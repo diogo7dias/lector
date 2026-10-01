@@ -22,9 +22,7 @@ void ConfirmationActivity::onEnter() {
   }
 
   const char* options[] = {I18N.get(StrId::STR_CANCEL), I18N.get(StrId::STR_CONFIRM)};
-  // The question is the title page; the card names what it is about.
-  const std::string& cardTitle = safeBody.empty() ? safeHeading : safeBody;
-  confirmPopup.show(cardTitle.c_str(), options, 2, 0, [this](const int choice) {
+  confirmPopup.show(safeHeading.c_str(), options, 2, 0, [this](const int choice) {
     ActivityResult res;
     res.isCancelled = (choice != 1);
     setResult(std::move(res));
@@ -36,7 +34,9 @@ void ConfirmationActivity::onEnter() {
 
 UiStatusActivity::StatusView ConfirmationActivity::statusView() const {
   StatusView view;
-  view.title = safeHeading.c_str();
+  view.linesAtTop = true;
+  if (!safeHeading.empty()) view.lines[0] = safeHeading.c_str();
+  if (!safeBody.empty()) view.lines[safeHeading.empty() ? 0 : 1] = safeBody.c_str();
   // The popup carries both answers, so the hint band says nothing.
   view.backHint = "";
   return view;

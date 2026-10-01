@@ -4,7 +4,7 @@
 #include <I18n.h>
 
 #include "PxcSleepRenderer.h"
-#include "components/ListChrome.h"
+#include "fontIds.h"
 
 void BootActivity::onEnter() {
   Activity::onEnter();
@@ -20,8 +20,11 @@ void BootActivity::onEnter() {
     return;
   }
 
+  const auto pageHeight = renderer.getScreenHeight();
+
   renderer.clearScreen();
-  // The same face the sleep screen falls back to: the name as a title page.
-  drawCentredTitlePage(renderer, tr(STR_LECTOR));
+  // The same face the sleep screen falls back to: the name, centred, in the one UI face.
+  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  renderer.drawCenteredText(UI_10_FONT_ID, (pageHeight - lineHeight) / 2, tr(STR_LECTOR));
   renderer.displayBuffer();
 }

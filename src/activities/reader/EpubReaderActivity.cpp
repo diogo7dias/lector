@@ -664,20 +664,22 @@ void EpubReaderActivity::openQuickMenu() {
   for (const uint8_t function : functions) {
     if (!SETTINGS.isPopupItem(function)) continue;
     const bool available = boundMenuFunctionAvailable(function);
+    // Fixed-width status column, and the pop-up is left-aligned, so ticking or losing a
+    // footnote never shifts a label sideways.
     // One row, two names: a wallpaper already starred offers Unfavorite. Same swap the
     // reader menu's own Sleep Screen row makes, so the two never disagree.
     const StrId label = function == CrossPointSettings::LP_MENU_WALLPAPER_FAVORITE &&
                                 FavoriteImage::isFavoritePath(APP_STATE.lastSleepWallpaperPath)
                             ? StrId::STR_UNFAVORITE_WALLPAPER
                             : boundMenuActionLabel(function);
-    labels.push_back(I18N.get(label));
+    labels.push_back(std::string(available ? "    " : "[X] ") + I18N.get(label));
     disabledRows.push_back(!available);
     quickMenuFunctions.push_back(function);
   }
 
   if (quickMenuFunctions.empty()) return;
 
-  quickMenu.showWithDisabled(StrId::STR_QUICK_MENU, labels, disabledRows, 0, [this](const int index) {
+  quickMenu.showWithDisabled(StrId::STR_QUICK_MENU, labels, disabledRows, 0, true, [this](const int index) {
     if (index < 0 || index >= static_cast<int>(quickMenuFunctions.size())) return;
     const uint8_t function = quickMenuFunctions[index];
     // The pop-up has already closed itself by the time this runs, so the action draws
@@ -2126,10 +2128,11 @@ ReaderPrefs EpubReaderActivity::applyReaderPrefsFrom(const ReaderPrefs& incoming
 void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int marginLeft, const int marginTop,
                                               const int fontId) {
   if (prefs_.paragraphNumbering == CrossPointSettings::PARA_NUM_OFF) return;
-  // Literata, the contents look's numeral face: Small is its 16px cut, Double the 26px.
-  const int numFontId = (prefs_.paragraphNumberSize == CrossPointSettings::PARA_NUM_SIZE_DOUBLE)
-                            ? LITERATA_UI_26_FONT_ID
-                            : LITERATA_UI_16_FONT_ID;
+  // Small and Double are two separate baked faces, not one face scaled: a bitmap font
+  // only stays exact on whole multiples of its own cell, so the size is a choice between
+  // pre-rendered grids rather than a scale factor applied here.
+  const int numFontId =
+      (prefs_.paragraphNumberSize == CrossPointSettings::PARA_NUM_SIZE_DOUBLE) ? PARA_NUM_2X_FONT_ID : PARA_NUM_FONT_ID;
   int viewTop = 0, viewRight = 0, viewBottom = 0, pageLeft = 0;
   renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &pageLeft);
   const int lineHeight = renderer.getLineHeight(fontId);
@@ -2503,7 +2506,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       sbTitle = epub->getTitle();
     }
     const int lines = UITheme::getStatusBarV2TitleLines(sb, renderer, sbTitle.c_str());
-    sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(BaseTheme::statusBarTitleFontId());
+    sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
   }
   const bool sbTitleTop =
       sb.titlePos >= CrossPointSettings::SB_ANCHOR_TL && sb.titlePos <= CrossPointSettings::SB_ANCHOR_TR;

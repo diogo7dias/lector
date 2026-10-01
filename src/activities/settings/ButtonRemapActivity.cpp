@@ -112,13 +112,14 @@ ListChrome ButtonRemapActivity::chrome() const {
 
   ListChrome chrome;
   chrome.title = tr(STR_REMAP_FRONT_BUTTONS);
-  // The duplicate warning takes the prompt's place while it is up.
-  chrome.subHeader = errorMessage.empty() ? tr(STR_REMAP_PROMPT) : errorMessage.c_str();
+  chrome.subHeader = tr(STR_REMAP_PROMPT);
+  // The duplicate warning sits under the rows rather than over them, so the list
+  // the user is answering stays readable while it is up.
+  if (!errorMessage.empty()) chrome.note = errorMessage.c_str();
   chrome.footnotes[0] = tr(STR_REMAP_RESET_HINT);
   chrome.footnotes[1] = tr(STR_REMAP_CANCEL_HINT);
   // The hints are a live preview of the mapping being built, in the on-device
-  // front button order: Back, Confirm, Left, Right. They stay in the contents look.
-  chrome.contentsKeepsHints = true;
+  // front button order: Back, Confirm, Left, Right.
   chrome.backHint = labelForHardware(CrossPointSettings::FRONT_HW_BACK);
   chrome.confirmHint = labelForHardware(CrossPointSettings::FRONT_HW_CONFIRM);
   chrome.thirdHint = labelForHardware(CrossPointSettings::FRONT_HW_LEFT);

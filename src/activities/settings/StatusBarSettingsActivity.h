@@ -58,6 +58,6 @@ class StatusBarSettingsActivity final : public UiListActivity {
   std::string rowValue(int id) const;
 
   // Row text owns its strings; the ListItems borrow them.
-  std::vector<std::string> values;
+  std::vector<std::string> subtitles;
   std::vector<freeink::ui::ListItem> rows;
 };

@@ -13,20 +13,6 @@
 #include "fontIds.h"
 
 namespace {
-
-// "Receiving: name". The translations carry their own colon but disagree on the space
-// after it ("Empfange:", "Reçu : "), so the label is trimmed and one space added here;
-// with no name the colon goes too.
-std::string labelledName(const char* label, const std::string& name) {
-  std::string out(label);
-  while (!out.empty() && out.back() == ' ') out.pop_back();
-  if (name.empty()) {
-    while (!out.empty() && (out.back() == ':' || out.back() == ' ')) out.pop_back();
-    return out;
-  }
-  return out + " " + name;
-}
-
 constexpr const char* HOSTNAME = "crosspoint";
 }  // namespace
 
@@ -143,9 +129,10 @@ bool CalibreConnectActivity::handleCustomInput() {
       // One line for whichever the status section is showing: the book coming
       // in, or the one that just landed.
       if (lastProgressTotal > 0 && lastProgressReceived <= lastProgressTotal) {
-        transferLine = labelledName(tr(STR_CALIBRE_RECEIVING), currentUploadName);
+        transferLine = tr(STR_CALIBRE_RECEIVING);
+        if (!currentUploadName.empty()) transferLine += ": " + currentUploadName;
       } else if (lastCompleteAt > 0) {
-        transferLine = labelledName(tr(STR_CALIBRE_RECEIVED), lastCompleteName);
+        transferLine = std::string(tr(STR_CALIBRE_RECEIVED)) + lastCompleteName;
       } else {
         transferLine.clear();
       }

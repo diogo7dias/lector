@@ -39,12 +39,7 @@ void StealLookActivity::onExit() {
   candidates.clear();
 }
 
-ListChrome StealLookActivity::chrome() const {
-  ListChrome chrome;
-  chrome.title = tr(STR_STEAL_LOOK);
-  chrome.subHeader = tr(STR_STEAL_LOOK_SUB);
-  return chrome;
-}
+const char* StealLookActivity::headerTitle() const { return tr(STR_STEAL_LOOK); }
 
 void StealLookActivity::buildScreen(UiScreen& screen) {
   // The base paints the header and the button hints itself, outside the app.

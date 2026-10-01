@@ -11,6 +11,7 @@ target_compile_definitions(ListHoldNavTest PRIVATE
   BUTTON_NAVIGATOR_SOURCE="${REPO_ROOT}/src/util/ButtonNavigator.cpp"
   LIST_ACTIVITY_SOURCE="${REPO_ROOT}/src/activities/UiListActivity.cpp"
   STATUS_ACTIVITY_SOURCE="${REPO_ROOT}/src/activities/UiStatusActivity.cpp"
+  BROWSER_ACTIVITY_SOURCE="${REPO_ROOT}/src/activities/home/FileBrowserActivity.cpp"
 )
 
 target_link_libraries(ListHoldNavTest PRIVATE

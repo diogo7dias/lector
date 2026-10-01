@@ -3,10 +3,8 @@
 #include <HalDisplay.h>
 
 #include <array>
-#include <string>
 
 #include "activities/Activity.h"
-#include "components/ListChrome.h"
 #include "components/UiAppHost.h"
 #include "components/themes/BaseTheme.h"  // Rect, for the QR squares the body layout places
 #include "util/ButtonNavigator.h"
@@ -87,8 +85,8 @@ class UiStatusActivity : public Activity, protected UiAppHost {
     const char* title = nullptr;  // header band; nullptr draws no header
     // Right of the title, for a count the screen keeps ("12 networks").
     const char* headerRight = nullptr;
-    // The network a screen is reachable on, as the title page's italic line: left
-    // the name, right the address, joined.
+    // Sub-header band under the title, for the network a screen is reachable
+    // on. Left is the name, right the address.
     const char* subtitleLeft = nullptr;
     const char* subtitleRight = nullptr;
     std::array<const char*, MAX_LINES> lines{};
@@ -103,7 +101,7 @@ class UiStatusActivity : public Activity, protected UiAppHost {
     // address it carries) under that.
     const char* qrPayload = nullptr;
     std::array<const char*, MAX_LINES> qrLines{};
-    // Link strength beside the title. Off unless the screen
+    // Link strength at the right of the sub-header band. Off unless the screen
     // sets showSignal; bars run 0 to 4, and a screen with no link asks for the
     // cross by leaving connected false.
     bool showSignal = false;
@@ -184,8 +182,9 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   virtual bool handleCustomInput() { return false; }
   // Drawn after the hints, for a legacy pop-up that owns the frame. Returning
   // true means the overlay published the buffer itself.
-  // Drawn after the title page, for a screen with a mark of its own beside the title
-  // (the OPDS browser's search glyph). The title's line box is passed.
+  // Drawn straight after the header band, for a screen with a mark of its own
+  // there (the OPDS browser's search glyph). The band's rect is passed so the
+  // mark follows the theme's header height.
   virtual void drawHeaderExtras(const Rect& headerRect) {}
   virtual bool drawOverlay() { return false; }
   // Called once the page is on the panel, for a screen that tracks what the
@@ -259,13 +258,10 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   std::array<QrPlacement, MAX_SECTIONS> qrPlacements_{};
   void placeQr(size_t index, const Rect& rect, const char* payload);
   void drawQrCodes() const;
-  // Link strength beside the title, or a cross when the link is down.
+  // Link strength at the right of the sub-header band, or a cross when the link
+  // is down.
   void drawSignal(const StatusView& view, int bandRight, int bandBottom) const;
-  void drawProgress(UiScreen& screen, const StatusView& view, const freeink::ui::Rect& rect) const;
-  // The contents look's title page and hints for a view, in ListChrome terms.
-  ListChrome contentsChrome(const StatusView& view) const;
-  // What contentsChrome's italic line points into.
-  mutable std::string subtitleLine_;
+  static void drawProgress(UiScreen& screen, const StatusView& view, const freeink::ui::Rect& rect);
 
   void buildActions(UiScreen& screen, const StatusView& view);
 

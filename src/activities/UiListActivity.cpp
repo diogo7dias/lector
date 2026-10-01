@@ -6,7 +6,6 @@
 #include <algorithm>
 
 #include "MappedInputManager.h"
-#include "components/ContentsLook.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "fontIds.h"
@@ -22,8 +21,7 @@ void UiListActivity::onEnter() {
   // Before resetUi(): the shared theme tokens are derived from this target's
   // fonts, so a screen-specific body font has to be bound first.
   const int fontId = listFontId();
-  if (fontId != 0) uiTarget.setFont(fui::GfxRendererTarget::FONT_BODY, fontId);
-  contents_look::bindFonts(uiTarget);
+  if (fontId >= 0) uiTarget.setFont(fui::GfxRendererTarget::FONT_BODY, fontId);
   activeNav().reset();
   resetUi();
   app.on(ACTION_ROW, &UiListActivity::rowActionTrampoline, this);
@@ -37,7 +35,7 @@ void UiListActivity::screenTrampoline(UiScreen& screen, void* user) {
   // The body is reserved from the same bands the chrome paints, so a screen
   // cannot draw a header the list then runs under. A screen wanting a different
   // band still calls setContentMargin itself; this only sets the default.
-  const ListChrome listChrome = self->shownChrome();
+  const ListChrome listChrome = self->chrome();
   const list_chrome::Bands bands = listChromeBands(self->renderer, listChrome);
   screen.setContentMargin(fui::Insets{static_cast<int16_t>(bands.contentTop),
                                       static_cast<int16_t>(listChrome.sideInset),
@@ -130,30 +128,34 @@ void UiListActivity::loop() {
 
 void UiListActivity::navigateButtons() {
   auto& n = activeNav();
-  const int count = listCount();
-  const int from = n.selected;
-  buttonNavigator.onListNav(from, count, n.pageRows(), [this, from, count](int index) {
-    // The step's direction, wrap included: forward when the way round is shorter that way.
-    const bool forward = count > 0 && (index - from + count) % count <= count / 2;
-    for (int tries = 0; tries < count && isHeaderRow(index); ++tries) {
-      index = forward ? (index + 1) % count : (index - 1 + count) % count;
-    }
-    moveSelectionTo(index);
-  });
+  buttonNavigator.onListNav(n.selected, listCount(), n.pageRows(), [this](const int index) { moveSelectionTo(index); });
 }
 
 void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, const bool hasSubtitle) {
-  // Labels and subtitles wrap rather than truncate; the contents props then set the
-  // faces. Fixed geometry on every board: the painter ignores the theme's row tokens.
+  int16_t rowHeight = screen.theme().rowHeight;
+  // Setting name and value at the same size and weight on the keys-only boards.
+  // Done here rather than in each screen: every list goes through this call, so
+  // one place cannot be forgotten by a new one.
+  applyKeysOnlyValueStyle(props, screen.theme());
+  if (!mappedInput.hasTouch()) {
+    // Non-touch hardware (X3/X4) keeps the original, denser per-theme row
+    // height instead of FreeInkUI's touch-target-sized default, so lists fit
+    // as many rows per screen as they did before the FreeInkUI migration.
+    // props.rowHeight must be set explicitly: screen.list() otherwise falls
+    // back to the (touch-friendly) theme token, not this local value.
+    // A label that must wrap (labelText.maxLines > 1) grows only its own row:
+    // list() sizes wrapped items per-row, so the dense height stays.
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    rowHeight = static_cast<int16_t>(hasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight);
+    props.rowHeight = rowHeight;
+  }
   applyWrappingRowStyle(props, screen.theme());
-  const int16_t rowHeight = contents_look::rowHeight(hasSubtitle);
-  props.rowHeight = rowHeight;
-  contents_look::applyListProps(props);
+  applyInvertedSectionHeaderStyle(props, screen.theme());
   // Remembered for the chevrons render() draws once the list has reported what it
   // actually laid out.
   const fui::Rect body = screen.body();
   listBand = Rect{body.x, body.y, body.width, body.height};
-  activeNav().syncToProps(body, rowHeight, 0, listCount(), props);
+  activeNav().syncToProps(body, rowHeight, screen.theme().listRowGap, listCount(), props);
 }
 
 void UiListActivity::drawScrollArrows() {
@@ -168,21 +170,15 @@ void UiListActivity::drawScrollArrows() {
       renderer, list_scrollbar::outsideBand(listBand, UITheme::getInstance().getMetrics().verticalSpacing), arrows);
 }
 
-ListChrome UiListActivity::shownChrome() const {
-  ListChrome shown = chrome();
-  toContentsLook(shown, mappedInput.hasTouch());
-  return shown;
-}
-
 ListChrome UiListActivity::chrome() const {
   ListChrome chrome;
   chrome.title = headerTitle();
   return chrome;
 }
 
-void UiListActivity::drawChrome() { drawListChromeTop(renderer, shownChrome()); }
+void UiListActivity::drawChrome() { drawListChromeTop(renderer, chrome()); }
 
-void UiListActivity::drawFooter() { drawListChromeBottom(renderer, mappedInput, shownChrome()); }
+void UiListActivity::drawFooter() { drawListChromeBottom(renderer, mappedInput, chrome()); }
 
 void UiListActivity::render(RenderLock&&) {
   renderer.clearScreen();

@@ -31,5 +31,7 @@ class PopupItemsActivity final : public UiListActivity {
   // The counter beside the title, rebuilt on every chrome() call. Mutable
   // because chrome() is const: nothing about the screen itself changes.
   mutable char counterText[16] = {};
+  // Row labels own their "[x] " prefix; the ListItems borrow these strings.
+  std::vector<std::string> labels;
   std::vector<freeink::ui::ListItem> rows;
 };

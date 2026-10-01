@@ -196,16 +196,29 @@ TEST(SettingsGrid, X4ProRowsRemainFullWidthAndScrollUnderAReservedPreview) {
   }
 }
 
-TEST(SettingsGrid, ActivityIsOneColumnOfContentsRowsOnEveryBoard) {
+TEST(SettingsGrid, ActivityUsesTheDevicePolicyForBothGeometryAndTouchRows) {
   std::ifstream file(GRID_ACTIVITY_SOURCE);
   ASSERT_TRUE(file.is_open());
   std::stringstream contents;
   contents << file.rdbuf();
   const std::string source = contents.str();
-  // No board keeps the old two-column cells: every build is the contents list.
-  EXPECT_EQ(source.find("usesWrappedRows"), std::string::npos);
-  EXPECT_EQ(source.find("void UiGridActivity::buildCell("), std::string::npos);
-  EXPECT_NE(source.find("buildContents(screen, gridPane(), win)"), std::string::npos);
+  EXPECT_NE(source.find("settings_grid::usesWrappedRows(mappedInput.hasTouch(), display.profile().isX4Pro)"),
+            std::string::npos);
+  const auto shape = source.find("settings_grid::Shape UiGridActivity::gridShape()");
+  const auto rows = source.find("bool UiGridActivity::usesWrappedRows()");
+  ASSERT_LT(shape, rows);
+  EXPECT_NE(source.substr(shape, rows - shape).find("if (!usesWrappedRows())"), std::string::npos);
+  const auto cell = source.find("void UiGridActivity::buildCell(");
+  const auto row = source.find("void UiGridActivity::buildRow(");
+  ASSERT_LT(cell, row);
+  const auto cellBody = source.substr(cell, row - cell);
+  EXPECT_NE(cellBody.find("if (usesWrappedRows())"), std::string::npos);
+  EXPECT_NE(cellBody.find("buildRow(screen, index, box)"), std::string::npos);
+  const auto loop = source.find("void UiGridActivity::loop(");
+  ASSERT_LT(row, loop);
+  const auto rowBody = source.substr(row, loop - row);
+  EXPECT_NE(rowBody.find("props.action = ACTION_CELL"), std::string::npos);
+  EXPECT_NE(rowBody.find("screen.button(props, box)"), std::string::npos);
   // A numeric cell opens the shared slider dialog on its own screen; the grid no
   // longer carries an in-place value band over its header.
   EXPECT_EQ(source.find("buildValueBand"), std::string::npos);

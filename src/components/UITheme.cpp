@@ -165,8 +165,7 @@ int UITheme::getStatusBarV2TitleLines(const StatusBarBlock& sb, const GfxRendere
   // Safety ceiling: real book/chapter titles never approach this many UI_10 lines,
   // but it bounds the reserved band (and the render loop) for a pathological title.
   constexpr int kMaxTitleLines = 6;
-  const int lines = static_cast<int>(
-      renderer.wrappedText(BaseTheme::statusBarTitleFontId(), title, bandWidth, kMaxTitleLines).size());
+  const int lines = static_cast<int>(renderer.wrappedText(UI_10_FONT_ID, title, bandWidth, kMaxTitleLines).size());
   return lines < 1 ? 1 : lines;
 }
 

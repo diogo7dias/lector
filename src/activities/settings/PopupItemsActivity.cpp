@@ -24,16 +24,21 @@ constexpr int ITEM_COUNT = static_cast<int>(std::size(CrossPointSettings::POPUP_
 void PopupItemsActivity::onExit() {
   UiListActivity::onExit();
   rows.clear();
+  labels.clear();
 }
 
 int PopupItemsActivity::listCount() const { return ITEM_COUNT; }
 
 void PopupItemsActivity::buildScreen(UiScreen& screen) {
+  labels.assign(ITEM_COUNT, std::string());
   rows.assign(ITEM_COUNT, fui::ListItem{});
   for (int i = 0; i < ITEM_COUNT; ++i) {
     const uint8_t function = CrossPointSettings::POPUP_ITEM_FUNCTIONS[i];
-    rows[i].label = I18N.get(boundMenuActionLabel(function));
-    rows[i].value = I18N.get(SETTINGS.isPopupItem(function) ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+    // The box sits on the left, in a fixed-width column, so ticking a row never
+    // shifts its label sideways.
+    labels[i] =
+        std::string(SETTINGS.isPopupItem(function) ? "[x]  " : "[ ]  ") + I18N.get(boundMenuActionLabel(function));
+    rows[i].label = labels[i].c_str();
     rows[i].actionValue = static_cast<int16_t>(i);
   }
 
@@ -70,7 +75,7 @@ ListChrome PopupItemsActivity::chrome() const {
            static_cast<unsigned>(CrossPointSettings::POPUP_ITEM_MAX));
   ListChrome chrome;
   chrome.title = tr(STR_POPUP_ITEMS);
-  chrome.subHeader = counterText;
+  chrome.headerRight = counterText;
   chrome.confirmHint = tr(STR_TOGGLE);
   return chrome;
 }

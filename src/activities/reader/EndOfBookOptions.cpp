@@ -1,6 +1,5 @@
 #include "EndOfBookOptions.h"
 
-#include <FreeInkUIGfxRenderer.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
@@ -10,11 +9,7 @@
 // ReaderUtils.h pulls in ActivityManager.h, which only forward-declares Activity while holding
 // std::unique_ptr<Activity> members. Destroying that unique_ptr needs the complete type, so the
 // definition must be visible here.
-#include <FreeInkUICore.h>
-
 #include "activities/Activity.h"
-#include "components/ListChrome.h"
-#include "components/RowHitTest.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
@@ -100,49 +95,39 @@ EndOfBookOptions::Action EndOfBookOptions::handleMenuInput(const MappedInputMana
 }
 
 void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& input) const {
-  namespace ct = freeink::ui::contents;
-  // A title page: "The End" and, with suggestions, the books to go on with as rows.
-  ListChrome chrome;
-  chrome.title = tr(STR_END_OF_BOOK);
-  chrome.backHint = tr(STR_BACK);
-  chrome.confirmHint = tr(STR_OPEN);
-  if (menuActive()) chrome.subHeader = tr(STR_EOB_CONTINUE_WITH);
-  toContentsLook(chrome, input.hasTouch());
-  if (!menuActive()) chrome.hints = false;
-  drawListChromeTop(renderer, chrome);
-  if (!menuActive()) return;
+  const auto& metrics = UITheme::getInstance().getMetrics();
 
-  // At most four short rows, so no scrolling: each title wraps over the lines it needs.
-  const int font = UI_10_FONT_ID;
-  const int lineHeight = renderer.getLineHeight(font);
-  const int textX = ct::SIDE;
-  const int textW = renderer.getScreenWidth() - ct::SIDE * 2;
-  const int bottom = listChromeBands(renderer, chrome).contentBottom;
-  row_hit::Rows& hitRows = row_hit::lastRows();
-  hitRows.begin();
-  int y = listChromeBands(renderer, chrome).contentTop;
-  const int count = static_cast<int>(names.size()) + 1;  // + the Home entry
-  for (int i = 0; i < count; ++i) {
-    const std::string label = i < static_cast<int>(names.size()) ? displayName(names[i]) : tr(STR_EOB_HOME);
-    const auto lines = BaseTheme::wrapUiText(renderer, label, textW, textW);
-    const int height = ct::ROW_H + (static_cast<int>(lines.size()) - 1) * lineHeight;
-    if (y + height > bottom) break;
-    const bool selected = i == selector;
-    int baseline = y + ct::ROW_BASELINE;
-    if (selected) {
-      const int x = textX - (ct::SIDE - ct::MARKER_X);
-      const int cy = baseline - ct::MARKER_RAISE;
-      const int xs[3] = {x, x, x + ct::MARKER_W};
-      const int ys[3] = {cy - ct::MARKER_H / 2, cy + ct::MARKER_H / 2, cy};
-      renderer.fillPolygon(xs, ys, 3, true);
-    }
-    for (const std::string& line : lines) {
-      renderer.drawText(font, textX, baseline - renderer.getFontAscenderSize(font), line.c_str(), true,
-                        selected ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
-      baseline += lineHeight;
-    }
-    hitRows.add(i, 0, y, renderer.getScreenWidth(), height);
-    y += height;
+  if (!menuActive()) {
+    // No suggestions: the historical plain end screen. 3/8 of the screen height matches
+    // the previous fixed position on the 480x800 panel and scales to other resolutions.
+    renderer.drawCenteredText(UI_10_FONT_ID, renderer.getScreenHeight() * 3 / 8, tr(STR_END_OF_BOOK), true,
+                              EpdFontFamily::REGULAR);
+    return;
   }
-  drawListChromeBottom(renderer, input, chrome);
+
+  // Suggestion menu: title, list (+ Home entry) and button hints. The hints are drawn at
+  // the physical front buttons, which is a logical side/top edge in the rotated
+  // orientations — lay out inside the safe area so nothing hides behind them. Vertical
+  // positions derive from the safe-area height and font line heights so other panel
+  // resolutions scale (review request on #2532).
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  const int titleY = safe.y + safe.height / 8;
+  const int subtitleY = titleY + renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing;
+  const int listTop = subtitleY + renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing * 2;
+
+  UITheme::drawCenteredText(renderer, safe, UI_10_FONT_ID, titleY, tr(STR_END_OF_BOOK), true, EpdFontFamily::REGULAR);
+  UITheme::drawCenteredText(renderer, safe, UI_10_FONT_ID, subtitleY, tr(STR_EOB_CONTINUE_WITH));
+
+  const int listHeight = safe.y + safe.height - listTop - metrics.verticalSpacing;
+  // Titles wrap over the lines they need rather than being cut; the visible range
+  // comes back from the draw and feeds the scroll offset, as in the file browser.
+  const ListVisibility vis = GUI.drawWrappedList(
+      renderer, Rect{safe.x, listTop, safe.width, listHeight}, static_cast<int>(names.size()) + 1, selector,
+      scrollOffset, [this](const int index) {
+        return index < static_cast<int>(names.size()) ? displayName(names[index]) : std::string(tr(STR_EOB_HOME));
+      });
+  scrollOffset = vis.firstVisible;
+
+  const auto labels = input.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
