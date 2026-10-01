@@ -304,8 +304,7 @@ Press **Confirm** while reading. The menu is one list of five tabs: **Look**, **
 **Book**, **Sleep Screen** and **Device**. Each tab is a heading with a plus at its right edge
 and the number of rows it holds. Moving onto a heading opens it (the plus turns to a minus)
 and closes the one that was open. **Back** closes the open tab; a second **Back** leaves the
-menu. Small capital labels such as POSITION and MARKS group the rows inside a tab and are
-skipped by the cursor. Rows that do not apply to the open book are not shown at all.
+menu. Rows that do not apply to the open book are not shown at all.
 
 The menu opens on **Sleep Screen**. **Settings > Reader > Book Menu Opens On** changes that to
 **Navigate**, **Book**, **Look** or **Device** instead, and that choice always wins. The

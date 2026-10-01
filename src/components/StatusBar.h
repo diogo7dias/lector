@@ -47,13 +47,13 @@ inline int statusBarThicknessPx(uint8_t thickness) {
   }
 }
 
-// Thickness actually drawn. An outlined bar spends 1px per side on the frame, so
-// a slim (2px) bar would have no room left to show a partial fill; it is nudged
-// to 3px. Every site that draws OR reserves space for a bar must call this, or
-// the reserved band and the drawn bar disagree.
+// Thickness actually drawn. An outlined bar spends 2px per side on the frame, so
+// a slim bar would have no room left to show a partial fill; it is nudged to 5px.
+// Every site that draws OR reserves space for a bar must call this, or the
+// reserved band and the drawn bar disagree.
 inline int statusBarDrawThicknessPx(const uint8_t thickness, const bool outline) {
   const int px = statusBarThicknessPx(thickness);
-  return outline && px < 3 ? 3 : px;
+  return outline && px < 5 ? 5 : px;
 }
 
 // ---------------------------------------------------------------------------

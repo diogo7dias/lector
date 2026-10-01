@@ -217,14 +217,16 @@ class LightPanel {
     renderer.fillRect(0, 0, screenWidth, bandHeight, false);
     renderer.fillRect(0, bandHeight - banner::RULE, screenWidth, banner::RULE, true);
 
-    char text[64];
-    snprintf(text, sizeof(text), "%s  %s", I18N.get(StrId::STR_FRONTLIGHT),
-             I18N.get(on_ ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF));
-    drawBox(renderer, layout_.toggle, text, /*filled=*/on_);
-
+    // The in-book menu's look: full-width rows between 2px rules, the selected row
+    // filled black, the steppers drawn as its boxed minus and plus.
+    drawToggleRow(renderer);
     drawSliderRow(renderer, layout_.brightness, Sun24Icon, brightness_);
     if (layout_.hasWarmth) drawSliderRow(renderer, layout_.warmth, Thermometer24Icon, warmth_);
     if (layout_.hasAux) drawAuxRow(renderer, layout_.aux, context_.auxText);
+    const light_panel::StepRow& last = layout_.hasAux      ? layout_.aux
+                                       : layout_.hasWarmth ? layout_.warmth
+                                                           : layout_.brightness;
+    drawRule(renderer, last.y + last.height + light_panel::kRowGap / 2);
 
     for (int i = 0; i < layout_.actionCount; ++i) {
       drawBox(renderer, layout_.actions[i], I18N.get(boundMenuActionLabel(context_.actions[i])),
@@ -274,12 +276,30 @@ class LightPanel {
     }
   }
 
+  // A full-width 2px rule centred on y (panel coordinates).
+  void drawRule(const GfxRenderer& renderer, const int y) const {
+    renderer.fillRect(0, y + topInset_ - light_panel::kRule / 2, layout_.width, light_panel::kRule, true);
+  }
+
+  // Frontlight as a menu row: the name at the left, On or Off at the right, rules above
+  // and below.
+  void drawToggleRow(const GfxRenderer& renderer) const {
+    const auto& rect = layout_.toggle;
+    drawRule(renderer, rect.y);
+    drawRule(renderer, rect.y + rect.height + light_panel::kRowGap / 2);
+    const int textY = rect.y + topInset_ + (rect.height - renderer.getLineHeight(banner::FONT_ID)) / 2;
+    renderer.drawText(banner::FONT_ID, rect.x, textY, I18N.get(StrId::STR_FRONTLIGHT), true);
+    const char* state = I18N.get(on_ ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+    renderer.drawText(banner::FONT_ID, rect.x + rect.width - renderer.getTextWidth(banner::FONT_ID, state), textY,
+                      state, true);
+  }
+
   // A framed box with its label centred. Filled while pressed, and the text is knocked out
   // of the fill rather than drawn over it.
   void drawBox(const GfxRenderer& renderer, const light_panel::Rect& rect, const char* label, const bool filled) const {
     const int y = rect.y + topInset_;
     if (filled) renderer.fillRect(rect.x, y, rect.width, rect.height, true);
-    renderer.drawRect(rect.x, y, rect.width, rect.height, true);
+    renderer.drawRect(rect.x, y, rect.width, rect.height, light_panel::kRule, true);
     const int textWidth = renderer.getTextWidth(banner::FONT_ID, label);
     const int textY = y + (rect.height - renderer.getLineHeight(banner::FONT_ID)) / 2;
     renderer.drawText(banner::FONT_ID, rect.x + (rect.width - textWidth) / 2, textY, label, !filled);
@@ -291,50 +311,64 @@ class LightPanel {
   void drawSliderRow(const GfxRenderer& renderer, const light_panel::StepRow& row, const freeink::Icon& icon,
                      const uint8_t value) const {
     if (row.height == 0) return;
-    drawSteppers(renderer, row);
+    const bool ink = !drawSelection(renderer, row);
+    drawSteppers(renderer, row, ink);
 
     const int rowCenter = row.y + topInset_ + row.height / 2;
-    renderer.drawIcon(icon.bits, row.icon.x, rowCenter - icon.opticalCenterY, icon.w);
+    renderer.drawIcon(icon.bits, row.icon.x, rowCenter - icon.opticalCenterY, icon.w, ink);
 
     const int barY = row.bar.y + topInset_;
-    renderer.drawRect(row.bar.x, barY, row.bar.width, row.bar.height, true);
+    renderer.drawRect(row.bar.x, barY, row.bar.width, row.bar.height, light_panel::kRule, ink);
     const int fill = row.bar.width * value / 100;
-    if (fill > 0) renderer.fillRect(row.bar.x, barY, fill, row.bar.height, true);
+    if (fill > 0) renderer.fillRect(row.bar.x, barY, fill, row.bar.height, ink);
 
     char number[8];
     snprintf(number, sizeof(number), "%d", static_cast<int>(value));
-    drawCentered(renderer, row.value, number, /*center=*/false);
-    drawSelection(renderer, row);
+    drawCentered(renderer, row.value, number, /*center=*/false, ink);
+    drawRule(renderer, row.y - light_panel::kRowGap / 2);
   }
 
   // No icon and no track: the label owns the run up to the stepper column.
   void drawAuxRow(const GfxRenderer& renderer, const light_panel::StepRow& row, const char* label) const {
     if (row.height == 0) return;
-    drawSteppers(renderer, row);
-    drawCentered(renderer, row.value, label, /*center=*/true);
-    drawSelection(renderer, row);
+    const bool ink = !drawSelection(renderer, row);
+    drawSteppers(renderer, row, ink);
+    drawCentered(renderer, row.value, label, /*center=*/true, ink);
+    drawRule(renderer, row.y - light_panel::kRowGap / 2);
   }
 
-  void drawSteppers(const GfxRenderer& renderer, const light_panel::StepRow& row) const {
-    drawBox(renderer, row.minus, "-", /*filled=*/false);
-    drawBox(renderer, row.plus, "+", /*filled=*/false);
+  // The in-book menu's boxed minus and plus (freeink drawAccordionHeader): an 18px sign
+  // with 3px strokes in a 2px square, centred in the stepper's touch area.
+  void drawSteppers(const GfxRenderer& renderer, const light_panel::StepRow& row, const bool ink) const {
+    constexpr int kSign = 18, kStroke = 3, kPad = 5;
+    constexpr int kBox = kSign + (kPad + light_panel::kRule) * 2;
+    for (const auto* rect : {&row.minus, &row.plus}) {
+      const int x = rect->x + (rect->width - kBox) / 2;
+      const int y = rect->y + topInset_ + (rect->height - kBox) / 2;
+      renderer.drawRect(x, y, kBox, kBox, light_panel::kRule, ink);
+      const int signX = x + light_panel::kRule + kPad;
+      const int signY = y + light_panel::kRule + kPad;
+      renderer.fillRect(signX, signY + (kSign - kStroke) / 2, kSign, kStroke, ink);
+      if (rect == &row.plus) renderer.fillRect(signX + (kSign - kStroke) / 2, signY, kStroke, kSign, ink);
+    }
   }
 
   // Vertically centred in `rect` either way; `center` picks horizontal centring over
   // starting at the left edge.
-  void drawCentered(const GfxRenderer& renderer, const light_panel::Rect& rect, const char* text,
-                    const bool center) const {
+  void drawCentered(const GfxRenderer& renderer, const light_panel::Rect& rect, const char* text, const bool center,
+                    const bool ink) const {
     const int textY = rect.y + topInset_ + (rect.height - renderer.getLineHeight(banner::FONT_ID)) / 2;
     const int textX = center ? rect.x + (rect.width - renderer.getTextWidth(banner::FONT_ID, text)) / 2 : rect.x;
-    renderer.drawText(banner::FONT_ID, textX, textY, text, true);
+    renderer.drawText(banner::FONT_ID, textX, textY, text, ink);
   }
 
-  // Button users need to see which row Left/Right will move. A rule under the row rather
-  // than a box: a full frame fought with the steppers.
-  void drawSelection(const GfxRenderer& renderer, const light_panel::StepRow& row) const {
-    if (selected_ != row.row) return;
-    renderer.fillRect(light_panel::kSidePad, row.y + row.height + topInset_ - 1,
-                      layout_.width - light_panel::kSidePad * 2, 1, true);
+  // Button users need to see which row Left/Right will move: it fills black edge to edge,
+  // like the in-book menu's selected row, and the row is then drawn in white. True when
+  // the row is selected.
+  bool drawSelection(const GfxRenderer& renderer, const light_panel::StepRow& row) const {
+    if (selected_ != row.row) return false;
+    renderer.fillRect(0, row.y + topInset_, layout_.width, row.height, true);
+    return true;
   }
 
   // Battery and free space, in the small UI font. No rule above it: the button grid it

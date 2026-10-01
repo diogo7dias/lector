@@ -104,8 +104,6 @@ class EpubReaderMenuActivity final : public UiListActivity {
   bool handleButtons() override;
   // A press walks visible rows; a hold jumps to the next section header.
   void navigateButtons() override;
-  // The visible index itself, or the next one along `step` that is not a group label.
-  int pastGroupLabels(int visible, int step) const;
   bool drawOverlay() override;
 
  private:
@@ -114,13 +112,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
     StrId labelId;
     // A tab's heading: landable, opens and closes the tab's rows.
     bool isHeader = false;
-    // A group label inside a tab (POSITION, MARKS): drawn small, never landed on.
-    bool isSubheader = false;
 
     static MenuItem Header(const StrId labelId) { return MenuItem{MenuAction::SECTION_HEADER, labelId, true}; }
-    static MenuItem Subheader(const StrId labelId) {
-      return MenuItem{MenuAction::SECTION_HEADER, labelId, false, true};
-    }
   };
 
   // One section of the menu: what it is, the heading drawn above its rows, and the rows

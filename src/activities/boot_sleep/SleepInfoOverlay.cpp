@@ -51,7 +51,7 @@ void drawLabel(const GfxRenderer& renderer, const std::string& text, const Corne
   // nudge cell), turning the white pixels dark grey on 3-pass wallpapers.
   renderer.fillRect(boxX, boxY, boxWidth, boxHeight, true);
   if (renderer.getRenderMode() == GfxRenderer::BW) {
-    renderer.drawRect(boxX, boxY, boxWidth, boxHeight, 1, false);
+    renderer.drawRect(boxX, boxY, boxWidth, boxHeight, 2, false);
     renderer.drawText(UI_10_FONT_ID, boxX + paddingX, boxY + paddingY, shown.c_str(), false, EpdFontFamily::REGULAR);
   }
 }

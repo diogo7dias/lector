@@ -188,14 +188,15 @@ TEST(TwoTapGate, TheSelfRoutingSurfacesSayWhyTheyAreExempt) {
 
 // --- the armed control is outlined, never filled ----------------------------
 
-TEST(TwoTapGate, TheArmedControlIsDrawnAsAOnePixelOutline) {
+TEST(TwoTapGate, TheArmedControlIsDrawnAsDashedTwoPixelLines) {
   const std::string tokens = readSource(THEME_TOKENS_HEADER);
-  EXPECT_TRUE(contains(tokens, "style.borderWidth = 1;"));
+  EXPECT_TRUE(contains(tokens, "style.borderWidth = 2;"));
+  EXPECT_TRUE(contains(tokens, "style.borderDashed = true;"));
   EXPECT_TRUE(contains(tokens, "outlineArmedControl(tokens.listRow.active"));
   EXPECT_TRUE(contains(tokens, "outlineArmedControl(tokens.button.active"));
 
   // The self-painted row lists share one painter, so they cannot drift from it.
   const std::string theme = readSource(BASE_THEME_SOURCE);
   EXPECT_TRUE(contains(theme, "if (armed) {"));
-  EXPECT_TRUE(contains(theme, "renderer.drawRect(rect.x, rect.y, rect.width, rect.height);"));
+  EXPECT_TRUE(contains(theme, "renderer.fillRect(rect.x + at, rect.y, run, kRule);"));
 }

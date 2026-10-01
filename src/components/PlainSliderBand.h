@@ -53,7 +53,7 @@ void draw(Screen& screen, const freeink::ui::Rect& rect, const char* label, cons
   bar.max = sliderMax > 0 ? sliderMax : 1;
   bar.fill = fui::Paint::solid(inverted ? fui::Color::White : fui::Color::Black);
   bar.border = bar.fill;
-  bar.borderWidth = 1;
+  bar.borderWidth = 2;
   fui::progressBar(screen.frame(), fui::Rect{line.x, barTop, line.width, kBarHeight}, bar);
 }
 

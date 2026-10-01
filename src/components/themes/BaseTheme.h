@@ -192,7 +192,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .optionPopupDialogSideMargin = 20,
                                  .optionPopupTitleSeparator = true,
                                  .textFieldHorizontalPadding = 6,
-                                 .textFieldNormalThickness = 1,
+                                 .textFieldNormalThickness = 2,
                                  .textFieldCursorThickness = 3,
                                  .textFieldLineEndOffset = 0,
                                  .pathBarThickness = 3};

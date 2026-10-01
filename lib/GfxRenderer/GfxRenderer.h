@@ -265,7 +265,7 @@ class GfxRenderer {
   void fillRoundedRect(int x, int y, int width, int height, int cornerRadius, Color color) const;
   void fillRoundedRect(int x, int y, int width, int height, int cornerRadius, bool roundTopLeft, bool roundTopRight,
                        bool roundBottomLeft, bool roundBottomRight, Color color) const;
-  void drawIcon(const uint8_t bitmap[], int x, int y, int size) const;
+  void drawIcon(const uint8_t bitmap[], int x, int y, int size, bool black = true) const;
   void drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, float cropX = 0,
                   float cropY = 0) const;
   // Counter-invert content images in the logical framebuffer so output-level
