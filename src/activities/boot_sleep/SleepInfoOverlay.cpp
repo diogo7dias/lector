@@ -7,7 +7,6 @@
 #include <cstdio>
 
 #include "CrossPointSettings.h"
-#include "UiFont.h"
 #include "fontIds.h"
 #include "util/FavoriteImage.h"
 
@@ -23,38 +22,38 @@ uint32_t g_total = 0;
 
 enum class Corner { BottomLeft, BottomRight };
 
-// A paper label in a bottom safe corner: the text in italic, black on white inside a
-// hairline frame, so it reads over any wallpaper. Every badge shares this shape.
+// Filled box + text in a bottom safe corner. White text on a black box so it
+// reads over any wallpaper. Both badges share this so the filename, the "F"
+// mark and the rotation position are the same shape on screen.
 void drawLabel(const GfxRenderer& renderer, const std::string& text, const Corner corner = Corner::BottomLeft) {
   if (text.empty()) return;
-  const int font = uiLanguageNeedsUbuntu() ? UI_10_FONT_ID : LITERATA_UI_19_IT_FONT_ID;
   const int screenWidth = renderer.getScreenWidth();
   const int screenHeight = renderer.getScreenHeight();
   constexpr int safeInset = 18;
-  constexpr int paddingX = 10;
+  constexpr int paddingX = 4;
   constexpr int paddingY = 2;
-  const int textLineHeight = renderer.getLineHeight(font);
+  const int textLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   const int maxBoxWidth = std::max(1, screenWidth - safeInset * 2);
   const int maxTextWidth = std::max(1, maxBoxWidth - paddingX * 2 - 2);
 
-  const std::string shown = renderer.truncatedText(font, text.c_str(), maxTextWidth);
-  const int textWidth = renderer.getTextWidth(font, shown.c_str(), EpdFontFamily::REGULAR);
+  const std::string shown = renderer.truncatedText(UI_10_FONT_ID, text.c_str(), maxTextWidth);
+  const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, shown.c_str(), EpdFontFamily::REGULAR);
   const int boxWidth = std::min(textWidth + paddingX * 2, maxBoxWidth);
   const int boxHeight = textLineHeight + paddingY * 2;
   const int boxX = corner == Corner::BottomRight ? std::max(safeInset, screenWidth - safeInset - boxWidth) : safeInset;
   const int boxY = std::max(safeInset, screenHeight - boxHeight - safeInset);
 
-  // In the grayscale plane passes fillRect(true) clears the plane bits over the box, which
-  // stops the wallpaper's gray nudges bleeding through the paper. The paper, frame and
-  // text belong to the BW base pass only: the 1-bit glyph/rect path ignores the render
-  // mode and would set the plane bits, turning black ink into the dark-grey nudge cell.
-  if (renderer.getRenderMode() != GfxRenderer::BW) {
-    renderer.fillRect(boxX, boxY, boxWidth, boxHeight, true);
-    return;
+  // The black box must be drawn in EVERY pass: in the grayscale plane passes
+  // fillRect(true) clears the plane bits over the box area, which is what stops
+  // the wallpaper's gray nudges from bleeding through it. The white text and
+  // border must be drawn ONLY in the BW base pass: the 1-bit glyph/rect path
+  // ignores the render mode and would set the LSB+MSB plane bits (the dark-grey
+  // nudge cell), turning the white pixels dark grey on 3-pass wallpapers.
+  renderer.fillRect(boxX, boxY, boxWidth, boxHeight, true);
+  if (renderer.getRenderMode() == GfxRenderer::BW) {
+    renderer.drawRect(boxX, boxY, boxWidth, boxHeight, 1, false);
+    renderer.drawText(UI_10_FONT_ID, boxX + paddingX, boxY + paddingY, shown.c_str(), false, EpdFontFamily::REGULAR);
   }
-  renderer.fillRect(boxX, boxY, boxWidth, boxHeight, false);
-  renderer.drawRect(boxX, boxY, boxWidth, boxHeight, 1, true);
-  renderer.drawText(font, boxX + paddingX, boxY + paddingY, shown.c_str(), true, EpdFontFamily::REGULAR);
 }
 
 }  // namespace

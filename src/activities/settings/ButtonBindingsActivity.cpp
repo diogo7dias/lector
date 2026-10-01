@@ -137,7 +137,7 @@ void ButtonBindingsActivity::openActionPicker(const size_t row) {
     // actions in the same order, so the one that is missing reads as unavailable here
     // rather than as absent from the firmware.
     const bool unavailable = !inBook && !bound_action::allowedOutsideBook(function);
-    options.push_back(I18N.get(boundMenuActionLabel(function)));
+    options.push_back(std::string(unavailable ? "[X] " : "    ") + I18N.get(boundMenuActionLabel(function)));
     disabledRows.push_back(unavailable);
     if (function == *binding) currentIndex = static_cast<int>(pickerFunctions.size());
     pickerFunctions.push_back(function);
@@ -145,7 +145,7 @@ void ButtonBindingsActivity::openActionPicker(const size_t row) {
   if (pickerFunctions.empty()) return;
 
   pickerRow = row;
-  actionPopup.showWithDisabled(gestureLabel(bindingRows[row].gesture), options, disabledRows, currentIndex,
+  actionPopup.showWithDisabled(gestureLabel(bindingRows[row].gesture), options, disabledRows, currentIndex, true,
                                [this](const int choice) {
                                  if (choice < 0 || choice >= static_cast<int>(pickerFunctions.size())) return;
                                  uint8_t* target = bindingFor(pickerRow);
@@ -217,7 +217,6 @@ void ButtonBindingsActivity::buildScreen(UiScreen& screen) {
     const size_t row = static_cast<size_t>(i);
     if (view == View::Buttons) {
       labels[row] = buttonLabel(buttons[row]);
-      rows[row].value = "\xE2\x80\xBA";  // › opens the key's bindings
     } else if (bindingRows[row].isHeader) {
       labels[row] = I18N.get(bindingRows[row].inBook ? StrId::STR_IN_BOOK : StrId::STR_OUTSIDE_BOOK);
       rows[row].isHeader = true;

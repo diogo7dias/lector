@@ -31,25 +31,6 @@ struct ListChrome {
   // it over as many screen lines as it needs and reserves them all.
   static constexpr int MAX_HEADER_LINES = 8;
   std::array<const char*, MAX_HEADER_LINES> headerLines{};
-  // The contents look's header: the book set like a title page (title in tracked
-  // capitals, author in italic, a short rule, the chapter in small capitals, the
-  // progress in italic), in place of headerLines. Starts at the top of the panel.
-  struct TitlePage {
-    const char* title = nullptr;
-    const char* author = nullptr;
-    const char* chapter = nullptr;
-    const char* progress = nullptr;
-  } titlePage;
-  // False drops the button-hint band, and the body runs to the panel's foot.
-  bool hints = true;
-  // Set by toContentsLook(): footnotes are set in italic, centred, over an 18px foot.
-  bool contents = false;
-  // The contents look's folio: one small-caps line at the foot, under any footnotes, for
-  // what the device says about itself (the clock and the battery on Home).
-  const char* folio = nullptr;
-  // Keeps the hint band in the contents look, for hints that say what the rows cannot
-  // (Remap Front Buttons previews the mapping on the keys themselves).
-  bool contentsKeepsHints = false;
   // A centred note under everything above, wrapped like the header lines.
   const char* note = nullptr;
   // Lines above the button hints, for something true of the whole list rather
@@ -68,25 +49,11 @@ struct ListChrome {
   int sideInset = 0;
 };
 
-// The contents look for a screen that describes its chrome the classic way: the title
-// and one line about the screen (sub-header, counter or note, the first there is) become
-// a title page, and the hint band goes unless the board is touch, where it is the only
-// Back. A chrome that already set its own titlePage keeps it.
-void toContentsLook(ListChrome& chrome, bool keepHints);
-
 // The bands, measured from the live renderer and theme.
 list_chrome::Bands listChromeBands(const GfxRenderer& renderer, const ListChrome& chrome);
 
 // Paints the bands that sit above the body. Called before the app renders.
 void drawListChromeTop(const GfxRenderer& renderer, const ListChrome& chrome);
-
-// The title's first line box across the page, for a mark a screen sets beside it in the
-// side margin (the Wi-Fi signal, a feed's search glyph).
-list_chrome::Rect titleLineBox(const GfxRenderer& renderer);
-
-// A title page alone, centred on an empty sheet (boot, the sleep fallback, messages).
-// italic may be null.
-void drawCentredTitlePage(const GfxRenderer& renderer, const char* title, const char* italic = nullptr);
 
 // Paints the footnote and the button hints. Called after the app renders.
 void drawListChromeBottom(GfxRenderer& renderer, const MappedInputManager& mappedInput, const ListChrome& chrome);

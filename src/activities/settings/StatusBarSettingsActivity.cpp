@@ -99,7 +99,7 @@ const StrId offBarNames[CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT] = {
 // Row value for a position item: "[TC]" for an anchor, "Off" when parked.
 std::string anchorRowValue(uint8_t v) {
   if (v == 0 || v >= CrossPointSettings::STATUS_BAR_ANCHOR_COUNT) return std::string(I18N.get(StrId::STR_STATE_OFF));
-  return std::string(I18N.get(anchorNames[v]));
+  return "[" + std::string(I18N.get(anchorNames[v])) + "]";
 }
 
 uint8_t cycle(uint8_t v, int count) { return static_cast<uint8_t>((v + 1) % count); }
@@ -172,7 +172,7 @@ void StatusBarSettingsActivity::onEnter() {
 void StatusBarSettingsActivity::onExit() {
   UiListActivity::onExit();
   rows.clear();
-  values.clear();
+  subtitles.clear();
 }
 
 bool StatusBarSettingsActivity::handleCustomInput() {
@@ -282,14 +282,14 @@ std::string StatusBarSettingsActivity::rowValue(const int id) const {
 
 void StatusBarSettingsActivity::buildScreen(UiScreen& screen) {
   const int itemCount = static_cast<int>(visibleItems.size());
-  values.assign(static_cast<size_t>(itemCount), std::string());
+  subtitles.assign(static_cast<size_t>(itemCount), std::string());
   rows.assign(static_cast<size_t>(itemCount), fui::ListItem{});
 
   for (int i = 0; i < itemCount; ++i) {
     const int id = visibleItems[i];
     rows[i].label = I18N.get(itemLabel(id));
-    values[i] = rowValue(id);
-    if (!values[i].empty()) rows[i].value = values[i].c_str();
+    subtitles[i] = rowValue(id);
+    if (!subtitles[i].empty()) rows[i].subtitle = subtitles[i].c_str();
     rows[i].actionValue = static_cast<int16_t>(i);
   }
 
@@ -297,7 +297,7 @@ void StatusBarSettingsActivity::buildScreen(UiScreen& screen) {
   props.items = rows.data();
   props.count = static_cast<uint16_t>(itemCount);
   props.action = ACTION_ROW;
-  syncListViewport(screen, props);
+  syncListViewport(screen, props, true);
   screen.list(props);
 }
 

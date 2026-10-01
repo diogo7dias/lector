@@ -141,11 +141,6 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) const
       return reinterpret_cast<const char*>(reinterpret_cast<const uint8_t*>(&SETTINGS) + setting.stringOffset);
     }
   }
-  // A row that opens a screen says so with a › at the end of its leader; the one that
-  // acts in place (Shuffle Wallpapers) has nothing to show.
-  if (setting.type == SettingType::ACTION && setting.action != SettingAction::ShuffleWallpapers) {
-    return "\xE2\x80\xBA";
-  }
   return valueText;
 }
 
@@ -177,23 +172,17 @@ std::vector<SettingInfo>& SettingsActivity::categoryRows(const int index) {
   }
 }
 
-// The chosen category's rows. Each group heading applyGroups inserted is carried on the
-// row under it, where the contents look draws it as a numbered heading.
+// The chosen category's rows, group headings dropped. The headings did their work in
+// rebuildSettingsList, which ordered each category by group; a cell names itself, so a
+// heading band would cost a whole grid row to repeat what the order already says.
 void SettingsActivity::selectCategory(const int index) {
   {
     RenderLock lock(*this);
     selectedCategory = std::clamp(index, 0, kCategoryCount - 1);
     settings.clear();
-    headingOf.clear();
-    StrId pending = StrId::_COUNT;
     for (const auto& row : categoryRows(selectedCategory)) {
-      if (row.isHeader) {
-        pending = row.nameId;
-        continue;
-      }
+      if (row.isHeader) continue;
       settings.push_back(row);
-      headingOf.push_back(pending);
-      pending = StrId::_COUNT;
     }
     settingsCount = static_cast<int>(settings.size());
   }
@@ -213,14 +202,9 @@ const char* SettingsActivity::cellName(const int index) const {
   return cellNameScratch.c_str();
 }
 
-const char* SettingsActivity::cellHeading(const int index) const {
-  if (mode == Mode::Hub || index < 0 || index >= static_cast<int>(headingOf.size())) return nullptr;
-  return headingOf[index] == StrId::_COUNT ? nullptr : I18N.get(headingOf[index]);
-}
-
 const char* SettingsActivity::cellValue(const int index) const {
   if (mode == Mode::Hub) {
-    if (index == 4) return "\xE2\x80\xBA";  // › File Transfer opens its own screen
+    if (index == 4) return nullptr;
     if (index < 0 || index >= kCategoryCount) return nullptr;
     // Settings only: the group headings applyGroups inserts are rows too.
     const auto& rows = const_cast<SettingsActivity*>(this)->categoryRows(index);
@@ -490,8 +474,7 @@ void SettingsActivity::onBackButton() {
 ListChrome SettingsActivity::chrome() const {
   ListChrome chrome;
   chrome.title = mode == Mode::Hub ? tr(STR_SETTINGS_TITLE) : I18N.get(categoryName(selectedCategory));
-  // The version is the hub's italic line.
-  if (mode == Mode::Hub) chrome.subHeader = CROSSPOINT_VERSION;
+  if (mode == Mode::Hub) chrome.footerRight = CROSSPOINT_VERSION;
 
   const int index = selected();
   const bool onSleepTimeout = mode == Mode::Category && index >= 0 && index < settingsCount &&

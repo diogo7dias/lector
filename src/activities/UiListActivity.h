@@ -51,10 +51,8 @@ class UiListActivity : public Activity, protected UiAppHost {
   // row, then long-press/activate.
   virtual void onRowAction(const freeink::ui::ActionEvent& event);
   // The button-navigation tail of loop(): release steps the selection, hold
-  // jumps by page, and a step that lands on a heading row goes on past it.
+  // jumps by page. The reader menu replaces it with a heading-aware walk.
   virtual void navigateButtons();
-  // A heading row: drawn, never selected.
-  virtual bool isHeaderRow(int index) const { return false; }
   // First hook in loop(); return true when the pass is consumed (popups, extra
   // buttons, gestures). Runs before the base button handling.
   virtual bool handleCustomInput() { return false; }
@@ -63,19 +61,15 @@ class UiListActivity : public Activity, protected UiAppHost {
   virtual bool handleButtons();
   virtual void onBackButton() { finish(); }
   // GfxRenderer font the list rows are drawn with, bound into the body slot on
-  // entry. 0 (the reserved no-font id; real ids are hashes and can be negative)
-  // keeps the uiScale body font. Screens whose labels leave the UI
+  // entry. -1 keeps the uiScale body font. Screens whose labels leave the UI
   // font's coverage (native language names span Arabic, Hebrew and Cyrillic)
   // name a full-coverage font here instead of boxing out.
-  virtual int listFontId() const { return 0; }
+  virtual int listFontId() const { return -1; }
   // What the base paints around the body: the title band and the hints by
   // default, plus whatever else the screen asks for (a counter, a sub-header, a
   // header block, a note, a footnote). Screens override this instead of the
   // paint, so their chrome keeps coming from the theme.
   virtual ListChrome chrome() const;
-  // chrome() as it is painted: in the contents look (Literata title page, no hint band
-  // on keys-only boards).
-  ListChrome shownChrome() const;
   // Shorthand for the common case: a title and nothing else.
   virtual const char* headerTitle() const { return nullptr; }
   // The paint itself. Overriding these is the exception now; chrome() is the
@@ -95,8 +89,9 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Measure visibleRows for the screen band, apply follow-on-build, clamp the
   // viewport, and write selection/viewport into props. Call from buildScreen
   // right before screen.list(props).
-  // hasSubtitle: rows carry the italic second line, so the page estimate uses the
-  // taller contents row.
+  // hasSubtitle: rows carry a second (subtitle) text line, so on non-touch
+  // hardware the denser override below uses the theme's *-with-subtitle row
+  // height instead of its single-line one (see syncListViewport()).
   void syncListViewport(UiScreen& screen, freeink::ui::ListProps& props, bool hasSubtitle = false);
   // Move the selection to index and pull the viewport to it.
   void moveSelectionTo(int index);

@@ -13,6 +13,15 @@
 
 class GfxRenderer;
 struct StatusBarBlock;
+struct RecentBook;
+
+// Which item indices a variable-height list actually rendered this frame, so the caller
+// can keep the selected row on screen. Used by drawRecentBookList and drawWrappedList.
+struct ListVisibility {
+  int firstVisible;  // index of the first fully-rendered book
+  int lastVisible;   // index of the last fully-rendered book (inclusive)
+  int totalCount;
+};
 
 struct Rect {
   int x;
@@ -65,6 +74,11 @@ struct ThemeMetrics {
   int controlRadius;
   int sheetRadius;
   int capsuleRadius;
+
+  int homeTopPadding;
+  int homeCoverTileHeight;
+  int homeMenuTopOffset;
+
   int buttonHintsHeight;
   int sideButtonHintsWidth;
 
@@ -80,11 +94,32 @@ struct ThemeMetrics {
   int keyboardWidthPercent;
 
   int popupMarginX;
+  int popupFrameThickness;
+  int popupCornerRadius;
+  int popupProgressBarHeight;
+  bool popupProgressDrawOutline;
+  bool popupProgressClampPercent;
+  bool popupProgressFillInverted;
+  bool popupProgressOutlineInverted;
+
+  int optionPopupItemSpacing;
+  int optionPopupInnerPadding;
+  int optionPopupSelectionHPadding;
+  int optionPopupSelectionVPadding;
+  int optionPopupTitleGap;
+  int optionPopupSelectionRadius;
+  bool optionPopupSelectionLight;
+  bool optionPopupDrawAllRows;
+  int optionPopupDialogSideMargin;
+  bool optionPopupTitleSeparator;
 
   int textFieldHorizontalPadding;
   int textFieldNormalThickness;
   int textFieldCursorThickness;
   int textFieldLineEndOffset;
+
+  // Rule above the file browser's path line.
+  int pathBarThickness;
 };
 
 enum UIIcon { None = 0, Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot, Bookmark };
@@ -103,7 +138,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .headerHeight = 45,
                                  .verticalSpacing = 10,
                                  .contentSidePadding = 20,
-                                 .listRowHeight = 37,  // the contents look's row: Literata's 30px line with air
+                                 .listRowHeight = 30,
                                  .listWithSubtitleRowHeight = 50,
                                  .menuRowHeight = 45,
                                  .menuSpacing = 8,
@@ -122,6 +157,9 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .controlRadius = 0,
                                  .sheetRadius = 0,
                                  .capsuleRadius = 0,
+                                 .homeTopPadding = 40,
+                                 .homeCoverTileHeight = 400,
+                                 .homeMenuTopOffset = 10,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
                                  .progressBarHeight = 16,
@@ -135,10 +173,29 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .keyboardTextFieldWidthPercent = 85,
                                  .keyboardWidthPercent = 94,
                                  .popupMarginX = 15,
+                                 .popupFrameThickness = 2,
+                                 .popupCornerRadius = 0,
+                                 .popupProgressBarHeight = 4,
+                                 .popupProgressDrawOutline = false,
+                                 .popupProgressClampPercent = false,
+                                 // White on the strip's black backing.
+                                 .popupProgressFillInverted = false,
+                                 .popupProgressOutlineInverted = false,
+                                 .optionPopupItemSpacing = 6,
+                                 .optionPopupInnerPadding = 16,
+                                 .optionPopupSelectionHPadding = 8,
+                                 .optionPopupSelectionVPadding = 4,
+                                 .optionPopupTitleGap = 10,
+                                 .optionPopupSelectionRadius = 0,
+                                 .optionPopupSelectionLight = false,
+                                 .optionPopupDrawAllRows = false,
+                                 .optionPopupDialogSideMargin = 20,
+                                 .optionPopupTitleSeparator = true,
                                  .textFieldHorizontalPadding = 6,
                                  .textFieldNormalThickness = 1,
                                  .textFieldCursorThickness = 3,
-                                 .textFieldLineEndOffset = 0};
+                                 .textFieldLineEndOffset = 0,
+                                 .pathBarThickness = 3};
 }
 
 class BaseTheme {
@@ -205,6 +262,32 @@ class BaseTheme {
   void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, bool selected) const;
   bool tabIndexFromPoint(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, int x, int y,
                          int& index) const;
+  // Home in-progress list: each book's full title + author initials wrapped across as
+  // many lines as it needs, with an inline [NN%] black-background badge, the selected
+  // row inverted, and "N more above/below" indicators when the list scrolls. Returns
+  // the visible index range so the caller can keep the selected book on screen.
+  ListVisibility drawRecentBookList(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
+                                    int selectorIndex, int scrollOffset) const;
+  // Variable-height sibling of drawList: each row's title WRAPS over as many lines as it
+  // needs instead of being ellipsised, so a long filename stays readable in full. rowValue
+  // is optional and is drawn right-aligned on the row's first line, with its width reserved
+  // there. Rows scroll rather than paginate, so the caller keeps a scrollOffset and feeds
+  // back the returned visible range (see FileBrowserActivity).
+  ListVisibility drawWrappedList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
+                                 int scrollOffset, const std::function<std::string(int index)>& rowTitle,
+                                 const std::function<std::string(int index)>& rowValue = nullptr,
+                                 // Drawn as a filled chip before the title on the row's first line, in
+                                 // the same style drawRecentBookList uses on the home screen: black on
+                                 // an unselected row, white on the inverted one. Return an empty
+                                 // string for a row that has no badge. The title wraps to the right of
+                                 // the chip and its continuation lines stay under the first line, not
+                                 // back at the left margin, so the text block keeps a straight edge.
+                                 const std::function<std::string(int index)>& rowBadge = nullptr) const;
+  // itemIndexBase is what a tapped tile reports as its item: the home screen's menu sits
+  // below its book list in one selection space, so its first tile is item N, not item 0.
+  void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
+                      const std::function<std::string(int index)>& buttonLabel,
+                      const std::function<UIIcon(int index)>& rowIcon, int itemIndexBase = 0) const;
   // The one message surface: a full-width black strip below the top padding, with a
   // white inset border and white centered text. Paints only — the caller picks the
   // refresh, because the busy banner wants the cheap FAST waveform and popups do not.
@@ -214,32 +297,37 @@ class BaseTheme {
   // example. drawPopup below is the convenience for the 42 callers that just want a
   // message on the glass.
   Rect drawBannerStrip(const GfxRenderer& renderer, const char* message) const;
-  // The image viewer's button hints as one italic line on a paper strip at the foot, the
-  // labels in button order: the image stays full-bleed above it.
-  void drawHintStrip(const GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
-                     const char* btn4) const;
   // drawBannerStrip plus ONE panel submission at FAST. Paints and drives the panel — the
   // only draw* entry point on this class that does, which is why it is called out here.
   Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
-  // The option pop-up as a card: the title as a heading over a rule, the rows under it with
-  // the cursor on the selected one. Rows flagged in `disabled` are set in italic.
+  // leftAlign left-aligns the rows instead of centring them, so a caller whose labels carry
+  // a status marker keeps that marker in a fixed column rather than letting it shunt each
+  // label sideways. Text is 1-bit on this panel, so an unavailable row is marked in the
+  // label the caller supplies, not by the painter. Defaults to the centred look every
+  // other caller in the firmware uses.
   void drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
-                       int selectedIndex, const std::vector<bool>& disabled) const;
+                       int selectedIndex, bool leftAlign = false) const;
   void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   // v2 status bar: per-item, six-anchor layout with reflow (see StatusBar.h). Reads
   // the sb* settings and pulls battery/clock from the HAL; the reader supplies the
   // book/chapter data. Draws top and/or bottom bands plus edge progress bars.
   void drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data, const StatusBarBlock& sb) const;
-  // The status bar's faces (Literata 19 italic, the title in its small caps), or the UI
-  // face where Literata cannot stand in. The band reservations measure with these too.
-  static int statusBarFontId();
-  static int statusBarTitleFontId();
   // Centred lines of help text, wrapped to the rect's width and never cut. The caller
   // reserves helpTextLines() lines; every line is drawn.
   void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
   static int helpTextLines(const GfxRenderer& renderer, int rectWidth, const char* label);
+  // Foot-of-screen path bar: a rule, then the path wrapped over as many lines as it
+  // needs (pathBarLines says how many, so the caller can reserve them).
+  void drawPathBar(const GfxRenderer& renderer, Rect rect, const char* path) const;
+  static int pathBarLines(const GfxRenderer& renderer, int rectWidth, const char* path);
+  // The home header band's own contents: the firmware version at the left edge,
+  // the clock against the battery cluster, and the skull on the screen's centre
+  // line. nullptr for either string leaves that part out, which is what a board
+  // with no RTC does with the clock.
+  void drawHomeHeaderExtras(const GfxRenderer& renderer, const char* version, const char* clock) const;
   void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                      int contentStartX = 0, int contentWidth = 0) const;
+  bool showsFileIcons() const { return false; }
 
   // Shared constants and helpers for battery drawing
   static constexpr int batteryPercentSpacing = 4;

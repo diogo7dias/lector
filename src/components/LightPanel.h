@@ -15,7 +15,6 @@
 #include "CrossPointSettings.h"
 #include "LightPanelGeometry.h"
 #include "MappedInputManager.h"
-#include "UiFont.h"
 #include "fontIds.h"
 #include "icons/sun24.h"
 #include "icons/thermometer24.h"
@@ -200,7 +199,7 @@ class LightPanel {
 
     const int screenWidth = renderer.getScreenWidth();
     const int lineHeight = renderer.getLineHeight(banner::FONT_ID);
-    layout_ = light_panel::forScreen(screenWidth, lineHeight, renderer.getLineHeight(readoutFont()),
+    layout_ = light_panel::forScreen(screenWidth, lineHeight, renderer.getLineHeight(UI_10_FONT_ID),
                                      Frontlight.hasColorTemperature(), context_.hasAux(), context_.actionCount);
 
     // Physical top crop (X4 crops ~9px, X3 none): the black backing reaches the physical
@@ -218,15 +217,18 @@ class LightPanel {
     renderer.fillRect(0, 0, screenWidth, bandHeight, false);
     renderer.fillRect(0, bandHeight - banner::RULE, screenWidth, banner::RULE, true);
 
-    drawToggleRow(renderer, layout_.toggle);
+    char text[64];
+    snprintf(text, sizeof(text), "%s  %s", I18N.get(StrId::STR_FRONTLIGHT),
+             I18N.get(on_ ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF));
+    drawBox(renderer, layout_.toggle, text, /*filled=*/on_);
 
     drawSliderRow(renderer, layout_.brightness, Sun24Icon, brightness_);
     if (layout_.hasWarmth) drawSliderRow(renderer, layout_.warmth, Thermometer24Icon, warmth_);
     if (layout_.hasAux) drawAuxRow(renderer, layout_.aux, context_.auxText);
 
     for (int i = 0; i < layout_.actionCount; ++i) {
-      drawCell(renderer, layout_.actions[i], I18N.get(boundMenuActionLabel(context_.actions[i])),
-               /*marked=*/i == actionPressed_);
+      drawBox(renderer, layout_.actions[i], I18N.get(boundMenuActionLabel(context_.actions[i])),
+              /*filled=*/i == actionPressed_);
     }
     drawReadout(renderer);
   }
@@ -272,30 +274,15 @@ class LightPanel {
     }
   }
 
-  // The contents look: a label on a hairline, no box. A pressed cell is bold with a rule
-  // under its label, as the keyboard marks its selected key.
-  void drawCell(const GfxRenderer& renderer, const light_panel::Rect& rect, const char* label,
-                const bool marked) const {
+  // A framed box with its label centred. Filled while pressed, and the text is knocked out
+  // of the fill rather than drawn over it.
+  void drawBox(const GfxRenderer& renderer, const light_panel::Rect& rect, const char* label, const bool filled) const {
     const int y = rect.y + topInset_;
-    const auto style = marked ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
-    const int textWidth = renderer.getTextWidth(banner::FONT_ID, label, style);
-    const int lineHeight = renderer.getLineHeight(banner::FONT_ID);
-    const int textX = rect.x + (rect.width - textWidth) / 2;
-    const int textY = y + (rect.height - lineHeight) / 2;
-    renderer.drawText(banner::FONT_ID, textX, textY, label, true, style);
-    renderer.fillRect(rect.x, y + rect.height - 1, rect.width, 1, true);
-    if (marked) renderer.fillRect(textX, textY + lineHeight, textWidth, 2, true);
-  }
-
-  // Frontlight on the left, its state on the right, over a hairline.
-  void drawToggleRow(const GfxRenderer& renderer, const light_panel::Rect& rect) const {
-    const int y = rect.y + topInset_;
+    if (filled) renderer.fillRect(rect.x, y, rect.width, rect.height, true);
+    renderer.drawRect(rect.x, y, rect.width, rect.height, true);
+    const int textWidth = renderer.getTextWidth(banner::FONT_ID, label);
     const int textY = y + (rect.height - renderer.getLineHeight(banner::FONT_ID)) / 2;
-    renderer.drawText(banner::FONT_ID, rect.x, textY, I18N.get(StrId::STR_FRONTLIGHT), true);
-    const char* state = I18N.get(on_ ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
-    renderer.drawText(banner::FONT_ID, rect.x + rect.width - renderer.getTextWidth(banner::FONT_ID, state), textY,
-                      state, true);
-    renderer.fillRect(rect.x, y + rect.height - 1, rect.width, 1, true);
+    renderer.drawText(banner::FONT_ID, rect.x + (rect.width - textWidth) / 2, textY, label, !filled);
   }
 
   // Icon, track, number, then the two steppers. The row is named by its icon rather than
@@ -309,12 +296,10 @@ class LightPanel {
     const int rowCenter = row.y + topInset_ + row.height / 2;
     renderer.drawIcon(icon.bits, row.icon.x, rowCenter - icon.opticalCenterY, icon.w);
 
-    // The track as the contents look draws a progress rule: a hairline, the set part 4px.
-    // The touch band stays the full bar height; only the paint is thin.
-    const int midY = row.bar.y + topInset_ + row.bar.height / 2;
-    renderer.fillRect(row.bar.x, midY, row.bar.width, 1, true);
+    const int barY = row.bar.y + topInset_;
+    renderer.drawRect(row.bar.x, barY, row.bar.width, row.bar.height, true);
     const int fill = row.bar.width * value / 100;
-    if (fill > 0) renderer.fillRect(row.bar.x, midY - 2, fill, 4, true);
+    if (fill > 0) renderer.fillRect(row.bar.x, barY, fill, row.bar.height, true);
 
     char number[8];
     snprintf(number, sizeof(number), "%d", static_cast<int>(value));
@@ -331,8 +316,8 @@ class LightPanel {
   }
 
   void drawSteppers(const GfxRenderer& renderer, const light_panel::StepRow& row) const {
-    drawCentered(renderer, row.minus, "\xE2\x88\x92", /*center=*/true);  // a minus sign, not a hyphen
-    drawCentered(renderer, row.plus, "+", /*center=*/true);
+    drawBox(renderer, row.minus, "-", /*filled=*/false);
+    drawBox(renderer, row.plus, "+", /*filled=*/false);
   }
 
   // Vertically centred in `rect` either way; `center` picks horizontal centring over
@@ -352,30 +337,29 @@ class LightPanel {
                       layout_.width - light_panel::kSidePad * 2, 1, true);
   }
 
-  // Battery and free space as the folio: one small-caps line, centred.
+  // Battery and free space, in the small UI font. No rule above it: the button grid it
+  // follows is already a row of boxes, and a line under those read as a second border.
   void drawReadout(const GfxRenderer& renderer) const {
     const auto& rect = layout_.readout;
+    const int y = rect.y + topInset_;
+
+    char left[32];
+    snprintf(left, sizeof(left), "%s %u%%", I18N.get(StrId::STR_BATTERY),
+             static_cast<unsigned>(powerManager.getBatteryPercentage()));
+    renderer.drawText(UI_10_FONT_ID, rect.x, y, left, true);
+
+    char right[32];
     // Whole gigabytes below ten get a decimal; above it the tenth is noise on a card this
     // size and the shorter string is easier to read at a glance.
     const double gigabytes = static_cast<double>(freeBytes_) / (1024.0 * 1024.0 * 1024.0);
-    char space[24];
     if (gigabytes < 10.0) {
-      snprintf(space, sizeof(space), "%.1f gb", gigabytes);
+      snprintf(right, sizeof(right), "%.1f GB %s", gigabytes, I18N.get(StrId::STR_FREE_SPACE));
     } else {
-      snprintf(space, sizeof(space), "%d gb", static_cast<int>(gigabytes + 0.5));
+      snprintf(right, sizeof(right), "%d GB %s", static_cast<int>(gigabytes + 0.5), I18N.get(StrId::STR_FREE_SPACE));
     }
-    char line[96];
-    snprintf(line, sizeof(line), "%s %u%% \xC2\xB7 %s %s", I18N.get(StrId::STR_BATTERY),
-             static_cast<unsigned>(powerManager.getBatteryPercentage()), space, I18N.get(StrId::STR_FREE_SPACE));
-    // Small capitals are the lower case set in the small-caps face.
-    for (char* c = line; *c; ++c)
-      if (*c >= 'A' && *c <= 'Z') *c = static_cast<char>(*c - 'A' + 'a');
-    const int font = readoutFont();
-    renderer.drawText(font, rect.x + (rect.width - renderer.getTextWidth(font, line)) / 2, rect.y + topInset_, line,
-                      true);
+    const int width = renderer.getTextWidth(UI_10_FONT_ID, right);
+    renderer.drawText(UI_10_FONT_ID, rect.x + rect.width - width, y, right, true);
   }
-
-  static int readoutFont() { return uiLanguageNeedsUbuntu() ? UI_10_FONT_ID : LITERATA_UI_19_SC_FONT_ID; }
 
   void close(const std::function<void()>& requestUpdate) {
     active_ = false;

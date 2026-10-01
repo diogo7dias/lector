@@ -8,7 +8,6 @@
 
 #include "MappedInputManager.h"
 #include "components/KeyboardFieldLayout.h"
-#include "components/ListChrome.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -621,13 +620,9 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  // The prompt as a title page; a long one wraps and the field starts under it.
-  ListChrome titleChrome;
-  titleChrome.title = title.c_str();
-  titleChrome.hints = false;  // the keyboard draws its own
-  toContentsLook(titleChrome, false);
-  drawListChromeTop(renderer, titleChrome);
-  const int headerHeight = listChromeBands(renderer, titleChrome).contentTop - metrics.topPadding;
+  // A long prompt wraps and the band grows; the field below starts under it.
+  const int headerHeight = BaseTheme::headerHeightFor(renderer, pageWidth, title.c_str());
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, headerHeight}, title.c_str());
 
   // The field draws through the same target the keyboard does, so its type and
   // its ink come from the theme rather than from a font id named here.
@@ -904,7 +899,6 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   props.selectedIndex = cursorMode ? -1 : static_cast<int16_t>(selectedLogicalIndex());
   props.labelText.font = fui::GfxRendererTarget::FONT_BODY;
   props.altText.font = fui::GfxRendererTarget::FONT_SMALL;
-  props.hairlines = true;
   props.gap = static_cast<int16_t>(metrics.keyboardKeySpacing);
   props.padding = fui::Insets{0, 0, 0, 0};
   // Fingers land low on the bottom row (occlusion) and there is no key below

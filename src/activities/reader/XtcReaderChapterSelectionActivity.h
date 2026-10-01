@@ -2,7 +2,6 @@
 #include <Xtc.h>
 
 #include <memory>
-#include <string>
 #include <vector>
 
 #include "activities/UiListActivity.h"
@@ -14,8 +13,6 @@ class XtcReaderChapterSelectionActivity final : public UiListActivity {
   // The rows; buildScreen only hands out pointers into the chapter list, so
   // the labels themselves live in the Xtc.
   std::vector<freeink::ui::ListItem> rows;
-  // The title page's italic line; chrome() borrows it.
-  std::string bookTitle;
 
   int findChapterIndexForPage(uint32_t page) const;
 
@@ -31,10 +28,5 @@ class XtcReaderChapterSelectionActivity final : public UiListActivity {
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   void onBackButton() override;
-  ListChrome chrome() const override {
-    ListChrome chrome;
-    chrome.title = tr(STR_SELECT_CHAPTER);
-    chrome.subHeader = bookTitle.c_str();
-    return chrome;
-  }
+  const char* headerTitle() const override { return tr(STR_SELECT_CHAPTER); }
 };

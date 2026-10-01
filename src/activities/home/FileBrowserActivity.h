@@ -9,11 +9,12 @@
 
 #include "CrossPointSettings.h"
 #include "RecentBooksStore.h"
-#include "activities/UiListActivity.h"
+#include "activities/Activity.h"
 #include "components/OptionPopup.h"
+#include "util/ButtonNavigator.h"
 #include "util/HoldButtonPolicy.h"
 
-class FileBrowserActivity final : public UiListActivity {
+class FileBrowserActivity final : public Activity {
  public:
   // Books = standard reader browser; PickFirmware = filter to .bin only and return path via
   // ActivityResult; PickFolder = folders only, returning the folder the reader stops in, which
@@ -29,12 +30,21 @@ class FileBrowserActivity final : public UiListActivity {
   // Opens the delete confirmation for one entry.
   void confirmDelete(const std::string& fullPath);
 
+  // List repeat rates, not the page-flick default: see UiListActivity.h.
+  ButtonNavigator buttonNavigator{ButtonNavigator::LIST_REPEAT_INTERVAL_MS, ButtonNavigator::LIST_REPEAT_START_MS};
   // Holding Confirm on a file opens this: send it to a nearby reader, or delete it.
   OptionPopup fileActionPopup;
-  // What the list rows point into, rebuilt with them.
-  std::vector<freeink::ui::ListItem> rows;
-  std::vector<std::string> rowText;
 
+  size_t selectorIndex = 0;
+
+  // Rows wrap over a variable number of lines, so the list scrolls instead of paginating.
+  // render() is the source of truth: it reports back which rows it actually drew, and
+  // loop() only nudges the offset when the selection leaves that range.
+  int scrollOffset = 0;
+  int firstVisibleIdx = 0;
+  int lastVisibleIdx = 0;
+
+  // True when this activity was entered while Confirm was already held; we must swallow the next
   // Confirm and Back each carry a short and a hold action; the trackers decide which
   // fired and keep the hold from also counting as a short press on the way up.
   hold_button::Tracker confirmHold;
@@ -72,8 +82,8 @@ class FileBrowserActivity final : public UiListActivity {
   int fileIndexAt(int row) const;
   std::string rowTitle(int row) const;
   std::string rowValue(int row) const;
-  // The reading progress under the title ("42%", or Read). Empty for a row that is not a
-  // book or for a book that has never been opened.
+  // The reading-progress chip drawn before the title. Empty for a row that is not a book
+  // or for a book that has never been opened.
   std::string rowBadge(int row) const;
   // Reading badge for one listing entry: the stored percent, or -1 for a book that was
   // never opened (and for anything that is not a book). Memoised per listing because the
@@ -125,25 +135,15 @@ class FileBrowserActivity final : public UiListActivity {
   // the length of a load only: the browser reads it once, in applyBrowserOrder().
   std::vector<uint32_t> sortKeys;
   size_t findEntryRow(const std::string& name) const;
-  // Open, descend into or (holdAction) act on one row.
-  void activateRow(int row, bool holdAction);
 
  public:
   explicit FileBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialPath = "/",
                                Mode mode = Mode::Books)
-      : UiListActivity(activity_name::kFileBrowser, renderer, mappedInput),
+      : Activity(activity_name::kFileBrowser, renderer, mappedInput),
         mode(mode),
         basepath(initialPath.empty() ? "/" : std::move(initialPath)) {}
   void onEnter() override;
   void onExit() override;
-
- protected:
-  int listCount() const override { return totalRowCount(); }
-  void buildScreen(UiScreen& screen) override;
-  void activateIndex(int index) override;
-  bool handleCustomInput() override;
-  bool handleButtons() override;
-  ListChrome chrome() const override;
-  HalDisplay::RefreshMode refreshMode() override;
-  bool drawOverlay() override;
+  void loop() override;
+  void render(RenderLock&&) override;
 };

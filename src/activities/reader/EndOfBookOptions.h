@@ -42,6 +42,9 @@ class EndOfBookOptions {
   // reads it after isLoaded is observed true (acquire), so no further locking is needed.
   std::vector<std::string> names;
   int selector = 0;
+  // First row of the last drawn window, fed back by drawWrappedList. Written by the
+  // render pass, which is why it is mutable behind a const render().
+  mutable int scrollOffset = 0;
   std::atomic<bool> isLoaded{false};
 
   std::string fullPath(size_t index) const;

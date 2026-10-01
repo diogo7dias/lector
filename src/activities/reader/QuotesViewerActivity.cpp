@@ -24,6 +24,8 @@ constexpr unsigned long ENTER_DELETE_MODE_MS = 700;
 // Headroom demanded on top of the file bytes before the whole sidecar is pulled in:
 // std::string growth aborts on OOM under -fno-exceptions, so refuse up front.
 constexpr size_t LOAD_HEAP_HEADROOM = 8 * 1024;
+// Share of the row width the chapter tag may claim on a row's first line.
+constexpr int CHAPTER_TAG_WIDTH_DIVISOR = 4;
 // Lines a quote may spill over before it is cut. Long enough for a paragraph,
 // short enough that one quote cannot fill the screen on its own.
 constexpr uint8_t MAX_QUOTE_LINES = 8;
@@ -220,11 +222,10 @@ void QuotesViewerActivity::onBackButton() {
 // ── Screen ──────────────────────────────────────────────────────────────────
 
 ListChrome QuotesViewerActivity::chrome() const {
-  // Title page: Quotes, then the book and how many it holds in italic.
-  headerText = bookTitle + " \xC2\xB7 " + std::to_string(quotes.size());
+  // Header: book name plus how many quotes it holds.
+  headerText = bookTitle + "  (" + std::to_string(quotes.size()) + ")";
   ListChrome chrome;
-  chrome.title = tr(STR_GRP_QUOTES);
-  chrome.subHeader = headerText.c_str();
+  chrome.title = headerText.c_str();
   // Nothing to open: the middle button only deletes, and only on a hold.
   chrome.confirmHint = "";
   if (!quotes.empty()) chrome.footnotes[0] = tr(STR_HOLD_TO_DELETE);
@@ -238,8 +239,7 @@ void QuotesViewerActivity::buildScreen(UiScreen& screen) {
     return;
   }
 
-  // The chapter is the row's italic line, as wide as the text column.
-  const int chapterMaxWidth = std::max(1, renderer.getScreenWidth() - fui::contents::SIDE * 2);
+  const int chapterMaxWidth = std::max(1, renderer.getScreenWidth() / CHAPTER_TAG_WIDTH_DIVISOR);
   chapterTags.assign(static_cast<size_t>(count), std::string());
   rows.assign(static_cast<size_t>(count), fui::ListItem{});
   for (int i = 0; i < count; ++i) {
@@ -247,7 +247,7 @@ void QuotesViewerActivity::buildScreen(UiScreen& screen) {
     if (!quotes[i].chapter.empty()) {
       chapterTags[i] =
           renderer.truncatedText(UI_10_FONT_ID, quotes[i].chapter.c_str(), chapterMaxWidth, EpdFontFamily::REGULAR);
-      rows[i].subtitle = chapterTags[i].c_str();
+      rows[i].value = chapterTags[i].c_str();
     }
     rows[i].actionValue = static_cast<int16_t>(i);
   }
@@ -263,6 +263,6 @@ void QuotesViewerActivity::buildScreen(UiScreen& screen) {
   // follows a selection whose row is taller than the estimate.
   props.labelText = screen.theme().bodyText;
   props.labelText.maxLines = MAX_QUOTE_LINES;
-  syncListViewport(screen, props, /*hasSubtitle=*/true);
+  syncListViewport(screen, props);
   screen.list(props);
 }

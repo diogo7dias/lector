@@ -23,13 +23,11 @@ class EpubReaderChapterSelectionActivity final : public UiListActivity {
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   void onBackButton() override;
-  ListChrome chrome() const override;
+  const char* headerTitle() const override;
 
  private:
   Epub& epub;
   int currentSpineIndex = 0;
-  // The title page's italic line; chrome() borrows it.
-  std::string bookTitle;
 
   // Visible-row cache. TOC entries are SD-backed (BookMetadataCache LUT reads) and the
   // list redraws every visible row on each repaint, so a CJK table of contents used to

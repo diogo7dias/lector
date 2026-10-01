@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <functional>
 
-// Pure windowing logic for the wrapped settings grid (no hardware deps — host testable).
+// Pure windowing logic for BaseTheme::drawWrappedList (no hardware deps — host testable).
 //
 // Rows in a wrapped list vary in height, because a long title wraps over as many lines as
 // it needs. So the window cannot be "N rows of a fixed step": it is however many rows fit

@@ -14,7 +14,6 @@ void EpubReaderFootnotesActivity::onExit() {
 ListChrome EpubReaderFootnotesActivity::chrome() const {
   ListChrome chrome;
   chrome.title = tr(STR_FOOTNOTES);
-  chrome.subHeader = tr(STR_ON_THIS_PAGE);
   // Nothing to open and nothing to move between when the page carries no links.
   const bool hasRows = listCount() > 0;
   chrome.confirmHint = hasRows ? tr(STR_SELECT) : "";

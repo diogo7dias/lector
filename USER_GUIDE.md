@@ -134,21 +134,21 @@ On a fresh card, Lector creates the folders it uses: `/read`, `/recents`, `/slee
 
 ## 3. Home screen
 
-The Home screen is the entry point, laid out like a book's contents page: the firmware's name
-and version at the top, the clock and battery at the foot. Under **Continue Reading** are the
-books you have been reading, each with its author and how far in you are. Under **Library**:
+The Home screen is the entry point. It lists the books you have been reading, and below them:
 
+- **Continue Reading** — reopen the most recent book. Present in themes that put it in the
+  menu, and only once something has been read.
 - **Browse Files** — the file browser.
 - **OPDS Browser** — shown once at least one catalog is configured, see
   [section 9](#9-getting-books-onto-the-device).
-- **Nearby Sync** — Wi-Fi transfers, see [section 9](#9-getting-books-onto-the-device).
+- **File Transfer** — Wi-Fi transfers, see [section 9](#9-getting-books-onto-the-device).
 - **Settings** — see [section 12](#12-settings-reference).
 
 **Settings > Controls > Home Back Button** decides what **Back** does here: nothing, resume
 the current book, or open **Sortes**.
 Resume remains the default. Sortes opens a randomly chosen finished EPUB at a random page:
 a book counts as finished when its saved library badge is 100% (Read), wherever it is filed.
-Back then shows **No read books** and does nothing when none qualify.
+The footer says **No read books** and does nothing when none qualify.
 
 Back or sleep ends the visit. Sortes leaves the saved reading position, Read status, filing
 and recents untouched. Quotes and bookmarks can still be saved deliberately, and the reader
@@ -164,8 +164,8 @@ full name.
 
 ## 4. Browsing files
 
-The file browser is titled with the current folder, with its full path at the foot. Files show
-their type on the right; folders show `›`.
+The file browser shows the current folder path at the top, files with their extensions, and
+folders in brackets, for example `[folder-name]`.
 
 - **Move the cursor** — **Left** (or **Volume Up**) and **Right** (or **Volume Down**). Hold
   either one to move a whole page at a time.
@@ -179,8 +179,9 @@ their type on the right; folders show `›`.
 Renaming and moving files is done from the web interface rather than on the device, see
 [section 9](#9-getting-books-onto-the-device).
 
-A book you have opened before also shows how far in you are, in italic under its title: a
-percentage while you are reading it, or **Read** once you reach its last page. The
+Each row shows its file type on the right, and a book you have opened before also shows how
+far in you are on the left, in front of the title: a percentage while you are reading it, or
+**Read** once you reach its last page, in the same style the home screen uses. The
 badge stays even after the book leaves the Recents list or is filed into `/read`. Books you
 have never opened show no badge, and comics (XTC) never carry one.
 
@@ -299,12 +300,9 @@ Landscape CCW. The in-book menu can rotate the screen without leaving the book.
 
 ## 6. The in-book menu
 
-Press **Confirm** while reading. The menu is set like a book's contents page: the book's
-title, author, chapter and progress at the top, then one list with every section under its own
-numbered heading (**I Look**, **II Navigate**...). A small triangle marks the selection and the
-cursor steps over the headings. Rows with a setting run a dotted line out to its value, and
-rows that open another screen end in **›**. **Back** closes the menu. Rows that do not apply
-to the open book are not shown at all.
+Press **Confirm** while reading. The menu opens in tabs; **Left** and **Right** move within a
+tab, and the tab strip runs across the top. Rows that do not apply to the open book are not
+shown at all.
 
 The menu opens on **Sleep Screen**. **Settings > Reader > Book Menu Opens On** changes that to
 **Navigate**, **Book**, **Look** or **Device** instead, and that choice always wins. The

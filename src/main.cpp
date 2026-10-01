@@ -85,22 +85,22 @@ EpdFontFamily chareink14FontFamily(&chareink14RegularFont, &chareink14BoldFont, 
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
 
-// Contents look faces (lib/EpdFont/scripts/convert-literata-ui.py). One pixel size per
-// face, as the mockup draws them; only the row face has a second cut, the selected row's
-// bold. Each face fills its family's bold slot with itself otherwise, like the UI fonts.
-EpdFont literataUi20RegularFont(&literata_ui_20_regular);
-EpdFont literataUi20BoldFont(&literata_ui_20_bold);
-EpdFontFamily literataUi20FontFamily(&literataUi20RegularFont, &literataUi20BoldFont);
-EpdFont literataUi26Font(&literata_ui_26_semibold);
-EpdFontFamily literataUi26FontFamily(&literataUi26Font, &literataUi26Font);
-EpdFont literataUi25Font(&literata_ui_25_semibold);
-EpdFontFamily literataUi25FontFamily(&literataUi25Font, &literataUi25Font);
-EpdFont literataUi16Font(&literata_ui_16_semibold);
-EpdFontFamily literataUi16FontFamily(&literataUi16Font, &literataUi16Font);
-EpdFont literataUi19ScFont(&literata_ui_19_smallcaps);
-EpdFontFamily literataUi19ScFontFamily(&literataUi19ScFont, &literataUi19ScFont);
-EpdFont literataUi19ItFont(&literata_ui_19_italic);
-EpdFontFamily literataUi19ItFontFamily(&literataUi19ItFont, &literataUi19ItFont);
+// Paragraph numbers only. Spleen 6x12 is a bitmap face baked at --dpi 72, so "size 12"
+// means 12 pixels and every glyph lands exactly on its native grid: one-pixel stems, no
+// anti-alias halo, no smear. Cozette (SMALL_FONT_ID) is also a bitmap face but is baked
+// at the historic 150 dpi, i.e. 1.6x off its own 13px grid, which fattens the digits
+// until 8, 9 and 0 close up at margin size. Digits here are 8px tall against Cozette's
+// 13px: smaller AND cleaner. Kept off SMALL_FONT_ID so the status bar is untouched.
+EpdFont paragraphNumFont(&spleen_6x12_regular);
+EpdFontFamily paragraphNumFontFamily(&paragraphNumFont, &paragraphNumFont);
+
+// The Double size: the very same Spleen cell baked at exactly 2x (24px at dpi 72), so
+// each pixel becomes a 2x2 block and the shapes are identical, just larger. Verified
+// glyph-by-glyph against the 1x header. A size between the two is not offered because
+// a bitmap face has nothing to draw there: 1.5 pixels rounds unevenly and the stems
+// come out mismatched, which is the very fault this font was brought in to cure.
+EpdFont paragraphNum2xFont(&spleen_6x12_2x_regular);
+EpdFontFamily paragraphNum2xFontFamily(&paragraphNum2xFont, &paragraphNum2xFont);
 
 // The UI families ship REGULAR ONLY, and the regular face fills the family's bold slot
 // so a stray BOLD request resolves to regular instead of nullptr. This is the old-Lector
@@ -120,11 +120,24 @@ EpdFontFamily ubuntu12FontFamily(&ubuntu12RegularFont, &ubuntu12RegularFont);
 EpdFont ubuntu14RegularFont(&ubuntu_14_regular);
 EpdFontFamily ubuntu14FontFamily(&ubuntu14RegularFont, &ubuntu14RegularFont);
 
-// Literata cannot draw Arabic or Hebrew, so those two UI languages use the Ubuntu
-// family. Every other language uses Literata (Latin, Vietnamese and Cyrillic are baked
-// into the faces). Called at boot and on every in-app language change (declared in
-// UiFont.h so LanguageSelectActivity can rebind after a change).
-bool uiLanguageNeedsUbuntu() {
+// Cozette UI family — lector's default menu font (Latin + Cyrillic + Greek + Vietnamese;
+// no Arabic/Hebrew). Sizes match the previous mature Lector: 10 = SMALL_FONT_ID,
+// 12 = UI_10_FONT_ID (list rows), 14 = UI_12_FONT_ID (header title). Bound for every
+// language except Arabic/Hebrew (which use the Ubuntu family at the same sizes).
+EpdFont cozette10RegularFont(&cozette_10_regular);
+EpdFontFamily cozette10FontFamily(&cozette10RegularFont, &cozette10RegularFont);
+
+EpdFont cozette12RegularFont(&cozette_12_regular);
+EpdFontFamily cozette12FontFamily(&cozette12RegularFont, &cozette12RegularFont);
+
+EpdFont cozette14RegularFont(&cozette_14_regular);
+EpdFontFamily cozette14FontFamily(&cozette14RegularFont, &cozette14RegularFont);
+
+// Cozette cannot draw Arabic or Hebrew, so those two UI languages use the Ubuntu
+// family. Every other language (incl. Cyrillic + Vietnamese, verified in Cozette's
+// cmap) uses Cozette. Called at boot and on every in-app language change (declared
+// in UiFont.h so LanguageSelectActivity can rebind after a change).
+static bool uiLanguageNeedsUbuntu() {
   const Language lang = I18n::getInstance().getLanguage();
   return lang == Language::AR || lang == Language::HE;
 }
@@ -132,15 +145,15 @@ bool uiLanguageNeedsUbuntu() {
 void bindUiFontsForLanguage(GfxRenderer& renderer) {
   const bool useUbuntu = uiLanguageNeedsUbuntu();
   // insertFont() ignores an already-registered id, so drop the old binding first.
-  // The contents look's one UI face, Literata 20px (the in-book menu's rows), for every
-  // slot: the UI draws everything at one size (UIScale.h). Arabic/Hebrew keep the Ubuntu
-  // family at the old sizes.
+  // Sizes mirror the previous mature Lector (2px larger than the CrossPoint base):
+  // SMALL = 10, UI_10 (list rows) = 12, UI_12 (header title) = 14. Arabic/Hebrew use the
+  // Ubuntu family at the same sizes so their small text renders too (Cozette lacks AR/HE).
   renderer.removeFont(SMALL_FONT_ID);
   renderer.removeFont(UI_10_FONT_ID);
   renderer.removeFont(UI_12_FONT_ID);
-  renderer.insertFont(SMALL_FONT_ID, useUbuntu ? ubuntu10FontFamily : literataUi20FontFamily);
-  renderer.insertFont(UI_10_FONT_ID, useUbuntu ? ubuntu12FontFamily : literataUi20FontFamily);
-  renderer.insertFont(UI_12_FONT_ID, useUbuntu ? ubuntu14FontFamily : literataUi20FontFamily);
+  renderer.insertFont(SMALL_FONT_ID, useUbuntu ? ubuntu10FontFamily : cozette10FontFamily);
+  renderer.insertFont(UI_10_FONT_ID, useUbuntu ? ubuntu12FontFamily : cozette12FontFamily);
+  renderer.insertFont(UI_12_FONT_ID, useUbuntu ? ubuntu14FontFamily : cozette14FontFamily);
 }
 
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
@@ -353,12 +366,10 @@ static void setupBuiltinFonts() {
   // language-select native-name list and the Arabic/Hebrew UI.
   renderer.insertFont(UBUNTU_10_FONT_ID, ubuntu10FontFamily);
   renderer.insertFont(UBUNTU_12_FONT_ID, ubuntu12FontFamily);
-  renderer.insertFont(LITERATA_UI_20_FONT_ID, literataUi20FontFamily);
-  renderer.insertFont(LITERATA_UI_26_FONT_ID, literataUi26FontFamily);
-  renderer.insertFont(LITERATA_UI_25_FONT_ID, literataUi25FontFamily);
-  renderer.insertFont(LITERATA_UI_16_FONT_ID, literataUi16FontFamily);
-  renderer.insertFont(LITERATA_UI_19_SC_FONT_ID, literataUi19ScFontFamily);
-  renderer.insertFont(LITERATA_UI_19_IT_FONT_ID, literataUi19ItFontFamily);
+  // Paragraph numbers, both sizes. Digits only in practice, so neither rebinds per
+  // language; the reader picks between them per book from ReaderPrefs.
+  renderer.insertFont(PARA_NUM_FONT_ID, paragraphNumFontFamily);
+  renderer.insertFont(PARA_NUM_2X_FONT_ID, paragraphNum2xFontFamily);
   // Active UI ids (SMALL / UI_10 / UI_12): Cozette by default, Ubuntu for Arabic/Hebrew
   // (honors the persisted SETTINGS.language already loaded at this point).
   bindUiFontsForLanguage(renderer);
@@ -496,10 +507,10 @@ void setup() {
     // recovery chord is held, keep asking for the card instead of giving up.
     sdRecoveryChord = earlyWakeupReason == HalGPIO::WakeupReason::PowerButton && recoveryChordHeld(inputStartedMs);
     if (!sdRecoveryChord) {
-      activityManager.goToFullScreenMessage("SD card error");
+      activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::REGULAR);
       return;
     }
-    activityManager.goToFullScreenMessage("Insert an SD card with firmware.bin");
+    activityManager.goToFullScreenMessage("Insert an SD card with firmware.bin", EpdFontFamily::REGULAR);
     // Five minutes of retries, not forever: a reader left in a drawer with the
     // chord stuck down should end up asleep rather than polling the card slot
     // until the battery is flat.
@@ -514,7 +525,7 @@ void setup() {
       }
     }
     if (!mounted) {
-      activityManager.goToFullScreenMessage("SD card error");
+      activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::REGULAR);
       return;
     }
     LOG_INF("MAIN", "SD card mounted on retry; entering recovery firmware mode");

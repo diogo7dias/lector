@@ -42,10 +42,14 @@ class OptionPopup {
   // Disabled rows stay visible and keep their place — a row that vanished when a page had
   // no footnote would move every row under it and break the muscle memory the pop-up
   // exists to reward — but the cursor steps over them and Confirm cannot land on one.
+  //
+  // leftAlign lines up the rows so the disabled marker occupies a fixed column instead of
+  // shunting the label sideways on each row that carries it.
   void showWithDisabled(StrId titleId, const std::vector<std::string>& options, const std::vector<bool>& disabledRows,
-                        int currentIndex, std::function<void(int)> onSelect) {
+                        int currentIndex, bool leftAlign, std::function<void(int)> onSelect) {
     show(titleId, options, currentIndex, std::move(onSelect));
     disabled = disabledRows;
+    leftAligned = leftAlign;
     // Never open on a row Confirm would refuse.
     if (isDisabled(selectedIndex)) selectedIndex = nextEnabled(selectedIndex, 1);
   }
@@ -121,11 +125,8 @@ class OptionPopup {
 
   bool processRender(GfxRenderer& renderer, const MappedInputManager& input) const {
     if (!active) return false;
-    // Touch boards keep the hints: the band is their Back.
-    if (input.hasTouch()) {
-      const auto popupLabels = input.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-      GUI.drawButtonHints(renderer, popupLabels.btn1, popupLabels.btn2, popupLabels.btn3, popupLabels.btn4);
-    }
+    const auto popupLabels = input.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    GUI.drawButtonHints(renderer, popupLabels.btn1, popupLabels.btn2, popupLabels.btn3, popupLabels.btn4);
     render(renderer);
     renderer.displayBuffer();
     return true;
@@ -133,7 +134,7 @@ class OptionPopup {
 
   void render(const GfxRenderer& renderer) const {
     if (!active) return;
-    GUI.drawOptionPopup(renderer, title.c_str(), ownedStrings, selectedIndex, disabled);
+    GUI.drawOptionPopup(renderer, title.c_str(), ownedStrings, selectedIndex, leftAligned);
   }
 
   bool isActive() const { return active; }
@@ -144,6 +145,7 @@ class OptionPopup {
   void open(const char* titleStr, const int currentIndex, std::function<void(int)> onSelect) {
     title = titleStr;
     disabled.clear();
+    leftAligned = false;
     selectedIndex = currentIndex;
     onSelectCallback = std::move(onSelect);
     layoutValid = false;
@@ -199,16 +201,15 @@ class OptionPopup {
   const Layout& getLayout(const GfxRenderer& renderer) const {
     if (layoutValid) return layout;
 
-    const auto g = option_popup::compute(renderer, title.c_str(), ownedStrings);
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const auto g = option_popup::compute(renderer, metrics, title.c_str(), ownedStrings);
 
     const int optionCount = static_cast<int>(ownedStrings.size());
     layout.dialog = Rect{g.dialogX, g.dialogY, g.dialogW, g.dialogH};
     layout.options.clear();
     layout.options.reserve(optionCount);
-    const int rowX = g.dialogX + option_popup::FRAME;
-    const int rowW = g.dialogW - option_popup::FRAME * 2;
     for (int i = 0; i < optionCount; i++) {
-      layout.options.push_back(Rect{rowX, g.rowTop[i], rowW, g.rowHeight[i]});
+      layout.options.push_back(Rect{g.itemRectX, g.rowTop[i], g.itemRectW, g.rowHeight[i]});
     }
     layoutValid = true;
     return layout;
@@ -225,6 +226,7 @@ class OptionPopup {
   std::vector<std::string> ownedStrings;
   // Empty when every row is selectable, which is every caller except the Quick Menu.
   std::vector<bool> disabled;
+  bool leftAligned = false;
   int selectedIndex = 0;
   std::function<void(int)> onSelectCallback;
   mutable Layout layout;

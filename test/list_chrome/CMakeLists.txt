@@ -1,6 +1,5 @@
 add_executable(ListChromeLayoutTest
   ListChromeLayoutTest.cpp
-  OptionPopupLayoutTest.cpp
 )
 
 target_include_directories(ListChromeLayoutTest PRIVATE
