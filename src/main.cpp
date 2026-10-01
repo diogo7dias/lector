@@ -590,6 +590,7 @@ void setup() {
 
   // Brightness and warmth always come back; whether the light itself does is
   // FrontlightBootPolicy's call. Inert on a board without a frontlight.
+  SETTINGS.clampFrontlightBrightness();
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth,
                    frontlight::restoreLightOnAtBoot(
                        {SETTINGS.frontlightOn != 0, SETTINGS.frontlightRestoreOnWake != 0, isSilentReboot}));

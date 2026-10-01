@@ -127,7 +127,7 @@ class LightPanel {
       // whatever it slid over.
       if (!down && dragging_ != light_panel::Row::None) {
         const auto& bar = dragging_ == light_panel::Row::Warmth ? layout_.warmth.bar : layout_.brightness.bar;
-        if (setValue(dragging_, light_panel::valueForX(bar, tx, 0, 100))) requestUpdate();
+        if (setValue(dragging_, light_panel::valueForX(bar, tx, 0, maxFor(dragging_)))) requestUpdate();
         return true;
       }
 
@@ -166,7 +166,7 @@ class LightPanel {
           selected_ = hit.row;
           dragging_ = hit.row;
           const auto& bar = hit.row == light_panel::Row::Warmth ? layout_.warmth.bar : layout_.brightness.bar;
-          if (setValue(hit.row, light_panel::valueForX(bar, tx, 0, 100))) requestUpdate();
+          if (setValue(hit.row, light_panel::valueForX(bar, tx, 0, maxFor(hit.row)))) requestUpdate();
           break;
         }
         case light_panel::Hit::Kind::Action:
@@ -217,16 +217,12 @@ class LightPanel {
     renderer.fillRect(0, 0, screenWidth, bandHeight, false);
     renderer.fillRect(0, bandHeight - banner::RULE, screenWidth, banner::RULE, true);
 
-    // The in-book menu's look: full-width rows between 2px rules, the selected row
-    // filled black, the steppers drawn as its boxed minus and plus.
+    // The in-book menu's look without its rules: full-width rows, the selected row filled
+    // black, the steppers drawn as its boxed minus and plus.
     drawToggleRow(renderer);
     drawSliderRow(renderer, layout_.brightness, Sun24Icon, brightness_);
     if (layout_.hasWarmth) drawSliderRow(renderer, layout_.warmth, Thermometer24Icon, warmth_);
     if (layout_.hasAux) drawAuxRow(renderer, layout_.aux, context_.auxText);
-    const light_panel::StepRow& last = layout_.hasAux      ? layout_.aux
-                                       : layout_.hasWarmth ? layout_.warmth
-                                                           : layout_.brightness;
-    drawRule(renderer, last.y + last.height + light_panel::kRowGap / 2);
 
     for (int i = 0; i < layout_.actionCount; ++i) {
       drawBox(renderer, layout_.actions[i], I18N.get(boundMenuActionLabel(context_.actions[i])),
@@ -276,17 +272,9 @@ class LightPanel {
     }
   }
 
-  // A full-width 2px rule centred on y (panel coordinates).
-  void drawRule(const GfxRenderer& renderer, const int y) const {
-    renderer.fillRect(0, y + topInset_ - light_panel::kRule / 2, layout_.width, light_panel::kRule, true);
-  }
-
-  // Frontlight as a menu row: the name at the left, On or Off at the right, rules above
-  // and below.
+  // Frontlight as a menu row: the name at the left, On or Off at the right.
   void drawToggleRow(const GfxRenderer& renderer) const {
     const auto& rect = layout_.toggle;
-    drawRule(renderer, rect.y);
-    drawRule(renderer, rect.y + rect.height + light_panel::kRowGap / 2);
     const int textY = rect.y + topInset_ + (rect.height - renderer.getLineHeight(banner::FONT_ID)) / 2;
     renderer.drawText(banner::FONT_ID, rect.x, textY, I18N.get(StrId::STR_FRONTLIGHT), true);
     const char* state = I18N.get(on_ ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
@@ -319,13 +307,12 @@ class LightPanel {
 
     const int barY = row.bar.y + topInset_;
     renderer.drawRect(row.bar.x, barY, row.bar.width, row.bar.height, light_panel::kRule, ink);
-    const int fill = row.bar.width * value / 100;
+    const int fill = row.bar.width * std::min<int>(value, maxFor(row.row)) / maxFor(row.row);
     if (fill > 0) renderer.fillRect(row.bar.x, barY, fill, row.bar.height, ink);
 
     char number[8];
     snprintf(number, sizeof(number), "%d", static_cast<int>(value));
     drawCentered(renderer, row.value, number, /*center=*/false, ink);
-    drawRule(renderer, row.y - light_panel::kRowGap / 2);
   }
 
   // No icon and no track: the label owns the run up to the stepper column.
@@ -334,7 +321,6 @@ class LightPanel {
     const bool ink = !drawSelection(renderer, row);
     drawSteppers(renderer, row, ink);
     drawCentered(renderer, row.value, label, /*center=*/true, ink);
-    drawRule(renderer, row.y - light_panel::kRowGap / 2);
   }
 
   // The in-book menu's boxed minus and plus (freeink drawAccordionHeader): an 18px sign
@@ -417,11 +403,17 @@ class LightPanel {
     }
   }
 
+  // The top of a row's range: brightness stops at Settings > Max Brightness, warmth runs
+  // the whole 0-100.
+  static int maxFor(const light_panel::Row row) {
+    return row == light_panel::Row::Brightness ? std::max<int>(1, SETTINGS.frontlightMaxBrightness) : 100;
+  }
+
   // Moving either track off zero turns the light back on: the user dragged brightness up,
   // so asking them to also find the toggle would be a puzzle, not a control.
   bool setValue(const light_panel::Row row, const int raw) {
     if (row != light_panel::Row::Brightness && row != light_panel::Row::Warmth) return false;
-    const auto next = static_cast<uint8_t>(std::clamp(raw, 0, 100));
+    const auto next = static_cast<uint8_t>(std::clamp(raw, 0, maxFor(row)));
     uint8_t& target = row == light_panel::Row::Warmth ? warmth_ : brightness_;
     if (target == next) return false;
     target = next;

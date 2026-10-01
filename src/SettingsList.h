@@ -284,6 +284,8 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
     // jumps, and a 0-100 row stepped by one takes twenty presses to cross.
     v.push_back(SettingInfo::Value(StrId::STR_FRONTLIGHT_BRIGHTNESS, &CrossPointSettings::frontlightBrightness,
                                    {0, 100, 5}, "frontlightBrightness", StrId::STR_CAT_DISPLAY));
+    v.push_back(SettingInfo::Value(StrId::STR_FRONTLIGHT_MAX_BRIGHTNESS, &CrossPointSettings::frontlightMaxBrightness,
+                                   {10, 100, 5}, "frontlightMaxBrightness", StrId::STR_CAT_DISPLAY));
 
     v.push_back(SettingInfo::Value(StrId::STR_FRONTLIGHT_WARMTH, &CrossPointSettings::frontlightWarmth, {0, 100, 5},
                                    "frontlightWarmth", StrId::STR_CAT_DISPLAY));
@@ -760,7 +762,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   // guaranteed to be after HalFrontlight::begin().
   if (!withAbsentHardware && !Frontlight.present()) {
     static constexpr StrId FRONTLIGHT_ROWS[] = {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS,
-                                                StrId::STR_FRONTLIGHT_WARMTH, StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE};
+                                                StrId::STR_FRONTLIGHT_MAX_BRIGHTNESS, StrId::STR_FRONTLIGHT_WARMTH,
+                                                StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE};
     v.erase(std::remove_if(v.begin(), v.end(),
                            [](const SettingInfo& s) {
                              return std::find(std::begin(FRONTLIGHT_ROWS), std::end(FRONTLIGHT_ROWS), s.nameId) !=
