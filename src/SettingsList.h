@@ -532,6 +532,10 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
         StrId::STR_TIME_TO_SLEEP, &CrossPointSettings::sleepTimeoutMinutes,
         {CrossPointSettings::MIN_SLEEP_TIMEOUT_MINUTES, CrossPointSettings::MAX_SLEEP_TIMEOUT_MINUTES, 1},
         "sleepTimeoutMinutes", StrId::STR_CAT_SYSTEM));
+    v.push_back(SettingInfo::Enum(
+        StrId::STR_TOUCH_SLEEP, &CrossPointSettings::touchSleep,
+        {StrId::STR_TOUCH_SLEEP_OFF, StrId::STR_TOUCH_SLEEP_15S, StrId::STR_TOUCH_SLEEP_30S, StrId::STR_TOUCH_SLEEP_1M},
+        "touchSleep", StrId::STR_CAT_SYSTEM));
 
     // How this reader introduces itself during Nearby Position Sync. Left empty
     // it falls back to a generated "Lector-XXXX" from the MAC.
@@ -774,6 +778,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     // Single-colour light: brightness applies, warmth does not.
     v.erase(std::remove_if(v.begin(), v.end(),
                            [](const SettingInfo& s) { return s.nameId == StrId::STR_FRONTLIGHT_WARMTH; }),
+            v.end());
+  }
+  if (!withAbsentHardware && !gpio.hasTouch()) {
+    v.erase(std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_TOUCH_SLEEP; }),
             v.end());
   }
   if (!withAbsentHardware && !halClock.isAvailable()) {

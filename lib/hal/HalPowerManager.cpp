@@ -217,7 +217,92 @@ esp_err_t onLightSleepExit(const int64_t sleepTimeUs, void*) {
 }
 #endif
 
+// The digital button pins and the level each reads when pressed, for
+// waitForButtons(). Empty on boards that read buttons any other way.
+struct ButtonPin {
+  gpio_num_t pin;
+  gpio_int_type_t pressed;
+};
+size_t digitalButtonPins(ButtonPin (&out)[7]) {
+  if (BoardConfig::ACTIVE.inputStyle != BoardConfig::InputStyle::DigitalButtons) return 0;
+  const auto& in = BoardConfig::ACTIVE.input;
+  size_t n = 0;
+  for (const int8_t pin : {in.back, in.confirm, in.left, in.right, in.up, in.down}) {
+    if (pin >= 0) out[n++] = {static_cast<gpio_num_t>(pin), GPIO_INTR_LOW_LEVEL};
+  }
+  if (in.power >= 0) {
+    out[n++] = {static_cast<gpio_num_t>(in.power), in.powerActiveHigh ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL};
+  }
+  return n;
+}
+
+// Level interrupts fire for as long as the pin is held, so the first one disables
+// them all before waking the loop; waitForButtons() then disarms the rest.
+void buttonWakeIsr(void* sem) {
+  ButtonPin pins[7];
+  const size_t n = digitalButtonPins(pins);
+  for (size_t i = 0; i < n; i++) gpio_intr_disable(pins[i].pin);
+  BaseType_t woken = pdFALSE;
+  xSemaphoreGiveFromISR(static_cast<SemaphoreHandle_t>(sem), &woken);
+  if (woken) portYIELD_FROM_ISR();
+}
+
+void armButtonWake() {
+  ButtonPin pins[7];
+  const size_t n = digitalButtonPins(pins);
+  for (size_t i = 0; i < n; i++) {
+    gpio_set_intr_type(pins[i].pin, pins[i].pressed);
+    gpio_wakeup_enable(pins[i].pin, pins[i].pressed);
+    gpio_intr_enable(pins[i].pin);
+  }
+  esp_sleep_enable_gpio_wakeup();
+}
+
+// Same trap as the BUSY-wait slice: gpio_wakeup_disable() leaves the level type
+// behind, and an asserted level with interrupts on livelocks the ISR service.
+void disarmButtonWake() {
+  ButtonPin pins[7];
+  const size_t n = digitalButtonPins(pins);
+  for (size_t i = 0; i < n; i++) {
+    gpio_intr_disable(pins[i].pin);
+    gpio_wakeup_disable(pins[i].pin);
+    gpio_set_intr_type(pins[i].pin, GPIO_INTR_DISABLE);
+  }
+}
+
 }  // namespace
+
+bool HalPowerManager::waitForButtons(const unsigned long ms) {
+  ButtonPin pins[7];
+  const size_t n = digitalButtonPins(pins);
+  if (n == 0) return false;
+  for (size_t i = 0; i < n; i++) {
+    if (gpio_get_level(pins[i].pin) == (pins[i].pressed == GPIO_INTR_HIGH_LEVEL ? 1 : 0)) return false;
+  }
+  if (buttonWake == nullptr) {
+    buttonWake = xSemaphoreCreateBinary();
+    const esp_err_t err = gpio_install_isr_service(0);
+    if (buttonWake == nullptr || (err != ESP_OK && err != ESP_ERR_INVALID_STATE)) {
+      LOG_ERR("PWR", "button wake unavailable: %d", static_cast<int>(err));
+      return false;
+    }
+    for (size_t i = 0; i < n; i++) gpio_isr_handler_add(pins[i].pin, buttonWakeIsr, buttonWake);
+  }
+
+  xSemaphoreTake(buttonWake, 0);  // drop a give left over from the last wait
+  xSemaphoreTake(sleepMutex, portMAX_DELAY);
+  buttonWaitArmed = true;
+  armButtonWake();  // level-armed: a press landing since the check above fires at once
+  xSemaphoreGive(sleepMutex);
+
+  xSemaphoreTake(buttonWake, pdMS_TO_TICKS(ms));
+
+  xSemaphoreTake(sleepMutex, portMAX_DELAY);
+  buttonWaitArmed = false;
+  disarmButtonWake();
+  xSemaphoreGive(sleepMutex);
+  return true;
+}
 
 void HalPowerManager::begin() {
   if (BoardConfig::ACTIVE.batteryAdc >= 0) {
@@ -502,6 +587,9 @@ bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t bu
     gpio_wakeup_disable(static_cast<gpio_num_t>(powerPin));
     gpio_set_intr_type(static_cast<gpio_num_t>(powerPin), GPIO_INTR_DISABLE);
   }
+  // The disarm above took the main loop's button wake with it; a press during
+  // the rest of that wait would then go unseen until it timed out.
+  if (buttonWaitArmed) armButtonWake();
 
   xSemaphoreGive(sleepMutex);
 

@@ -87,6 +87,9 @@ class HalGPIO {
   // Drop the rest of the current contact, so a finger lift after an action has already
   // fired cannot also land as a tap on whatever that action opened.
   void suppressTouchContact();
+  // Touch controller sleep (GT911 only; see InputManager::setTouchAsleep).
+  void setTouchAsleep(bool asleep);
+  bool isTouchAsleep() const;
   bool isTouchHeldAt(float& nx, float& ny) const;
   unsigned long lastTouchHeldMs() const;
   bool wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const;
