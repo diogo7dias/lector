@@ -444,6 +444,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
   uint8_t sleepTimeoutMinutes = 10;
+  // Touch Sleep (touch boards): after this long without input the touch controller
+  // sleeps and the chip waits on the buttons alone. The next button press wakes
+  // touch; until then a touch does nothing. 0 Off, 1 15 s, 2 30 s, 3 1 min.
+  uint8_t touchSleep = 2;
+  unsigned long touchSleepMs() const {
+    static constexpr unsigned long MS[] = {0, 15000, 30000, 60000};
+    return touchSleep < 4 ? MS[touchSleep] : 0;
+  }
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
 

@@ -73,6 +73,13 @@ class HalPowerManager {
   // hook on the loop task, so two different tasks can still be inside it.
   SemaphoreHandle_t sleepMutex = nullptr;
 
+  // Given by the button ISR, taken by waitForButtons(). A semaphore rather than a
+  // task notification: the loop task's notification already carries render waits.
+  SemaphoreHandle_t buttonWake = nullptr;
+  // True while waitForButtons() has the button pins armed. The BUSY-wait slice
+  // disarms every GPIO wake source when it finishes, so it re-arms these if set.
+  bool buttonWaitArmed = false;
+
  public:
   // The floor DFS is allowed to drop the CPU to, on every target. 80 and not the
   // 10 MHz the deleted manual downclock used on the C3, because 80 is the lowest
@@ -139,6 +146,10 @@ class HalPowerManager {
   // powered long enough to drift. See the call site in loop() for the failure it fixes.
   static constexpr unsigned long IDLE_PANEL_POWER_OFF_MS = 2000;
 
+  // Longest idle wait while the touch controller sleeps (see waitForButtons). Only
+  // the loop's slow chores wait on it: battery, USB, the auto-sleep clock.
+  static constexpr unsigned long IDLE_BUTTON_WAIT_MS = 1000;
+
   static constexpr unsigned long BATTERY_POLL_MS = 1500;  // ms
 
   // Timer bound for one BUSY-wait light-sleep slice. The refresh end itself
@@ -190,6 +201,17 @@ class HalPowerManager {
   // Leaves the CPU clock alone: the chip is asleep for most of the wait, so a
   // downclock buys nothing and only slows the main loop's awake windows.
   bool onEinkBusyWaitSlice(int8_t busyPin, uint8_t busyLevel);
+
+  // Idle wait for a board whose only live input is its digital buttons (the X4 Pro
+  // with its touch controller asleep). Blocks up to `ms` and returns the moment a
+  // button pin reaches its pressed level: the pins are armed as level GPIO wake
+  // sources plus a GPIO interrupt, so the chip light-sleeps for the whole wait
+  // instead of waking 100 times a second to poll. The wake only ends the wait
+  // early; update()'s two-sample debounce still decides what was pressed, as it
+  // does after every other wait. Returns false without waiting when it cannot
+  // help: not a digital-button board, or a button already reads pressed (a level
+  // wake armed on an asserted pin would never let the chip sleep).
+  bool waitForButtons(unsigned long ms);
 
   // Call at the end of every main-loop iteration; paces the slice hook's yield.
   // Read-then-assign, not ++: C++20 deprecates increment on a volatile lvalue.

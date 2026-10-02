@@ -989,7 +989,9 @@ void loop() {
 
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
-  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || activityManager.preventAutoSleep()) {
+  // Touch counts: before Touch Sleep it did not, so a touch-only session never
+  // reset the auto-sleep clock or took the post-input activity lock.
+  if (mappedInputManager.isInputActive() || activityManager.preventAutoSleep()) {
     lastActivityTime = millis();  // Reset inactivity timer
   }
   // Publishes the USB console state and takes or releases the WiFi and
@@ -997,6 +999,10 @@ void loop() {
   // raises it whenever a lock is taken, and the recent-activity lock is what used
   // to be the explicit setPowerSaving(false) on input.
   powerManager.updateLocks(gpio, millis() - lastActivityTime);
+  // Any input wakes touch (only a button can, while it sleeps); the wake itself
+  // finishes over the next few polls.
+  const unsigned long touchSleepMs = SETTINGS.touchSleepMs();
+  gpio.setTouchAsleep(touchSleepMs > 0 && millis() - lastActivityTime >= touchSleepMs);
   // The press, not the release, and not "any activity": this is the instant the reader's
   // thumb acted, and the refresh that answers it closes the measurement. A release-driven
   // action (a short power click) still lands within the same press-to-paint window.
@@ -1262,6 +1268,11 @@ void loop() {
       // button press, and is the difference between a tap committing and a tap
       // being dropped.
       delayWallClock(HalPowerManager::IDLE_POLL_MS);
+    } else if (gpio.isTouchAsleep() && !powerManager.isPerfLockHeld() &&
+               powerManager.waitForButtons(HalPowerManager::IDLE_BUTTON_WAIT_MS)) {
+      // Touch is asleep, so the buttons are the only input left and they wake
+      // the chip themselves: one wake a second for the slow chores instead of
+      // a hundred.
     } else {
       idlePoll(HalPowerManager::IDLE_POLL_MS);
     }
