@@ -108,7 +108,8 @@ if (parsedSize != fileSize) {
 
 A word holding Hangul, Hanja included, stays one token: a boundary touching Hangul is no longer
 a gap-less break, so Korean wraps at spaces (CSS `word-break: keep-all`) and justification
-stretches only word spaces.
+stretches only word spaces. A Korean word wider than the line or table cell is the exception:
+it splits between syllables into zero-width, non-stretching pieces.
 Cached line breaks and word positions change; the binary layout is unchanged since version 62.
 The derived partial version changes from 217 to 216.
 

@@ -89,6 +89,7 @@ class ParsedText {
   uint32_t visibleOffsetBaseAt(size_t wordIndex) const;
   uint32_t visibleOffsetAt(size_t wordIndex) const;
   void pushVisibleOffset(uint32_t offset);
+  void insertVisibleOffset(size_t wordIndex, uint32_t offset);
   void eraseVisibleOffsetPrefix(size_t count);
   // Space a ruby annotation needs beyond its base word, on each side of the line. Layout
   // reserves it so the centered annotation cannot spill past the margin; the renderer then
@@ -105,6 +106,9 @@ class ParsedText {
                    const std::vector<size_t>& lineBreakIndices, LineSinkFn processLine, void* processLineCtx,
                    const GfxRenderer& renderer, int fontId);
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
+  bool splitOverwideHangulRuns(int pageWidth, const std::vector<uint16_t>& wordWidths, const GfxRenderer& renderer,
+                               int fontId);
+  bool splitHangulToken(size_t index);
 
  public:
   explicit ParsedText(const bool focusReadingEnabled = false, const uint8_t guideDotsMode = GUIDE_DOTS_OFF,

@@ -113,8 +113,8 @@ namespace {
 // v64: a CSS-hidden <rt> clears its skip on close; the element after it no longer vanishes.
 // v65: table rows use the rounding line-height overload; they were 1 px short.
 // v66: a word holding Hangul (Hanja included) stays whole and wraps at spaces; justification no
-//      longer stretches between syllables (upstream #3700; upstream numbered it v48). Line
-//      breaks and word positions move.
+//      longer stretches between syllables (upstream #3700; upstream numbered it v48). A Korean
+//      word wider than the line splits between syllables instead. Line breaks and word positions move.
 constexpr uint8_t SECTION_FILE_VERSION = 66;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /

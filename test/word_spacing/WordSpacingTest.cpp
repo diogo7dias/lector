@@ -275,6 +275,55 @@ TEST(KoreanLayout, LineWithoutSpacesGetsNoSyllableGaps) {
   EXPECT_EQ(std::vector<std::string>{"가나다라마바사아자"}, lines[0].words);
 }
 
+TEST(KoreanLayout, WordWiderThanLineSplitsBetweenSyllablesWithoutGaps) {
+  const std::string longWord = "다라마바사아자차카타파하거너더러머버서어저처";  // 22 syllables, 220 px
+  layout("가나 " + longWord + " 기", 100, 103, CssTextAlign::Justify);
+  ASSERT_GT(lines.size(), 2u);
+  std::string rejoined;
+  for (size_t i = 0; i < lines.size(); ++i) {
+    EXPECT_LE(rightEdge(lines[i]), 103) << "line=" << i;
+    for (size_t k = 0; k < lines[i].words.size(); ++k) {
+      const auto& word = lines[i].words[k];
+      const bool piece = word != "가나" && word != "기";
+      if (piece) rejoined += word;
+      // Consecutive pieces of the split word touch: no justification gap between syllables.
+      if (k > 0 && piece && lines[i].words[k - 1] != "가나") {
+        EXPECT_EQ(lines[i].x[k - 1] + 10, lines[i].x[k]) << "line=" << i << " k=" << k;
+      }
+    }
+  }
+  EXPECT_EQ(longWord, rejoined);
+  // Greedy fill: the line holding 가나 also carries the start of the long word.
+  EXPECT_GT(lines[0].words.size(), 1u);
+}
+
+TEST(KoreanLayout, SplitWordPiecesKeepTheirReadingOffsets) {
+  lines.clear();
+  BlockStyle style;
+  style.alignment = CssTextAlign::Justify;
+  style.textAlignDefined = true;
+  style.directionDefined = true;
+  ParsedText parsed(false, GUIDE_DOTS_OFF, style, 1, 0, 100);
+  parsed.addWord("가나", EpdFontFamily::REGULAR, false, 0);
+  parsed.addWord("다라마바사아자차카타파하거너더러머버서어저처", EpdFontFamily::REGULAR, false, 3);
+  parsed.addWord("기", EpdFontFamily::REGULAR, false, 26);
+  std::vector<uint32_t> offsets;
+  parsed.layoutAndExtractLines(
+      renderer, FONT, 103,
+      [](void* ctx, std::shared_ptr<TextBlock>, uint32_t offset) {
+        static_cast<std::vector<uint32_t>*>(ctx)->push_back(offset);
+      },
+      &offsets);
+  ASSERT_EQ(lines.size(), offsets.size());
+  uint32_t expected = 0;
+  for (size_t i = 0; i < lines.size(); ++i) {
+    EXPECT_EQ(expected, offsets[i]) << "line=" << i;
+    for (const auto& word : lines[i].words) {
+      expected = word == "가나" ? 3 : word == "기" ? 27 : expected + 1;
+    }
+  }
+}
+
 TEST(KoreanLayout, KoreanWordWithHanjaStaysOneWord) {
   // 21 + 50 px leaves 9 px that the next word (7 + 20 px) cannot use.
   layout("大韓民國의 가나", 100, 80, CssTextAlign::Justify);
