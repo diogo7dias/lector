@@ -52,7 +52,7 @@ constexpr uint8_t TABLE_ROW_SEPARATOR_THICKNESS = 1;
 constexpr int16_t TABLE_MIN_CELL_WIDTH_LINE_HEIGHTS = 3;
 
 constexpr const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
-constexpr const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
+constexpr const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote", "ul", "ol"};
 constexpr const char* BOLD_TAGS[] = {"b", "strong"};
 constexpr const char* ITALIC_TAGS[] = {"i", "em"};
 constexpr const char* UNDERLINE_TAGS[] = {"u", "ins"};
@@ -1422,8 +1422,18 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0 && self->currentTextBlock) {  // null after OOM
-        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR, false, self->visibleTextOffset);
-        self->listItemBulletOnly = true;
+        // A stray <li> outside any list keeps the plain bullet.
+        ListContext* const list = self->listStack.empty() ? nullptr : &self->listStack.back();
+        if (!list || !list->styleNone) {
+          char marker[16] = "\xe2\x80\xa2";
+          if (list && list->ordered) snprintf(marker, sizeof(marker), "%d.", ++list->counter);
+          self->currentTextBlock->addWord(marker, EpdFontFamily::REGULAR, false, self->visibleTextOffset);
+          self->listItemBulletOnly = true;
+        }
+      } else if (strcmp(name, "ul") == 0 || strcmp(name, "ol") == 0) {
+        self->listStack.push_back({strcmp(name, "ol") == 0,
+                                   cssStyle.hasListStyleType() && cssStyle.listStyleType == CssListStyleType::None, 0,
+                                   self->depth});
       }
     }
   } else if (matches(name, UNDERLINE_TAGS, std::size(UNDERLINE_TAGS))) {
@@ -1998,6 +2008,10 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       self->listItemBulletOnly = false;
     }
   }
+  if ((strcmp(name, "ul") == 0 || strcmp(name, "ol") == 0) && !self->listStack.empty() &&
+      self->listStack.back().depth == self->depth) {
+    self->listStack.pop_back();
+  }
   if (strcmp(name, "body") == 0) {
     self->insideBody = false;
   }
@@ -2025,6 +2039,7 @@ bool ChapterHtmlSlimParser::beginParse() {
   // next chapter's effective style, so the stack is emptied with the rest of the table state.
   inlineStyleStack.clear();
   updateEffectiveInlineStyle();
+  listStack.clear();
   tableDepth = 0;
   insideTableCell = false;
   tableRowStacked = false;

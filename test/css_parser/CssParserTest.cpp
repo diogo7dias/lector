@@ -29,7 +29,7 @@ namespace {
 // update the expectations here.
 constexpr size_t kMaxRules = 2048;
 constexpr size_t kMaxUniqueStyles = 256;
-constexpr size_t kStyleWireBytes = 66;
+constexpr size_t kStyleWireBytes = 67;
 
 class CssParserTest : public ::testing::Test {
  protected:
@@ -182,7 +182,8 @@ TEST_F(CssParserTest, SaveLoadRoundTrip) {
           "p { text-align: justify; margin-top: 2em; }\n"
           ".bold { font-weight: bolder; }\n"
           ".italic { font-style: italic; }\n"
-          "p.deco { text-decoration: underline; }\n");
+          "p.deco { text-decoration: underline; }\n"
+          "ol.plain { list-style-type: none; }\n");
   ASSERT_TRUE(writer.saveToCache());
 
   CssParser reader(cachePath());
@@ -200,6 +201,10 @@ TEST_F(CssParserTest, SaveLoadRoundTrip) {
   EXPECT_EQ(reader.resolveStyle("span", "bold").fontWeight, CssFontWeight::Bold);
   EXPECT_EQ(reader.resolveStyle("span", "italic").fontStyle, CssFontStyle::Italic);
   EXPECT_EQ(reader.resolveStyle("p", "deco").textDecoration, CssTextDecoration::Underline);
+  const CssStyle plain = reader.resolveStyle("ol", "plain");
+  EXPECT_TRUE(plain.hasListStyleType());
+  EXPECT_EQ(plain.listStyleType, CssListStyleType::None);
+  EXPECT_FALSE(reader.resolveStyle("ol", "").hasListStyleType());
 }
 
 TEST_F(CssParserTest, EmptyRuleSetRoundTrips) {
@@ -445,6 +450,8 @@ CssStyle fullyDefinedStyle() {
   s.defined.textDecoration = 1;
   s.verticalAlign = CssVerticalAlign::Super;
   s.defined.verticalAlign = 1;
+  s.listStyleType = CssListStyleType::None;
+  s.defined.listStyleType = 1;
   s.direction = CssTextDirection::Rtl;
   s.defined.direction = 1;
   s.display = CssDisplay::None;
@@ -488,6 +495,7 @@ TEST(CssStyleBuckets, TextOnlyKeepsGlyphPropertiesAndDropsGeometry) {
   EXPECT_TRUE(s.hasVerticalAlign());
   EXPECT_TRUE(s.hasDirection());
   EXPECT_TRUE(s.hasDisplay());
+  EXPECT_TRUE(s.hasListStyleType());
 
   EXPECT_FALSE(s.hasTextAlign());
   EXPECT_FALSE(s.hasTextIndent());
@@ -526,6 +534,7 @@ TEST(CssStyleBuckets, LayoutOnlyKeepsGeometryAndDropsGlyphProperties) {
   EXPECT_FALSE(s.hasVerticalAlign());
   EXPECT_FALSE(s.hasDirection());
   EXPECT_FALSE(s.hasDisplay());
+  EXPECT_FALSE(s.hasListStyleType());
 }
 
 TEST(CssStyleBuckets, BothOnKeepsEverythingAndBothOffKeepsNothing) {

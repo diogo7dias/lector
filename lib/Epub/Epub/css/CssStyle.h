@@ -73,6 +73,9 @@ enum class CssDisplay : uint8_t { Block = 0, None = 1 };
 // Vertical alignment options for inline elements (e.g. superscript/subscript)
 enum class CssVerticalAlign : uint8_t { Baseline = 0, Super = 1, Sub = 2 };
 
+// list-style-type: only None (no marker) changes rendering; every other value keeps the default marker
+enum class CssListStyleType : uint8_t { Disc = 0, None = 1 };
+
 // Bitmask for tracking which properties have been explicitly set
 struct CssPropertyFlags {
   uint16_t textAlign : 1;
@@ -93,6 +96,7 @@ struct CssPropertyFlags {
   uint16_t display : 1;
   uint16_t direction : 1;
   uint16_t verticalAlign : 1;
+  uint16_t listStyleType : 1;
 
   CssPropertyFlags()
       : textAlign(0),
@@ -112,23 +116,24 @@ struct CssPropertyFlags {
         imageWidth(0),
         display(0),
         direction(0),
-        verticalAlign(0) {}
+        verticalAlign(0),
+        listStyleType(0) {}
 
   [[nodiscard]] bool anySet() const {
     return textAlign || fontStyle || fontWeight || textDecoration || textIndent || marginTop || marginBottom ||
            marginLeft || marginRight || paddingTop || paddingBottom || paddingLeft || paddingRight || imageHeight ||
-           imageWidth || display || direction || verticalAlign;
+           imageWidth || display || direction || verticalAlign || listStyleType;
   }
 
   void clearAll() {
     textAlign = fontStyle = fontWeight = textDecoration = textIndent = 0;
     marginTop = marginBottom = marginLeft = marginRight = 0;
     paddingTop = paddingBottom = paddingLeft = paddingRight = 0;
-    imageHeight = imageWidth = display = direction = verticalAlign = 0;
+    imageHeight = imageWidth = display = direction = verticalAlign = listStyleType = 0;
   }
 };
 
-// Cache serializes defined flags as uint32_t with bit indices 0..17.
+// Cache serializes defined flags as uint32_t with bit indices 0..18.
 static_assert(sizeof(CssPropertyFlags) <= sizeof(uint32_t),
               "CssPropertyFlags exceeds 32 bits; update cache read/write in CssParser.cpp");
 
@@ -155,6 +160,7 @@ struct CssStyle {
   CssLength imageWidth;     // Width for img when both or only width set
   CssDisplay display = CssDisplay::Block;                       // display property (Block or None)
   CssVerticalAlign verticalAlign = CssVerticalAlign::Baseline;  // vertical-align (super/sub positioning)
+  CssListStyleType listStyleType = CssListStyleType::Disc;      // list-style-type (Disc or None)
 
   CssPropertyFlags defined;  // Tracks which properties were explicitly set
 
@@ -233,6 +239,10 @@ struct CssStyle {
       verticalAlign = base.verticalAlign;
       defined.verticalAlign = 1;
     }
+    if (base.hasListStyleType()) {
+      listStyleType = base.listStyleType;
+      defined.listStyleType = 1;
+    }
   }
 
   [[nodiscard]] bool hasTextAlign() const { return defined.textAlign; }
@@ -253,6 +263,7 @@ struct CssStyle {
   [[nodiscard]] bool hasDisplay() const { return defined.display; }
   [[nodiscard]] bool hasDirection() const { return defined.direction; }
   [[nodiscard]] bool hasVerticalAlign() const { return defined.verticalAlign; }
+  [[nodiscard]] bool hasListStyleType() const { return defined.listStyleType; }
 
   // Embedded Text Style and Embedded Layout Style are two independent reader switches.
   // A property whose bucket is switched off is dropped here, right after resolution, so
@@ -260,13 +271,14 @@ struct CssStyle {
   // already means "the book said nothing, use the reader's own setting".
   //
   // Text bucket   — how the glyphs look: weight, slant, decoration, super/sub, writing
-  //                 direction, and display:none (the book declaring a run is not content).
+  //                 direction, list markers, and display:none (the book declaring a run is
+  //                 not content).
   // Layout bucket — where the block sits: alignment, first-line indent, margins, padding
   //                 and book-set image dimensions.
   void keepBuckets(const bool text, const bool layout) {
     if (!text) {
       defined.fontStyle = defined.fontWeight = defined.textDecoration = 0;
-      defined.verticalAlign = defined.direction = defined.display = 0;
+      defined.verticalAlign = defined.direction = defined.display = defined.listStyleType = 0;
     }
     if (!layout) {
       defined.textAlign = defined.textIndent = 0;
@@ -288,6 +300,7 @@ struct CssStyle {
     imageHeight = imageWidth = CssLength{};
     display = CssDisplay::Block;
     verticalAlign = CssVerticalAlign::Baseline;
+    listStyleType = CssListStyleType::Disc;
     defined.clearAll();
   }
 };
