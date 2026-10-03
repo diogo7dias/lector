@@ -535,7 +535,9 @@ bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t bu
   // updateLocks() already keeps the power manager awake for both, but this
   // sleeper is not the power manager's, so it has to make the same check for
   // itself. No LOG here — this runs ~50x/s mid-refresh.
-  if (WiFi.getMode() != WIFI_MODE_NULL || gpio.isUsbConnectedCached()) {
+  // usbConsoleUp too: USB Drive pins it on (see main.cpp), and on boards without a
+  // USB-detect line the cable can read as absent while the host has the drive.
+  if (WiFi.getMode() != WIFI_MODE_NULL || gpio.isUsbConnectedCached() || usbConsoleUp) {
     return false;
   }
 

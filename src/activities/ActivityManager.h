@@ -139,6 +139,7 @@ class ActivityManager {
   void popActivity();
 
   bool preventAutoSleep() const;
+  bool requiresExclusiveStorageLoop() const;
   bool isReaderActivity() const;
   bool isHomeActivity() const;
   bool handleForcedRefresh();

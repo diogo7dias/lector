@@ -4,6 +4,9 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <SDCardManager.h>
+#if FREEINK_CAP_USB_MSC
+#include <UsbMassStorage.h>
+#endif
 
 #include <cassert>
 
@@ -14,6 +17,15 @@
 #define SDCard SDCardManager::getInstance()
 
 HalStorage HalStorage::instance;
+
+namespace {
+// Set once beginUsbDrive() hands the card to the host, read under storageMutex, never
+// cleared: the way out of USB Drive is a reboot.
+bool cardLentToUsbHost = false;
+#if FREEINK_CAP_USB_MSC
+freeink::UsbMassStorage usbMassStorage;
+#endif
+}  // namespace
 
 HalStorage::HalStorage() {
   // Recursive so the same task can re-enter StorageLock without self-deadlock.
@@ -37,6 +49,7 @@ bool HalStorage::ready() const { return SDCard.ready(); }
 void HalStorage::prepareForDeepSleep() {
 #if FREEINK_SD_SDMMC
   StorageLock lock;
+  if (cardLentToUsbHost) return;
   // Unmounts the FsVolume (flushing SdFat's cached FAT/dir sectors) and returns the
   // block device; nullptr when nothing is mounted.
   FsBlockDeviceInterface* dev = SDCard.detachFilesystemForRawAccess();
@@ -56,10 +69,74 @@ void HalStorage::prepareForDeepSleep() {
   // SPI boards: sleep cuts or gates the SD rail; there is no host to stop.
 }
 
+#if FREEINK_CAP_USB_MSC && !FREEINK_SD_SDMMC
+#error "USB Drive needs the SDMMC storage backend"
+#endif
+
+bool HalStorage::beginUsbDrive() {
+#if FREEINK_CAP_USB_MSC
+  StorageLock lock;
+  // Lent before the volume is detached: a file opened earlier still points at the
+  // detached volume's sectors and must fail from here on, not write through it.
+  cardLentToUsbHost = true;
+  auto* const blockDevice = SDCard.detachFilesystemForRawAccess();
+  if (!blockDevice) {
+    LOG_ERR("USB", "USB Drive needs a mounted SD card");
+    return false;
+  }
+  if (!usbMassStorage.begin(blockDevice)) {
+    LOG_ERR("USB", "USB Drive MSC initialization failed");
+    return false;
+  }
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool HalStorage::disconnectUsbDriveHost() {
+#if FREEINK_CAP_USB_MSC
+  StorageLock lock;
+  return usbMassStorage.disconnectHost();
+#else
+  return false;
+#endif
+}
+
+void HalStorage::endUsbDrive() {
+#if FREEINK_CAP_USB_MSC
+  StorageLock lock;
+  usbMassStorage.end();
+#endif
+}
+
+UsbDriveState HalStorage::usbDriveState() const {
+#if FREEINK_CAP_USB_MSC
+  StorageLock lock;
+  switch (usbMassStorage.state()) {
+    case freeink::UsbMassStorageState::WaitingForHost:
+      return UsbDriveState::WaitingForHost;
+    case freeink::UsbMassStorageState::Connected:
+    case freeink::UsbMassStorageState::Accessed:
+      return UsbDriveState::Connected;
+    case freeink::UsbMassStorageState::Ejected:
+      return UsbDriveState::Ejected;
+    case freeink::UsbMassStorageState::Disconnected:
+      return UsbDriveState::Disconnected;
+    case freeink::UsbMassStorageState::IoError:
+      return UsbDriveState::IoError;
+    case freeink::UsbMassStorageState::Idle:
+      break;
+  }
+#endif
+  return UsbDriveState::Unsupported;
+}
+
 // For the rest of the methods, we acquire the mutex to ensure thread safety
 
 #define HAL_STORAGE_WRAPPED_CALL(method, ...) \
   HalStorage::StorageLock lock;               \
+  if (cardLentToUsbHost) return {};           \
   return SDCard.method(__VA_ARGS__);
 
 std::vector<String> HalStorage::listFiles(const char* path, int maxFiles) {
@@ -96,6 +173,11 @@ class HalFile::Impl {
   // issue #518 and the HAL note in CLAUDE.md.
   ~Impl() {
     HalStorage::StorageLock lock;
+    // Forget, not close: closing syncs dirty sectors, and the card is the host's now.
+    if (cardLentToUsbHost) {
+      file = FsFile();
+      return;
+    }
     file.close();
   }
   FsFile file;
@@ -116,6 +198,7 @@ HalFile HalStorage::open(const char* path, const oflag_t oflag) {
     LOG_ERR("SD", "OOM: file handle");
     return {};
   }
+  if (cardLentToUsbHost) return {};
   impl->file = SDCard.open(path, oflag);
   return HalFile(std::move(impl));
 }
@@ -139,7 +222,7 @@ bool HalStorage::openFileForRead(const char* moduleName, const char* path, HalFi
     file = HalFile();
     return false;
   }
-  const bool ok = SDCard.openFileForRead(moduleName, path, impl->file);
+  const bool ok = !cardLentToUsbHost && SDCard.openFileForRead(moduleName, path, impl->file);
   file = HalFile(std::move(impl));
   return ok;
 }
@@ -160,7 +243,7 @@ bool HalStorage::openFileForWrite(const char* moduleName, const char* path, HalF
     file = HalFile();
     return false;
   }
-  const bool ok = SDCard.openFileForWrite(moduleName, path, impl->file);
+  const bool ok = !cardLentToUsbHost && SDCard.openFileForWrite(moduleName, path, impl->file);
   file = HalFile(std::move(impl));
   return ok;
 }
@@ -179,9 +262,10 @@ bool HalStorage::removeDir(const char* path) { HAL_STORAGE_WRAPPED_CALL(removeDi
 // Allow doing file operations while ensuring thread safety via HalStorage's mutex.
 // Please keep the list below in sync with the HalFile class in HalStorage.h
 
-#define HAL_FILE_WRAPPED_CALL(method, ...) \
-  HalStorage::StorageLock lock;            \
-  assert(impl != nullptr);                 \
+#define HAL_FILE_WRAPPED_CALL(method, ...)                                  \
+  HalStorage::StorageLock lock;                                             \
+  assert(impl != nullptr);                                                  \
+  if (cardLentToUsbHost) return decltype(impl->file.method(__VA_ARGS__))(); \
   return impl->file.method(__VA_ARGS__);
 
 #define HAL_FILE_FORWARD_CALL(method, ...) \
@@ -203,7 +287,12 @@ bool HalFile::seekSet(size_t offset) { HAL_FILE_WRAPPED_CALL(seekSet, offset); }
 int HalFile::available() const { HAL_FILE_WRAPPED_CALL(available, ); }
 size_t HalFile::position() const { HAL_FILE_WRAPPED_CALL(position, ); }
 int HalFile::read(void* buf, size_t count) { HAL_FILE_WRAPPED_CALL(read, buf, count); }
-int HalFile::read() { HAL_FILE_WRAPPED_CALL(read, ); }
+int HalFile::read() {
+  HalStorage::StorageLock lock;
+  assert(impl != nullptr);
+  if (cardLentToUsbHost) return -1;
+  return impl->file.read();
+}
 size_t HalFile::write(const uint8_t* buf, size_t count) { HAL_FILE_WRAPPED_CALL(write, buf, count); }
 size_t HalFile::write(const void* buf, size_t count) { HAL_FILE_WRAPPED_CALL(write, buf, count); }
 size_t HalFile::write(uint8_t b) { HAL_FILE_WRAPPED_CALL(write, b); }
@@ -222,8 +311,11 @@ HalFile HalFile::openNextFile() {
     LOG_ERR("SD", "OOM: directory entry handle");
     return {};
   }
+  if (cardLentToUsbHost) return {};
   next->file = impl->file.openNextFile();
   return HalFile(std::move(next));
 }
-bool HalFile::isOpen() const { return impl != nullptr && impl->file.isOpen(); }  // already thread-safe, no need to wrap
+bool HalFile::isOpen() const {
+  return impl != nullptr && !cardLentToUsbHost && impl->file.isOpen();
+}  // already thread-safe, no need to wrap
 HalFile::operator bool() const { return isOpen(); }

@@ -206,6 +206,12 @@ void ActivityManager::renderTaskLoop() {
 }
 
 void ActivityManager::loop() {
+  if (requiresExclusiveStorageLoop()) {
+    currentActivity->loop();
+    if (requestedUpdate.exchange(false) && renderTaskHandle) xTaskNotify(renderTaskHandle, 1, eIncrement);
+    return;
+  }
+
   if (currentActivity) {
     // Home from anywhere, handled once here rather than in every activity: the
     // capacitive Home key on boards that have one, the bottom-edge up-swipe on the
@@ -369,6 +375,10 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
     currentActivity = std::move(newActivity);
     currentActivity->onEnter();
   }
+}
+
+bool ActivityManager::requiresExclusiveStorageLoop() const {
+  return currentActivity && currentActivity->requiresExclusiveStorageLoop();
 }
 
 void ActivityManager::goToFileTransfer() {

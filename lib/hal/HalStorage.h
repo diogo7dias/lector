@@ -11,6 +11,15 @@
 
 class HalFile;
 
+enum class UsbDriveState : uint8_t {
+  Unsupported,
+  WaitingForHost,
+  Connected,
+  Ejected,
+  Disconnected,
+  IoError,
+};
+
 class HalStorage {
  public:
   HalStorage();
@@ -21,6 +30,15 @@ class HalStorage {
   // open HalFiles become invalid. A deep-sleep wake resets the MCU and mounts
   // storage again through begin().
   void prepareForDeepSleep();
+  // USB Drive lends the raw SD card to a USB host. From beginUsbDrive() on, every
+  // HalStorage and HalFile call that would reach the card fails instead, including on
+  // handles opened before the handoff (isOpen() turns false), so no firmware path can
+  // write behind the host's back. There is no way back: the caller reboots after
+  // endUsbDrive().
+  bool beginUsbDrive();
+  bool disconnectUsbDriveHost();
+  void endUsbDrive();
+  UsbDriveState usbDriveState() const;
   std::vector<String> listFiles(const char* path = "/", int maxFiles = 200);
   // Read the entire file at `path` into a String. Returns empty string on failure.
   String readFile(const char* path);

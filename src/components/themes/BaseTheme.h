@@ -122,7 +122,22 @@ struct ThemeMetrics {
   int pathBarThickness;
 };
 
-enum UIIcon { None = 0, Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot, Bookmark };
+enum UIIcon {
+  None = 0,
+  Folder,
+  Text,
+  Image,
+  Book,
+  File,
+  Recent,
+  Settings,
+  Transfer,
+  Library,
+  Wifi,
+  Hotspot,
+  Bookmark,
+  Usb
+};
 
 // The one theme. Nothing is virtual: UITheme holds a BaseTheme and calls it directly.
 

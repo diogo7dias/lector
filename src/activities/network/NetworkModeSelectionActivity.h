@@ -4,7 +4,7 @@
 
 #include "activities/UiListActivity.h"
 
-enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT, NEARBY_READER };
+enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT, NEARBY_READER, USB_DRIVE };
 
 /**
  * NetworkModeSelectionActivity presents the user with a choice:
@@ -13,6 +13,7 @@ enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT, NEARBY_R
  * - "Create Hotspot" - Create an Access Point that others can connect to (AP mode)
  * - "Nearby Reader" - Receive a file straight from another reader over ESP-NOW,
  *   with no network involved at all
+ * - "USB Drive" (X4 Pro) - Open the SD card on a computer over the USB cable
  *
  * The chosen mode is returned as a NetworkModeResult; Back cancels.
  */

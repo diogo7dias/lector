@@ -1,0 +1,14 @@
+menu "Lector Arduino TinyUSB bridge"
+    config TINYUSB_ENABLED
+        bool
+        default y
+        depends on TINYUSB_MSC_ENABLED
+        help
+            On wherever esp_tinyusb's MSC is (env:x4pro, USB Drive). The Arduino
+            core then builds USB.cpp, USBMSC.cpp and esp32-hal-tinyusb.c against
+            esp_tinyusb; without it USBMSC.cpp does not compile once
+            CONFIG_TINYUSB_MSC_ENABLED is set. Lector's core rebuild has no
+            lib-builder arduino_tinyusb component; this one stands in for it.
+            No prompt, so the lib-builder sdkconfig's CONFIG_TINYUSB_ENABLED=y
+            cannot turn it on in envs without esp_tinyusb.
+endmenu
