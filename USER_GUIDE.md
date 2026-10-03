@@ -869,7 +869,8 @@ other numbers in Settings use the same band.
 - **First Line Indent** — Book or Custom %, with **First-Line Indent %** underneath.
 - **Paragraph Alignment** — Justify, Left, Center, Right or Book's Style.
   Justify distributes all spare horizontal space between eligible gaps; the last line
-  keeps its natural spacing.
+  keeps its natural spacing. Korean text wraps and stretches only at the spaces between
+  words, never between syllables.
 - **Embedded Text Style** — honour the book's own CSS for how the words look: bold, italic,
   underline, superscript and subscript, writing direction, and passages the book marks as
   hidden. Bold and italic written as `<b>` or `<i>` tags are always honoured, switch or not.

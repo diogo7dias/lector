@@ -112,7 +112,10 @@ namespace {
 // v63: a soft-flushed long paragraph no longer re-indents its continuation lines.
 // v64: a CSS-hidden <rt> clears its skip on close; the element after it no longer vanishes.
 // v65: table rows use the rounding line-height overload; they were 1 px short.
-constexpr uint8_t SECTION_FILE_VERSION = 65;
+// v66: a word holding Hangul (Hanja included) stays whole and wraps at spaces; justification no
+//      longer stretches between syllables (upstream #3700; upstream numbered it v48). Line
+//      breaks and word positions move.
+constexpr uint8_t SECTION_FILE_VERSION = 66;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

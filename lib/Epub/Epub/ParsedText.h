@@ -34,7 +34,7 @@ class ParsedText {
   std::vector<EpdFontFamily::Style> wordStyles;
   // Boundary flags use all four combinations:
   //   continues=false, noSpace=false: ordinary breakable word gap
-  //   continues=false, noSpace=true:  breakable zero-width, stretchable CJK/Korean gap
+  //   continues=false, noSpace=true:  breakable zero-width, stretchable CJK gap
   //   continues=true,  noSpace=false: unbreakable attachment
   //   continues=true,  noSpace=true:  breakable zero-width, non-stretching attachment
   std::vector<bool> wordContinues;

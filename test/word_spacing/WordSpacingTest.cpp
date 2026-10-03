@@ -1,6 +1,7 @@
 #include <GfxRenderer.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <fstream>
 #include <iterator>
 #include <sstream>
@@ -250,4 +251,50 @@ TEST(WordSpacing, SoftFlushedParagraphIndentsOnlyItsFirstLine) {
   ASSERT_GT(lines.size(), 4u);
   EXPECT_EQ(21, lines[0].x[0]);
   for (size_t i = 1; i < lines.size(); ++i) EXPECT_EQ(0, lines[i].x[0]) << "line=" << i;
+}
+
+// Stub metrics: a Hangul syllable is 10 px, a space 7 px, the first-line indent 21 px.
+TEST(KoreanLayout, JustifiedLinesStretchOnlyWordSpaces) {
+  const std::vector<std::string> input{"가나다", "라마", "바사아", "자차", "카타파", "하"};
+  layout("가나다 라마 바사아 자차 카타파 하", 100, 103, CssTextAlign::Justify);
+  ASSERT_GT(lines.size(), 1u);
+  for (size_t i = 0; i < lines.size(); ++i) {
+    for (const auto& word : lines[i].words) {
+      EXPECT_NE(std::find(input.begin(), input.end(), word), input.end()) << "split token " << word << " line=" << i;
+    }
+    if (i + 1 < lines.size() && lines[i].words.size() > 1) {
+      EXPECT_EQ(103, rightEdge(lines[i])) << "line=" << i;
+    }
+  }
+}
+
+TEST(KoreanLayout, LineWithoutSpacesGetsNoSyllableGaps) {
+  // 21 + 90 px leaves 9 px that the next word (7 + 20 px) cannot use.
+  layout("가나다라마바사아자 차카", 100, 120, CssTextAlign::Justify);
+  ASSERT_EQ(2u, lines.size());
+  EXPECT_EQ(std::vector<std::string>{"가나다라마바사아자"}, lines[0].words);
+}
+
+TEST(KoreanLayout, KoreanWordWithHanjaStaysOneWord) {
+  // 21 + 50 px leaves 9 px that the next word (7 + 20 px) cannot use.
+  layout("大韓民國의 가나", 100, 80, CssTextAlign::Justify);
+  ASSERT_EQ(2u, lines.size());
+  EXPECT_EQ(std::vector<std::string>{"大韓民國의"}, lines[0].words);
+}
+
+TEST(KoreanLayout, HangulGluedAcrossInlineStyleStaysOneWord) {
+  lines.clear();
+  BlockStyle style;
+  style.alignment = CssTextAlign::Justify;
+  style.textAlignDefined = true;
+  style.directionDefined = true;
+  ParsedText parsed(false, GUIDE_DOTS_OFF, style, 1, 0, 100);
+  parsed.addWord("가나", EpdFontFamily::REGULAR);
+  parsed.addWord("한국", EpdFontFamily::REGULAR);
+  parsed.addWord("어", EpdFontFamily::BOLD, true);  // <b>어</b> with no space before it
+  // 21 + 20 + 7 + 20 = 68 px fits in 70, but 어 is glued to 한국, so the whole word moves down.
+  parsed.layoutAndExtractLines(renderer, FONT, 70, [](void*, std::shared_ptr<TextBlock>, uint32_t) {}, nullptr);
+  ASSERT_EQ(2u, lines.size());
+  EXPECT_EQ(std::vector<std::string>{"가나"}, lines[0].words);
+  EXPECT_EQ((std::vector<std::string>{"한국", "어"}), lines[1].words);
 }

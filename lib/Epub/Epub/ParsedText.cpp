@@ -158,7 +158,9 @@ uint32_t countCodepoints(const std::string_view text) {
   return count;
 }
 
+// Korean separates words with spaces, so a boundary touching Hangul is never a gap-less break.
 bool hasCjkBreakOpportunityBetween(const uint32_t leftCp, const uint32_t rightCp) {
+  if (utf8IsHangul(leftCp) || utf8IsHangul(rightCp)) return false;
   if (!utf8IsCjkBreakable(leftCp) && !utf8IsCjkBreakable(rightCp)) return false;
   if (isNoBreakAfterCjkPunctuation(leftCp) || isNoBreakBeforeCjkPunctuation(rightCp)) return false;
   if (utf8IsCombiningMark(rightCp)) return false;
@@ -170,6 +172,11 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text) {
     uint32_t cp;
     size_t endOffset;
   };
+
+  // A word holding Hangul is a Korean word, Hanja and all, so it stays one token.
+  for (const auto* p = reinterpret_cast<const unsigned char*>(text.c_str()); *p;) {
+    if (utf8IsHangul(utf8NextCodepoint(&p))) return {};
+  }
 
   std::vector<CodepointBoundary> codepoints;
   codepoints.reserve(text.size());
@@ -403,8 +410,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style baseStyle,
   bool effectiveNoSpaceBefore = false;
   // Only a glued token (attachToPrevious == true, i.e. no whitespace separated it from the
   // previous one in the source) may be turned into a gap-less break opportunity. When real
-  // whitespace separated the two words, that space is content and must be rendered: Korean
-  // is a space-delimited script written in Hangul, which utf8IsCjkBreakable() covers.
+  // whitespace separated the two words, that space is content and must be rendered.
   if (attachToPrevious && !words.empty() &&
       hasCjkBreakOpportunityBetween(lastCodepoint(words.back()), firstCodepoint(word))) {
     effectiveAttachToPrevious = false;
@@ -1189,7 +1195,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       reorderedWordWidthSum += reorderedWidthsScratch[wordIdx];
       if (wordIdx > 0 && reorderedNoSpaceBeforeScratch[wordIdx]) {
         // Unicode break opportunity with no inserted Latin-style space. It is still
-        // a stretchable gap for justified CJK/Korean text.
+        // a stretchable gap for justified CJK text.
         reorderedGapCount++;
       } else if (wordIdx > 0 && !reorderedContinuesScratch[wordIdx]) {
         reorderedGapCount++;
