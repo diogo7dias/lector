@@ -5,12 +5,14 @@ add_executable(SortesTest
   ${REPO_ROOT}/src/util/BookFilingNames.cpp
   ${REPO_ROOT}/src/util/BusyTick.cpp
   ${REPO_ROOT}/lib/FsHelpers/FsHelpers.cpp
+  ${REPO_ROOT}/lib/Utf8/Utf8.cpp
 )
 target_include_directories(SortesTest PRIVATE
   stubs
   ${REPO_ROOT}/test/css_parser/stubs
   ${REPO_ROOT}/test/fs_helpers/stubs
   ${REPO_ROOT}/lib/FsHelpers
+  ${REPO_ROOT}/lib/Utf8
   ${REPO_ROOT}/lib/Memory
   ${REPO_ROOT}/src
 )

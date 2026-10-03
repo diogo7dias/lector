@@ -1,5 +1,7 @@
 #include "FsHelpers.h"
 
+#include <Utf8.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -220,6 +222,8 @@ void sanitizePathComponentForFat32(const char* input, char* output, size_t maxLe
       output[i] = c;
     }
   }
+  // A cut at maxLen, or by the caller's own buffer, can leave half a letter, which SdFat rejects in a name.
+  i = static_cast<size_t>(utf8SafeTruncateBuffer(output, static_cast<int>(i)));
   output[i] = '\0';
 }
 
