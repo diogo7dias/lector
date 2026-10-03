@@ -11,14 +11,22 @@
 namespace fui = freeink::ui;
 
 namespace {
-constexpr int MENU_ITEM_COUNT = 4;
-constexpr StrId MENU_ITEMS[MENU_ITEM_COUNT] = {StrId::STR_JOIN_NETWORK, StrId::STR_CALIBRE_WIRELESS,
-                                               StrId::STR_CREATE_HOTSPOT, StrId::STR_NEARBY_TRANSFER};
-constexpr StrId MENU_DESCS[MENU_ITEM_COUNT] = {StrId::STR_JOIN_DESC, StrId::STR_CALIBRE_DESC, StrId::STR_HOTSPOT_DESC,
-                                               StrId::STR_NEARBY_TRANSFER_DESC};
-constexpr UIIcon MENU_ICONS[MENU_ITEM_COUNT] = {UIIcon::Wifi, UIIcon::Library, UIIcon::Hotspot, UIIcon::Transfer};
-constexpr NetworkMode MENU_MODES[MENU_ITEM_COUNT] = {NetworkMode::JOIN_NETWORK, NetworkMode::CONNECT_CALIBRE,
-                                                     NetworkMode::CREATE_HOTSPOT, NetworkMode::NEARBY_READER};
+struct MenuEntry {
+  StrId label;
+  StrId description;
+  UIIcon icon;
+  NetworkMode mode;
+};
+constexpr MenuEntry MENU[] = {
+    {StrId::STR_JOIN_NETWORK, StrId::STR_JOIN_DESC, UIIcon::Wifi, NetworkMode::JOIN_NETWORK},
+    {StrId::STR_CALIBRE_WIRELESS, StrId::STR_CALIBRE_DESC, UIIcon::Library, NetworkMode::CONNECT_CALIBRE},
+    {StrId::STR_CREATE_HOTSPOT, StrId::STR_HOTSPOT_DESC, UIIcon::Hotspot, NetworkMode::CREATE_HOTSPOT},
+    {StrId::STR_NEARBY_TRANSFER, StrId::STR_NEARBY_TRANSFER_DESC, UIIcon::Transfer, NetworkMode::NEARBY_READER},
+#if FREEINK_CAP_USB_MSC
+    {StrId::STR_USB_DRIVE, StrId::STR_USB_DRIVE_DESC, UIIcon::Usb, NetworkMode::USB_DRIVE},
+#endif
+};
+constexpr int MENU_ITEM_COUNT = sizeof(MENU) / sizeof(MENU[0]);
 }  // namespace
 
 void NetworkModeSelectionActivity::onExit() {
@@ -33,9 +41,9 @@ const char* NetworkModeSelectionActivity::headerTitle() const { return tr(STR_FI
 void NetworkModeSelectionActivity::buildScreen(UiScreen& screen) {
   rows.assign(MENU_ITEM_COUNT, fui::ListItem{});
   for (int i = 0; i < MENU_ITEM_COUNT; ++i) {
-    rows[i].label = I18N.get(MENU_ITEMS[i]);
-    rows[i].subtitle = I18N.get(MENU_DESCS[i]);
-    rows[i].icon = listIconFor(MENU_ICONS[i], 32);
+    rows[i].label = I18N.get(MENU[i].label);
+    rows[i].subtitle = I18N.get(MENU[i].description);
+    rows[i].icon = listIconFor(MENU[i].icon, 32);
     rows[i].actionValue = static_cast<int16_t>(i);
   }
 
@@ -50,7 +58,7 @@ void NetworkModeSelectionActivity::buildScreen(UiScreen& screen) {
 
 void NetworkModeSelectionActivity::activateIndex(const int index) {
   app.clearTapFlash();
-  onModeSelected(MENU_MODES[index]);
+  onModeSelected(MENU[index].mode);
 }
 
 void NetworkModeSelectionActivity::onModeSelected(NetworkMode mode) {

@@ -437,12 +437,13 @@ For **Cover**, and for the cover Custom falls back to:
 
 ## 9. Getting books onto the device
 
-The simplest route is a card reader: copy files onto the SD card. Everything below is the
-wireless alternative.
+The simplest route is a card reader: copy files onto the SD card. On the X4 Pro the device can
+be that card reader itself, over its USB cable (**USB Drive**, below). Everything else here is
+wireless.
 
 ### File Transfer
 
-**Home > File Transfer** offers four modes:
+**Home > File Transfer** offers four modes, and a fifth on the X4 Pro:
 
 - **Join a Network** — connect to an existing Wi-Fi network. A failed connection returns to
   the network list; it never offers to forget the network, since a connection drops for
@@ -451,6 +452,7 @@ wireless alternative.
 - **Create Hotspot** — the device makes a network for your computer or phone to join.
 - **Calibre Wireless** — Calibre device transfers, below.
 - **Nearby Reader** — receive a file straight from another Lector, below.
+- **USB Drive** (X4 Pro only) — open the SD card on a computer over the USB cable, below.
 
 In the first two modes the device runs a web server. Open `http://<device-ip>/` in a browser,
 or `http://crosspoint.local`. The web interface uploads and downloads files, manages fonts,
@@ -474,6 +476,27 @@ While joined to a network, the screen shows the Wi-Fi signal strength in dBm.
 
 See [docs/webserver.md](./docs/webserver.md) for the full web server documentation, including
 managing files from the command line with `curl`.
+
+### USB Drive
+
+On the X4 Pro the SD card can appear on a computer as a removable disk, with no card reader and
+no network. The X3 and X4 do not have this mode.
+
+1. Open **File Transfer > USB Drive**.
+2. Connect the reader to the computer with a USB data cable. The screen says **USB Drive
+   Connected**; the disk can take up to 30 seconds to appear on the computer.
+3. Copy books, fonts or wallpapers onto the disk as you would with any USB stick.
+4. Eject the disk on the computer (**Eject** in Finder, Explorer or the Linux file manager,
+   or `eject /dev/sdX` in a terminal; a plain `umount` is not enough) and wait for it to
+   disappear. The reader then restarts to Home with the new files in place.
+
+Unplugging the cable also ends the mode, but eject first: a cable pulled while the computer is
+still writing can leave a half-copied file or a damaged card, exactly as with any USB stick.
+
+While the computer holds the card the reader does nothing else with it: no sleep, no
+screenshots, no other screens, and the buttons are inactive. Before a computer connects,
+**Back**, **Power** or the Home gesture leaves the mode, and it gives up by itself after five
+minutes. Leaving always restarts the reader, which is how it takes the card back.
 
 ### Calibre wireless transfers
 

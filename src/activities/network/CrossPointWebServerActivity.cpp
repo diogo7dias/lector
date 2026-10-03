@@ -14,6 +14,9 @@
 #include "NearbyFileTransferActivity.h"
 #include "NetworkModeSelectionActivity.h"
 #include "SilentRestart.h"
+#if FREEINK_CAP_USB_MSC
+#include "UsbDriveActivity.h"
+#endif
 #include "WebServerSession.h"
 #include "WifiSelectionActivity.h"
 #include "activities/network/CalibreConnectActivity.h"
@@ -129,6 +132,16 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
         std::make_unique<NearbyFileTransferActivity>(renderer, mappedInput, NearbyFileTransferActivity::Mode::Receive));
     return;
   }
+
+#if FREEINK_CAP_USB_MSC
+  if (mode == NetworkMode::USB_DRIVE) {
+    // A cancelled Join Network leaves the radio on, and onExit() would then reboot
+    // instead of opening USB Drive. USB Drive ends in a reboot anyway.
+    WiFi.mode(WIFI_OFF);
+    activityManager.replaceActivity(std::make_unique<UsbDriveActivity>(renderer, mappedInput));
+    return;
+  }
+#endif
 
   if (mode == NetworkMode::CONNECT_CALIBRE) {
     startActivityForResult(

@@ -169,7 +169,7 @@ static bool deepSleepInProgress = false;
 // the heap-defrag reboots below are the other routine way a session ends, and without
 // this a reader who trips one (returning from KOReader sync, leaving a WiFi screen)
 // hands the next session a budget of zero and delays the panel's next discharge.
-static void persistAntiGhostBudget() {
+void persistAntiGhostBudget() {
   APP_STATE.fastRefreshesSinceFull = display.fastRefreshesSinceFull();
   APP_STATE.inkDebt = display.inkDebt();
   APP_STATE.saveToFile();
@@ -971,6 +971,18 @@ void loop() {
   mappedInputManager.setPowerReleaseOverride(false, false);
   // Same reason, for the per-button bindings: an early return must never leave a key gated.
   mappedInputManager.clearBindingOverrides();
+
+  // USB Drive has lent the SD card to a computer. Everything below can reach for the
+  // card (sleep, screenshots, bindings, screen changes), so only the activity runs.
+  if (activityManager.requiresExclusiveStorageLoop()) {
+    // The host link dies in light sleep. Both sleepers read this flag (the PM skip
+    // callback and the e-ink BUSY-wait slices), and updateLocks() below, which
+    // normally republishes it from the USB-detect line, never runs in this mode.
+    powerManager.setUsbConsoleUp(true);
+    activityManager.loop();
+    delay(10);
+    return;
+  }
 
   renderer.setFadingFix(SETTINGS.fadingFix);
   display.setFastPageTurns(SETTINGS.fastPageTurns != 0);

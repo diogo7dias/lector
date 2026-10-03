@@ -42,8 +42,8 @@ class HalPowerManager {
   // clocked from the PLL, which min 80 keeps running at every DFS point. So the
   // firmware registers an esp_pm skip-light-sleep callback instead, which vetoes
   // the sleep and leaves the frequency alone. See the .cpp for why the veto has
-  // to be a callback rather than a lock taken in the main loop.
-  void setUsbConsoleUp(bool up) const;
+  // to be a callback rather than a lock taken in the main loop. The flag is
+  // setUsbConsoleUp(), public below.
 
   // Depth of perfLock, for isPerfLockHeld(). esp_pm exposes no "is this held"
   // query and the answer decides which of two idle waits the main loop uses, so
@@ -171,7 +171,7 @@ class HalPowerManager {
   //     task light-sleeps the chip and the sleep path disables the USJ pad
   //     (esp_hw_support/sleep_console.c), dropping an enumerated CDC link
   //     mid-session. Published as a flag here, enforced by the skip-light-sleep
-  //     callback -- see setUsbConsoleUp() above.
+  //     callback -- see the USB note above.
   //   - the WiFi driver does take its own locks, but only ESP_PM_APB_FREQ_MAX: a
   //     download would still run with the CPU at LOW_POWER_FREQ. The old
   //     setPowerSaving() forced full speed whenever the modem was up; this keeps
@@ -180,6 +180,10 @@ class HalPowerManager {
   // Idempotent: acquiring an already-held lock or releasing an unheld one is a
   // no-op, so this is safe to call at 100 Hz.
   void updateLocks(const HalGPIO& gpio, unsigned long idleMs);
+
+  // The USB light-sleep veto (see the USB note above). updateLocks() republishes it
+  // from the cable state every loop; USB Drive, which skips updateLocks(), pins it.
+  void setUsbConsoleUp(bool up) const;
 
   // True while a render holds the performance lock. The main loop uses it to pick
   // between its two idle waits — see the comment at idlePoll() in main.cpp.
