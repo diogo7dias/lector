@@ -113,8 +113,8 @@ namespace {
 // v64: a CSS-hidden <rt> clears its skip on close; the element after it no longer vanishes.
 // v65: table rows use the rounding line-height overload; they were 1 px short.
 // v66: a word holding Hangul (Hanja included) stays whole and wraps at spaces; justification no
-//      longer stretches between syllables (upstream #3700; upstream numbered it v48). Line
-//      breaks and word positions move.
+//      longer stretches between syllables (upstream #3700; upstream numbered it v48). A Korean
+//      word wider than the line splits between syllables instead. Line breaks and word positions move.
 // v67: ordered lists number their items, list-style-type: none drops the marker, and <ul>/<ol>
 //      add their own margins and padding to the items' inset (upstream #3500; upstream
 //      numbered it v46). Marker text and list layout change.

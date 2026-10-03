@@ -870,7 +870,7 @@ other numbers in Settings use the same band.
 - **Paragraph Alignment** — Justify, Left, Center, Right or Book's Style.
   Justify distributes all spare horizontal space between eligible gaps; the last line
   keeps its natural spacing. Korean text wraps and stretches only at the spaces between
-  words, never between syllables.
+  words, never between syllables, unless a single word is wider than the line.
 - **Embedded Text Style** — honour the book's own CSS for how the words look: bold, italic,
   underline, superscript and subscript, writing direction, passages the book marks as
   hidden, and lists the book marks as having no bullets or numbers. Bold and italic written
