@@ -227,6 +227,11 @@ void EpubReaderActivity::onEnter() {
 void EpubReaderActivity::onExit() {
   Activity::onExit();
 
+  // Keep rebuildable font buffers from pinning the heap between reading sessions.
+  if (auto* fontCache = renderer.getFontCacheManager()) {
+    fontCache->releaseSdFontCaches();
+  }
+
   // Page turns batch their progress writes, so whatever is still queued has to land here.
   // This is also the sleep path: ActivityManager::goToSleep() replaces this activity, which
   // runs onExit() before the device drops into deep sleep.

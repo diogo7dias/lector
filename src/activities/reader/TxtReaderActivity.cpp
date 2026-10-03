@@ -62,6 +62,11 @@ void TxtReaderActivity::onEnter() {
 void TxtReaderActivity::onExit() {
   Activity::onExit();
 
+  // Keep rebuildable font buffers from pinning the heap between reading sessions.
+  if (auto* fontCache = renderer.getFontCacheManager()) {
+    fontCache->releaseSdFontCaches();
+  }
+
   if (txt && progressSaveDebouncer.hasPending()) {
     saveProgress(progressSaveDebouncer.lastObservedPosition());
   }
