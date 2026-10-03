@@ -39,7 +39,7 @@
 class CssParser {
  public:
   // Bump when CSS cache format or rules change; section caches are invalidated when this changes
-  static constexpr uint8_t CSS_CACHE_VERSION = 10;
+  static constexpr uint8_t CSS_CACHE_VERSION = 11;
 
   // Outcome of loadFromCache. NoMemory means the cache may be fine but the heap
   // could not hold it: keep the file and retry later, never delete or rebuild.

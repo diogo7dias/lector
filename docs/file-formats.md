@@ -104,6 +104,15 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 67
+
+Ordered lists number their items (`1.`, `2.`, ...) instead of drawing bullets, nested lists
+restart their own count, `list-style-type: none` on a `<ul>`/`<ol>` drops the marker, and list
+containers add their own margins and padding to their items' inset. Cached marker text and list
+layout change; the binary layout is unchanged since version 62. The derived partial version
+changes from 216 to 215. The CSS rules cache moves to version 11: each style record gains a
+`listStyleType` byte (66 to 67 bytes) and defined-property bit 18.
+
 ### Version 66
 
 A word holding Hangul, Hanja included, stays one token: a boundary touching Hangul is no longer
@@ -251,7 +260,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 66
+#define EXPECTED_VERSION 67
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256

@@ -872,8 +872,10 @@ other numbers in Settings use the same band.
   keeps its natural spacing. Korean text wraps and stretches only at the spaces between
   words, never between syllables.
 - **Embedded Text Style** — honour the book's own CSS for how the words look: bold, italic,
-  underline, superscript and subscript, writing direction, and passages the book marks as
-  hidden. Bold and italic written as `<b>` or `<i>` tags are always honoured, switch or not.
+  underline, superscript and subscript, writing direction, passages the book marks as
+  hidden, and lists the book marks as having no bullets or numbers. Bold and italic written
+  as `<b>` or `<i>` tags are always honoured, switch or not. Numbered lists always show
+  their numbers, and a nested list counts from 1 again.
   An inline passage in another writing direction keeps the enclosing paragraph's base direction.
   Arabic and Persian text is shaped once, preserving Alef and Lam order; Latin ligatures remain supported.
 - **Embedded Layout Style** — honour the book's own CSS for where blocks sit: alignment,

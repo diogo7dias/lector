@@ -147,7 +147,16 @@ class ChapterHtmlSlimParser {
   // allocates these once instead of once per row.
   std::array<std::vector<std::shared_ptr<TextBlock>>, MAX_GRID_TABLE_COLUMNS> tableCellLines;
   std::vector<uint32_t> tableLineVisibleOffsets;
-  bool listItemBulletOnly = false;  // true when currentTextBlock has only the <li> bullet
+  bool listItemBulletOnly = false;  // true when currentTextBlock has only the <li> marker
+  // Innermost open <ul>/<ol> decides an <li>'s marker: a bullet, its number, or nothing
+  // (list-style-type: none). Nested lists push their own entry, so each restarts its count.
+  struct ListContext {
+    bool ordered = false;
+    bool styleNone = false;
+    int counter = 0;
+    int depth = 0;  // parser depth at open; a display:none list never pushes, so its close must not pop
+  };
+  std::vector<ListContext> listStack;
 
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on. Keys are
   // arxHash64 of the id, never the id text — see the note on arxHash64 above.

@@ -157,13 +157,13 @@ std::string_view stripTrailingImportant(std::string_view value) {
 }
 
 // Canonical fixed-size wire encoding of a CssStyle: 5 enum bytes, 11 CssLength
-// records (float value + unit byte), display, verticalAlign, then the
+// records (float value + unit byte), display, verticalAlign, listStyleType, then the
 // defined-property bits as u32. Shared by the style dedup comparison and the
 // cache format so "same style" and "same cache record" are one definition.
 // CssStyle itself has padding and a bitfield, so raw memcmp of the struct is
 // not a valid equality test — the wire bytes are. Multi-byte fields go through
 // memcpy (RISC-V faults on unaligned access; both targets are little-endian).
-constexpr size_t STYLE_WIRE_BYTES = 5 + 11 * (sizeof(float) + 1) + 2 + sizeof(uint32_t);
+constexpr size_t STYLE_WIRE_BYTES = 5 + 11 * (sizeof(float) + 1) + 3 + sizeof(uint32_t);
 
 void encodeStyleWire(const CssStyle& style, uint8_t out[STYLE_WIRE_BYTES]) {
   size_t o = 0;
@@ -192,6 +192,7 @@ void encodeStyleWire(const CssStyle& style, uint8_t out[STYLE_WIRE_BYTES]) {
 
   out[o++] = static_cast<uint8_t>(style.display);
   out[o++] = static_cast<uint8_t>(style.verticalAlign);
+  out[o++] = static_cast<uint8_t>(style.listStyleType);
 
   uint32_t definedBits = 0;
   if (style.defined.textAlign) definedBits |= 1 << 0;
@@ -212,6 +213,7 @@ void encodeStyleWire(const CssStyle& style, uint8_t out[STYLE_WIRE_BYTES]) {
   if (style.defined.display) definedBits |= 1 << 15;
   if (style.defined.direction) definedBits |= 1 << 16;
   if (style.defined.verticalAlign) definedBits |= 1 << 17;
+  if (style.defined.listStyleType) definedBits |= 1 << 18;
   memcpy(out + o, &definedBits, sizeof(definedBits));
 }
 
@@ -242,6 +244,7 @@ void decodeStyleWire(const uint8_t in[STYLE_WIRE_BYTES], CssStyle& style) {
 
   style.display = static_cast<CssDisplay>(in[o++]);
   style.verticalAlign = static_cast<CssVerticalAlign>(in[o++]);
+  style.listStyleType = static_cast<CssListStyleType>(in[o++]);
 
   uint32_t definedBits = 0;
   memcpy(&definedBits, in + o, sizeof(definedBits));
@@ -263,6 +266,7 @@ void decodeStyleWire(const uint8_t in[STYLE_WIRE_BYTES], CssStyle& style) {
   style.defined.display = (definedBits & 1 << 15) != 0;
   style.defined.direction = (definedBits & 1 << 16) != 0;
   style.defined.verticalAlign = (definedBits & 1 << 17) != 0;
+  style.defined.listStyleType = (definedBits & 1 << 18) != 0;
 }
 
 uint32_t hashStyleWire(const uint8_t (&wire)[STYLE_WIRE_BYTES]) {
@@ -620,6 +624,9 @@ void CssParser::parseDeclarationIntoStyle(std::string_view decl, CssStyle& style
       style.verticalAlign = CssVerticalAlign::Sub;
       style.defined.verticalAlign = 1;
     }
+  } else if (iequalsAscii(name, "list-style-type")) {
+    style.listStyleType = iequalsAscii(value, "none") ? CssListStyleType::None : CssListStyleType::Disc;
+    style.defined.listStyleType = 1;
   }
 }
 

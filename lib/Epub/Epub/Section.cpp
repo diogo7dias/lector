@@ -115,7 +115,10 @@ namespace {
 // v66: a word holding Hangul (Hanja included) stays whole and wraps at spaces; justification no
 //      longer stretches between syllables (upstream #3700; upstream numbered it v48). Line
 //      breaks and word positions move.
-constexpr uint8_t SECTION_FILE_VERSION = 66;
+// v67: ordered lists number their items, list-style-type: none drops the marker, and <ul>/<ol>
+//      add their own margins and padding to the items' inset (upstream #3500; upstream
+//      numbered it v46). Marker text and list layout change.
+constexpr uint8_t SECTION_FILE_VERSION = 67;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
