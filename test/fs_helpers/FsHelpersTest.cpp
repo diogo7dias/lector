@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <cstdio>
+#include <string>
 #include <string_view>
 
 #include "FsHelpers.h"
@@ -73,4 +75,38 @@ TEST(FsHelpers, NormaliseWebPathIsAbsoluteWithoutTrailingSlash) {
   EXPECT_EQ(FsHelpers::normaliseWebPath("//books//a.epub/"), "/books/a.epub");
   EXPECT_EQ(FsHelpers::normaliseWebPath("/../../.crosspoint"), "/.crosspoint");
   EXPECT_EQ(FsHelpers::normaliseWebPath("/books/../x"), "/x");
+}
+
+namespace {
+// ScreenshotUtil sanitizes into a 64-byte buffer.
+std::string sanitize(const char* input, const size_t size = 64) {
+  char out[64];
+  FsHelpers::sanitizePathComponentForFat32(input, out, size);
+  return out;
+}
+
+// Titles from the EPUBs in crosspoint-reader#2103 and #2199.
+constexpr char kLongTitle[] = "Богиня глюкозы. Нормализуйте уровень сахара в крови, чтобы изменить свою жизнь";
+constexpr char kShortTitle[] = "Вглядываясь в солнце. Жизнь без страха смерти";
+}  // namespace
+
+TEST(FsHelpers, SanitizeKeepsMultiByteTitleThatFits) {
+  EXPECT_EQ(sanitize("Эдем (полный перевод)"), "Эдем-(полный-перевод)");
+}
+
+// The readers snprintf the title into ScreenshotInfo::title (char[64]), which can end
+// the copy partway through a Cyrillic letter. FAT32 rejects the folder name if the
+// half letter survives, and the screenshot is lost.
+TEST(FsHelpers, SanitizeDropsLetterCutOffByCaller) {
+  char title[64];
+  snprintf(title, sizeof(title), "%s", kLongTitle);
+  EXPECT_EQ(sanitize(title), "Богиня-глюкозы.-Нормализуйте-уров");
+  snprintf(title, sizeof(title), "%s", kShortTitle);
+  EXPECT_EQ(sanitize(title), "Вглядываясь-в-солнце.-Жизнь-без-ст");
+}
+
+TEST(FsHelpers, SanitizeDoesNotSplitLetterAtBufferLimit) {
+  // Each letter is 2 bytes; 7 bytes of room hold "Жиз" and half of "н".
+  EXPECT_EQ(sanitize("Жизнь", 8), "Жиз");
+  EXPECT_EQ(sanitize(kLongTitle), "Богиня-глюкозы.-Нормализуйте-уров");
 }
