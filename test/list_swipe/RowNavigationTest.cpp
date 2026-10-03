@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
-#include <vector>
+#include <initializer_list>
 
 #include "activities/settings/SettingsListNav.h"
 #include "components/SettingsGrid.h"
@@ -32,8 +32,8 @@ struct Navigation {
             rows > 0 ? ButtonNavigator::nextIndex(selected, count) : ButtonNavigator::previousIndex(selected, count);
       }
     };
-    const std::vector<Button> next = {grid ? Button::ScreenDown : Button::NavNext};
-    const std::vector<Button> previous = {grid ? Button::ScreenUp : Button::NavPrevious};
+    const std::initializer_list<Button> next = {grid ? Button::ScreenDown : Button::NavNext};
+    const std::initializer_list<Button> previous = {grid ? Button::ScreenUp : Button::NavPrevious};
     if (release) {
       nav.onRelease(next, [&] { move(1); });
       nav.onRelease(previous, [&] { move(-1); });
