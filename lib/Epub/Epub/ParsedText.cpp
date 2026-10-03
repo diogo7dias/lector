@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstring>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <vector>
 
@@ -158,18 +159,30 @@ uint32_t countCodepoints(const std::string_view text) {
   return count;
 }
 
-bool hasCjkBreakOpportunityBetween(const uint32_t leftCp, const uint32_t rightCp) {
+bool cjkBoundaryAllowsBreak(const uint32_t leftCp, const uint32_t rightCp) {
   if (!utf8IsCjkBreakable(leftCp) && !utf8IsCjkBreakable(rightCp)) return false;
   if (isNoBreakAfterCjkPunctuation(leftCp) || isNoBreakBeforeCjkPunctuation(rightCp)) return false;
   if (utf8IsCombiningMark(rightCp)) return false;
   return true;
 }
 
-std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text) {
+// Korean separates words with spaces, so a boundary touching Hangul is never a gap-less break.
+bool hasCjkBreakOpportunityBetween(const uint32_t leftCp, const uint32_t rightCp) {
+  if (utf8IsHangul(leftCp) || utf8IsHangul(rightCp)) return false;
+  return cjkBoundaryAllowsBreak(leftCp, rightCp);
+}
+
+// splitHangul is only for a Korean word too wide for the line; any other word holding Hangul stays whole.
+std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text, const bool splitHangul = false) {
   struct CodepointBoundary {
     uint32_t cp;
     size_t endOffset;
   };
+
+  // A word holding Hangul is a Korean word, Hanja and all, so it stays one token.
+  for (const auto* p = reinterpret_cast<const unsigned char*>(text.c_str()); *p && !splitHangul;) {
+    if (utf8IsHangul(utf8NextCodepoint(&p))) return {};
+  }
 
   std::vector<CodepointBoundary> codepoints;
   codepoints.reserve(text.size());
@@ -193,7 +206,7 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text) {
   for (size_t i = 0; i + 1 < codepoints.size(); ++i) {
     const uint32_t current = codepoints[i].cp;
     const uint32_t next = codepoints[i + 1].cp;
-    if (!hasCjkBreakOpportunityBetween(current, next)) continue;
+    if (!(splitHangul ? cjkBoundaryAllowsBreak(current, next) : hasCjkBreakOpportunityBetween(current, next))) continue;
     allowedOffsets.push_back(codepoints[i].endOffset);
   }
   return allowedOffsets;
@@ -331,6 +344,23 @@ void ParsedText::pushVisibleOffset(const uint32_t offset) {
   wordVisibleOffsetDeltas.push_back(static_cast<uint16_t>(offset - base));
 }
 
+void ParsedText::insertVisibleOffset(const size_t wordIndex, const uint32_t offset) {
+  const uint32_t base = wordIndex > 0 ? visibleOffsetBaseAt(wordIndex - 1) : visibleOffsetBase;
+  for (auto& rebase : visibleOffsetRebases) {
+    if (rebase.wordIndex >= wordIndex) rebase.wordIndex++;
+  }
+
+  uint32_t insertionBase = base;
+  if (offset < base || offset - base > std::numeric_limits<uint16_t>::max()) {
+    const auto rebaseIt = std::find_if(visibleOffsetRebases.begin(), visibleOffsetRebases.end(),
+                                       [wordIndex](const auto& rebase) { return rebase.wordIndex > wordIndex; });
+    visibleOffsetRebases.insert(rebaseIt, {wordIndex, offset});
+    insertionBase = offset;
+  }
+  wordVisibleOffsetDeltas.insert(wordVisibleOffsetDeltas.begin() + wordIndex,
+                                 static_cast<uint16_t>(offset - insertionBase));
+}
+
 void ParsedText::eraseVisibleOffsetPrefix(const size_t count) {
   if (count >= wordVisibleOffsetDeltas.size()) {
     wordVisibleOffsetDeltas.clear();
@@ -403,8 +433,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style baseStyle,
   bool effectiveNoSpaceBefore = false;
   // Only a glued token (attachToPrevious == true, i.e. no whitespace separated it from the
   // previous one in the source) may be turned into a gap-less break opportunity. When real
-  // whitespace separated the two words, that space is content and must be rendered: Korean
-  // is a space-delimited script written in Hangul, which utf8IsCjkBreakable() covers.
+  // whitespace separated the two words, that space is content and must be rendered.
   if (attachToPrevious && !words.empty() &&
       hasCjkBreakOpportunityBetween(lastCodepoint(words.back()), firstCodepoint(word))) {
     effectiveAttachToPrevious = false;
@@ -709,6 +738,9 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
 
   const int pageWidth = viewportWidth;
   auto wordWidths = calculateWordWidths(renderer, fontId);
+  if (splitOverwideHangulRuns(pageWidth, wordWidths, renderer, fontId)) {
+    wordWidths = calculateWordWidths(renderer, fontId);
+  }
 
   const auto lineBreakIndices =
       computeLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore);
@@ -735,6 +767,60 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
       rubyTexts.erase(rubyTexts.begin(), rubyTexts.begin() + rtConsumed);
     }
   }
+}
+
+// Keep-all has one exception: a Korean word wider than the line (or table cell) would run off
+// the edge, so its run is split between syllables. The pieces are breakable, non-stretching
+// attachments, so the line breaker fills each line greedily and justification never spreads them.
+bool ParsedText::splitOverwideHangulRuns(const int pageWidth, const std::vector<uint16_t>& wordWidths,
+                                         const GfxRenderer& renderer, const int fontId) {
+  const int firstLineWidth = pageWidth - resolveFirstLineIndent(true, pageWidth, renderer, fontId);
+  bool split = false;
+  for (size_t end = words.size(); end > 0;) {
+    size_t start = end - 1;
+    int runWidth = wordWidths[start];
+    while (start > 0 && !TokenBoundary::allowsBreak(wordContinues[start], wordNoSpaceBefore[start])) {
+      runWidth += wordWidths[--start];
+    }
+    if (runWidth > (start == 0 ? firstLineWidth : pageWidth)) {
+      for (size_t i = end; i-- > start;) split |= splitHangulToken(i);
+    }
+    end = start;
+  }
+  return split;
+}
+
+bool ParsedText::splitHangulToken(const size_t index) {
+  if (index < rubyTexts.size() && !rubyTexts[index].empty()) return false;
+  const auto offsets = cjkCharacterBreakByteOffsets(words[index], /*splitHangul=*/true);
+  if (offsets.empty()) return false;
+
+  const std::string word = std::move(words[index]);
+  std::vector<std::string> pieces;
+  pieces.reserve(offsets.size() + 1);
+  size_t pieceStart = 0;
+  for (const size_t offset : offsets) {
+    pieces.emplace_back(word, pieceStart, offset - pieceStart);
+    pieceStart = offset;
+  }
+  pieces.emplace_back(word, pieceStart);
+
+  uint32_t visibleOffset = visibleOffsetAt(index);
+  for (size_t k = 1; k < pieces.size(); ++k) {
+    visibleOffset += countCodepoints(pieces[k - 1]);
+    insertVisibleOffset(index + k, visibleOffset);
+  }
+  const size_t added = pieces.size() - 1;
+  const auto pos = static_cast<std::ptrdiff_t>(index + 1);
+  const EpdFontFamily::Style style = wordStyles[index];
+  wordStyles.insert(wordStyles.begin() + pos, added, style);
+  wordContinues.insert(wordContinues.begin() + pos, added, true);
+  wordNoSpaceBefore.insert(wordNoSpaceBefore.begin() + pos, added, true);
+  wordFocusBoundary.insert(wordFocusBoundary.begin() + pos, added, 0);
+  if (!rubyTexts.empty()) rubyTexts.insert(rubyTexts.begin() + pos, added, std::string());
+  words[index] = std::move(pieces[0]);
+  words.insert(words.begin() + pos, std::make_move_iterator(pieces.begin() + 1), std::make_move_iterator(pieces.end()));
+  return true;
 }
 
 static inline bool isCjkIdeograph(uint32_t cp) {
@@ -1189,7 +1275,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       reorderedWordWidthSum += reorderedWidthsScratch[wordIdx];
       if (wordIdx > 0 && reorderedNoSpaceBeforeScratch[wordIdx]) {
         // Unicode break opportunity with no inserted Latin-style space. It is still
-        // a stretchable gap for justified CJK/Korean text.
+        // a stretchable gap for justified CJK text.
         reorderedGapCount++;
       } else if (wordIdx > 0 && !reorderedContinuesScratch[wordIdx]) {
         reorderedGapCount++;
