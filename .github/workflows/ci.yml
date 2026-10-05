@@ -219,6 +219,7 @@ jobs:
         with:
           name: sim-e2e-report
           path: sim/.e2e
+          include-hidden-files: true
 
   unit-tests:
     runs-on: ubuntu-latest
