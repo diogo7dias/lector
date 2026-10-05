@@ -1,0 +1,35 @@
+From be5a07849d276533e070e9c646e720c1bdcfd2cf Mon Sep 17 00:00:00 2001
+From: Vault Keeper <diogo7dias@gmail.com>
+Date: Mon, 5 Oct 2026 02:59:37 +0000
+Subject: [PATCH 6/7] ssi_psram: reject negative offsets (octal PROCESSING with
+ addr -1 crashed QEMU)
+
+---
+ hw/misc/ssi_psram.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hw/misc/ssi_psram.c b/hw/misc/ssi_psram.c
+index b88ac3e..295bd56 100644
+--- a/hw/misc/ssi_psram.c
++++ b/hw/misc/ssi_psram.c
+@@ -135,7 +135,7 @@ static void psram_write_data(SsiPsramState *s, off_t offset, uint8_t byte)
+     uint8_t* ptr = (uint8_t*) memory_region_get_ram_ptr(&s->data_mr);
+     const uint32_t size_bytes = s->size_mbytes * 1024 * 1024;
+     off_t destination = s->addr + offset;
+-    if (destination < size_bytes) {
++    if (destination >= 0 && destination < size_bytes) {
+         ptr[destination] = byte;
+     }
+ }
+@@ -150,7 +150,7 @@ static uint8_t psram_read_data(SsiPsramState *s, off_t offset)
+     uint8_t* ptr = (uint8_t*) memory_region_get_ram_ptr(&s->data_mr);
+     const uint32_t size_bytes = s->size_mbytes * 1024 * 1024;
+     off_t destination = s->addr + offset;
+-    if (destination < size_bytes) {
++    if (destination >= 0 && destination < size_bytes) {
+         return ptr[destination];
+     }
+     return 0;
+-- 
+2.43.0
+

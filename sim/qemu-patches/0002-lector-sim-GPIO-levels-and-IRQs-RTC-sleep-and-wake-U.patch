@@ -1,7 +1,7 @@
 From 730e511b08260e9948bc463932c1272aab2cc6ee Mon Sep 17 00:00:00 2001
 From: h4rg0s <diogo7dias@gmail.com>
 Date: Mon, 5 Oct 2026 01:42:23 +0000
-Subject: [PATCH 2/3] lector sim: GPIO levels and IRQs, RTC sleep and wake, USB
+Subject: [PATCH 2/7] lector sim: GPIO levels and IRQs, RTC sleep and wake, USB
  serial, SPI2 + SSD1677 panel + SPI SD
 
 ---

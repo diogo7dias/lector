@@ -1,12 +1,15 @@
 import type { E2EConfig } from 'e2e';
 import { web } from '@e2e-dev/web';
 
-// The real firmware (last `pio run -e default`) in QEMU, served as a device page. No model:
-// every check is exact (activity name, frame count, ink on the panel).
+// The real firmware of one board (LECTOR_BOARD, default x4pro; built by `pio run -e <env>`)
+// in QEMU, served as a device page. No model: every check is exact (activity name, frame
+// count, ink on the panel).
+const board = process.env.LECTOR_BOARD ?? 'x4pro';
+
 export default {
-  tests: 'tests/**/*.e2e.ts',
+  tests: `tests/${board}/**/*.e2e.ts`,
   workers: 1,
-  timeout: 180_000,
+  timeout: 240_000,
   targets: [{
     engine: web({ viewport: { width: 520, height: 1100 } }),
     app: {
@@ -14,10 +17,13 @@ export default {
       command: {
         executable: 'python3',
         args: ['server.py', '{port}'],
-        log: '.e2e/logs/sim.log',
+        log: `.e2e/logs/sim-${board}.log`,
         // The page answers only once the firmware has booted and drawn Home.
         startupTimeout: 180_000,
-        ...(process.env.LECTOR_QEMU ? { env: { LECTOR_QEMU: process.env.LECTOR_QEMU } } : {}),
+        env: {
+          LECTOR_BOARD: board,
+          ...(process.env.LECTOR_QEMU_DIR ? { LECTOR_QEMU_DIR: process.env.LECTOR_QEMU_DIR } : {}),
+        },
       },
     },
   }],

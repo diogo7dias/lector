@@ -1,7 +1,7 @@
 From 8016aca2125fd2f7b8c3a8cd878205533db13a09 Mon Sep 17 00:00:00 2001
 From: h4rg0s <diogo7dias@gmail.com>
 Date: Mon, 5 Oct 2026 01:47:12 +0000
-Subject: [PATCH 3/3] ssi-sd: keep a write token sent right after R1, answer
+Subject: [PATCH 3/7] ssi-sd: keep a write token sent right after R1, answer
  SPI CMD13 with R2
 
 ---

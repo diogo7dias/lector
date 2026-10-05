@@ -537,22 +537,32 @@ pio run -t upload && pio device monitor
 
 ### Simulator e2e (QEMU)
 
-`sim/` runs the real `default` firmware (X4) in Espressif's QEMU with modelled
-hardware: SSD1677 panel, SPI SD card, button ladder ADC, power button, sleep and
-wake, USB serial log. `sim/server.py` serves it as a device page; the e2e suite
-drives that page with exact checks (activity name, frame count, panel ink).
+`sim/` runs the real firmware in Espressif's QEMU, one board per run
+(`LECTOR_BOARD`, default `x4pro`):
+
+- `x4pro`: ESP32-S3 (`pio run -e x4pro`). SSD1677, SDMMC card, GT911 touch (tap, swipe,
+  Home key), Up/Down keys, CW2017 gauge, PCF8563 clock.
+- `x3`: C3 `default` binary on the X3 board (`-machine esp32c3,x3=on`). UC8253 panel,
+  BQ27220 / DS3231 / QMI8658 on I2C (the firmware's own X3 fingerprint), button ladder.
+- `x4`: C3 `default` binary. SSD1677, SPI SD, button ladder.
+
+`sim/server.py` serves the device as a page (keys, click or drag on the panel to
+touch, `/state`, `/ink/x/y/w/h`); the e2e suites (`sim/tests/<board>/`) drive it
+with exact checks (activity, frame count, panel ink).
 
 ```bash
-./sim/build-qemu.sh                          # once, and after sim/qemu-patches/ change
-pio run -e default                           # the firmware under test
-(cd sim && npm install && npm run test:e2e)  # boots, browses, opens a book
+./sim/build-qemu.sh                               # once, and after sim/qemu-patches/ change
+pio run -e x4pro && pio run -e default            # the firmware under test
+(cd sim && npm install && npm run test:e2e)       # all boards; or test:e2e:x4pro|x3|x4
 ```
 
 - QEMU changes live only as patches in `sim/qemu-patches/` (base tag in `build-qemu.sh`).
-- Time is instruction-counted (`-icount`), so runs are deterministic.
-- Not modelled: X3 (UC8253 panel, I2C gauge/RTC), X4 Pro (ESP32-S3, GT911 touch,
-  frontlight, SDMMC), waveforms and ghosting, battery drain, USB Drive, Wi-Fi.
-  Those stay device tests.
+- Time is instruction-counted (`-icount`). Light sleep jumps the clock to its next
+  event, never ahead of the wall clock, so idle timeouts (auto-sleep) match the device.
+- A `custom_sdkconfig` change rebuilds the framework and wipes the other env's
+  `.pio/build/<env>`: build both envs again after one.
+- Not modelled: waveforms and ghosting, frontlight, battery drain, USB Drive, Wi-Fi,
+  the X3's UC8279 variant. Those stay device tests.
 
 ### Code Quality
 

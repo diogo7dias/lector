@@ -1,0 +1,412 @@
+From 082c7ca8763a6d970ba4968cfe351e603edd70b1 Mon Sep 17 00:00:00 2001
+From: Vault Keeper <diogo7dias@gmail.com>
+Date: Mon, 5 Oct 2026 03:16:38 +0000
+Subject: [PATCH 7/7] lector sim: Xteink X3 on the C3 machine (x3=on): UC8253
+ panel, I2C0 with BQ27220, DS3231, QMI8658
+
+---
+ hw/display/meson.build |   2 +-
+ hw/display/uc8253.c    | 262 +++++++++++++++++++++++++++++++++++++++++
+ hw/i2c/meson.build     |   1 +
+ hw/misc/meson.build    |   1 +
+ hw/riscv/esp32c3.c     |  45 ++++++-
+ 5 files changed, 309 insertions(+), 2 deletions(-)
+ create mode 100644 hw/display/uc8253.c
+
+diff --git a/hw/display/meson.build b/hw/display/meson.build
+index 7a498da..f6c027b 100644
+--- a/hw/display/meson.build
++++ b/hw/display/meson.build
+@@ -32,7 +32,7 @@ system_ss.add(when: 'CONFIG_CG3', if_true: files('cg3.c'))
+ system_ss.add(when: 'CONFIG_MACFB', if_true: files('macfb.c'))
+ system_ss.add(when: 'CONFIG_NEXTCUBE', if_true: files('next-fb.c'))
+ system_ss.add(when: 'CONFIG_ESP_RGB', if_true: files('esp_rgb.c'))
+-system_ss.add(when: 'CONFIG_RISCV_ESP32C3', if_true: files('ssd1677.c'))
++system_ss.add(when: 'CONFIG_RISCV_ESP32C3', if_true: files('ssd1677.c', 'uc8253.c'))
+ 
+ system_ss.add(when: 'CONFIG_VGA', if_true: files('vga.c'))
+ system_ss.add(when: 'CONFIG_VIRTIO', if_true: files('virtio-dmabuf.c'))
+diff --git a/hw/display/uc8253.c b/hw/display/uc8253.c
+new file mode 100644
+index 0000000..793a6f4
+--- /dev/null
++++ b/hw/display/uc8253.c
+@@ -0,0 +1,262 @@
++/*
++ * UC8253 e-paper controller (792x528, as on the Xteink X3), for the lector
++ * simulator.
++ *
++ * Commands arrive on SPI with D/C low, data with D/C high. DTM1 (0x10) and
++ * DTM2 (0x13) fill the old and new planes gate row by gate row (gate 0 first,
++ * which is the bottom of the logical frame), MSB = leftmost pixel, 1 = white;
++ * inside a partial window (0x91 PTIN + 0x90 PTL) they fill only the window.
++ * PON (0x04), DRF (0x12) and POF (0x02) pull BUSY low (busy) for a while; when
++ * the refresh ends the panel shows the new plane: written as a PGM to "image"
++ * and counted in "frames".
++ *
++ * Not modelled: LUTs, waveforms, the look of grayscale passes.
++ */
++#include "qemu/osdep.h"
++#include "qemu/module.h"
++#include "qemu/timer.h"
++#include "qapi/error.h"
++#include "hw/irq.h"
++#include "hw/qdev-properties.h"
++#include "hw/ssi/ssi.h"
++#include "qapi/visitor.h"
++
++#define TYPE_UC8253 "uc8253"
++OBJECT_DECLARE_SIMPLE_TYPE(Uc8253State, UC8253)
++
++#define W 792
++#define H 528
++#define ROW (W / 8)
++
++struct Uc8253State {
++    SSIPeripheral parent_obj;
++    qemu_irq busy;
++    QEMUTimer *busy_timer;
++
++    bool dc;
++    bool asleep;
++    bool partial;
++    bool refreshing;
++    uint8_t cmd;
++    uint32_t nparam;
++    uint8_t params[16];
++    int xs, xe, ys, ye;     /* window: x in bytes, y in gates */
++    int x, y;               /* write position */
++
++    uint8_t old[H][ROW];    /* indexed by gate */
++    uint8_t new[H][ROW];
++    uint8_t screen[H][W];   /* logical rows: 0 black .. 255 white */
++
++    char *image;
++    uint32_t frames;
++    uint32_t refresh_ms, power_ms;
++};
++
++static void uc8253_write_image(Uc8253State *s)
++{
++    if (!s->image) {
++        return;
++    }
++    g_autofree char *tmp = g_strdup_printf("%s.tmp", s->image);
++    FILE *f = fopen(tmp, "wb");
++    if (!f) {
++        return;
++    }
++    fprintf(f, "P5\n%d %d\n255\n", W, H);
++    fwrite(s->screen, 1, sizeof(s->screen), f);
++    fclose(f);
++    rename(tmp, s->image);
++}
++
++static void uc8253_idle(void *opaque)
++{
++    Uc8253State *s = opaque;
++    if (s->refreshing) {
++        s->refreshing = false;
++        for (int gate = 0; gate < H; gate++) {
++            for (int x = 0; x < W; x++) {
++                const int white = (s->new[gate][x / 8] >> (7 - (x & 7))) & 1;
++                s->screen[H - 1 - gate][x] = white ? 0xFF : 0x00;
++            }
++        }
++        s->frames++;
++        uc8253_write_image(s);
++    }
++    qemu_set_irq(s->busy, 1);
++}
++
++static void uc8253_busy_for(Uc8253State *s, uint32_t ms)
++{
++    qemu_set_irq(s->busy, 0);
++    timer_mod(s->busy_timer, qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) + ms);
++}
++
++static void uc8253_window_all(Uc8253State *s)
++{
++    s->xs = 0; s->xe = ROW - 1;
++    s->ys = 0; s->ye = H - 1;
++}
++
++static void uc8253_data(Uc8253State *s, uint8_t plane[H][ROW], uint8_t v)
++{
++    if (s->y > s->ye) {
++        return;
++    }
++    plane[s->y][s->x] = v;
++    if (++s->x > s->xe) {
++        s->x = s->xs;
++        s->y++;
++    }
++}
++
++static void uc8253_param(Uc8253State *s, uint8_t v)
++{
++    const uint32_t n = s->nparam++;
++    if (n < sizeof(s->params)) {
++        s->params[n] = v;
++    }
++    const uint8_t *p = s->params;
++    switch (s->cmd) {
++    case 0x10:
++        uc8253_data(s, s->old, v);
++        break;
++    case 0x13:
++        uc8253_data(s, s->new, v);
++        break;
++    case 0x90:
++        if (n == 7) {
++            s->xs = ((p[0] << 8) | p[1]) / 8;
++            s->xe = ((p[2] << 8) | p[3]) / 8;
++            s->ys = (p[4] << 8) | p[5];
++            s->ye = (p[6] << 8) | p[7];
++            s->xs = MIN(s->xs, ROW - 1); s->xe = MIN(s->xe, ROW - 1);
++            s->ys = MIN(s->ys, H - 1);   s->ye = MIN(s->ye, H - 1);
++        }
++        break;
++    case 0x07:
++        if (v == 0xA5) {
++            s->asleep = true;
++        }
++        break;
++    }
++}
++
++static void uc8253_command(Uc8253State *s, uint8_t c)
++{
++    s->cmd = c;
++    s->nparam = 0;
++    switch (c) {
++    case 0x10:
++    case 0x13:
++        if (!s->partial) {
++            uc8253_window_all(s);
++        }
++        s->x = s->xs;
++        s->y = s->ys;
++        break;
++    case 0x91:
++        s->partial = true;
++        break;
++    case 0x92:
++        s->partial = false;
++        uc8253_window_all(s);
++        break;
++    case 0x04:
++    case 0x02:
++        uc8253_busy_for(s, s->power_ms);
++        break;
++    case 0x12:
++        s->refreshing = true;
++        uc8253_busy_for(s, s->refresh_ms);
++        break;
++    }
++}
++
++static uint32_t uc8253_transfer(SSIPeripheral *dev, uint32_t val)
++{
++    Uc8253State *s = UC8253(dev);
++    if (s->asleep) {
++        return 0;
++    }
++    if (s->dc) {
++        uc8253_param(s, val);
++    } else {
++        uc8253_command(s, val);
++    }
++    return 0;
++}
++
++static void uc8253_dc(void *opaque, int n, int level)
++{
++    UC8253(opaque)->dc = level;
++}
++
++static void uc8253_rst(void *opaque, int n, int level)
++{
++    Uc8253State *s = UC8253(opaque);
++    if (!level) {
++        /* Reset wakes the chip and keeps the RAM. */
++        s->asleep = false;
++        s->partial = false;
++        s->refreshing = false;
++        uc8253_window_all(s);
++        timer_del(s->busy_timer);
++        qemu_set_irq(s->busy, 1);
++    }
++}
++
++static void uc8253_realize(SSIPeripheral *dev, Error **errp)
++{
++    Uc8253State *s = UC8253(dev);
++    s->busy_timer = timer_new_ms(QEMU_CLOCK_VIRTUAL, uc8253_idle, s);
++    qdev_init_gpio_in_named(DEVICE(dev), uc8253_dc, "dc", 1);
++    qdev_init_gpio_in_named(DEVICE(dev), uc8253_rst, "rst", 1);
++    qdev_init_gpio_out_named(DEVICE(dev), &s->busy, "busy", 1);
++    memset(s->old, 0xFF, sizeof(s->old));
++    memset(s->new, 0xFF, sizeof(s->new));
++    memset(s->screen, 0xFF, sizeof(s->screen));
++    uc8253_window_all(s);
++}
++
++static Property uc8253_properties[] = {
++    DEFINE_PROP_STRING("image", Uc8253State, image),
++    /* Roughly what the X3 panel takes for a refresh and a power switch. */
++    DEFINE_PROP_UINT32("refresh-ms", Uc8253State, refresh_ms, 450),
++    DEFINE_PROP_UINT32("power-ms", Uc8253State, power_ms, 20),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
++static void uc8253_frames_get(Object *obj, Visitor *v, const char *name, void *opaque, Error **errp)
++{
++    visit_type_uint32(v, name, &UC8253(obj)->frames, errp);
++}
++
++static void uc8253_init(Object *obj)
++{
++    object_property_add(obj, "frames", "uint32", uc8253_frames_get, NULL, NULL, NULL);
++}
++
++static void uc8253_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    SSIPeripheralClass *k = SSI_PERIPHERAL_CLASS(klass);
++    k->realize = uc8253_realize;
++    k->transfer = uc8253_transfer;
++    k->cs_polarity = SSI_CS_LOW;
++    device_class_set_props(dc, uc8253_properties);
++}
++
++static const TypeInfo uc8253_info = {
++    .name = TYPE_UC8253,
++    .parent = TYPE_SSI_PERIPHERAL,
++    .instance_size = sizeof(Uc8253State),
++    .instance_init = uc8253_init,
++    .class_init = uc8253_class_init,
++};
++
++static void uc8253_register_types(void)
++{
++    type_register_static(&uc8253_info);
++}
++
++type_init(uc8253_register_types)
+diff --git a/hw/i2c/meson.build b/hw/i2c/meson.build
+index e72dca0..7f6aab0 100644
+--- a/hw/i2c/meson.build
++++ b/hw/i2c/meson.build
+@@ -17,6 +17,7 @@ i2c_ss.add(when: 'CONFIG_OMAP', if_true: files('omap_i2c.c'))
+ i2c_ss.add(when: 'CONFIG_PPC4XX', if_true: files('ppc4xx_i2c.c'))
+ i2c_ss.add(when: 'CONFIG_XTENSA_ESP32', if_true: files('esp32_i2c.c'))
+ i2c_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files('esp32_i2c.c'))
++i2c_ss.add(when: 'CONFIG_RISCV_ESP32C3', if_true: files('esp32_i2c.c'))
+ i2c_ss.add(when: 'CONFIG_PCA954X', if_true: files('i2c_mux_pca954x.c'))
+ i2c_ss.add(when: 'CONFIG_PMBUS', if_true: files('pmbus_device.c'))
+ i2c_ss.add(when: 'CONFIG_BCM2835_I2C', if_true: files('bcm2835_i2c.c'))
+diff --git a/hw/misc/meson.build b/hw/misc/meson.build
+index 6cb7362..e7734af 100644
+--- a/hw/misc/meson.build
++++ b/hw/misc/meson.build
+@@ -212,3 +212,4 @@ system_ss.add(when: 'CONFIG_SBSA_REF', if_true: files('sbsa_ec.c'))
+ # HPPA devices
+ system_ss.add(when: 'CONFIG_LASI', if_true: files('lasi.c'))
+ system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files('esp32s3_sens.c', 'lector_i2c.c'))
++system_ss.add(when: 'CONFIG_RISCV_ESP32C3', if_true: files('lector_i2c.c'))
+diff --git a/hw/riscv/esp32c3.c b/hw/riscv/esp32c3.c
+index a3d86cf..5901f16 100644
+--- a/hw/riscv/esp32c3.c
++++ b/hw/riscv/esp32c3.c
+@@ -36,6 +36,7 @@
+ #include "hw/nvram/esp32c3_efuse.h"
+ #include "hw/riscv/esp32c3_clk.h"
+ #include "hw/riscv/esp32c3_intmatrix.h"
++#include "hw/i2c/esp32_i2c.h"
+ #include "hw/misc/esp32c3_sha.h"
+ #include "hw/timer/esp32c3_timg.h"
+ #include "hw/timer/esp32c3_systimer.h"
+@@ -75,6 +76,7 @@ struct Esp32C3MachineState {
+     qemu_irq cpu_reset;
+ 
+     DeviceState *eth; /* Ethernet controller */
++    bool x3;          /* lector simulator: Xteink X3 board instead of the X4 */
+     ESP32C3IntMatrixState intmatrix;
+     ESP32C3UARTState uart[ESP32C3_UART_COUNT];
+     ESP32C3GPIOState gpio;
+@@ -617,8 +619,9 @@ static void esp32c3_machine_init(MachineState *machine)
+         sysbus_connect_irq(SYS_BUS_DEVICE(&ms->spi2), 0,
+                            qdev_get_gpio_in(intmatrix_dev, ETS_SPI2_INTR_SOURCE));
+ 
++        /* The X3 has a UC8253 (BUSY low = busy) on the same pins. */
+         DeviceState *gpio = DEVICE(&ms->gpio);
+-        DeviceState *panel = qdev_new("ssd1677");
++        DeviceState *panel = qdev_new(ms->x3 ? "uc8253" : "ssd1677");
+         object_property_add_child(OBJECT(machine), "panel", OBJECT(panel));
+         qdev_realize_and_unref(panel, BUS(ms->spi2.spi), &error_fatal);
+         qdev_connect_gpio_out_named(gpio, "pin-out", 21, qdev_get_gpio_in_named(panel, SSI_GPIO_CS, 0));
+@@ -636,6 +639,34 @@ static void esp32c3_machine_init(MachineState *machine)
+         qdev_realize_and_unref(card, qdev_get_child_bus(sd, "sd-bus"), &error_fatal);
+     }
+ 
++    /* lector simulator: I2C0. The X3 fingerprints itself by its chips on it
++     * (XteinkDetect.cpp): BQ27220 gauge 0x55 (80 %, 3.9 V, -50 mA: no USB),
++     * DS3231 clock 0x68 (2026-10-05 12:00:00, OSF clear), QMI8658 IMU 0x6B.
++     * The X4 has none, so every probe NACKs there. */
++    {
++        DeviceState *i2c = qdev_new(TYPE_ESP32_I2C);
++        object_property_add_child(OBJECT(machine), "i2c0", OBJECT(i2c));
++        qdev_prop_set_uint32(i2c, "cmd-count", 8);
++        qdev_prop_set_bit(i2c, "c3-opcodes", true);
++        sysbus_realize_and_unref(SYS_BUS_DEVICE(i2c), &error_fatal);
++        memory_region_add_subregion_overlap(sys_mem, DR_REG_I2C_EXT_BASE,
++                                            sysbus_mmio_get_region(SYS_BUS_DEVICE(i2c), 0), 0);
++        sysbus_connect_irq(SYS_BUS_DEVICE(i2c), 0, qdev_get_gpio_in(intmatrix_dev, ETS_I2C_EXT0_INTR_SOURCE));
++        if (ms->x3) {
++            I2CBus *bus = I2C_BUS(qdev_get_child_bus(i2c, "i2c"));
++            static const struct { uint8_t addr; const char *init; } chips[] = {
++                { 0x55, "2c:5000,08:3c0f,0c:ceff" },
++                { 0x68, "0:00001201051026,e:1c08" },
++                { 0x6B, "0:05" },
++            };
++            for (int i = 0; i < ARRAY_SIZE(chips); i++) {
++                I2CSlave *chip = i2c_slave_new("i2c-regs", chips[i].addr);
++                qdev_prop_set_string(DEVICE(chip), "init", chips[i].init);
++                i2c_slave_realize_and_unref(chip, bus, &error_fatal);
++            }
++        }
++    }
++
+     /* SHA realization */
+     {
+         ms->sha.parent.gdma = ESP_GDMA(&ms->gdma);
+@@ -713,6 +744,16 @@ static void esp32c3_machine_init(MachineState *machine)
+ 
+ 
+ /* Initialize machine type */
++static bool esp32c3_get_x3(Object *obj, Error **errp)
++{
++    return ESP32C3_MACHINE(obj)->x3;
++}
++
++static void esp32c3_set_x3(Object *obj, bool value, Error **errp)
++{
++    ESP32C3_MACHINE(obj)->x3 = value;
++}
++
+ static void esp32c3_machine_class_init(ObjectClass *oc, void *data)
+ {
+     MachineClass *mc = MACHINE_CLASS(oc);
+@@ -723,6 +764,8 @@ static void esp32c3_machine_class_init(ObjectClass *oc, void *data)
+     mc->default_cpus = 1;
+     // 0x4f600
+     mc->default_ram_size = 400 * 1024;
++    object_class_property_add_bool(oc, "x3", esp32c3_get_x3, esp32c3_set_x3);
++    object_class_property_set_description(oc, "x3", "Xteink X3 board: UC8253 panel, I2C gauge, clock and IMU");
+ }
+ 
+ /* Create a new type of machine ("child class") */
+-- 
+2.43.0
+

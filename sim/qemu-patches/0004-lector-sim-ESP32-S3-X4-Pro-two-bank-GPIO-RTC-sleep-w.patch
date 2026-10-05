@@ -1,0 +1,815 @@
+From 1e0fee7940962612894b1e9d9856f5d3d4f2d4bb Mon Sep 17 00:00:00 2001
+From: h4rg0s <diogo7dias@gmail.com>
+Date: Mon, 5 Oct 2026 02:08:31 +0000
+Subject: [PATCH 4/7] lector sim: ESP32-S3 (X4 Pro): two-bank GPIO, RTC sleep
+ with EXT1 wake, SENS ADC, USB serial, SPI2 + SSD1677
+
+---
+ hw/display/meson.build             |   1 +
+ hw/gpio/esp32c3_gpio.c             | 184 +++++++++++++++++------------
+ hw/gpio/esp32s3_gpio.c             |   3 +-
+ hw/gpio/meson.build                |   2 +-
+ hw/misc/esp32s3_rtc_cntl.c         | 123 ++++++++++++++++++-
+ hw/misc/esp32s3_sens.c             |  79 +++++++++++++
+ hw/misc/meson.build                |   1 +
+ hw/ssi/meson.build                 |   1 +
+ hw/xtensa/esp32s3.c                |  41 +++++++
+ include/hw/gpio/esp32c3_gpio.h     |  21 ++--
+ include/hw/gpio/esp32s3_gpio.h     |   8 +-
+ include/hw/misc/esp32s3_rtc_cntl.h |   7 ++
+ 12 files changed, 376 insertions(+), 95 deletions(-)
+ create mode 100644 hw/misc/esp32s3_sens.c
+
+diff --git a/hw/display/meson.build b/hw/display/meson.build
+index 20f47cc..7a498da 100644
+--- a/hw/display/meson.build
++++ b/hw/display/meson.build
+@@ -145,3 +145,4 @@ endif
+ system_ss.add(when: 'CONFIG_OMAP', if_true: files('omap_lcdc.c'))
+ 
+ modules += { 'hw-display': hw_display_modules }
++system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files('ssd1677.c'))
+diff --git a/hw/gpio/esp32c3_gpio.c b/hw/gpio/esp32c3_gpio.c
+index 8492789..105e42f 100644
+--- a/hw/gpio/esp32c3_gpio.c
++++ b/hw/gpio/esp32c3_gpio.c
+@@ -22,30 +22,46 @@
+ #include "hw/qdev-properties.h"
+ #include "hw/gpio/esp32c3_gpio.h"
+ 
+-#define A_OUT          0x04
+-#define A_OUT_W1TS     0x08
+-#define A_OUT_W1TC     0x0C
+-#define A_ENABLE       0x20
+-#define A_ENABLE_W1TS  0x24
+-#define A_ENABLE_W1TC  0x28
+-#define A_STRAP        0x38
+-#define A_IN           0x3C
+-#define A_STATUS       0x44
+-#define A_STATUS_W1TS  0x48
+-#define A_STATUS_W1TC  0x4C
+-#define A_PCPU_INT     0x5C
+-#define A_PIN0         0x74
+-#define A_DATE         0x6FC
++/* Bank 0 holds pins 0-31; bank 1 (S3 only) pins 32 and up. */
++#define A_OUT           0x04
++#define A_OUT_W1TS      0x08
++#define A_OUT_W1TC      0x0C
++#define A_OUT1          0x10
++#define A_OUT1_W1TS     0x14
++#define A_OUT1_W1TC     0x18
++#define A_ENABLE        0x20
++#define A_ENABLE_W1TS   0x24
++#define A_ENABLE_W1TC   0x28
++#define A_ENABLE1       0x2C
++#define A_ENABLE1_W1TS  0x30
++#define A_ENABLE1_W1TC  0x34
++#define A_STRAP         0x38
++#define A_IN            0x3C
++#define A_IN1           0x40
++#define A_STATUS        0x44
++#define A_STATUS_W1TS   0x48
++#define A_STATUS_W1TC   0x4C
++#define A_STATUS1       0x50
++#define A_STATUS1_W1TS  0x54
++#define A_STATUS1_W1TC  0x58
++#define A_PCPU_INT      0x5C
++#define A_PCPU_INT1     0x68
++#define A_PIN0          0x74
++#define A_DATE          0x6FC
+ 
+ #define PIN_INT_TYPE(v) (((v) >> 7) & 0x7)
+ #define PIN_INT_ENA(v)  (((v) >> 13) & 0x1F)
+ 
+-#define PIN_MASK ((1u << ESP32C3_GPIO_COUNT) - 1)
++#define PIN_MASK(s) (((s)->npins >= 64) ? ~0ULL : ((1ULL << (s)->npins) - 1))
++#define LO(v) ((uint32_t)(v))
++#define HI(v) ((uint32_t)((v) >> 32))
++#define SET_LO(v, x) (((v) & ~0xFFFFFFFFULL) | (uint32_t)(x))
++#define SET_HI(v, x) (((v) & 0xFFFFFFFFULL) | ((uint64_t)(uint32_t)(x) << 32))
+ 
+-static uint32_t esp32c3_gpio_in(ESP32C3GPIOState *s)
++static uint64_t esp32c3_gpio_in(ESP32C3GPIOState *s)
+ {
+-    uint32_t ext = (s->levels & ~s->driven_mask) | (s->driven_levels & s->driven_mask);
+-    return ((ext & ~s->enable) | (s->out & s->enable)) & PIN_MASK;
++    uint64_t ext = (s->levels & ~s->driven_mask) | (s->driven_levels & s->driven_mask);
++    return ((ext & ~s->enable) | (s->out & s->enable)) & PIN_MASK(s);
+ }
+ 
+ bool esp32c3_gpio_level(ESP32C3GPIOState *s, int pin)
+@@ -53,48 +69,53 @@ bool esp32c3_gpio_level(ESP32C3GPIOState *s, int pin)
+     return (esp32c3_gpio_in(s) >> pin) & 1;
+ }
+ 
+-static void esp32c3_gpio_update_irq(ESP32C3GPIOState *s)
++static uint64_t esp32c3_gpio_pending(ESP32C3GPIOState *s)
+ {
+-    uint32_t pending = 0;
+-    for (int i = 0; i < ESP32C3_GPIO_COUNT; i++) {
+-        if ((s->status & BIT(i)) && PIN_INT_ENA(s->pin[i])) {
+-            pending |= BIT(i);
++    uint64_t pending = 0;
++    for (int i = 0; i < s->npins; i++) {
++        if ((s->status & BIT_ULL(i)) && PIN_INT_ENA(s->pin[i])) {
++            pending |= BIT_ULL(i);
+         }
+     }
+-    qemu_set_irq(s->parent.irq, pending != 0);
++    return pending;
++}
++
++static void esp32c3_gpio_update_irq(ESP32C3GPIOState *s)
++{
++    qemu_set_irq(s->parent.irq, esp32c3_gpio_pending(s) != 0);
+ }
+ 
+ /* Latch edge and level interrupts after any change to what the pins read. */
+ static void esp32c3_gpio_sample(ESP32C3GPIOState *s)
+ {
+-    const uint32_t in = esp32c3_gpio_in(s);
+-    const uint32_t rose = in & ~s->last_in, fell = ~in & s->last_in;
+-    for (int i = 0; i < ESP32C3_GPIO_COUNT; i++) {
++    const uint64_t in = esp32c3_gpio_in(s);
++    const uint64_t rose = in & ~s->last_in, fell = ~in & s->last_in;
++    for (int i = 0; i < s->npins; i++) {
+         bool hit = false;
+         switch (PIN_INT_TYPE(s->pin[i])) {
+-        case 1: hit = rose & BIT(i); break;
+-        case 2: hit = fell & BIT(i); break;
+-        case 3: hit = (rose | fell) & BIT(i); break;
+-        case 4: hit = !(in & BIT(i)); break;
+-        case 5: hit = in & BIT(i); break;
++        case 1: hit = rose & BIT_ULL(i); break;
++        case 2: hit = fell & BIT_ULL(i); break;
++        case 3: hit = (rose | fell) & BIT_ULL(i); break;
++        case 4: hit = !(in & BIT_ULL(i)); break;
++        case 5: hit = in & BIT_ULL(i); break;
+         }
+         if (hit) {
+-            s->status |= BIT(i);
++            s->status |= BIT_ULL(i);
+         }
+     }
+     s->last_in = in;
+     esp32c3_gpio_update_irq(s);
+ }
+ 
+-static void esp32c3_gpio_drive_outputs(ESP32C3GPIOState *s, uint32_t old_out, uint32_t old_en)
++static void esp32c3_gpio_drive_outputs(ESP32C3GPIOState *s, uint64_t old_out, uint64_t old_en)
+ {
+-    for (int i = 0; i < ESP32C3_GPIO_COUNT; i++) {
+-        const bool was = (old_en & BIT(i)) && (old_out & BIT(i));
+-        const bool now = (s->enable & BIT(i)) && (s->out & BIT(i));
+-        const bool en_changed = (old_en ^ s->enable) & BIT(i);
++    for (int i = 0; i < s->npins; i++) {
++        const bool was = (old_en & BIT_ULL(i)) && (old_out & BIT_ULL(i));
++        const bool now = (s->enable & BIT_ULL(i)) && (s->out & BIT_ULL(i));
++        const bool en_changed = (old_en ^ s->enable) & BIT_ULL(i);
+         if (was != now || en_changed) {
+             /* A pin that stops driving reads its external level, like the real pad. */
+-            qemu_set_irq(s->pin_out[i], (s->enable & BIT(i)) ? now : esp32c3_gpio_level(s, i));
++            qemu_set_irq(s->pin_out[i], (s->enable & BIT_ULL(i)) ? now : esp32c3_gpio_level(s, i));
+         }
+     }
+     esp32c3_gpio_sample(s);
+@@ -104,23 +125,20 @@ static uint64_t esp32c3_gpio_read(void *opaque, hwaddr addr, unsigned int size)
+ {
+     ESP32C3GPIOState *s = ESP32C3_GPIO(opaque);
+     switch (addr) {
+-    case A_OUT:      return s->out;
+-    case A_ENABLE:   return s->enable;
+-    case A_STRAP:    return s->parent.strap_mode;
+-    case A_IN:       return esp32c3_gpio_in(s);
+-    case A_STATUS:   return s->status;
+-    case A_PCPU_INT: {
+-        uint32_t r = 0;
+-        for (int i = 0; i < ESP32C3_GPIO_COUNT; i++) {
+-            if ((s->status & BIT(i)) && PIN_INT_ENA(s->pin[i])) {
+-                r |= BIT(i);
+-            }
+-        }
+-        return r;
+-    }
+-    case A_DATE:     return 0x2006130;
++    case A_OUT:       return LO(s->out);
++    case A_OUT1:      return HI(s->out);
++    case A_ENABLE:    return LO(s->enable);
++    case A_ENABLE1:   return HI(s->enable);
++    case A_STRAP:     return s->parent.strap_mode;
++    case A_IN:        return LO(esp32c3_gpio_in(s));
++    case A_IN1:       return HI(esp32c3_gpio_in(s));
++    case A_STATUS:    return LO(s->status);
++    case A_STATUS1:   return HI(s->status);
++    case A_PCPU_INT:  return LO(esp32c3_gpio_pending(s));
++    case A_PCPU_INT1: return HI(esp32c3_gpio_pending(s));
++    case A_DATE:      return 0x2006130;
+     }
+-    if (addr >= A_PIN0 && addr < A_PIN0 + 4 * ESP32C3_GPIO_COUNT) {
++    if (addr >= A_PIN0 && addr < A_PIN0 + 4 * s->npins) {
+         return s->pin[(addr - A_PIN0) / 4];
+     }
+     return 0;
+@@ -129,23 +147,33 @@ static uint64_t esp32c3_gpio_read(void *opaque, hwaddr addr, unsigned int size)
+ static void esp32c3_gpio_write(void *opaque, hwaddr addr, uint64_t value, unsigned int size)
+ {
+     ESP32C3GPIOState *s = ESP32C3_GPIO(opaque);
+-    const uint32_t old_out = s->out, old_en = s->enable;
++    const uint64_t old_out = s->out, old_en = s->enable, mask = PIN_MASK(s);
++    const uint64_t v = (uint32_t)value, v1 = (uint64_t)(uint32_t)value << 32;
+     switch (addr) {
+-    case A_OUT:         s->out = value & PIN_MASK; break;
+-    case A_OUT_W1TS:    s->out |= value & PIN_MASK; break;
+-    case A_OUT_W1TC:    s->out &= ~value; break;
+-    case A_ENABLE:      s->enable = value & PIN_MASK; break;
+-    case A_ENABLE_W1TS: s->enable |= value & PIN_MASK; break;
+-    case A_ENABLE_W1TC: s->enable &= ~value; break;
+-    case A_STATUS:      s->status = value & PIN_MASK; esp32c3_gpio_update_irq(s); return;
+-    case A_STATUS_W1TS: s->status |= value & PIN_MASK; esp32c3_gpio_update_irq(s); return;
++    case A_OUT:          s->out = SET_LO(s->out, value) & mask; break;
++    case A_OUT_W1TS:     s->out |= v & mask; break;
++    case A_OUT_W1TC:     s->out &= ~v; break;
++    case A_OUT1:         s->out = SET_HI(s->out, value) & mask; break;
++    case A_OUT1_W1TS:    s->out |= v1 & mask; break;
++    case A_OUT1_W1TC:    s->out &= ~v1; break;
++    case A_ENABLE:       s->enable = SET_LO(s->enable, value) & mask; break;
++    case A_ENABLE_W1TS:  s->enable |= v & mask; break;
++    case A_ENABLE_W1TC:  s->enable &= ~v; break;
++    case A_ENABLE1:      s->enable = SET_HI(s->enable, value) & mask; break;
++    case A_ENABLE1_W1TS: s->enable |= v1 & mask; break;
++    case A_ENABLE1_W1TC: s->enable &= ~v1; break;
++    case A_STATUS:       s->status = SET_LO(s->status, value) & mask; esp32c3_gpio_update_irq(s); return;
++    case A_STATUS_W1TS:  s->status |= v & mask; esp32c3_gpio_update_irq(s); return;
++    case A_STATUS1:      s->status = SET_HI(s->status, value) & mask; esp32c3_gpio_update_irq(s); return;
++    case A_STATUS1_W1TS: s->status |= v1 & mask; esp32c3_gpio_update_irq(s); return;
+     case A_STATUS_W1TC:
+-        s->status &= ~value;
++    case A_STATUS1_W1TC:
++        s->status &= ~(addr == A_STATUS_W1TC ? v : v1);
+         /* Level interrupts re-assert while the level holds. */
+         esp32c3_gpio_sample(s);
+         return;
+     default:
+-        if (addr >= A_PIN0 && addr < A_PIN0 + 4 * ESP32C3_GPIO_COUNT) {
++        if (addr >= A_PIN0 && addr < A_PIN0 + 4 * s->npins) {
+             s->pin[(addr - A_PIN0) / 4] = value;
+             esp32c3_gpio_sample(s);
+         }
+@@ -163,16 +191,16 @@ static const MemoryRegionOps esp32c3_gpio_ops = {
+ static void esp32c3_gpio_pin_in(void *opaque, int n, int level)
+ {
+     ESP32C3GPIOState *s = ESP32C3_GPIO(opaque);
+-    s->driven_mask |= BIT(n);
+-    s->driven_levels = level ? (s->driven_levels | BIT(n)) : (s->driven_levels & ~BIT(n));
++    s->driven_mask |= BIT_ULL(n);
++    s->driven_levels = level ? (s->driven_levels | BIT_ULL(n)) : (s->driven_levels & ~BIT_ULL(n));
+     esp32c3_gpio_sample(s);
+ }
+ 
+ static void esp32c3_gpio_levels_set(Object *obj, Visitor *v, const char *name, void *opaque, Error **errp)
+ {
+     ESP32C3GPIOState *s = ESP32C3_GPIO(obj);
+-    uint32_t value;
+-    if (visit_type_uint32(v, name, &value, errp)) {
++    uint64_t value;
++    if (visit_type_uint64(v, name, &value, errp)) {
+         s->levels = value;
+         esp32c3_gpio_sample(s);
+     }
+@@ -181,8 +209,8 @@ static void esp32c3_gpio_levels_set(Object *obj, Visitor *v, const char *name, v
+ static void esp32c3_gpio_levels_get(Object *obj, Visitor *v, const char *name, void *opaque, Error **errp)
+ {
+     ESP32C3GPIOState *s = ESP32C3_GPIO(obj);
+-    uint32_t value = esp32c3_gpio_in(s);
+-    visit_type_uint32(v, name, &value, errp);
++    uint64_t value = esp32c3_gpio_in(s);
++    visit_type_uint64(v, name, &value, errp);
+ }
+ 
+ static void esp32c3_gpio_init(Object *obj)
+@@ -197,17 +225,19 @@ static void esp32c3_gpio_init(Object *obj)
+     sbd->mmio[0].memory = &s->iomem;
+ 
+     /* Floating pins read high: every input lector reads has a pull-up. */
+-    s->levels = PIN_MASK;
+-    s->last_in = PIN_MASK;
+-    object_property_add(obj, "levels", "uint32", esp32c3_gpio_levels_get, esp32c3_gpio_levels_set, NULL, NULL);
+-    qdev_init_gpio_in_named(DEVICE(obj), esp32c3_gpio_pin_in, "pin-in", ESP32C3_GPIO_COUNT);
+-    qdev_init_gpio_out_named(DEVICE(obj), s->pin_out, "pin-out", ESP32C3_GPIO_COUNT);
++    s->npins = ESP32C3_GPIO_GET_CLASS(obj)->npins;
++    s->levels = PIN_MASK(s);
++    s->last_in = PIN_MASK(s);
++    object_property_add(obj, "levels", "uint64", esp32c3_gpio_levels_get, esp32c3_gpio_levels_set, NULL, NULL);
++    qdev_init_gpio_in_named(DEVICE(obj), esp32c3_gpio_pin_in, "pin-in", s->npins);
++    qdev_init_gpio_out_named(DEVICE(obj), s->pin_out, "pin-out", s->npins);
+ }
+ 
+ /* If we need to override any function from the parent (reset, realize, ...), it shall be done
+  * in this class_init function */
+ static void esp32c3_gpio_class_init(ObjectClass *klass, void *data)
+ {
++    ESP32C3_GPIO_CLASS(klass)->npins = ESP32C3_GPIO_COUNT;
+ }
+ 
+ static const TypeInfo esp32c3_gpio_info = {
+diff --git a/hw/gpio/esp32s3_gpio.c b/hw/gpio/esp32s3_gpio.c
+index 0a0e477..2ca09f3 100644
+--- a/hw/gpio/esp32s3_gpio.c
++++ b/hw/gpio/esp32s3_gpio.c
+@@ -30,11 +30,12 @@ static void esp32s3_gpio_init(Object *obj)
+  * in this class_init function */
+ static void esp32s3_gpio_class_init(ObjectClass *klass, void *data)
+ {
++    ESP32C3_GPIO_CLASS(klass)->npins = ESP32S3_GPIO_COUNT;
+ }
+ 
+ static const TypeInfo esp32s3_gpio_info = {
+     .name = TYPE_ESP32S3_GPIO,
+-    .parent = TYPE_ESP32_GPIO,
++    .parent = TYPE_ESP32C3_GPIO,
+     .instance_size = sizeof(ESP32S3GPIOState),
+     .instance_init = esp32s3_gpio_init,
+     .class_init = esp32s3_gpio_class_init,
+diff --git a/hw/gpio/meson.build b/hw/gpio/meson.build
+index 6d53d8a..5450454 100644
+--- a/hw/gpio/meson.build
++++ b/hw/gpio/meson.build
+@@ -19,5 +19,5 @@ system_ss.add(when: 'CONFIG_ASPEED_SOC', if_true: files('aspeed_gpio.c'))
+ system_ss.add(when: 'CONFIG_SIFIVE_GPIO', if_true: files('sifive_gpio.c'))
+ system_ss.add(when: 'CONFIG_XTENSA_ESP32', if_true: files('esp32_gpio.c'))
+ system_ss.add(when: 'CONFIG_RISCV_ESP32C3', if_true: files('esp32_gpio.c', 'esp32c3_gpio.c'))
+-system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files('esp32_gpio.c', 'esp32s3_gpio.c'))
++system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files('esp32_gpio.c', 'esp32c3_gpio.c', 'esp32s3_gpio.c'))
+ system_ss.add(when: 'CONFIG_PCF8574', if_true: files('pcf8574.c'))
+diff --git a/hw/misc/esp32s3_rtc_cntl.c b/hw/misc/esp32s3_rtc_cntl.c
+index 76076c7..86af7f4 100644
+--- a/hw/misc/esp32s3_rtc_cntl.c
++++ b/hw/misc/esp32s3_rtc_cntl.c
+@@ -20,10 +20,107 @@
+ #include "hw/qdev-properties.h"
+ #include "hw/misc/esp32s3_reg.h"
+ #include "hw/misc/esp32s3_rtc_cntl.h"
++#include "qemu/host-utils.h"
+ 
+ static void esp32s3_rtc_update_cpu_stall(Esp32s3RtcCntlState* s);
+ static void esp32s3_rtc_update_clk(Esp32s3RtcCntlState* s);
+ 
++/* lector simulator: sleep and wake. Offsets from the S3 rtc_cntl_reg.h. */
++#define A_SLP_TIMER0        0x004
++#define A_SLP_TIMER1        0x008
++#define A_STATE0            0x018
++#define A_WAKEUP_STATE      0x03C
++#define A_INT_RAW           0x044
++#define A_INT_CLR           0x04C
++#define A_EXT_WAKEUP_CONF   0x064
++#define A_DIG_PWC           0x090
++#define A_EXT_WAKEUP1       0x0E0
++#define A_EXT_WAKEUP1_STAT  0x0E4
++#define A_SLP_WAKEUP_CAUSE  0x130
++
++#define SLEEP_EN            BIT(31)
++#define DG_WRAP_PD_EN       BIT(31)
++#define SLP_WAKEUP_INT      BIT(0)
++#define EXT1_LV_HIGH        BIT(31)    /* EXT_WAKEUP_CONF: 1 = any pin high, 0 = any pin low */
++#define WAKE_EXT1           BIT(1)
++#define WAKE_GPIO           BIT(2)
++#define WAKE_TIMER          BIT(3)
++
++/* Count the RTC timer at the rate the firmware calibrated (STORE1: us per
++ * tick, Q13.19), so light-sleep time correction lands exactly. */
++static uint64_t rtc_ticks(Esp32s3RtcCntlState *s)
++{
++    const uint64_t ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - s->time_base_ns;
++    const uint32_t cal = s->scratch_reg[1];
++    if (cal == 0) {
++        return muldiv64(ns, s->rtc_slowclk_freq, NANOSECONDS_PER_SECOND);
++    }
++    return muldiv64(ns, 1ULL << 19, 1000ULL * cal);
++}
++
++/* EXT1: RTC IO n is GPIO n on the S3 for the pins lector uses (0-21). */
++static uint32_t ext1_status(Esp32s3RtcCntlState *s)
++{
++    const uint32_t mask = s->regs[A_EXT_WAKEUP1 / 4] & 0x3FFFFF;
++    const bool want_high = s->regs[A_EXT_WAKEUP_CONF / 4] & EXT1_LV_HIGH;
++    uint32_t status = 0;
++    for (int pin = 0; s->gpio && pin < 22; pin++) {
++        if ((mask & BIT(pin)) && esp32c3_gpio_level(s->gpio, pin) == want_high) {
++            status |= BIT(pin);
++        }
++    }
++    return status;
++}
++
++static uint32_t pending_wake(Esp32s3RtcCntlState *s)
++{
++    const uint32_t ena = s->regs[A_WAKEUP_STATE / 4] >> 15;
++    const uint64_t target = ((uint64_t)(s->regs[A_SLP_TIMER1 / 4] & 0xFFFF) << 32) | s->regs[A_SLP_TIMER0 / 4];
++    uint32_t cause = 0;
++    if ((ena & WAKE_EXT1) && ext1_status(s)) {
++        cause |= WAKE_EXT1;
++    }
++    if ((ena & WAKE_TIMER) && rtc_ticks(s) >= target) {
++        cause |= WAKE_TIMER;
++    }
++    return cause;
++}
++
++/* Deep sleep: the cores spin after SLEEP_EN, standing in for power-down,
++ * until a wake source fires; then the chip boots with reason DEEPSLEEP. */
++static void esp32s3_wake_check(void *opaque)
++{
++    Esp32s3RtcCntlState *s = opaque;
++    if (!s->deep_sleeping) {
++        return;
++    }
++    const uint32_t cause = pending_wake(s);
++    if (!cause) {
++        timer_mod(s->wake_timer, qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) + 5);
++        return;
++    }
++    s->deep_sleeping = false;
++    s->regs[A_SLP_WAKEUP_CAUSE / 4] = cause;
++    s->regs[A_EXT_WAKEUP1_STAT / 4] = ext1_status(s);
++    s->reset_cause[0] = ESP32_DEEPSLEEP_RESET;
++    s->reset_cause[1] = ESP32_DEEPSLEEP_RESET;
++    qemu_irq_pulse(s->dig_reset_req);
++}
++
++static void esp32s3_sleep_start(Esp32s3RtcCntlState *s)
++{
++    if (s->regs[A_DIG_PWC / 4] & DG_WRAP_PD_EN) {
++        s->deep_sleeping = true;
++        esp32s3_wake_check(s);
++        return;
++    }
++    /* Light sleep wakes at once; the PM layer re-checks why it should stay
++     * awake. ponytail: immediate wake, model the timer/GPIO wait if idle CPU matters. */
++    const uint32_t cause = pending_wake(s);
++    s->regs[A_SLP_WAKEUP_CAUSE / 4] = cause ? cause : WAKE_TIMER;
++    s->regs[A_INT_RAW / 4] |= SLP_WAKEUP_INT;
++}
++
+ static uint64_t esp32s3_rtc_cntl_read(void *opaque, hwaddr addr, unsigned int size)
+ {
+     Esp32s3RtcCntlState *s = ESP32S3_RTC_CNTL(opaque);
+@@ -72,6 +169,9 @@ static uint64_t esp32s3_rtc_cntl_read(void *opaque, hwaddr addr, unsigned int si
+     case A_RTC_CNTL_STORE7:
+         r = s->scratch_reg[(addr - A_RTC_CNTL_STORE4) / 4 + 4];
+         break;
++    default:
++        r = s->regs[addr / 4];
++        break;
+     }
+     return r;
+ }
+@@ -104,9 +204,7 @@ static void esp32s3_rtc_cntl_write(void *opaque, hwaddr addr, uint64_t value,
+ 
+     case A_RTC_CNTL_TIME_UPDATE:
+         if (value & R_RTC_CNTL_TIME_UPDATE_UPDATE_MASK) {
+-            s->time_reg = muldiv64(
+-                qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - s->time_base_ns,
+-                s->rtc_slowclk_freq, NANOSECONDS_PER_SECOND);
++            s->time_reg = rtc_ticks(s);
+         }
+         break;
+ 
+@@ -142,6 +240,19 @@ static void esp32s3_rtc_cntl_write(void *opaque, hwaddr addr, uint64_t value,
+     case A_RTC_CNTL_STORE7:
+         s->scratch_reg[(addr - A_RTC_CNTL_STORE4) / 4 + 4] = value;
+         break;
++
++    case A_INT_CLR:
++        s->regs[A_INT_RAW / 4] &= ~value;
++        break;
++    case A_STATE0:
++        s->regs[addr / 4] = value & ~SLEEP_EN;
++        if (value & SLEEP_EN) {
++            esp32s3_sleep_start(s);
++        }
++        break;
++    default:
++        s->regs[addr / 4] = value;
++        break;
+     }
+ }
+ 
+@@ -181,7 +292,10 @@ static void esp32s3_rtc_cntl_reset_hold(Object *obj, ResetType type)
+ {
+     Esp32s3RtcCntlState *s = ESP32S3_RTC_CNTL(obj);
+ 
+-    s->time_base_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
++    /* The RTC timer keeps counting through a deep-sleep reset, like the chip. */
++    if (!s->time_base_ns) {
++        s->time_base_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
++    }
+ }
+ 
+ static void esp32s3_rtc_cntl_realize(DeviceState *dev, Error **errp)
+@@ -201,6 +315,7 @@ static void esp32s3_rtc_cntl_init(Object *obj)
+     qdev_init_gpio_out_named(DEVICE(sbd), &s->cpu_reset_req[0], ESP32S3_RTC_CPU_RESET_GPIO, ESP32S3_CPU_COUNT);
+     qdev_init_gpio_out_named(DEVICE(sbd), &s->cpu_stall_req[0], ESP32S3_RTC_CPU_STALL_GPIO, ESP32S3_CPU_COUNT);
+     qdev_init_gpio_out_named(DEVICE(sbd), &s->clk_update, ESP32S3_RTC_CLK_UPDATE_GPIO, 1);
++    s->wake_timer = timer_new_ms(QEMU_CLOCK_VIRTUAL, esp32s3_wake_check, s);
+ 
+     for (int i = 0; i < ESP32S3_CPU_COUNT; ++i) {
+         s->reset_cause[i] = ESP32_POWERON_RESET;
+diff --git a/hw/misc/esp32s3_sens.c b/hw/misc/esp32s3_sens.c
+new file mode 100644
+index 0000000..dfc1cb6
+--- /dev/null
++++ b/hw/misc/esp32s3_sens.c
+@@ -0,0 +1,79 @@
++/*
++ * ESP32-S3 SENS block, one-shot SAR ADC only, for the lector simulator.
++ *
++ * A conversion started through SAR_MEAS{1,2}_CTRL2 completes at once with the
++ * raw reading from the "adc1"/"adc2" properties. The X4 Pro reads no analog
++ * input of its own; the ADC is touched only by the driver's self-calibration.
++ */
++#include "qemu/osdep.h"
++#include "qemu/module.h"
++#include "qom/object.h"
++#include "hw/sysbus.h"
++
++#define TYPE_ESP32S3_SENS "esp32s3.sens"
++OBJECT_DECLARE_SIMPLE_TYPE(ESP32S3SensState, ESP32S3_SENS)
++
++#define A_MEAS1_CTRL2   0x00C
++#define A_MEAS2_CTRL2   0x030
++#define A_SLAVE_ADDR1   0x040
++#define START           BIT(17)
++#define DONE            BIT(16)
++
++struct ESP32S3SensState {
++    SysBusDevice parent_obj;
++    MemoryRegion iomem;
++    uint32_t regs[0x400 / 4];
++    uint32_t raw[2];
++};
++
++static uint64_t esp32s3_sens_read(void *opaque, hwaddr addr, unsigned size)
++{
++    ESP32S3SensState *s = ESP32S3_SENS(opaque);
++    /* meas_status: the controller is never busy between conversions. */
++    return addr == A_SLAVE_ADDR1 ? 0 : s->regs[addr / 4];
++}
++
++static void esp32s3_sens_write(void *opaque, hwaddr addr, uint64_t value, unsigned size)
++{
++    ESP32S3SensState *s = ESP32S3_SENS(opaque);
++    if (addr == A_MEAS1_CTRL2 || addr == A_MEAS2_CTRL2) {
++        const int unit = addr == A_MEAS2_CTRL2;
++        value &= ~(DONE | 0xFFFF);
++        if (value & START) {
++            value |= DONE | (s->raw[unit] & 0xFFF);
++        }
++    }
++    s->regs[addr / 4] = value;
++}
++
++static const MemoryRegionOps esp32s3_sens_ops = {
++    .read = esp32s3_sens_read,
++    .write = esp32s3_sens_write,
++    .endianness = DEVICE_LITTLE_ENDIAN,
++    .valid.min_access_size = 4,
++    .valid.max_access_size = 4,
++};
++
++static void esp32s3_sens_init(Object *obj)
++{
++    ESP32S3SensState *s = ESP32S3_SENS(obj);
++    memory_region_init_io(&s->iomem, obj, &esp32s3_sens_ops, s, TYPE_ESP32S3_SENS, 0x400);
++    sysbus_init_mmio(SYS_BUS_DEVICE(obj), &s->iomem);
++    s->raw[0] = s->raw[1] = 2048;
++    object_property_add_uint32_ptr(obj, "adc1", &s->raw[0], OBJ_PROP_FLAG_READWRITE);
++    object_property_add_uint32_ptr(obj, "adc2", &s->raw[1], OBJ_PROP_FLAG_READWRITE);
++}
++
++static const TypeInfo esp32s3_sens_info = {
++    .name = TYPE_ESP32S3_SENS,
++    .parent = TYPE_SYS_BUS_DEVICE,
++    .instance_size = sizeof(ESP32S3SensState),
++    .instance_init = esp32s3_sens_init,
++};
++
++static void esp32s3_sens_register_types(void)
++{
++    type_register_static(&esp32s3_sens_info);
++}
++
++type_init(esp32s3_sens_register_types)
+diff --git a/hw/misc/meson.build b/hw/misc/meson.build
+index c72ee7d..617571b 100644
+--- a/hw/misc/meson.build
++++ b/hw/misc/meson.build
+@@ -211,3 +211,4 @@ system_ss.add(when: 'CONFIG_SBSA_REF', if_true: files('sbsa_ec.c'))
+ 
+ # HPPA devices
+ system_ss.add(when: 'CONFIG_LASI', if_true: files('lasi.c'))
++system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files('esp32s3_sens.c'))
+diff --git a/hw/ssi/meson.build b/hw/ssi/meson.build
+index 6348ce3..e7b47ce 100644
+--- a/hw/ssi/meson.build
++++ b/hw/ssi/meson.build
+@@ -16,3 +16,4 @@ system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files('esp32s3_spi.c'))
+ system_ss.add(when: 'CONFIG_IBEX', if_true: files('ibex_spi_host.c'))
+ system_ss.add(when: 'CONFIG_BCM2835_SPI', if_true: files('bcm2835_spi.c'))
+ system_ss.add(when: 'CONFIG_PNV_SPI', if_true: files('pnv_spi.c'))
++system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files('esp32c3_gpspi.c'))
+diff --git a/hw/xtensa/esp32s3.c b/hw/xtensa/esp32s3.c
+index 4a24a04..2715713 100644
+--- a/hw/xtensa/esp32s3.c
++++ b/hw/xtensa/esp32s3.c
+@@ -68,6 +68,8 @@
+ #include "cpu_esp32s3.h"
+ 
+ #include "hw/misc/esp32c3_jtag.h"
++#include "hw/ssi/esp32c3_gpspi.h"
++#include "hw/ssi/ssi.h"
+ #include "hw/display/esp_rgb.h"
+ 
+ #define TYPE_ESP32S3_SOC "xtensa.esp32s3"
+@@ -150,6 +152,7 @@ typedef struct Esp32s3SocState {
+ 
+     ESP32C3UsbJtagState jtag;
+     ESPRgbState rgb;
++    ESP32C3GpspiState spi2;
+ 
+     MemoryRegion iomem;
+     DWCSDMMCState sdmmc;
+@@ -403,6 +406,7 @@ static void esp32s3_soc_realize(DeviceState *dev, Error **errp)
+     qdev_realize(DEVICE(&s->intmatrix), &s->periph_bus, &error_fatal);
+ 
+ 
++    s->rtc_cntl.gpio = &s->gpio.parent;
+     qdev_realize(DEVICE(&s->rtc_cntl), &s->rtc_bus, &error_fatal);
+     esp32s3_soc_add_periph_device(sys_mem, &s->rtc_cntl, DR_REG_RTCCNTL_BASE);
+ 
+@@ -639,6 +643,7 @@ static void esp32s3_machine_init(MachineState *machine)
+     object_initialize_child(OBJECT(ss), "spi1", &ss->spi1, TYPE_ESP32S3_SPI);
+     object_initialize_child(OBJECT(ss), "efuse", &ss->efuse, TYPE_ESP32S3_EFUSE);
+     object_initialize_child(OBJECT(ss), "jtag", &ss->jtag, TYPE_ESP32C3_JTAG);
++    object_initialize_child(OBJECT(ss), "spi2", &ss->spi2, TYPE_ESP32C3_GPSPI);
+     object_initialize_child(OBJECT(ss), "gpio", &ss->gpio, TYPE_ESP32S3_GPIO);
+     object_initialize_child(OBJECT(ss), "rng", &ss->rng, TYPE_ESP32S3_RNG);
+ 
+@@ -670,9 +675,14 @@ static void esp32s3_machine_init(MachineState *machine)
+ 
+     /* USB Serial JTAG realization */
+     {
++        if (serial_hd(ESP32S3_UART_COUNT)) {
++            qdev_prop_set_chr(DEVICE(&ss->jtag), "chardev", serial_hd(ESP32S3_UART_COUNT));
++        }
+         sysbus_realize(SYS_BUS_DEVICE(&ss->jtag), &error_fatal);
+         MemoryRegion *mr = sysbus_mmio_get_region(SYS_BUS_DEVICE(&ss->jtag), 0);
+         memory_region_add_subregion_overlap(sys_mem, DR_REG_USB_SERIAL_JTAG_BASE, mr, 0);
++        sysbus_connect_irq(SYS_BUS_DEVICE(&ss->jtag), 0,
++                           qdev_get_gpio_in(DEVICE(&ss->intmatrix), ETS_USB_SERIAL_JTAG_INTR_SOURCE));
+     }
+ 
+     /* SPI1 controller (SPI Flash) */
+@@ -773,6 +783,8 @@ static void esp32s3_machine_init(MachineState *machine)
+         sysbus_realize(SYS_BUS_DEVICE(&ss->gpio), &error_fatal);
+         MemoryRegion *mr = sysbus_mmio_get_region(SYS_BUS_DEVICE(&ss->gpio), 0);
+         memory_region_add_subregion_overlap(sys_mem, DR_REG_GPIO_BASE, mr, 0);
++        sysbus_connect_irq(SYS_BUS_DEVICE(&ss->gpio), 0,
++                           qdev_get_gpio_in(DEVICE(&ss->intmatrix), ETS_GPIO_INTR_SOURCE));
+     }
+ 
+     {
+@@ -798,6 +810,35 @@ static void esp32s3_machine_init(MachineState *machine)
+    }
+ 
+     /* SHA realization */
++    /* lector simulator: the SENS block's one-shot ADC (self-calibration only). */
++    {
++        DeviceState *sens = qdev_new("esp32s3.sens");
++        object_property_add_child(OBJECT(machine), "sens", OBJECT(sens));
++        sysbus_realize_and_unref(SYS_BUS_DEVICE(sens), &error_fatal);
++        memory_region_add_subregion_overlap(sys_mem, DR_REG_SENS_BASE,
++                                            sysbus_mmio_get_region(SYS_BUS_DEVICE(sens), 0), 0);
++    }
++
++    /* lector simulator: SPI2 with the Xteink X4 Pro's e-paper panel.
++     * Pins (BoardConfig.h): panel CS 13, DC 18, RST 14, BUSY 6. The SD card is on SDMMC. */
++    {
++        ss->spi2.gdma = ESP_GDMA(&ss->gdma);
++        sysbus_realize(SYS_BUS_DEVICE(&ss->spi2), &error_fatal);
++        memory_region_add_subregion_overlap(sys_mem, DR_REG_SPI2_BASE,
++                                            sysbus_mmio_get_region(SYS_BUS_DEVICE(&ss->spi2), 0), 0);
++        sysbus_connect_irq(SYS_BUS_DEVICE(&ss->spi2), 0,
++                           qdev_get_gpio_in(DEVICE(&ss->intmatrix), ETS_SPI2_INTR_SOURCE));
++
++        DeviceState *gpio = DEVICE(&ss->gpio);
++        DeviceState *panel = qdev_new("ssd1677");
++        object_property_add_child(OBJECT(machine), "panel", OBJECT(panel));
++        qdev_realize_and_unref(panel, BUS(ss->spi2.spi), &error_fatal);
++        qdev_connect_gpio_out_named(gpio, "pin-out", 13, qdev_get_gpio_in_named(panel, SSI_GPIO_CS, 0));
++        qdev_connect_gpio_out_named(gpio, "pin-out", 18, qdev_get_gpio_in_named(panel, "dc", 0));
++        qdev_connect_gpio_out_named(gpio, "pin-out", 14, qdev_get_gpio_in_named(panel, "rst", 0));
++        qdev_connect_gpio_out_named(panel, "busy", 0, qdev_get_gpio_in_named(gpio, "pin-in", 6));
++    }
++
+     {
+         ss->sha.parent.gdma = ESP_GDMA(&ss->gdma);
+         sysbus_realize(SYS_BUS_DEVICE(&ss->sha), &error_fatal);
+diff --git a/include/hw/gpio/esp32c3_gpio.h b/include/hw/gpio/esp32c3_gpio.h
+index 59c1b80..c4c6fb7 100644
+--- a/include/hw/gpio/esp32c3_gpio.h
++++ b/include/hw/gpio/esp32c3_gpio.h
+@@ -15,6 +15,7 @@
+ #define ESP32C3_STRAP_MODE_USB_BOOT   0x0   /* Diagnostic Mode1+USB download Mode */
+ 
+ #define ESP32C3_GPIO_COUNT 22
++#define ESP_GPIO_MAX 64   /* room for the S3's 49 pins in two banks */
+ 
+ /*
+  * Pin levels for the lector simulator. "levels" is what the outside world
+@@ -25,19 +26,21 @@
+ typedef struct ESP32C3State {
+     Esp32GpioState parent;
+     MemoryRegion iomem;
+-    uint32_t out;
+-    uint32_t enable;
+-    uint32_t status;
+-    uint32_t pin[ESP32C3_GPIO_COUNT];
+-    uint32_t levels;        /* external levels, settable at run time */
+-    uint32_t driven_mask;   /* pins a device model drives */
+-    uint32_t driven_levels;
+-    uint32_t last_in;
+-    qemu_irq pin_out[ESP32C3_GPIO_COUNT];
++    int npins;
++    uint64_t out;
++    uint64_t enable;
++    uint64_t status;
++    uint32_t pin[ESP_GPIO_MAX];
++    uint64_t levels;        /* external levels, settable at run time */
++    uint64_t driven_mask;   /* pins a device model drives */
++    uint64_t driven_levels;
++    uint64_t last_in;
++    qemu_irq pin_out[ESP_GPIO_MAX];
+ } ESP32C3GPIOState;
+ 
+ typedef struct ESP32C3GPIOClass {
+     Esp32GpioClass parent;
++    int npins;
+ } ESP32C3GPIOClass;
+ 
+ /* Current level of a pin as the chip sees it (for RTC GPIO wakeup). */
+diff --git a/include/hw/gpio/esp32s3_gpio.h b/include/hw/gpio/esp32s3_gpio.h
+index 7d6bb4b..1f32464 100644
+--- a/include/hw/gpio/esp32s3_gpio.h
++++ b/include/hw/gpio/esp32s3_gpio.h
+@@ -3,7 +3,7 @@
+ #include "hw/sysbus.h"
+ #include "hw/hw.h"
+ #include "hw/registerfields.h"
+-#include "esp32_gpio.h"
++#include "esp32c3_gpio.h"
+ 
+ #define TYPE_ESP32S3_GPIO "esp32s3.gpio"
+ #define ESP32S3_GPIO(obj)           OBJECT_CHECK(ESP32S3GPIOState, (obj), TYPE_ESP32S3_GPIO)
+@@ -13,10 +13,12 @@
+ /* Bootstrap options for ESP32-S3 (4-bit) */
+ #define ESP32S3_STRAP_MODE_FLASH_BOOT 0x4   /* SPI Boot */
+ 
++#define ESP32S3_GPIO_COUNT 49
++
+ typedef struct ESP32S3State {
+-    Esp32GpioState parent;
++    ESP32C3GPIOState parent;
+ } ESP32S3GPIOState;
+ 
+ typedef struct ESP32S3GPIOClass {
+-    Esp32GpioClass parent;
++    ESP32C3GPIOClass parent;
+ } ESP32S3GPIOClass;
+diff --git a/include/hw/misc/esp32s3_rtc_cntl.h b/include/hw/misc/esp32s3_rtc_cntl.h
+index 45bd7e2..824ca5d 100644
+--- a/include/hw/misc/esp32s3_rtc_cntl.h
++++ b/include/hw/misc/esp32s3_rtc_cntl.h
+@@ -14,6 +14,8 @@
+ #include "hw/sysbus.h"
+ #include "hw/registerfields.h"
+ #include "hw/misc/esp32s3_reg.h"
++#include "qemu/timer.h"
++#include "hw/gpio/esp32s3_gpio.h"
+ 
+ #define TYPE_ESP32S3_RTC_CNTL "misc.esp32s3.rtc_cntl"
+ #define ESP32S3_RTC_CNTL(obj) OBJECT_CHECK(Esp32s3RtcCntlState, (obj), TYPE_ESP32S3_RTC_CNTL)
+@@ -83,6 +85,11 @@ typedef struct Esp32s3RtcCntlState {
+     uint32_t sw_cpu_stall_reg;
+     uint32_t scratch_reg[ESP32S3_RTC_CNTL_SCRATCH_REG_COUNT];
+     Esp32s3ResetCause reset_cause[ESP32S3_CPU_COUNT];
++    /* lector simulator: every other register keeps what was written, and sleep is modelled. */
++    uint32_t regs[0x200 / 4];
++    bool deep_sleeping;
++    QEMUTimer *wake_timer;
++    ESP32C3GPIOState *gpio;
+     bool stat_vector_sel[ESP32S3_CPU_COUNT];
+ } Esp32s3RtcCntlState;
+ 
+-- 
+2.43.0
+
