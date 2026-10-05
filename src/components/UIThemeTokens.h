@@ -6,8 +6,7 @@
 #include "UiRowHeight.h"
 
 // The look of a control a first tap armed: dashed black 2px lines on white, text
-// on its normal ground. A row gets them above and below, like the rules between
-// the in-book menu's headings; a button gets them all round. Shared by every
+// on its normal ground, all round, on rows and buttons alike. Shared by every
 // control style so the highlight reads the same whatever was tapped.
 inline void outlineArmedControl(freeink::ui::BoxStyle& style, const uint8_t radius, const uint8_t edges) {
   namespace fui = freeink::ui;
@@ -98,7 +97,7 @@ inline freeink::ui::ThemeTokens uiThemeTokens(const freeink::ui::GfxRendererTarg
   // by construction rather than by a board test: StateActive is only ever set
   // by a touch contact, so a keys-only board never paints it and nothing here
   // asks what the board is.
-  outlineArmedControl(tokens.listRow.active, tokens.listRowRadius, fui::EdgesHorizontal);
+  outlineArmedControl(tokens.listRow.active, tokens.listRowRadius, fui::EdgesAll);
   outlineArmedControl(tokens.button.active, static_cast<uint8_t>(tokens.controlRadius), fui::EdgesAll);
   // No scroll track. Lists say "more" with the two chevrons UiListActivity draws
   // outside the row band (ListScrollbar.h), so the SDK draws no indicator and

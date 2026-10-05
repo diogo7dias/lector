@@ -102,18 +102,26 @@ void expectOutlined(const Grid& grid, int index) {
   EXPECT_EQ(target.fills[index].paint.kind, fui::PaintKind::Solid);
   EXPECT_EQ(target.fills[index].paint.color, fui::Color::White) << "armed row must never carry the selected fill";
   EXPECT_TRUE(target.strokes.empty());
-  // Dashed 2px lines above and below the armed row: short black fills right after its
-  // background, on its top and bottom edges.
+  // A dashed 2px border all round the armed row: short black fills right after its
+  // background, on all four edges.
   const auto row = target.fills[index].rect;
-  int top = 0, bottom = 0;
+  int top = 0, bottom = 0, left = 0, right = 0;
   for (size_t i = index + 1; i < target.fills.size(); ++i) {
     const auto& f = target.fills[i];
-    if (f.paint.color != fui::Color::Black || f.rect.height != 2 || f.rect.width >= row.width) break;
-    top += f.rect.y == row.y;
-    bottom += f.rect.y == row.y + row.height - 2;
+    if (f.paint.color != fui::Color::Black || f.rect.width >= row.width || f.rect.height >= row.height) break;
+    if (f.rect.height == 2) {
+      top += f.rect.y == row.y;
+      bottom += f.rect.y == row.y + row.height - 2;
+    }
+    if (f.rect.width == 2) {
+      left += f.rect.x == row.x;
+      right += f.rect.x == row.x + row.width - 2;
+    }
   }
   EXPECT_GT(top, 1);
   EXPECT_EQ(top, bottom);
+  EXPECT_GT(left, 0);
+  EXPECT_EQ(left, right);
   ASSERT_EQ(target.texts.size(), 6u);
   EXPECT_FALSE(target.texts[index * 2].inverted);
   EXPECT_FALSE(target.texts[index * 2 + 1].inverted);
