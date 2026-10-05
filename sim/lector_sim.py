@@ -5,7 +5,7 @@
     sim.tap(240, 570); sim.press("down")
     sim.screenshot("home.png")
 """
-import os, subprocess, time
+import os, subprocess, sys, time
 from PIL import Image
 from qmp import Qmp
 
@@ -54,7 +54,9 @@ def make_flash(path, board="x4pro"):
     """Bootloader, partition table and app from the last `pio run -e <env>`, as one 16 MB image."""
     b = BOARDS[board]
     build = os.path.join(REPO, ".pio/build", b["env"])
+    # PlatformIO's venv carries esptool; elsewhere (CI) it is pip-installed next to us.
     py = os.path.expanduser("~/.platformio/penv/bin/python")
+    py = py if os.path.exists(py) else sys.executable
     subprocess.run([py, "-m", "esptool", "--chip", b["chip"], "merge-bin", "--fill-flash-size", "16MB",
                     "-o", path, "0x0", f"{build}/bootloader.bin", "0x8000", f"{build}/partitions.bin",
                     "0x10000", f"{build}/firmware.bin"], check=True, stdout=subprocess.DEVNULL)
@@ -127,11 +129,17 @@ class LectorSim:
         """Power on the way a finger does: hold power, release once the screen is up."""
         if not self.qemu:
             self.start()
-        self._hold(self.b["power"], True)
         self.q.cmd("cont")
-        time.sleep(1.5)
+        return self.power_on(timeout)
+
+    def power_on(self, timeout=60):
+        """Hold power until the screen changes, then let go: a boot, or a wake from
+        sleep. Emulated boots run slower than the wall clock, so no fixed hold fits."""
+        before = self.frames()
+        self._hold(self.b["power"], True)
+        shown = self.wait_frames(before + 1, timeout)
         self._hold(self.b["power"], False)
-        return self.wait_frames(1, timeout)
+        return shown
 
     def frames(self):
         return self.q.get("/machine/panel", "frames")
@@ -216,6 +224,16 @@ class LectorSim:
     def screenshot(self, path):
         self.screen().save(path)
         return path
+
+    def asleep(self):
+        """In deep sleep: the last boot has since handed over to it."""
+        log = self.log_text()
+        return log.rfind("Entering deep sleep") > log.rfind("entry 0x")
+
+    def reboot(self, timeout=60):
+        """Cut the power and switch on again; flash (settings, NVS) and card persist."""
+        self.stop()
+        return self.boot(timeout)
 
     def log_text(self):
         with open(self.log, "rb") as f:
