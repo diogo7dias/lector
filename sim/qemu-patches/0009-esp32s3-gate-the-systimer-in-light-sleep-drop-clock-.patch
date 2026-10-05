@@ -1,0 +1,146 @@
+From 8a3e08a740dd61c72b2aecb0e198a8ae8e2e0ae7 Mon Sep 17 00:00:00 2001
+From: Vault Keeper <diogo7dias@gmail.com>
+Date: Mon, 5 Oct 2026 12:53:56 +0000
+Subject: [PATCH] esp32s3: gate the systimer in light sleep, drop clock lag at
+ sleep entry
+
+The systimer kept counting while light sleep warped the clock, so core 0 took
+a stale tick on wake (vTaskStepTick assert after ~5 min idle). Stop it for the
+sleep and reprogram its comparators on wake.
+
+Emulated work runs slower than the chip; catching that lag up during idle made
+2 s of idle look like 30 s to the firmware (touch sleep ate the next tap). Rebase
+the wall-clock anchor at each sleep entry instead.
+---
+ hw/misc/esp32s3_rtc_cntl.c         | 12 ++++++++++--
+ hw/timer/esp_systimer.c            | 17 ++++++++++++++++-
+ hw/xtensa/esp32s3.c                |  1 +
+ include/hw/misc/esp32s3_rtc_cntl.h |  2 ++
+ include/hw/timer/esp_systimer.h    |  6 ++++++
+ 5 files changed, 35 insertions(+), 3 deletions(-)
+
+diff --git a/hw/misc/esp32s3_rtc_cntl.c b/hw/misc/esp32s3_rtc_cntl.c
+index afa239f..a64b789 100644
+--- a/hw/misc/esp32s3_rtc_cntl.c
++++ b/hw/misc/esp32s3_rtc_cntl.c
+@@ -125,6 +125,9 @@ static void esp32s3_wake_check(void *opaque)
+     s->regs[A_EXT_WAKEUP1_STAT / 4] = ext1_status(s);
+     if (s->light_sleeping) {
+         s->light_sleeping = false;
++        if (s->systimer) {
++            esp_systimer_set_asleep(s->systimer, false);
++        }
+         s->regs[A_INT_RAW / 4] |= SLP_WAKEUP_INT;
+         return;
+     }
+@@ -141,9 +144,14 @@ static void esp32s3_light_sleep(Esp32s3RtcCntlState *s)
+ {
+     const uint32_t ena = s->regs[A_WAKEUP_STATE / 4] >> 15;
+     s->light_sleeping = true;
+-    if (!s->realtime_base_ns) {
+-        s->realtime_base_ns = qemu_clock_get_ns(QEMU_CLOCK_REALTIME) - qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
++    if (s->systimer) {
++        esp_systimer_set_asleep(s->systimer, true);
+     }
++    /* Emulated work runs slower than the chip, so the virtual clock falls behind
++     * the wall one. Drop that lag here rather than catch it up while idle: catching
++     * up would make two seconds of idle look like thirty to the firmware. */
++    s->realtime_base_ns = MAX(s->realtime_base_ns, qemu_clock_get_ns(QEMU_CLOCK_REALTIME) -
++                                                   qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL));
+     /* Without a timer only the outside (a button) can wake it: let the vCPU spin
+      * so QMP input gets through. */
+     while (icount_enabled() && (ena & WAKE_TIMER) && !pending_wake(s)) {
+diff --git a/hw/timer/esp_systimer.c b/hw/timer/esp_systimer.c
+index 75f9861..882ffd9 100644
+--- a/hw/timer/esp_systimer.c
++++ b/hw/timer/esp_systimer.c
+@@ -33,7 +33,7 @@
+ static void esp_systimer_update_counter(ESPSysTimerCounter *counter) {
+     const int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+     const int64_t elapsed_ns = now - counter->base;
+-    const int64_t ticks = (elapsed_ns * (ESP_SYSTIMER_CNT_CLK / 1000000)) / 1000;
++    const int64_t ticks = counter->asleep ? 0 : (elapsed_ns * (ESP_SYSTIMER_CNT_CLK / 1000000)) / 1000;
+     counter->value = (counter->value + ticks) & ESP_SYSTIMER_52BIT_MASK;
+     counter->base = now;
+ }
+@@ -371,6 +371,21 @@ static void esp_systimer_comparator_reload(ESPSysTimerComp* comparator)
+ }
+ 
+ 
++void esp_systimer_set_asleep(ESPSysTimerState *s, bool asleep)
++{
++    for (int i = 0; i < ESP_SYSTIMER_COUNTER_COUNT; i++) {
++        esp_systimer_update_counter(&s->counter[i]);
++        s->counter[i].asleep = asleep;
++    }
++    if (asleep) {
++        for (int i = 0; i < ESP_SYSTIMER_COMP_COUNT; i++) {
++            timer_del(&s->comparators[i].qtimer);
++        }
++    } else {
++        esp_systimer_comparator_reprogram_all(s);
++    }
++}
++
+ static void esp_systimer_conf_set(ESPSysTimerState *s, uint64_t value)
+ {
+     bool state[ESP_SYSTIMER_COMP_COUNT] = { 0 };
+diff --git a/hw/xtensa/esp32s3.c b/hw/xtensa/esp32s3.c
+index 5b2ea2c..c1b994e 100644
+--- a/hw/xtensa/esp32s3.c
++++ b/hw/xtensa/esp32s3.c
+@@ -408,6 +408,7 @@ static void esp32s3_soc_realize(DeviceState *dev, Error **errp)
+ 
+ 
+     s->rtc_cntl.gpio = &s->gpio.parent;
++    s->rtc_cntl.systimer = &s->systimer.parent;  /* initialised later, in machine init */
+     qdev_realize(DEVICE(&s->rtc_cntl), &s->rtc_bus, &error_fatal);
+     esp32s3_soc_add_periph_device(sys_mem, &s->rtc_cntl, DR_REG_RTCCNTL_BASE);
+ 
+diff --git a/include/hw/misc/esp32s3_rtc_cntl.h b/include/hw/misc/esp32s3_rtc_cntl.h
+index a2ee540..8174aa1 100644
+--- a/include/hw/misc/esp32s3_rtc_cntl.h
++++ b/include/hw/misc/esp32s3_rtc_cntl.h
+@@ -16,6 +16,7 @@
+ #include "hw/misc/esp32s3_reg.h"
+ #include "qemu/timer.h"
+ #include "hw/gpio/esp32s3_gpio.h"
++#include "hw/timer/esp_systimer.h"
+ 
+ #define TYPE_ESP32S3_RTC_CNTL "misc.esp32s3.rtc_cntl"
+ #define ESP32S3_RTC_CNTL(obj) OBJECT_CHECK(Esp32s3RtcCntlState, (obj), TYPE_ESP32S3_RTC_CNTL)
+@@ -93,6 +94,7 @@ typedef struct Esp32s3RtcCntlState {
+     uint64_t tick_base;
+     QEMUTimer *wake_timer;
+     ESP32C3GPIOState *gpio;
++    ESPSysTimerState *systimer;  /* stopped while in light sleep */
+     bool stat_vector_sel[ESP32S3_CPU_COUNT];
+ } Esp32s3RtcCntlState;
+ 
+diff --git a/include/hw/timer/esp_systimer.h b/include/hw/timer/esp_systimer.h
+index d8e2955..7a30bb8 100644
+--- a/include/hw/timer/esp_systimer.h
++++ b/include/hw/timer/esp_systimer.h
+@@ -76,6 +76,8 @@ typedef struct {
+     uint64_t flushed; // Mirror of the internal counter that can be seen by the guest program
+     /* Absolute time, in ns, when value was updated last */
+     int64_t base;
++    /* lector simulator: chip in light sleep, the counter's clock is gated */
++    bool asleep;
+ } ESPSysTimerCounter;
+ 
+ 
+@@ -124,6 +126,10 @@ typedef struct ESPSysTimerClass {
+     void (*comparators_reprogram)(ESPSysTimerState* s);
+ } ESPSysTimerClass;
+ 
++/* lector simulator: light sleep gates the systimer clock: counters stop and no
++ * alarm fires until the chip wakes (the firmware then advances it itself). */
++void esp_systimer_set_asleep(ESPSysTimerState *s, bool asleep);
++
+ 
+ REG32(SYSTIMER_CONF, 0x0000)
+     FIELD(SYSTIMER_CONF, CLK_EN, 31, 1)
+-- 
+2.43.0
+

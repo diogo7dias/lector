@@ -120,6 +120,13 @@ jobs:
           path: .pio/build/default/firmware.bin
           if-no-files-found: error
 
+      - name: Upload images for the simulator
+        uses: actions/upload-artifact@v6
+        with:
+          name: sim-default
+          path: .pio/build/default/*.bin
+          if-no-files-found: error
+
   build-x4pro:
     runs-on: ubuntu-latest
     steps:
@@ -151,6 +158,67 @@ jobs:
 
       - name: Build X4 Pro
         run: pio run -e x4pro
+
+      - name: Upload images for the simulator
+        uses: actions/upload-artifact@v6
+        with:
+          name: sim-x4pro
+          path: .pio/build/x4pro/*.bin
+          if-no-files-found: error
+
+  # The real firmware of every board in QEMU (sim/): boots, touch and keys, reading.
+  sim-e2e:
+    needs: [build, build-x4pro]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libglib2.0-dev libpixman-1-dev libgcrypt20-dev \
+            libslirp-dev python3-venv mtools dosfstools fdisk
+          pip install esptool pillow
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: sim-default
+          path: .pio/build/default
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: sim-x4pro
+          path: .pio/build/x4pro
+
+      - name: Cache QEMU
+        uses: actions/cache@v4
+        with:
+          path: sim/.qemu
+          key: qemu-${{ runner.os }}-${{ hashFiles('sim/qemu-patches/**', 'sim/build-qemu.sh') }}
+
+      - name: Build QEMU
+        run: ./sim/build-qemu.sh
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install e2e
+        working-directory: sim
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run e2e (x4pro, x3, x4)
+        working-directory: sim
+        run: npm run test:e2e
+
+      - name: Upload e2e report
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: sim-e2e-report
+          path: sim/.e2e
 
   unit-tests:
     runs-on: ubuntu-latest
@@ -193,6 +261,7 @@ jobs:
     needs:
       - build
       - build-x4pro
+      - sim-e2e
       - clang-format
       - cppcheck
       - unit-tests

@@ -7,7 +7,8 @@ Boots that board's firmware from its last `pio run` on a fresh card, then serves
   GET  /screen.png   the panel, upright
   GET  /state        {"frames", "activity", "ink"} as JSON
   GET  /ink/<x>/<y>/<w>/<h>  {"ink", "area"}: dark pixels in that box of the upright panel
-  POST /press/<key>  the board's keys (see lector_sim.buttons)
+  POST /press/<key>  the board's keys (see lector_sim.buttons); power sleeps, or wakes when asleep
+  POST /reboot       cut the power and switch on again (flash and card persist)
   POST /tap/<x>/<y>  touch the upright panel (480x800), touch boards only
   POST /swipe/<x1>/<y1>/<x2>/<y2>  slide a finger across it
 """
@@ -43,7 +44,9 @@ KEYS</div>
 <dl><dt>activity</dt><dd data-testid="activity">-</dd>
 <dt>frames</dt><dd data-testid="frames">0</dd>
 <dt>ink</dt><dd data-testid="ink">0</dd>
-<dt>busy</dt><dd data-testid="busy">no</dd></dl>
+<dt>busy</dt><dd data-testid="busy">no</dd>
+<dt>asleep</dt><dd data-testid="asleep">no</dd></dl>
+<button id="reboot">Reboot</button>
 <script>
 const $ = (s) => document.querySelector(s);
 let frames = -1;
@@ -52,6 +55,7 @@ async function poll() {
     const s = await (await fetch('/state')).json();
     $('[data-testid=activity]').textContent = s.activity;
     $('[data-testid=ink]').textContent = s.ink;
+    $('[data-testid=asleep]').textContent = s.asleep ? 'yes' : 'no';
     if (s.frames !== frames) { frames = s.frames; $('#screen').src = '/screen.png?f=' + frames; }
     $('[data-testid=frames]').textContent = s.frames;
   } catch (e) {}
@@ -62,6 +66,11 @@ async function press(key) {
   await fetch('/press/' + key, { method: 'POST' });
   $('[data-testid=busy]').textContent = 'no';
 }
+$('#reboot').onclick = async () => {
+  $('[data-testid=busy]').textContent = 'yes';
+  await fetch('/reboot', { method: 'POST' });
+  $('[data-testid=busy]').textContent = 'no';
+};
 document.querySelectorAll('[data-key]').forEach((b) => b.onclick = () => press(b.dataset.key));
 // The panel takes touch: a press and release in place is a tap, anything longer a swipe.
 const at = (e) => {
@@ -104,7 +113,7 @@ class Device:
         ink = 0
         if frames:
             ink = sum(1 for p in self.sim.screen().getdata() if p < 128)
-        return {"frames": frames, "activity": seen[-1] if seen else "", "ink": ink}
+        return {"frames": frames, "activity": seen[-1] if seen else "", "ink": ink, "asleep": self.sim.asleep()}
 
     def ink(self, box):
         region = self.sim.screen().crop(box)
@@ -117,7 +126,19 @@ class Device:
 
     def press(self, key):
         with self.lock:
-            self.sim.press(key)
+            if key != "power":
+                self.sim.press(key)
+            elif self.sim.asleep():
+                self.sim.power_on()
+                self.sim.wait_idle()
+            else:
+                # Long enough for the sleep hold on every board.
+                self.sim.press(key, hold=1.2, settle=False)
+
+    def reboot(self):
+        with self.lock:
+            self.sim.reboot()
+            self.sim.wait_idle()
 
     def swipe(self, *points):
         with self.lock:
@@ -170,6 +191,8 @@ def handler(device):
                 device.swipe(*(points * 2 if len(points) == 2 else points))
             elif parts[0] == "press" and len(parts) == 2 and parts[1] in KEYS:
                 device.press(parts[1])
+            elif parts == ["reboot"]:
+                device.reboot()
             else:
                 self.send(400, b"unknown key", "text/plain")
                 return

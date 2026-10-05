@@ -554,11 +554,18 @@ with exact checks (activity, frame count, panel ink).
 ./sim/build-qemu.sh                               # once, and after sim/qemu-patches/ change
 pio run -e x4pro && pio run -e default            # the firmware under test
 (cd sim && npm install && npm run test:e2e)       # all boards; or test:e2e:x4pro|x3|x4
+python3 sim/soak.py x4pro 10 600                  # 10 boots + 600 s idle; exit 1 on hang/reset/crash report
 ```
 
 - QEMU changes live only as patches in `sim/qemu-patches/` (base tag in `build-qemu.sh`).
 - Time is instruction-counted (`-icount`). Light sleep jumps the clock to its next
   event, never ahead of the wall clock, so idle timeouts (auto-sleep) match the device.
+  Lag from slow emulated work is dropped at each sleep, never caught up: otherwise a
+  short idle looks like 30 s and Touch Sleep eats the next tap.
+- CI runs `sim-e2e` on every PR (all boards, on the `build` and `build-x4pro` images).
+- The page's Reboot (`POST /reboot`) power-cycles with the same flash and card, so
+  settings and reading position must survive it. Emulated boot is slower than the
+  device: wake holds Power until a frame appears (`power_on`).
 - A `custom_sdkconfig` change rebuilds the framework and wipes the other env's
   `.pio/build/<env>`: build both envs again after one.
 - Not modelled: waveforms and ghosting, frontlight, battery drain, USB Drive, Wi-Fi,
