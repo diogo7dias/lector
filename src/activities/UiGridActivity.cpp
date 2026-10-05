@@ -81,6 +81,13 @@ fui::TextStyle wrappingStyle(const fui::ThemeTokens& theme) {
   style.maxLines = 8;
   return style;
 }
+
+// True when a selected control is drawn with its selected (black) ground. An armed
+// touch (Active) and the tap flash (Focused) outrank it with light grounds, so
+// inverted text on top of either would vanish.
+bool paintsSelected(const fui::State state) {
+  return !fui::hasState(state, fui::StateActive) && !fui::hasState(state, fui::StateFocused);
+}
 }  // namespace
 
 int UiGridActivity::rowHeightFor(const int index) const {
@@ -232,7 +239,7 @@ void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings
   // cell on the screen, so every name and value has the lines it needs.
   fui::TextStyle name = wrappingStyle(theme);
   name.align = fui::TextAlign::Center;
-  name.inverted = isSelected && !fui::hasState(screen.frame().stateFor(ACTION_CELL, index), fui::StateActive);
+  name.inverted = isSelected && paintsSelected(screen.frame().stateFor(ACTION_CELL, index));
   fui::TextStyle value = name;
 
   const int16_t inset = theme.spaceSm;
@@ -291,7 +298,7 @@ void UiGridActivity::buildRow(UiScreen& screen, const int index, const fui::Rect
   name.align = fui::TextAlign::Left;
   // button() has registered this row, so stateFor() now sees its active touch
   // across rebuilds. An armed row keeps dark text even if it was already selected.
-  name.inverted = isSelected && !fui::hasState(screen.frame().stateFor(ACTION_CELL, index), fui::StateActive);
+  name.inverted = isSelected && paintsSelected(screen.frame().stateFor(ACTION_CELL, index));
   fui::TextStyle value = style;
   value.align = fui::TextAlign::Right;
   value.inverted = name.inverted;
