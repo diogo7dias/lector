@@ -1,11 +1,11 @@
 """Serve the simulated lector as a web page: the panel, its buttons, and what it is showing.
 
-usage: LECTOR_BOARD=x4pro|x3|x4 python3 sim/server.py PORT   (default x4pro)
+usage: LECTOR_BOARD=x4pro|x3|x3uc8279|x4 python3 sim/server.py PORT   (default x4pro)
 
 Boots that board's firmware from its last `pio run` on a fresh card, then serves
   GET  /             the device page (panel image, one button per key; click the panel to touch it)
   GET  /screen.png   the panel, upright
-  GET  /state        {"frames", "activity", "ink"} as JSON
+  GET  /state        {"frames", "activity", "ink", "asleep", "controller"} as JSON
   GET  /ink/<x>/<y>/<w>/<h>  {"ink", "area"}: dark pixels in that box of the upright panel
   POST /press/<key>  the board's keys (see lector_sim.buttons); power sleeps, or wakes when asleep
   POST /reboot       cut the power and switch on again (flash and card persist)
@@ -21,6 +21,7 @@ from lector_sim import BOARDS, LectorSim, buttons, make_flash, make_sd  # noqa: 
 BOARD = os.environ.get("LECTOR_BOARD", "x4pro")
 KEYS = buttons(BOARD)
 ACTIVITY = re.compile(r"Entering activity: (\w+)")
+PROMOTED = re.compile(r"\[XTDET\] promoted \S+ -> (\w+)")
 
 PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>lector sim</title>
@@ -45,7 +46,8 @@ KEYS</div>
 <dt>frames</dt><dd data-testid="frames">0</dd>
 <dt>ink</dt><dd data-testid="ink">0</dd>
 <dt>busy</dt><dd data-testid="busy">no</dd>
-<dt>asleep</dt><dd data-testid="asleep">no</dd></dl>
+<dt>asleep</dt><dd data-testid="asleep">no</dd>
+<dt>controller</dt><dd data-testid="controller">-</dd></dl>
 <button id="reboot">Reboot</button>
 <script>
 const $ = (s) => document.querySelector(s);
@@ -56,6 +58,7 @@ async function poll() {
     $('[data-testid=activity]').textContent = s.activity;
     $('[data-testid=ink]').textContent = s.ink;
     $('[data-testid=asleep]').textContent = s.asleep ? 'yes' : 'no';
+    $('[data-testid=controller]').textContent = s.controller;
     if (s.frames !== frames) { frames = s.frames; $('#screen').src = '/screen.png?f=' + frames; }
     $('[data-testid=frames]').textContent = s.frames;
   } catch (e) {}
@@ -109,11 +112,15 @@ class Device:
     def state(self):
         with self.lock:
             frames = self.sim.frames()
-        seen = ACTIVITY.findall(self.sim.log_text())
+        log = self.sim.log_text()
+        seen = ACTIVITY.findall(log)
+        # The panel controller the firmware runs: its boot probe's promotion, else the board's own.
+        promoted = PROMOTED.findall(log)
         ink = 0
         if frames:
             ink = sum(1 for p in self.sim.screen().getdata() if p < 128)
-        return {"frames": frames, "activity": seen[-1] if seen else "", "ink": ink, "asleep": self.sim.asleep()}
+        return {"frames": frames, "activity": seen[-1] if seen else "", "ink": ink, "asleep": self.sim.asleep(),
+                "controller": promoted[-1] if promoted else self.sim.b["panel"].upper()}
 
     def ink(self, box):
         region = self.sim.screen().crop(box)

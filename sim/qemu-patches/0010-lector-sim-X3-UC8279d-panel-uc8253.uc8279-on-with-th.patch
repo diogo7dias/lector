@@ -1,0 +1,151 @@
+From 3220c1a5087c99a2bb0ffe4c50b2d786a05d94bb Mon Sep 17 00:00:00 2001
+From: Vault Keeper <diogo7dias@gmail.com>
+Date: Mon, 5 Oct 2026 14:08:49 +0000
+Subject: [PATCH] lector sim: X3 UC8279d panel (uc8253.uc8279=on) with the boot
+ probe
+
+The newer X3 run ships a UC8279d. Same planes and windows over SPI as the
+UC8253 model; the difference the firmware sees is its boot probe, which
+bit-bangs SCLK (GPIO8) and SDA (GPIO10) and reads FLG, VER and the MTP back on
+SDA. Answer those with a field unit's values (VER 00 00 66 00 00, FLG 13, MTP
+key A5); a UC8253 leaves SDA to its pull-up.
+---
+ hw/display/uc8253.c | 72 ++++++++++++++++++++++++++++++++++++++++++++-
+ hw/riscv/esp32c3.c  |  8 +++++
+ 2 files changed, 79 insertions(+), 1 deletion(-)
+
+diff --git a/hw/display/uc8253.c b/hw/display/uc8253.c
+index 793a6f4..e8f2e90 100644
+--- a/hw/display/uc8253.c
++++ b/hw/display/uc8253.c
+@@ -10,6 +10,13 @@
+  * the refresh ends the panel shows the new plane: written as a PGM to "image"
+  * and counted in "frames".
+  *
++ * "uc8279" makes it the UC8279d that newer X3 runs ship in its place: the same
++ * planes and windows over SPI (PTL takes a ninth byte, ignored), plus the
++ * firmware's boot probe, which bit-bangs SCLK and SDA as GPIOs and reads FLG
++ * (0x71), VER (0x70) and the MTP (0xA2) back on SDA. The answers are the ones a
++ * field unit logged: VER 00 00 66 00 00, FLG 13, MTP key A5. A UC8253 has no
++ * such reads and leaves SDA to its pull-up.
++ *
+  * Not modelled: LUTs, waveforms, the look of grayscale passes.
+  */
+ #include "qemu/osdep.h"
+@@ -50,8 +57,28 @@ struct Uc8253State {
+     char *image;
+     uint32_t frames;
+     uint32_t refresh_ms, power_ms;
++
++    /* The UC8279 boot probe (bit-banged, half duplex on SDA). */
++    bool uc8279;
++    qemu_irq sda_out;
++    bool sclk, sda;
++    uint8_t probe_cmd, probe_bits;
++    const uint8_t *answer;
++    uint32_t answer_len, answer_bit;
+ };
+ 
++static const uint8_t uc8279_flg[] = { 0x13 };
++static const uint8_t uc8279_ver[] = { 0x00, 0x00, 0x66, 0x00, 0x00 };
++static const uint8_t uc8279_mtp[] = { 0x00, 0xA5 };  /* dummy byte, then MTP[0] */
++
++/* The bit of the answer the firmware samples next; past its end, the pull-up. */
++static void uc8279_drive_sda(Uc8253State *s)
++{
++    const uint32_t byte = s->answer_bit / 8;
++    const uint8_t v = s->answer && byte < s->answer_len ? s->answer[byte] : 0xFF;
++    qemu_set_irq(s->sda_out, (v >> (7 - s->answer_bit % 8)) & 1);
++}
++
+ static void uc8253_write_image(Uc8253State *s)
+ {
+     if (!s->image) {
+@@ -188,7 +215,46 @@ static uint32_t uc8253_transfer(SSIPeripheral *dev, uint32_t val)
+ 
+ static void uc8253_dc(void *opaque, int n, int level)
+ {
+-    UC8253(opaque)->dc = level;
++    Uc8253State *s = UC8253(opaque);
++    s->dc = level;
++    if (!s->uc8279) {
++        return;
++    }
++    if (!level) {
++        /* A new command: its byte comes in on the next eight SCLK rises. */
++        s->probe_bits = 0;
++        s->probe_cmd = 0;
++        s->answer = NULL;
++    } else if (s->probe_bits == 8) {
++        /* Command byte in, D/C high: the reads follow, MSB first. */
++        switch (s->probe_cmd) {
++        case 0x71: s->answer = uc8279_flg; s->answer_len = sizeof(uc8279_flg); break;
++        case 0x70: s->answer = uc8279_ver; s->answer_len = sizeof(uc8279_ver); break;
++        case 0xA2: s->answer = uc8279_mtp; s->answer_len = sizeof(uc8279_mtp); break;
++        default:   s->answer = NULL; break;
++        }
++        s->answer_bit = 0;
++    }
++    uc8279_drive_sda(s);
++}
++
++static void uc8279_sda(void *opaque, int n, int level)
++{
++    UC8253(opaque)->sda = level;
++}
++
++static void uc8279_sclk(void *opaque, int n, int level)
++{
++    Uc8253State *s = UC8253(opaque);
++    if (level && !s->sclk && !s->dc && s->probe_bits < 8) {
++        s->probe_cmd = (s->probe_cmd << 1) | s->sda;
++        s->probe_bits++;
++    } else if (!level && s->sclk && s->dc && s->answer) {
++        /* The controller shifts the next bit out on the falling edge. */
++        s->answer_bit++;
++        uc8279_drive_sda(s);
++    }
++    s->sclk = level;
+ }
+ 
+ static void uc8253_rst(void *opaque, int n, int level)
+@@ -212,6 +278,9 @@ static void uc8253_realize(SSIPeripheral *dev, Error **errp)
+     qdev_init_gpio_in_named(DEVICE(dev), uc8253_dc, "dc", 1);
+     qdev_init_gpio_in_named(DEVICE(dev), uc8253_rst, "rst", 1);
+     qdev_init_gpio_out_named(DEVICE(dev), &s->busy, "busy", 1);
++    qdev_init_gpio_in_named(DEVICE(dev), uc8279_sclk, "sclk", 1);
++    qdev_init_gpio_in_named(DEVICE(dev), uc8279_sda, "sda", 1);
++    qdev_init_gpio_out_named(DEVICE(dev), &s->sda_out, "sda-out", 1);
+     memset(s->old, 0xFF, sizeof(s->old));
+     memset(s->new, 0xFF, sizeof(s->new));
+     memset(s->screen, 0xFF, sizeof(s->screen));
+@@ -223,6 +292,7 @@ static Property uc8253_properties[] = {
+     /* Roughly what the X3 panel takes for a refresh and a power switch. */
+     DEFINE_PROP_UINT32("refresh-ms", Uc8253State, refresh_ms, 450),
+     DEFINE_PROP_UINT32("power-ms", Uc8253State, power_ms, 20),
++    DEFINE_PROP_BOOL("uc8279", Uc8253State, uc8279, false),
+     DEFINE_PROP_END_OF_LIST(),
+ };
+ 
+diff --git a/hw/riscv/esp32c3.c b/hw/riscv/esp32c3.c
+index 5901f16..51cb6b0 100644
+--- a/hw/riscv/esp32c3.c
++++ b/hw/riscv/esp32c3.c
+@@ -628,6 +628,14 @@ static void esp32c3_machine_init(MachineState *machine)
+         qdev_connect_gpio_out_named(gpio, "pin-out", 4, qdev_get_gpio_in_named(panel, "dc", 0));
+         qdev_connect_gpio_out_named(gpio, "pin-out", 5, qdev_get_gpio_in_named(panel, "rst", 0));
+         qdev_connect_gpio_out_named(panel, "busy", 0, qdev_get_gpio_in_named(gpio, "pin-in", 6));
++        if (ms->x3) {
++            /* SCLK 8 and SDA 10 as GPIOs: the boot probe that tells a UC8279 from a UC8253. */
++            qdev_connect_gpio_out_named(gpio, "pin-out", 8, qdev_get_gpio_in_named(panel, "sclk", 0));
++            qdev_connect_gpio_out_named(gpio, "pin-out", 10, qdev_get_gpio_in_named(panel, "sda", 0));
++            if (object_property_get_bool(OBJECT(panel), "uc8279", &error_abort)) {
++                qdev_connect_gpio_out_named(panel, "sda-out", 0, qdev_get_gpio_in_named(gpio, "pin-in", 10));
++            }
++        }
+ 
+         DeviceState *sd = qdev_new("ssi-sd");
+         qdev_prop_set_uint8(sd, "cs", 1);
+-- 
+2.43.0
+
