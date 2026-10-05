@@ -1,0 +1,43 @@
+From 8016aca2125fd2f7b8c3a8cd878205533db13a09 Mon Sep 17 00:00:00 2001
+From: h4rg0s <diogo7dias@gmail.com>
+Date: Mon, 5 Oct 2026 01:47:12 +0000
+Subject: [PATCH 3/3] ssi-sd: keep a write token sent right after R1, answer
+ SPI CMD13 with R2
+
+---
+ hw/sd/ssi-sd.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/hw/sd/ssi-sd.c b/hw/sd/ssi-sd.c
+index 62df0b8..47cf1e5 100644
+--- a/hw/sd/ssi-sd.c
++++ b/hw/sd/ssi-sd.c
+@@ -177,6 +177,12 @@ static uint32_t ssi_sd_transfer(SSIPeripheral *dev, uint32_t val)
+                 s->arglen = 1;
+                 s->response[0] = 4;
+                 DPRINTF("SD command failed\n");
++            } else if (s->cmd == 13) {
++                /* SPI CMD13 answers R2: R1 then a status byte. sd.c hands
++                 * back the CSD here, so report a healthy card instead. */
++                s->arglen = 2;
++                s->response[0] = s->ready ? 0 : 1;
++                s->response[1] = 0;
+             } else if (s->cmd == 8 || s->cmd == 58) {
+                 /* CMD8/CMD58 returns R3/R7 response */
+                 DPRINTF("Returned R3/R7\n");
+@@ -271,6 +277,12 @@ static uint32_t ssi_sd_transfer(SSIPeripheral *dev, uint32_t val)
+         } else {
+             DPRINTF("End of command\n");
+             s->mode = SSI_SD_CMD;
++            /* A host may send the write data token right after R1, with no
++             * idle byte between: take it instead of dropping it. */
++            if (val == SSI_TOKEN_SINGLE || val == SSI_TOKEN_MULTI_WRITE) {
++                DPRINTF("Start write block\n");
++                s->mode = SSI_SD_DATA_WRITE;
++            }
+         }
+         return SSI_DUMMY;
+     case SSI_SD_PREP_DATA:
+-- 
+2.43.0
+

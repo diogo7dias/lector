@@ -36,3 +36,8 @@ sdkconfig.gh_release*
 lib/EpdFont/scripts/sd-fonts.local.yaml
 lib/EpdFont/scripts/local_fonts/
 NEW-STRINGS.md
+
+# Simulator: QEMU checkout/build, e2e deps and output
+sim/.qemu/
+sim/node_modules/
+sim/.e2e/

@@ -1,0 +1,209 @@
+From cf0d0639ed823b286f7e54266901086ed0e0adf1 Mon Sep 17 00:00:00 2001
+From: h4rg0s <diogo7dias@gmail.com>
+Date: Mon, 5 Oct 2026 01:23:18 +0000
+Subject: [PATCH 1/3] esp32c3: one-shot SAR ADC model with runtime-settable
+ channels
+
+---
+ hw/misc/esp32c3_saradc.c         | 103 +++++++++++++++++++++++++++++++
+ hw/misc/meson.build              |   3 +-
+ hw/riscv/esp32c3.c               |  10 +++
+ include/hw/misc/esp32c3_saradc.h |  20 ++++++
+ 4 files changed, 135 insertions(+), 1 deletion(-)
+ create mode 100644 hw/misc/esp32c3_saradc.c
+ create mode 100644 include/hw/misc/esp32c3_saradc.h
+
+diff --git a/hw/misc/esp32c3_saradc.c b/hw/misc/esp32c3_saradc.c
+new file mode 100644
+index 0000000..c05b637
+--- /dev/null
++++ b/hw/misc/esp32c3_saradc.c
+@@ -0,0 +1,103 @@
++/*
++ * ESP32-C3 SAR ADC (one-shot mode only), for the lector simulator.
++ *
++ * A conversion completes the moment ONETIME_START is set: the result lands in
++ * the data status register and the done bit rises in INT_RAW. Continuous
++ * (DMA) mode is not modelled.
++ */
++#include "qemu/osdep.h"
++#include "qemu/module.h"
++#include "qom/object.h"
++#include "hw/misc/esp32c3_saradc.h"
++
++#define A_ONETIME_SAMPLE 0x020
++#define A_ADC1_DATA      0x02C
++#define A_ADC2_DATA      0x030
++#define A_INT_RAW        0x044
++#define A_INT_CLR        0x04C
++
++#define ONETIME_ADC1     BIT(31)
++#define ONETIME_ADC2     BIT(30)
++#define ONETIME_START    BIT(29)
++#define ONETIME_CHANNEL(v) (((v) >> 25) & 0xF)
++#define ADC1_DONE        BIT(31)
++#define ADC2_DONE        BIT(30)
++
++static uint64_t esp32c3_saradc_read(void *opaque, hwaddr addr, unsigned size)
++{
++    ESP32C3SarAdcState *s = ESP32C3_SARADC(opaque);
++    return s->regs[addr / 4];
++}
++
++static void esp32c3_saradc_convert(ESP32C3SarAdcState *s, uint32_t sample)
++{
++    const unsigned ch = ONETIME_CHANNEL(sample);
++    if (sample & ONETIME_ADC1) {
++        s->regs[A_ADC1_DATA / 4] = ch < 5 ? (s->raw[ch] & 0xFFF) : 0;
++        s->regs[A_INT_RAW / 4] |= ADC1_DONE;
++    }
++    if (sample & ONETIME_ADC2) {
++        s->regs[A_ADC2_DATA / 4] = s->raw[5] & 0xFFF;
++        s->regs[A_INT_RAW / 4] |= ADC2_DONE;
++    }
++}
++
++static void esp32c3_saradc_write(void *opaque, hwaddr addr, uint64_t value, unsigned size)
++{
++    ESP32C3SarAdcState *s = ESP32C3_SARADC(opaque);
++    switch (addr) {
++    case A_INT_CLR:
++        s->regs[A_INT_RAW / 4] &= ~value;
++        return;
++    case A_ONETIME_SAMPLE:
++        if ((value & ONETIME_START) && !(s->regs[addr / 4] & ONETIME_START)) {
++            esp32c3_saradc_convert(s, value);
++        }
++        break;
++    case A_ADC1_DATA:
++    case A_ADC2_DATA:
++    case A_INT_RAW:
++        return;
++    }
++    s->regs[addr / 4] = value;
++}
++
++static const MemoryRegionOps esp32c3_saradc_ops = {
++    .read = esp32c3_saradc_read,
++    .write = esp32c3_saradc_write,
++    .endianness = DEVICE_LITTLE_ENDIAN,
++    .valid.min_access_size = 4,
++    .valid.max_access_size = 4,
++};
++
++static void esp32c3_saradc_init(Object *obj)
++{
++    ESP32C3SarAdcState *s = ESP32C3_SARADC(obj);
++    memory_region_init_io(&s->iomem, obj, &esp32c3_saradc_ops, s, TYPE_ESP32C3_SARADC, 0x100);
++    sysbus_init_mmio(SYS_BUS_DEVICE(obj), &s->iomem);
++    /* Plain object properties, not qdev ones: the harness changes them at run time. */
++    for (int i = 0; i < ESP32C3_SARADC_CHANNELS; i++) {
++        g_autofree char *name = g_strdup_printf("ch%d", i);
++        s->raw[i] = 4095;
++        object_property_add_uint32_ptr(obj, name, &s->raw[i], OBJ_PROP_FLAG_READWRITE);
++    }
++}
++
++static void esp32c3_saradc_class_init(ObjectClass *klass, void *data)
++{
++}
++
++static const TypeInfo esp32c3_saradc_info = {
++    .name = TYPE_ESP32C3_SARADC,
++    .parent = TYPE_SYS_BUS_DEVICE,
++    .instance_size = sizeof(ESP32C3SarAdcState),
++    .instance_init = esp32c3_saradc_init,
++    .class_init = esp32c3_saradc_class_init,
++};
++
++static void esp32c3_saradc_register_types(void)
++{
++    type_register_static(&esp32c3_saradc_info);
++}
++
++type_init(esp32c3_saradc_register_types)
+diff --git a/hw/misc/meson.build b/hw/misc/meson.build
+index 4c2b5b3..c72ee7d 100644
+--- a/hw/misc/meson.build
++++ b/hw/misc/meson.build
+@@ -155,7 +155,8 @@ system_ss.add(when: 'CONFIG_RISCV_ESP32C3', if_true: files(
+   'esp32c3_jtag.c',
+   'esp32c3_rtc_cntl.c',
+   'esp_hmac.c',
+-  'esp32c3_hmac.c'
++  'esp32c3_hmac.c',
++  'esp32c3_saradc.c'
+ ))
+ 
+ system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files(
+diff --git a/hw/riscv/esp32c3.c b/hw/riscv/esp32c3.c
+index ed698fb..f7e1b02 100644
+--- a/hw/riscv/esp32c3.c
++++ b/hw/riscv/esp32c3.c
+@@ -47,6 +47,7 @@
+ #include "hw/misc/esp32c3_ds.h"
+ #include "hw/misc/esp32c3_xts_aes.h"
+ #include "hw/misc/esp32c3_jtag.h"
++#include "hw/misc/esp32c3_saradc.h"
+ #include "hw/dma/esp32c3_gdma.h"
+ #include "hw/display/esp_rgb.h"
+ #include "hw/net/can/esp32c3_twai.h"
+@@ -88,6 +89,7 @@ struct Esp32C3MachineState {
+     ESP32C3SpiState spi1;
+     ESP32C3RtcCntlState rtccntl;
+     ESP32C3UsbJtagState jtag;
++    ESP32C3SarAdcState saradc;
+     ESPRgbState rgb;
+     Esp32C3TWAIState twai;
+ };
+@@ -422,6 +424,7 @@ static void esp32c3_machine_init(MachineState *machine)
+     object_initialize_child(OBJECT(machine), "spi1", &ms->spi1, TYPE_ESP32C3_SPI);
+     object_initialize_child(OBJECT(machine), "rtccntl", &ms->rtccntl, TYPE_ESP32C3_RTC_CNTL);
+     object_initialize_child(OBJECT(machine), "jtag", &ms->jtag, TYPE_ESP32C3_JTAG);
++    object_initialize_child(OBJECT(machine), "saradc", &ms->saradc, TYPE_ESP32C3_SARADC);
+     object_initialize_child(OBJECT(machine), "rgb", &ms->rgb, TYPE_ESP_RGB);
+     object_initialize_child(OBJECT(machine), "twai", &ms->twai, TYPE_ESP32C3_TWAI);
+ 
+@@ -455,6 +458,13 @@ static void esp32c3_machine_init(MachineState *machine)
+         memory_region_add_subregion_overlap(sys_mem, DR_REG_USB_SERIAL_JTAG_BASE, mr, 0);
+     }
+ 
++    /* SAR ADC realization */
++    {
++        sysbus_realize(SYS_BUS_DEVICE(&ms->saradc), &error_fatal);
++        MemoryRegion *mr = sysbus_mmio_get_region(SYS_BUS_DEVICE(&ms->saradc), 0);
++        memory_region_add_subregion_overlap(sys_mem, DR_REG_APB_SARADC_BASE, mr, 0);
++    }
++
+     /* RTC CNTL realization */
+     {
+         sysbus_realize(SYS_BUS_DEVICE(&ms->rtccntl), &error_fatal);
+diff --git a/include/hw/misc/esp32c3_saradc.h b/include/hw/misc/esp32c3_saradc.h
+new file mode 100644
+index 0000000..8bae96c
+--- /dev/null
++++ b/include/hw/misc/esp32c3_saradc.h
+@@ -0,0 +1,20 @@
++/*
++ * ESP32-C3 SAR ADC (one-shot mode only), for the lector simulator.
++ * Each channel's raw 12-bit reading is a QOM property ("ch0".."ch4" for ADC1,
++ * "ch5" for ADC2 channel 0), so a test sets a voltage with qom-set.
++ */
++#pragma once
++
++#include "hw/sysbus.h"
++
++#define TYPE_ESP32C3_SARADC "esp32c3.saradc"
++OBJECT_DECLARE_SIMPLE_TYPE(ESP32C3SarAdcState, ESP32C3_SARADC)
++
++#define ESP32C3_SARADC_CHANNELS 6
++
++struct ESP32C3SarAdcState {
++    SysBusDevice parent_obj;
++    MemoryRegion iomem;
++    uint32_t regs[0x100 / 4];
++    uint32_t raw[ESP32C3_SARADC_CHANNELS];
++};
+-- 
+2.43.0
+
