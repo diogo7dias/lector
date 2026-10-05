@@ -360,8 +360,8 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
 bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, const bool armed) const {
   // One highlight: the row filled, its text knocked out white.
   if (armed) {
-    // Two-tap confirmation: a row waiting for its confirming tap wears dashed 2px lines
-    // above and below, never the filled band, so "armed" can never be misread as
+    // Two-tap confirmation: a row waiting for its confirming tap wears a dashed 2px
+    // border all round, never the filled band, so "armed" can never be misread as
     // "already opened". Same shape and dashes as the FreeInkUI screens
     // (components/UIThemeTokens.h, freeink fillDashed: 6px dash, 4px gap).
     constexpr int kRule = 2, kDash = 6, kGap = 4;
@@ -369,6 +369,11 @@ bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, cons
       const int run = std::min(kDash, rect.width - at);
       renderer.fillRect(rect.x + at, rect.y, run, kRule);
       renderer.fillRect(rect.x + at, rect.y + rect.height - kRule, run, kRule);
+    }
+    for (int at = 0; at < rect.height; at += kDash + kGap) {
+      const int run = std::min(kDash, rect.height - at);
+      renderer.fillRect(rect.x, rect.y + at, kRule, run);
+      renderer.fillRect(rect.x + rect.width - kRule, rect.y + at, kRule, run);
     }
     return false;
   }
