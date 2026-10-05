@@ -34,6 +34,14 @@ BOARDS = {
         "ladder": {"back": (1, 3512), "confirm": (1, 2694), "left": (1, 1493), "right": (1, 5),
                    "up": (2, 2242), "down": (2, 5)},
     },
+    # The newer X3 run: same board, UC8279d panel controller, found by the boot probe.
+    "x3uc8279": {
+        "qemu": "qemu-system-riscv32", "machine": ["-machine", "esp32c3,x3=on", "-global", "uc8253.uc8279=on"],
+        "panel": "uc8253", "env": "default", "chip": "esp32c3", "gpio": "/machine/gpio", "pins": 22, "uarts": 2,
+        "power": 3, "usb": None,
+        "ladder": {"back": (1, 3512), "confirm": (1, 2694), "left": (1, 1493), "right": (1, 5),
+                   "up": (2, 2242), "down": (2, 5)},
+    },
     "x4pro": {
         "qemu": "qemu-system-xtensa",
         "machine": ["-machine", "esp32s3", "-m", "8M", "-global", "ssi_psram.is_octal=true"], "panel": "ssd1677",

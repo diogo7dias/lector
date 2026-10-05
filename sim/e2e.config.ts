@@ -7,7 +7,8 @@ import { web } from '@e2e-dev/web';
 const board = process.env.LECTOR_BOARD ?? 'x4pro';
 
 export default {
-  tests: `tests/${board}/**/*.e2e.ts`,
+  // The UC8279 X3 runs the X3 suite.
+  tests: `tests/${board === 'x3uc8279' ? 'x3' : board}/**/*.e2e.ts`,
   workers: 1,
   timeout: 240_000,
   targets: [{

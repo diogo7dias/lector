@@ -544,6 +544,9 @@ pio run -t upload && pio device monitor
   Home key), Up/Down keys, CW2017 gauge, PCF8563 clock.
 - `x3`: C3 `default` binary on the X3 board (`-machine esp32c3,x3=on`). UC8253 panel,
   BQ27220 / DS3231 / QMI8658 on I2C (the firmware's own X3 fingerprint), button ladder.
+- `x3uc8279`: the same X3 with the UC8279d of newer runs (`-global uc8253.uc8279=on`). The
+  firmware's boot probe bit-bangs SCLK/SDA and must log `promoted UC8253 -> UC8279`; the
+  page's `controller` field says which driver ran, and the X3 suite checks it on both.
 - `x4`: C3 `default` binary. SSD1677, SPI SD, button ladder.
 
 `sim/server.py` serves the device as a page (keys, click or drag on the panel to
@@ -553,7 +556,7 @@ with exact checks (activity, frame count, panel ink).
 ```bash
 ./sim/build-qemu.sh                               # once, and after sim/qemu-patches/ change
 pio run -e x4pro && pio run -e default            # the firmware under test
-(cd sim && npm install && npm run test:e2e)       # all boards; or test:e2e:x4pro|x3|x4
+(cd sim && npm install && npm run test:e2e)       # all boards; or test:e2e:x4pro|x3|x3uc8279|x4
 python3 sim/soak.py x4pro 10 600                  # 10 boots + 600 s idle; exit 1 on hang/reset/crash report
 ```
 
@@ -569,7 +572,7 @@ python3 sim/soak.py x4pro 10 600                  # 10 boots + 600 s idle; exit 
 - A `custom_sdkconfig` change rebuilds the framework and wipes the other env's
   `.pio/build/<env>`: build both envs again after one.
 - Not modelled: waveforms and ghosting, frontlight, battery drain, USB Drive, Wi-Fi,
-  the X3's UC8279 variant. Those stay device tests.
+  the UC8279's own LUTs and gray look. Those stay device tests.
 
 ### Code Quality
 

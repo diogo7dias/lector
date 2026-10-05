@@ -209,7 +209,7 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
-      - name: Run e2e (x4pro, x3, x4)
+      - name: Run e2e (x4pro, x3, x3uc8279, x4)
         working-directory: sim
         run: npm run test:e2e
 
