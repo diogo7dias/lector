@@ -535,6 +535,25 @@ pio run -t upload && pio device monitor
 
 **Via VS Code**: Click Monitor (🔌) button in PlatformIO toolbar
 
+### Simulator e2e (QEMU)
+
+`sim/` runs the real `default` firmware (X4) in Espressif's QEMU with modelled
+hardware: SSD1677 panel, SPI SD card, button ladder ADC, power button, sleep and
+wake, USB serial log. `sim/server.py` serves it as a device page; the e2e suite
+drives that page with exact checks (activity name, frame count, panel ink).
+
+```bash
+./sim/build-qemu.sh                          # once, and after sim/qemu-patches/ change
+pio run -e default                           # the firmware under test
+(cd sim && npm install && npm run test:e2e)  # boots, browses, opens a book
+```
+
+- QEMU changes live only as patches in `sim/qemu-patches/` (base tag in `build-qemu.sh`).
+- Time is instruction-counted (`-icount`), so runs are deterministic.
+- Not modelled: X3 (UC8253 panel, I2C gauge/RTC), X4 Pro (ESP32-S3, GT911 touch,
+  frontlight, SDMMC), waveforms and ghosting, battery drain, USB Drive, Wi-Fi.
+  Those stay device tests.
+
 ### Code Quality
 
 ```bash
