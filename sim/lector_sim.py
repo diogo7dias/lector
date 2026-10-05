@@ -1,8 +1,8 @@
-"""Drive the real lector firmware in QEMU: boot it, press its buttons, read its screen.
+"""Drive the real lector firmware in QEMU: boot it, press its buttons, touch it, read its screen.
 
-    sim = LectorSim(flash="firmware-merged.bin", sd="sd.img", workdir="/tmp/run")
+    sim = LectorSim("x4pro", flash="firmware-merged.bin", sd="sd.img", workdir="/tmp/run")
     sim.boot()
-    sim.press("down"); sim.press("confirm")
+    sim.tap(240, 570); sim.press("down")
     sim.screenshot("home.png")
 """
 import os, subprocess, time
@@ -11,88 +11,126 @@ from qmp import Qmp
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
-QEMU = os.environ.get("LECTOR_QEMU", os.path.join(HERE, ".qemu/build/qemu-system-riscv32"))
-BUILD = os.path.join(REPO, ".pio/build/default")
+QEMU_DIR = os.environ.get("LECTOR_QEMU_DIR", os.path.join(HERE, ".qemu/build"))
 # Books the simulated card starts with.
 SD_BOOKS = [os.path.join(REPO, "test/epubs", f) for f in ("test_kerning_ligature.epub", "test_jpeg_images.epub")]
-
-PINS = (1 << 22) - 1
-POWER_PIN, USB_PIN = 3, 20
 IDLE_RAW = 4095
-# Xteink X4 resistor ladder (InputManager.cpp): ADC channel and a raw reading inside each band.
-BUTTONS = {
-    "back": (1, 3512), "confirm": (1, 2694), "left": (1, 1493), "right": (1, 5),
-    "up": (2, 2242), "down": (2, 5),
+
+# One entry per simulated device. Pins and ladders come from BoardConfig.h / InputManager.cpp.
+BOARDS = {
+    "x4": {
+        "qemu": "qemu-system-riscv32", "machine": ["-machine", "esp32c3"], "panel": "ssd1677",
+        "env": "default", "chip": "esp32c3", "gpio": "/machine/gpio", "pins": 22, "uarts": 2,
+        "power": 3, "usb": 20,
+        # Resistor ladder: ADC channel and a raw reading inside each band.
+        "ladder": {"back": (1, 3512), "confirm": (1, 2694), "left": (1, 1493), "right": (1, 5),
+                   "up": (2, 2242), "down": (2, 5)},
+    },
+    # Same C3 binary as the X4; it tells itself apart by the X3's I2C chips.
+    "x3": {
+        "qemu": "qemu-system-riscv32", "machine": ["-machine", "esp32c3,x3=on"], "panel": "uc8253",
+        "env": "default", "chip": "esp32c3", "gpio": "/machine/gpio", "pins": 22, "uarts": 2,
+        "power": 3, "usb": None,
+        "ladder": {"back": (1, 3512), "confirm": (1, 2694), "left": (1, 1493), "right": (1, 5),
+                   "up": (2, 2242), "down": (2, 5)},
+    },
+    "x4pro": {
+        "qemu": "qemu-system-xtensa",
+        "machine": ["-machine", "esp32s3", "-m", "8M", "-global", "ssi_psram.is_octal=true"], "panel": "ssd1677",
+        "env": "x4pro", "chip": "esp32s3", "gpio": "/machine/soc/gpio", "pins": 49, "uarts": 3,
+        "power": 3, "usb": None,
+        # Two active-low keys; back and confirm come from the touch panel and its Home key.
+        "keys": {"up": 0, "down": 7}, "touch": True,
+    },
 }
 
 
-def make_flash(path):
-    """Bootloader, partition table and app from the last `pio run -e default`, as one 16 MB image."""
+def buttons(board):
+    b = BOARDS[board]
+    return [*b.get("ladder", {}), *b.get("keys", {}), *(["home"] if b.get("touch") else []), "power"]
+
+
+def make_flash(path, board="x4pro"):
+    """Bootloader, partition table and app from the last `pio run -e <env>`, as one 16 MB image."""
+    b = BOARDS[board]
+    build = os.path.join(REPO, ".pio/build", b["env"])
     py = os.path.expanduser("~/.platformio/penv/bin/python")
-    subprocess.run([py, "-m", "esptool", "--chip", "esp32c3", "merge-bin", "--fill-flash-size", "16MB",
-                    "-o", path, "0x0", f"{BUILD}/bootloader.bin", "0x8000", f"{BUILD}/partitions.bin",
-                    "0x10000", f"{BUILD}/firmware.bin"], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run([py, "-m", "esptool", "--chip", b["chip"], "merge-bin", "--fill-flash-size", "16MB",
+                    "-o", path, "0x0", f"{build}/bootloader.bin", "0x8000", f"{build}/partitions.bin",
+                    "0x10000", f"{build}/firmware.bin"], check=True, stdout=subprocess.DEVNULL)
     return path
 
 
 def make_sd(path, books=SD_BOOKS, size_mb=256):
-    """A fresh FAT32 card holding `books`."""
+    """A fresh card like a shop-bought one: an MBR with one FAT32 partition holding `books`.
+
+    The X4 Pro mounts partition 1 only; a bare superfloppy fails there."""
     if os.path.exists(path):
         os.unlink(path)
     with open(path, "wb") as f:
         f.truncate(size_mb << 20)
-    subprocess.run(["mkfs.vfat", "-F", "32", "-n", "LECTOR", path], check=True, stdout=subprocess.DEVNULL,
-                   env={**os.environ, "PATH": os.environ.get("PATH", "") + ":/usr/sbin:/sbin"})
+    env = {**os.environ, "PATH": os.environ.get("PATH", "") + ":/usr/sbin:/sbin"}
+    subprocess.run(["sfdisk", "-q", path], input=b"2048,,c\n", check=True, env=env)
+    subprocess.run(["mkfs.vfat", "-F", "32", "-n", "LECTOR", "--offset", "2048", path, str((size_mb << 10) - 1024)],
+                   check=True, stdout=subprocess.DEVNULL, env=env)
     if books:
-        subprocess.run(["mcopy", "-i", path, *books, "::/"], check=True)
+        subprocess.run(["mcopy", "-i", f"{path}@@1M", *books, "::/"], check=True)
     return path
 
 
 class LectorSim:
-    def __init__(self, flash, sd, workdir, usb=False):
+    def __init__(self, board, flash, sd, workdir, usb=False):
+        self.board, self.b = board, BOARDS[board]
         self.flash, self.sd, self.dir, self.usb = flash, sd, workdir, usb
         os.makedirs(workdir, exist_ok=True)
         self.image = os.path.join(workdir, "screen.pgm")
         self.log = os.path.join(workdir, "usb.log")
         self.qemu = None
         self.q = None
+        self.held = set()
 
-    def _levels(self, power_held=False):
-        levels = PINS
-        if not self.usb:
-            levels &= ~(1 << USB_PIN)
-        if power_held:
-            levels &= ~(1 << POWER_PIN)
+    def _levels(self):
+        levels = (1 << self.b["pins"]) - 1
+        if self.b["usb"] is not None and not self.usb:
+            levels &= ~(1 << self.b["usb"])
+        for pin in self.held:
+            levels &= ~(1 << pin)
         return levels
+
+    def _hold(self, pin, down):
+        (self.held.add if down else self.held.discard)(pin)
+        self.q.set(self.b["gpio"], "levels", self._levels())
 
     def start(self):
         sock = os.path.join(self.dir, "qmp.sock")
         for f in (sock, self.image):
             if os.path.exists(f):
                 os.unlink(f)
+        # UART0 to a file, the other UARTs nowhere, then USB-serial-JTAG (the log).
+        serials = ["-serial", f"file:{self.dir}/uart0.log"] + ["-serial", "null"] * (self.b["uarts"] - 1)
         self.qemu = subprocess.Popen(
-            [QEMU, "-S", "-nographic", "-machine", "esp32c3",
-             # Instruction-counted time: runs are deterministic and light sleep
-             # can never overshoot FreeRTOS's tick budget the way host jitter does.
+            [os.path.join(QEMU_DIR, self.b["qemu"]), "-S", "-nographic",
+             *self.b["machine"],
+             # Instruction-counted time: runs are deterministic, and light sleep jumps
+             # straight to its wake event, paced to the wall clock.
              "-icount", "shift=3,sleep=on",
              "-drive", f"file={self.flash},if=mtd,format=raw",
              "-drive", f"file={self.sd},if=sd,format=raw",
-             "-global", f"ssd1677.image={self.image}",
-             "-serial", f"file:{self.dir}/uart0.log", "-serial", "null",
-             "-serial", f"file:{self.log}",
+             "-global", f"{self.b['panel']}.image={self.image}",
+             *serials, "-serial", f"file:{self.log}",
              "-monitor", "none", "-qmp", f"unix:{sock},server=on,wait=off"],
             stdout=subprocess.DEVNULL, stderr=open(os.path.join(self.dir, "qemu.err"), "w"))
         self.q = Qmp(sock)
-        self.q.set("/machine/gpio", "levels", self._levels())
+        self.q.set(self.b["gpio"], "levels", self._levels())
 
     def boot(self, timeout=60):
         """Power on the way a finger does: hold power, release once the screen is up."""
         if not self.qemu:
             self.start()
-        self.q.set("/machine/gpio", "levels", self._levels(power_held=True))
+        self._hold(self.b["power"], True)
         self.q.cmd("cont")
         time.sleep(1.5)
-        self.q.set("/machine/gpio", "levels", self._levels())
+        self._hold(self.b["power"], False)
         return self.wait_frames(1, timeout)
 
     def frames(self):
@@ -128,21 +166,52 @@ class LectorSim:
             self.wait_idle()
 
     def _press(self, button, hold):
-        if button == "power":
-            self.q.set("/machine/gpio", "levels", self._levels(power_held=True))
+        if button == "home":
+            self.q.set("/machine/touch", "home", True)
             time.sleep(hold)
-            self.q.set("/machine/gpio", "levels", self._levels())
-            return
-        ch, raw = BUTTONS[button]
-        self.q.set("/machine/saradc", f"ch{ch}", raw)
-        time.sleep(hold)
-        self.q.set("/machine/saradc", f"ch{ch}", IDLE_RAW)
+            self.q.set("/machine/touch", "home", False)
+        elif button in self.b.get("ladder", {}):
+            ch, raw = self.b["ladder"][button]
+            self.q.set("/machine/saradc", f"ch{ch}", raw)
+            time.sleep(hold)
+            self.q.set("/machine/saradc", f"ch{ch}", IDLE_RAW)
+        else:
+            pin = self.b["power"] if button == "power" else self.b["keys"][button]
+            self._hold(pin, True)
+            time.sleep(hold)
+            self._hold(pin, False)
+
+    def _finger(self, x, y):
+        # The GT911 sits portrait under the landscape panel (swapXY + flipY in BoardConfig.h):
+        # its X is the upright X, its Y the upright Y.
+        self.q.set("/machine/touch", "x", x)
+        self.q.set("/machine/touch", "y", y)
+
+    def tap(self, x, y, hold=0.1, settle=True):
+        """Touch the upright screen (480x800) at x, y and lift."""
+        self.swipe(x, y, x, y, hold, settle)
+
+    def swipe(self, x1, y1, x2, y2, duration=0.3, settle=True):
+        """Put a finger down at x1, y1, slide it to x2, y2 over `duration`, lift."""
+        before = self.frames()
+        steps = 1 if (x1, y1) == (x2, y2) else 8
+        self._finger(x1, y1)
+        self.q.set("/machine/touch", "down", True)
+        for i in range(1, steps + 1):
+            time.sleep(duration / steps)
+            self._finger(x1 + (x2 - x1) * i // steps, y1 + (y2 - y1) * i // steps)
+        self.q.set("/machine/touch", "down", False)
+        if settle:
+            self.wait_frames(before + 1, timeout=15)
+            self.wait_idle()
 
     def screen(self):
-        """The panel as the reader sees it, upright (480x800)."""
+        """The panel as the reader sees it, upright (X4/X4 Pro 480x800, X3 528x792)."""
         raw = Image.open(self.image)
         raw.load()
-        return raw.transpose(Image.Transpose.FLIP_TOP_BOTTOM).rotate(-90, expand=True)
+        if self.b["panel"] == "ssd1677":
+            raw = raw.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+        return raw.rotate(-90, expand=True)
 
     def screenshot(self, path):
         self.screen().save(path)
