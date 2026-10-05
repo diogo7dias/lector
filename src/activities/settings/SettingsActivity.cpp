@@ -453,6 +453,9 @@ void SettingsActivity::activateCell(const int index) {
       activityManager.goToFileTransfer();
       return;
     }
+    // A new screen: its first row shares this cell's action and value, so it would
+    // inherit the tap flash.
+    app.clearTapFlash();
     selectedCategory = index;
     selectCategory(index);
     mode = Mode::Category;
