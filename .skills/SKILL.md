@@ -559,8 +559,8 @@ pio run -e x4pro && pio run -e default            # the firmware under test
 - QEMU changes live only as patches in `sim/qemu-patches/` (base tag in `build-qemu.sh`).
 - Time is instruction-counted (`-icount`). Light sleep jumps the clock to its next
   event, never ahead of the wall clock, so idle timeouts (auto-sleep) match the device.
-- A pio build that regenerates the framework sdkconfig wipes the other env's
-  `.pio/build/<env>`: rebuild the board you test last.
+- A `custom_sdkconfig` change rebuilds the framework and wipes the other env's
+  `.pio/build/<env>`: build both envs again after one.
 - Not modelled: waveforms and ghosting, frontlight, battery drain, USB Drive, Wi-Fi,
   the X3's UC8279 variant. Those stay device tests.
 

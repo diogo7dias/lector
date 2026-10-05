@@ -1,0 +1,67 @@
+From 57d4662fc835065eae5d98bea8b18a63f4bfee4b Mon Sep 17 00:00:00 2001
+From: Vault Keeper <diogo7dias@gmail.com>
+Date: Mon, 5 Oct 2026 03:38:52 +0000
+Subject: [PATCH] lector sim: S3 light sleep never wakes past its timer target
+ (vTaskStepTick assert)
+
+---
+ hw/misc/esp32s3_rtc_cntl.c | 22 +++++++++++++++++-----
+ 1 file changed, 17 insertions(+), 5 deletions(-)
+
+diff --git a/hw/misc/esp32s3_rtc_cntl.c b/hw/misc/esp32s3_rtc_cntl.c
+index f89c4f0..afa239f 100644
+--- a/hw/misc/esp32s3_rtc_cntl.c
++++ b/hw/misc/esp32s3_rtc_cntl.c
+@@ -91,6 +91,19 @@ static uint32_t pending_wake(Esp32s3RtcCntlState *s)
+     return cause;
+ }
+ 
++/* Virtual ns until the RTC timer target (a long way off when the timer wake is off). */
++static int64_t ns_to_timer(Esp32s3RtcCntlState *s)
++{
++    const uint32_t ena = s->regs[A_WAKEUP_STATE / 4] >> 15;
++    const uint64_t target = ((uint64_t)(s->regs[A_SLP_TIMER1 / 4] & 0xFFFF) << 32) | s->regs[A_SLP_TIMER0 / 4];
++    const uint64_t now = rtc_ticks(s);
++    const uint32_t cal = s->scratch_reg[1] ? s->scratch_reg[1] : 1;
++    if (!(ena & WAKE_TIMER)) {
++        return INT64_MAX;
++    }
++    return target > now ? muldiv64(target - now, 1000ULL * cal, 1ULL << 19) + 1 : 0;
++}
++
+ /* Sleep: the cores spin after SLEEP_EN (rtc_sleep_start polls INT_RAW; deep
+  * sleep stands in for power-down) until a wake source fires. Light sleep then
+  * raises SLP_WAKEUP, so the PM layer measures the real slept time; deep sleep
+@@ -103,7 +116,9 @@ static void esp32s3_wake_check(void *opaque)
+     }
+     const uint32_t cause = pending_wake(s);
+     if (!cause) {
+-        timer_mod(s->wake_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + SCALE_MS);
++        /* Check again in 1 ms, or right on the timer target if that comes first:
++         * a late wake oversteps the FreeRTOS tick budget (vTaskStepTick assert). */
++        timer_mod(s->wake_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + MIN(SCALE_MS, ns_to_timer(s)));
+         return;
+     }
+     s->regs[A_SLP_WAKEUP_CAUSE / 4] = cause;
+@@ -125,7 +140,6 @@ static void esp32s3_wake_check(void *opaque)
+ static void esp32s3_light_sleep(Esp32s3RtcCntlState *s)
+ {
+     const uint32_t ena = s->regs[A_WAKEUP_STATE / 4] >> 15;
+-    const uint64_t target = ((uint64_t)(s->regs[A_SLP_TIMER1 / 4] & 0xFFFF) << 32) | s->regs[A_SLP_TIMER0 / 4];
+     s->light_sleeping = true;
+     if (!s->realtime_base_ns) {
+         s->realtime_base_ns = qemu_clock_get_ns(QEMU_CLOCK_REALTIME) - qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+@@ -133,9 +147,7 @@ static void esp32s3_light_sleep(Esp32s3RtcCntlState *s)
+     /* Without a timer only the outside (a button) can wake it: let the vCPU spin
+      * so QMP input gets through. */
+     while (icount_enabled() && (ena & WAKE_TIMER) && !pending_wake(s)) {
+-        const uint64_t now = rtc_ticks(s);
+-        const uint32_t cal = s->scratch_reg[1] ? s->scratch_reg[1] : 1;
+-        const int64_t until = target > now ? muldiv64(target - now, 1000ULL * cal, 1ULL << 19) + 1 : 0;
++        const int64_t until = ns_to_timer(s);
+         const int64_t next = qemu_clock_deadline_ns_all(QEMU_CLOCK_VIRTUAL, ~QEMU_TIMER_ATTR_EXTERNAL);
+         /* Never ahead of the wall clock: idle timeouts (auto-sleep) must take
+          * as long as on the device. Past it, the vCPU spins in real time. */
+-- 
+2.43.0
+
