@@ -120,7 +120,9 @@ namespace {
 // v67: ordered lists number their items, list-style-type: none drops the marker, and <ul>/<ol>
 //      add their own margins and padding to the items' inset (upstream #3500; upstream
 //      numbered it v46). Marker text and list layout change.
-constexpr uint8_t SECTION_FILE_VERSION = 67;
+// v68: a soft-flushed long paragraph no longer gets top margin/padding before its continuation
+//      lines (upstream #3875; upstream numbered it v51).
+constexpr uint8_t SECTION_FILE_VERSION = 68;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
