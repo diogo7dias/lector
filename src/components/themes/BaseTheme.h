@@ -236,7 +236,7 @@ class BaseTheme {
   // Used by drawButtonHints(): centres a hint label in its box, wrapping to two
   // lines rather than overflowing when it's too wide to fit.
   static void drawHintLabel(GfxRenderer& renderer, int fontId, const char* label, int x, int boxWidth, int boxTop,
-                            int boxHeight, int singleLineYOffset);
+                            int boxHeight);
   void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
   // Paints the focused-row highlight in the style the user picked and returns true
   // when the row's own text has to be drawn white to stay legible. Every list, menu,
