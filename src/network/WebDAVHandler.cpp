@@ -334,8 +334,16 @@ void WebDAVHandler::handleGet(WebServer& s) {
   s.setContentLength(file.size());
   s.send(200, contentType.c_str(), "");
 
+  // HalFile is a Print, not a Stream: client.write(file) took operator bool and
+  // sent a single 0x01 (upstream #3410). Stream in chunks, feeding the watchdog.
   NetworkClient client = s.client();
-  client.write(file);
+  uint8_t buf[4096];
+  while (file.available()) {
+    resetTaskWatchdogIfSubscribed();
+    int bytesRead = file.read(buf, sizeof(buf));
+    if (bytesRead <= 0) break;
+    if (client.write(buf, bytesRead) != (size_t)bytesRead) break;
+  }
   file.close();
 }
 
