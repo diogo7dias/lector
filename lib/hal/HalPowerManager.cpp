@@ -347,7 +347,8 @@ void HalPowerManager::begin() {
   const esp_pm_config_t pmConfig = {
       .max_freq_mhz = normalFreq,
       .min_freq_mhz = LOW_POWER_FREQ,
-      .light_sleep_enable = true,
+      // A/B build for a USB-locked X4: automatic light sleep off, DFS kept.
+      .light_sleep_enable = false,
   };
   const esp_err_t err = esp_pm_configure(&pmConfig);
   if (err != ESP_OK) {
@@ -358,7 +359,7 @@ void HalPowerManager::begin() {
     LOG_ERR("PWR", "esp_pm_configure(max %d, min %d) failed: %d", normalFreq, LOW_POWER_FREQ, static_cast<int>(err));
     return;
   }
-  LOG_INF("PWR", "esp_pm: %d-%d MHz, light sleep on", LOW_POWER_FREQ, normalFreq);
+  LOG_INF("PWR", "esp_pm: %d-%d MHz, light sleep OFF (A/B)", LOW_POWER_FREQ, normalFreq);
 
 #if CONFIG_PM_LIGHT_SLEEP_CALLBACKS
   esp_pm_sleep_cbs_register_config_t cbs = {};
@@ -531,6 +532,9 @@ void HalPowerManager::startDeepSleep() const {
 }
 
 bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t busyLevel) {
+  // A/B build for a USB-locked X4: never light-sleep during a panel refresh; the SDK's
+  // poll delay runs instead.
+  return false;
   // Light sleep drops a WiFi association and kills an enumerated USB-CDC link.
   // updateLocks() already keeps the power manager awake for both, but this
   // sleeper is not the power manager's, so it has to make the same check for
