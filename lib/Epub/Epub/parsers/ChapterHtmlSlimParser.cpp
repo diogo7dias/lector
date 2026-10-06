@@ -1767,16 +1767,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
                                         : TEXT_BLOCK_SOFT_FLUSH_WORDS;
   if (blockWordCount > softFlushThreshold && !self->inRuby) {
     LOG_DBG("EHP", "Text block soft flush (%u words)", static_cast<unsigned>(blockWordCount));
-    const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
-    const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)
-                                        ? static_cast<uint16_t>(self->viewportWidth - horizontalInset)
-                                        : self->viewportWidth;
-    self->currentTextBlock->layoutAndExtractLines(
-        self->renderer, self->fontId, effectiveWidth,
-        [](void* const ctx, std::shared_ptr<TextBlock> textBlock, const uint32_t offset) {
-          static_cast<ChapterHtmlSlimParser*>(ctx)->addLineToPage(textBlock, offset);
-        },
-        self, false);
+    self->makePages(/*includeLastLine=*/false);
   }
 }
 
@@ -2242,7 +2233,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line, const
   currentPageNextY += lineHeight;
 }
 
-void ChapterHtmlSlimParser::makePages() {
+void ChapterHtmlSlimParser::makePages(const bool includeLastLine) {
   if (!currentTextBlock) {
     LOG_ERR("EHP", "!! No text block to make pages for !!");
     return;
@@ -2260,14 +2251,7 @@ void ChapterHtmlSlimParser::makePages() {
 
   const int lineHeight = renderer.getLineHeight(fontId, lineCompression);
 
-  // Apply top spacing before the paragraph (stored in pixels)
   const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
-  if (blockStyle.marginTop > 0) {
-    currentPageNextY += blockStyle.marginTop;
-  }
-  if (blockStyle.paddingTop > 0) {
-    currentPageNextY += blockStyle.paddingTop;
-  }
 
   // Calculate effective width accounting for horizontal margins/padding
   const int horizontalInset = blockStyle.totalHorizontalInset();
@@ -2280,13 +2264,28 @@ void ChapterHtmlSlimParser::makePages() {
   // Two kinds of block are deliberately not paragraphs, so number 1 lands on the first
   // real one: a chapter heading, and a block with no letter or digit in it (a scene
   // break made of asterisks, a stray bullet, whitespace that survived normalisation).
-  pendingParagraphFirstLine_ = !currentTextBlock->getIsHeading() && currentTextBlock->hasLetters();
+  //
+  // Only the final pass arms it: a soft-flushed paragraph still claims exactly one number.
+  if (includeLastLine) {
+    pendingParagraphFirstLine_ = !currentTextBlock->getIsHeading() && currentTextBlock->hasLetters();
+  }
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
       [](void* const ctx, std::shared_ptr<TextBlock> textBlock, const uint32_t offset) {
-        static_cast<ChapterHtmlSlimParser*>(ctx)->addLineToPage(textBlock, offset);
+        auto* self = static_cast<ChapterHtmlSlimParser*>(ctx);
+        // Top spacing goes before the block's first emitted line only, so a soft flush
+        // does not open a gap mid-paragraph (upstream #3875).
+        if (self->wordsExtractedInBlock == 0) {
+          const BlockStyle& style = self->currentTextBlock->getBlockStyle();
+          if (style.marginTop > 0) self->currentPageNextY += style.marginTop;
+          if (style.paddingTop > 0) self->currentPageNextY += style.paddingTop;
+        }
+        self->addLineToPage(textBlock, offset);
       },
-      this);
+      this, includeLastLine);
+
+  // Trailing footnotes and spacing only apply once the block is finalized.
+  if (!includeLastLine) return;
 
   // Fallback: transfer any remaining pending footnotes to current page.
   // Normally addLineToPage handles this via word-index tracking, but this catches
