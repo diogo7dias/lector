@@ -818,7 +818,12 @@ void EpubReaderActivity::loop() {
     if (section->isBuilding() && buildTickHeapGate()) {
       const int pageCountBefore = static_cast<int>(section->pageCount);
       const int waitingPage = section->currentPage;
-      if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
+      const uint32_t loansBefore = renderer.frameBufferLoanCount();
+      const bool built = section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK);
+      // An image probe may have lent the framebuffer, handing it back white while the panel still
+      // shows the page. Redraw it so nothing is later painted over the blank buffer.
+      if (renderer.frameBufferLoanCount() != loansBefore) requestUpdate();
+      if (!built) {
         LOG_ERR("ERS", "Background section build failed");
         section.reset();
         requestUpdate();
@@ -2402,7 +2407,17 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // in the framebuffer and returns, so opening it costs one popup-sized refresh instead of
   // a full page repaint. Closing it calls requestUpdate(), which lands here again with the
   // pop-up inactive and redraws the page normally.
-  if (quickMenu.processRender(renderer, mappedInput)) return;
+  // Only over the page it was opened on: a framebuffer loan since that page was drawn (a build
+  // step's image probe) handed the buffer back white. Then the page is redrawn first and the
+  // pop-up follows on the next pass.
+  if (quickMenu.isActive()) {
+    if (renderer.frameBufferLoanCount() == pageLoanCount) {
+      quickMenu.processRender(renderer, mappedInput);
+      return;
+    }
+    requestUpdate(/*immediate=*/true);
+  }
+  pageLoanCount = renderer.frameBufferLoanCount();  // everything below repaints the framebuffer
 
   const auto showPendingSyncSaveError = [this]() {
     if (!pendingSyncSaveError) return;
@@ -2943,6 +2958,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
+    pageLoanCount = renderer.frameBufferLoanCount();  // after any loan taken by this render's build
   }
   // Observe every render so unchanged pages can still reach the time limit.
   queueProgressSave(currentSpineIndex, section->currentPage, section->estimatedTotalPages());
