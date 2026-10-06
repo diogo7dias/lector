@@ -293,7 +293,7 @@ TEST(SdCardFontKerning, AFailedKernBuildKeepsTheLigatures) {
 TEST(SdCardFontKerning, LigatureRequestsServedFromAKernFreeMiniGetLigatures) {
   SdCardFont font;
   ASSERT_TRUE(font.load(writeKerningFont(0, 0, 2, true).c_str()));  // ligatures, no kern classes
-  ASSERT_EQ(0, font.prewarm("AEF", 1, false, false));  // kern-free prewarm, e.g. a UI string
+  ASSERT_EQ(0, font.prewarm("AEF", 1, false, false));               // kern-free prewarm, e.g. a UI string
   ASSERT_EQ(0, font.prewarm("EF", 1, false, true));
   EXPECT_EQ(static_cast<uint32_t>('A'), font.getEpdFont()->getLigature('E', 'F'));
 }
