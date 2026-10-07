@@ -109,6 +109,8 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["wallpaperRotationPaused"] = wallpaperRotationPaused;
   // Marks the one-time 0.8.2 reading-defaults migration in fromJson as done.
   doc["readingDefaults0820"] = true;
+  // Marks the one-time Touch Sleep Off migration in migrateFromJson as done.
+  doc["touchSleepOff0410"] = true;
   // TXT reader font — set from the in-book TXT popup, not in SettingsList.
   doc["txtFontSize"] = txtFontPointSize;
   if (txtSdFontFamilyName[0] != '\0') {
@@ -414,6 +416,13 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
     firstLineIndentMode = FIRST_LINE_INDENT_PERCENT;
     firstLineIndentPercent = DEFAULT_FIRST_LINE_INDENT_PERCENT;
     paragraphNumbering = PARA_NUM_CHAPTER;
+    needsResave = true;
+  }
+  // Touch Sleep shipped On (30 s) in 0.40.0 and left touch dead after a pause in reading.
+  // The default is Off now; a file written before carries the old default, so it is reset
+  // once. Turning it back on afterwards sticks.
+  if (!(doc["touchSleepOff0410"] | false)) {
+    touchSleep = 0;
     needsResave = true;
   }
 
