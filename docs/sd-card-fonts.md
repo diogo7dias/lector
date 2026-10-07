@@ -19,7 +19,8 @@ There are four ways to install fonts:
 1. Start **File Transfer** and connect through **Join Network** or **Create Hotspot**
 2. Open the web interface URL shown on the reader
 3. Navigate to the **Fonts** tab
-4. Upload `.cpfont` files using the upload form
+4. Upload `.cpfont` files using the upload form. On the X4 Pro it also takes
+   `.ttf` and `.otf` files, 2 MB at most per file.
 
 ### Option 3: Manual SD card copy
 
