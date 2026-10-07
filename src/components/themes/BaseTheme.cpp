@@ -221,19 +221,20 @@ void BaseTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const b
   fillBatteryIcon(renderer, iconRect, percentage, /*ink=*/!onBlack);
 }
 
-// Centre a button-hint label inside its box. A label that fits is drawn on the
-// single baseline it always was; one too wide wraps to two centred lines in the same
+// Centre a button-hint label inside its box. A label that fits is centred by the
+// font's text height; one too wide wraps to two centred lines in the same
 // face rather than dropping to a smaller one: the hint strip is the reference size for
 // every other piece of UI text, so nothing in it may be smaller. Shared so every
 // theme's drawButtonHints() gets the same behaviour.
 void BaseTheme::drawHintLabel(GfxRenderer& renderer, const int fontId, const char* label, const int x,
-                              const int boxWidth, const int boxTop, const int boxHeight, const int singleLineYOffset) {
+                              const int boxWidth, const int boxTop, const int boxHeight) {
   constexpr int textPadding = 4;  // keeps a wrapped label off the button's border
   const int maxTextWidth = boxWidth - (textPadding * 2);
 
   const int textWidth = renderer.getTextWidth(fontId, label);
   if (textWidth <= maxTextWidth) {
-    renderer.drawText(fontId, x + (boxWidth - 1 - textWidth) / 2, boxTop + singleLineYOffset, label);
+    const int textY = boxTop + std::max(1, (boxHeight - renderer.getTextHeight(fontId)) / 2);
+    renderer.drawText(fontId, x + (boxWidth - 1 - textWidth) / 2, textY, label);
     return;
   }
 
@@ -257,7 +258,6 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
-  constexpr int textYOffset = 7;  // Distance from top of button to text baseline
   const hint_band::Band band = hintBand(renderer);
   const char* labels[hint_band::kSlotCount] = {btn1, btn2, btn3, btn4};
 
@@ -287,7 +287,7 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
       } else {
         renderer.drawRect(slot.x, slot.y, slot.width, slot.height, kLine, true);
       }
-      drawHintLabel(renderer, UI_10_FONT_ID, labels[i], slot.x, slot.width, slot.y, slot.height, textYOffset);
+      drawHintLabel(renderer, UI_10_FONT_ID, labels[i], slot.x, slot.width, slot.y, slot.height);
     }
   }
 
