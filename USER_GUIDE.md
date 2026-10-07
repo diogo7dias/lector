@@ -760,7 +760,8 @@ Three ways to install one:
    reader ran out of memory rather than out of network. That line is diagnostic, not
    something to act on; photograph it if you report the problem.
 2. **From the web interface:** in File Transfer mode, open the **Fonts** page and upload
-   `.cpfont` files.
+   `.cpfont` files. On the X4 Pro the page also takes `.ttf` and `.otf` files (2 MB at most
+   per file); the X4 and X3 refuse them.
 3. **From your computer:** copy fonts into `/.fonts/` (preferred) or `/fonts/` on the card.
    Files come from the [lector-fonts repository](https://github.com/diogo7dias/lector-fonts).
 
@@ -770,10 +771,11 @@ for the same point size.
 
 On the X4 Pro a family can also be an ordinary TrueType or OpenType font. Make a folder under
 `/fonts/` (or `/.fonts/`) named after the family and copy its `.ttf` or `.otf` files into it,
-one per style. The style comes from the file name (`Regular`, `Bold`, `Italic`, `BoldItalic`
-and the usual weight names); a folder holding a single file uses it as the regular face. Such a
-family offers every size from 8 to 40 pt and renders anti-aliased when **Text Anti-Aliasing**
-is on. The X4 and X3 skip these folders; they read `.cpfont` families only.
+one per style, or upload them from the **Fonts** page of the web interface. The style comes
+from the file name (`Regular`, `Bold`, `Italic`, `BoldItalic` and the usual weight names); a
+folder holding a single file uses it as the regular face. Such a family offers every size from
+8 to 40 pt and renders anti-aliased when **Text Anti-Aliasing** is on. The X4 and X3 skip these
+folders; they read `.cpfont` families only.
 
 Installed families appear in **Settings > Reader > Text Settings > Reader Font Family**. Full
 details are in [docs/sd-card-fonts.md](./docs/sd-card-fonts.md).

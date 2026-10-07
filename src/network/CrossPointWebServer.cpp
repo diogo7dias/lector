@@ -37,10 +37,21 @@
 #include "util/BookCacheUtils.h"
 #include "util/PartialUploads.h"
 #include "util/TaskWatchdog.h"
+#ifdef CROSSPOINT_TTF_READER
+#include <TtfFamilyScan.h>
+#endif
 
 namespace {
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
+
+// .ttf/.otf font uploads: only builds with the SD-card TTF reader (the X4 Pro)
+// can render them, so every other build neither offers nor accepts them.
+#ifdef CROSSPOINT_TTF_READER
+constexpr bool kVectorFontUploads = true;
+#else
+constexpr bool kVectorFontUploads = false;
+#endif
 
 // Static pointer for WebSocket callback (WebSocketsServer requires C-style callback)
 CrossPointWebServer* wsInstance = nullptr;
@@ -2221,32 +2232,44 @@ void CrossPointWebServer::handleFontList() const {
   JsonDocument doc;
   JsonArray arr = doc["families"].to<JsonArray>();
   doc["maxFamilies"] = SdCardFontRegistry::MAX_SD_FAMILIES;
+  // Only TTF-reader builds (the X4 Pro, PSRAM) render .ttf/.otf; the page
+  // offers vector uploads only when this is true.
+  doc["vectorFonts"] = kVectorFontUploads;
 
   for (const auto& family : families) {
     JsonObject fObj = arr.add<JsonObject>();
     fObj["name"] = family.name;
 
+    // A vector family renders at any size: no size list, the page shows "scalable".
     JsonArray sizes = fObj["sizes"].to<JsonArray>();
-    for (uint8_t s : family.availableSizes()) {
-      sizes.add(s);
+    if (!family.hasTtf()) {
+      for (uint8_t s : family.availableSizes()) {
+        sizes.add(s);
+      }
     }
 
     JsonArray files = fObj["files"].to<JsonArray>();
-    for (const auto& file : family.files) {
+    auto addFile = [&files](const std::string& path) {
       JsonObject fileObj = files.add<JsonObject>();
       // Extract filename from full path
-      const char* name = strrchr(file.path.c_str(), '/');
-      fileObj["name"] = name ? name + 1 : file.path.c_str();
+      const char* name = strrchr(path.c_str(), '/');
+      fileObj["name"] = name ? name + 1 : path.c_str();
 
       // Stat the file for size
       HalFile f;
-      if (Storage.openFileForRead("WEB", file.path.c_str(), f)) {
+      if (Storage.openFileForRead("WEB", path.c_str(), f)) {
         fileObj["size"] = static_cast<unsigned long>(f.size());
         f.close();
       } else {
         fileObj["size"] = 0;
       }
+    };
+    for (const auto& file : family.files) addFile(file.path);
+#ifdef CROSSPOINT_TTF_READER
+    for (const auto& path : family.ttfFaces) {
+      if (!path.empty()) addFile(path);
     }
+#endif
   }
 
   String json;
@@ -2279,6 +2302,7 @@ void CrossPointWebServer::handleFontUploadData() {
       fontUpload.filePath.clear();
       fontUpload.valid = false;
       fontUpload.magicChecked = false;
+      fontUpload.isVector = false;
       fontUpload.bytesWritten = 0;
       fontUpload.bufferPos = 0;
 
@@ -2290,10 +2314,13 @@ void CrossPointWebServer::handleFontUploadData() {
       String filename = upload.filename;
       filename.replace(' ', '_');
       // Validate filename: rejects path traversal (../, /, \) and enforces
-      // a .cpfont basename of alphanumeric + hyphen + underscore. Without
-      // this an attacker could supply "../../.crosspoint/settings.json" as
-      // a "filename" and have it written outside the fonts directory.
-      if (!FontInstaller::isValidCpfontFilename(filename.c_str())) {
+      // a .cpfont/.ttf/.otf basename of alphanumeric + hyphen + underscore.
+      // Without this an attacker could supply
+      // "../../.crosspoint/settings.json" as a "filename" and have it written
+      // outside the fonts directory. Builds without the TTF reader (X4, X3)
+      // only accept .cpfont.
+      fontUpload.isVector = kVectorFontUploads && FontInstaller::isValidVectorFontFilename(filename.c_str());
+      if (!fontUpload.isVector && !FontInstaller::isValidCpfontFilename(filename.c_str())) {
         LOG_ERR("WEB", "Invalid font filename: %s", filename.c_str());
         break;
       }
@@ -2328,13 +2355,32 @@ void CrossPointWebServer::handleFontUploadData() {
       // Validate magic bytes on the first chunk. A first chunk shorter than the
       // magic is rejected too: skipping the check let any short body through.
       if (!fontUpload.magicChecked) {
-        if (upload.currentSize < 8 || memcmp(upload.buf, "CPFONT\0\0", 8) != 0) {
-          LOG_ERR("WEB", "Invalid .cpfont magic bytes");
+        bool magicOk = upload.currentSize >= 8;
+        if (magicOk && fontUpload.isVector) {
+          // sfnt versions: 0x00010000 (TrueType), "OTTO" (CFF), "true" (Apple)
+          static constexpr uint8_t kTtfMagic[4] = {0x00, 0x01, 0x00, 0x00};
+          magicOk = memcmp(upload.buf, kTtfMagic, 4) == 0 || memcmp(upload.buf, "OTTO", 4) == 0 ||
+                    memcmp(upload.buf, "true", 4) == 0;
+        } else if (magicOk) {
+          magicOk = memcmp(upload.buf, "CPFONT\0\0", 8) == 0;
+        }
+        if (!magicOk) {
+          LOG_ERR("WEB", "Invalid font magic bytes");
           fontUpload.valid = false;
           break;
         }
         fontUpload.magicChecked = true;
       }
+#ifdef CROSSPOINT_TTF_READER
+      // TtfSdFont refuses a face above this cap at load; refuse the upload
+      // instead of installing a font that never loads.
+      if (fontUpload.isVector &&
+          fontUpload.bytesWritten + fontUpload.bufferPos + upload.currentSize > ttfscan::TTF_MAX_FACE_BYTES) {
+        LOG_ERR("WEB", "Vector font over %u bytes", static_cast<unsigned>(ttfscan::TTF_MAX_FACE_BYTES));
+        fontUpload.valid = false;
+        break;
+      }
+#endif
 
       // Buffer writes for efficiency
       size_t remaining = upload.currentSize;
@@ -2391,7 +2437,7 @@ void CrossPointWebServer::handleFontUpload() {
     server->send(200, "application/json", "{\"ok\":true}");
     LOG_DBG("WEB", "Font upload complete: %s", fontUpload.filePath.c_str());
   } else {
-    server->send(400, "application/json", "{\"error\":\"Invalid .cpfont file\"}");
+    server->send(400, "application/json", "{\"error\":\"Invalid font file\"}");
   }
 }
 
