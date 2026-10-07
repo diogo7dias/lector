@@ -565,6 +565,9 @@ python3 sim/soak.py x4pro 10 600                  # 10 boots + 600 s idle; exit 
   event, never ahead of the wall clock, so idle timeouts (auto-sleep) match the device.
   Lag from slow emulated work is dropped at each sleep, never caught up: otherwise a
   short idle looks like 30 s and Touch Sleep eats the next tap.
+- The GT911 holds a frame until the firmware clears 0x814E, like the chip: a lift that
+  lands while a press frame is being read is reported next, never dropped. Dropping it
+  left a contact that never ended, and the next tap never completed (CI-only, slow hosts).
 - CI runs `sim-e2e` on every PR (all boards, on the `build` and `build-x4pro` images).
 - The page's Reboot (`POST /reboot`) power-cycles with the same flash and card, so
   settings and reading position must survive it. Emulated boot is slower than the

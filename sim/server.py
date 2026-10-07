@@ -9,10 +9,11 @@ Boots that board's firmware from its last `pio run` on a fresh card, then serves
   GET  /ink/<x>/<y>/<w>/<h>  {"ink", "area"}: dark pixels in that box of the upright panel
   POST /press/<key>  the board's keys (see lector_sim.buttons); power sleeps, or wakes when asleep
   POST /reboot       cut the power and switch on again (flash and card persist)
-  POST /tap/<x>/<y>  touch the upright panel (480x800), touch boards only
+  POST /tap/<x>/<y>[?ms=N]  touch the upright panel (480x800) for N ms (300), touch boards only
   POST /swipe/<x1>/<y1>/<x2>/<y2>  slide a finger across it
 """
 import io, json, os, re, sys, tempfile, threading
+from urllib.parse import parse_qs
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -147,9 +148,9 @@ class Device:
             self.sim.reboot()
             self.sim.wait_idle()
 
-    def swipe(self, *points):
+    def swipe(self, *points, duration=0.3):
         with self.lock:
-            self.sim.swipe(*points)
+            self.sim.swipe(*points, duration=duration)
 
 
 def handler(device):
@@ -186,16 +187,19 @@ def handler(device):
                 self.send(404, b"not found", "text/plain")
 
         def do_POST(self):
-            parts = self.path.strip("/").split("/")
+            path, _, query = self.path.partition("?")
+            parts = path.strip("/").split("/")
             if (parts[0], len(parts)) in (("tap", 3), ("swipe", 5)) and BOARDS[BOARD].get("touch"):
                 try:
                     points = [int(v) for v in parts[1:]]
+                    ms = int(parse_qs(query).get("ms", ["300"])[0])
                 except ValueError:
-                    points = [-1]
-                if not all(0 <= v < 480 for v in points[0::2]) or not all(0 <= v < 800 for v in points[1::2]):
-                    self.send(400, b"bad point", "text/plain")
+                    points, ms = [-1], 0
+                if not all(0 <= v < 480 for v in points[0::2]) or not all(0 <= v < 800 for v in points[1::2]) \
+                        or not 0 <= ms <= 5000:
+                    self.send(400, b"bad point or hold", "text/plain")
                     return
-                device.swipe(*(points * 2 if len(points) == 2 else points))
+                device.swipe(*(points * 2 if len(points) == 2 else points), duration=ms / 1000)
             elif parts[0] == "press" and len(parts) == 2 and parts[1] in KEYS:
                 device.press(parts[1])
             elif parts == ["reboot"]:
