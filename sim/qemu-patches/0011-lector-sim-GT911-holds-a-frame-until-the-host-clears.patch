@@ -1,0 +1,94 @@
+From cdd990ceafe71cb5b104387154f809834a05011e Mon Sep 17 00:00:00 2001
+From: Vault Keeper <diogo7dias@gmail.com>
+Date: Tue, 6 Oct 2026 23:39:34 +0000
+Subject: [PATCH] lector sim: GT911 holds a frame until the host clears it
+
+The chip does not update an unread buffer (GT911 Programming Guide, 5.
+Coordinates Reading, step 4: "instead of update coordinates even if it
+detects new coordinate"); after the host writes 0 to 0x814E it reports the
+current state, a lift included. The model rebuilt the next frame from the
+live finger alone, so a lift that landed between the host reading a press
+frame and clearing it was wiped: the firmware kept a contact that never
+ended and the next tap never completed. A slow host widens that window,
+which is why the X4 Pro settings e2e failed on CI only.
+---
+ hw/misc/lector_i2c.c | 28 ++++++++++++++++++++++------
+ 1 file changed, 22 insertions(+), 6 deletions(-)
+
+diff --git a/hw/misc/lector_i2c.c b/hw/misc/lector_i2c.c
+index 0208ba4..7a18f0a 100644
+--- a/hw/misc/lector_i2c.c
++++ b/hw/misc/lector_i2c.c
+@@ -10,7 +10,9 @@
+  * 8-byte contact records at 0x8150. Touch comes from QOM: set "x"/"y" (raw
+  * controller units), then "down" true or false; "home" holds the capacitive key.
+  * While a finger is down every status clear produces a fresh frame, like the
+- * chip's report rate; a lift produces one empty frame.
++ * chip's report rate; a lift produces one empty frame. Like the chip, an
++ * unread frame is held until the host clears the status: a tap that goes down
++ * and up between two polls still reports its press, then the lift.
+  */
+ #include "qemu/osdep.h"
+ #include "qemu/cutils.h"
+@@ -108,14 +110,15 @@ struct GT911State {
+     uint16_t ptr;
+     int nsent;
+     bool fresh;
+-    bool down, home;
++    bool down, home;    /* the finger and the key now */
++    bool fdown, fhome;  /* what the frame at 0x814E reports */
+     uint32_t x, y;
+ };
+ 
+ static uint8_t gt911_reg(GT911State *s, uint16_t reg)
+ {
+     if (reg == GT911_STATUS) {
+-        return s->fresh ? 0x80 | (s->home ? 0x10 : 0) | (s->down ? 1 : 0) : 0;
++        return s->fresh ? 0x80 | (s->fhome ? 0x10 : 0) | (s->fdown ? 1 : 0) : 0;
+     }
+     /* coordinates at byte 0 of the record, as on the X4 Pro */
+     switch (reg - GT911_POINTS) {
+@@ -153,7 +156,10 @@ static int gt911_send(I2CSlave *i2c, uint8_t data)
+         s->ptr = s->nsent ? (s->ptr & 0xFF00) | data : data << 8;
+     } else {
+         if (s->ptr == GT911_STATUS && data == 0) {
+-            s->fresh = s->down || s->home;
++            /* the next frame: the state now, or the lift of the frame just read */
++            s->fresh = s->down || s->home || s->fdown || s->fhome;
++            s->fdown = s->down;
++            s->fhome = s->home;
+         }
+         s->ptr++;
+     }
+@@ -161,11 +167,21 @@ static int gt911_send(I2CSlave *i2c, uint8_t data)
+     return 0;
+ }
+ 
++/* A change shows at once unless a frame is still unread; that one stays. */
++static void gt911_changed(GT911State *s)
++{
++    if (!s->fresh) {
++        s->fdown = s->down;
++        s->fhome = s->home;
++        s->fresh = true;
++    }
++}
++
+ static void gt911_set_down(Object *obj, bool value, Error **errp)
+ {
+     GT911State *s = GT911(obj);
+     s->down = value;
+-    s->fresh = true;
++    gt911_changed(s);
+ }
+ 
+ static bool gt911_get_down(Object *obj, Error **errp)
+@@ -177,7 +193,7 @@ static void gt911_set_home(Object *obj, bool value, Error **errp)
+ {
+     GT911State *s = GT911(obj);
+     s->home = value;
+-    s->fresh = true;
++    gt911_changed(s);
+ }
+ 
+ static bool gt911_get_home(Object *obj, Error **errp)
