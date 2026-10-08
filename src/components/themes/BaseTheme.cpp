@@ -413,18 +413,28 @@ static int headerRightReserve(const GfxRenderer& renderer, const char* right) {
   return cluster + headerRightGap + renderer.getTextWidth(UI_10_FONT_ID, right);
 }
 
-// The title's own width budget inside a band `width` wide: clear of the right reserve
-// on both sides, so a centred line never runs under the cluster or the label.
-static int headerTitleWidth(const GfxRenderer& renderer, const int width, const char* right) {
-  const int padding = headerRightReserve(renderer, right);
-  return std::max(1, width - padding * 2 - BaseMetrics::values.contentSidePadding * 2);
+// Where the title goes inside a band `width` wide. Centred on the screen, clear of the
+// right reserve on both sides, when the title fits that way. A long right label ("6
+// networks found") can leave that budget at nothing, and the title then wrapped one
+// letter per line down the screen; instead it centres in the room left of the reserve.
+struct HeaderTitleBox {
+  int left;   // offset of the box from the band's left edge
+  int width;  // wrap width
+};
+static HeaderTitleBox headerTitleBox(const GfxRenderer& renderer, const int width, const std::string& decorated,
+                                     const char* right) {
+  const int reserve = headerRightReserve(renderer, right);
+  const int pad = BaseMetrics::values.contentSidePadding;
+  const int centred = width - reserve * 2 - pad * 2;
+  if (centred >= renderer.getTextWidth(UI_10_FONT_ID, decorated.c_str())) return {reserve + pad, centred};
+  return {pad, std::max(1, width - reserve - pad * 2)};
 }
 
 std::vector<std::string> BaseTheme::headerTitleWrapped(const GfxRenderer& renderer, const int width, const char* title,
                                                        const char* right) {
   const std::string decorated = header_title::decorate(title);
   if (decorated.empty()) return {};
-  const int maxWidth = headerTitleWidth(renderer, width, right);
+  const int maxWidth = headerTitleBox(renderer, width, decorated, right).width;
   return wrapUiText(renderer, decorated, maxWidth, maxWidth);
 }
 
@@ -478,9 +488,11 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     // Same size as the rows under it and as the home screen's own text. A step larger
     // read as bold next to everything else on the screen. The brackets are what marks it
     // as the title instead: see components/HeaderTitle.h for why not bold.
+    const HeaderTitleBox box = headerTitleBox(renderer, rect.width, header_title::decorate(title), right);
     int y = rect.y + headerTitleOffset;
     for (const std::string& line : titleLines) {
-      renderer.drawCenteredText(UI_10_FONT_ID, y, line.c_str(), false, EpdFontFamily::REGULAR);
+      const int lineWidth = renderer.getTextWidth(UI_10_FONT_ID, line.c_str());
+      renderer.drawText(UI_10_FONT_ID, rect.x + box.left + (box.width - lineWidth) / 2, y, line.c_str(), false);
       y += renderer.getLineHeight(UI_10_FONT_ID);
     }
   }
