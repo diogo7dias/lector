@@ -63,6 +63,11 @@ way: the on-screen keyboard, sliders (brightness, text size and the rest, which 
 stepped), and the Yes/No pop-ups, which are already a question being answered. Page turns by
 tap while reading are unchanged.
 
+**Touch Sleep** (Settings > System, X4 Pro) is Off by default. Set to 15 s, 30 s or 1 min,
+it saves a little battery by putting the touch screen to sleep after that long without
+input. While it sleeps, touches and the touch Home key below the screen do nothing; press any
+side button, or lock and unlock, to wake it.
+
 ### Taking a screenshot
 
 Hold **Power** and **Volume Down** together. The image is written to `/screenshots/` on the
