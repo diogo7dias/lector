@@ -7,6 +7,8 @@
 #include <Memory.h>
 #include <Serialization.h>
 
+#include <algorithm>
+
 #include "Epub/css/CssParser.h"
 #include "Page.h"
 #include "parsers/ChapterHtmlSlimParser.h"
@@ -1241,18 +1243,28 @@ std::optional<uint16_t> Section::getPageForVisibleTextOffset(const uint32_t offs
     return std::nullopt;
   }
 
-  f.seek(visibleLutOffset);
+  if (!f.seek(visibleLutOffset)) {
+    LOG_ERR("SCT", "Failed to seek visible-text LUT");
+    return std::nullopt;
+  }
   uint16_t result = 0;
   uint32_t lastPageStart = 0;
-  for (uint16_t page = 0; page < count; page++) {
-    uint32_t pageStart;
-    serialization::readPod(f, pageStart);
-    lastPageStart = pageStart;
-    if (preferFirstAtOffset && pageStart == offset) {
-      return page;
+  // Batch the reads: one SD read per 32 pages instead of one per page.
+  constexpr uint32_t BATCH_PAGE_COUNT = 32;
+  uint32_t starts[BATCH_PAGE_COUNT];  // 128-byte stack buffer; offsets stay in file order for ties.
+  for (uint32_t base = 0; base < count; base += BATCH_PAGE_COUNT) {
+    const uint32_t batch = std::min<uint32_t>(BATCH_PAGE_COUNT, count - base);
+    const size_t bytes = batch * sizeof(uint32_t);
+    if (f.read(starts, bytes) != static_cast<int>(bytes)) {
+      LOG_ERR("SCT", "Failed to read visible-text LUT batch");
+      return std::nullopt;
     }
-    if (pageStart > offset) break;
-    result = page;
+    for (uint32_t i = 0; i < batch; ++i) {
+      lastPageStart = starts[i];
+      if (lastPageStart > offset) return result;
+      result = static_cast<uint16_t>(base + i);
+      if (preferFirstAtOffset && lastPageStart == offset) return result;
+    }
   }
   if (partial && offset > lastPageStart) {
     return std::nullopt;
