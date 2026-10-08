@@ -202,7 +202,10 @@ std::string writeKerningFont(uint16_t extraEntries = 0, uint8_t classCount = 2, 
     putU32(b, ligatureOffset + 4, 'A');
   }
 
-  const std::string path = ::testing::TempDir() + "kern.cpfont";
+  // One file per test: ctest -j runs each test as its own process, and a shared name let one
+  // test's font overwrite another's mid-read.
+  const std::string path =
+      ::testing::TempDir() + ::testing::UnitTest::GetInstance()->current_test_info()->name() + ".kern.cpfont";
   std::FILE* f = std::fopen(path.c_str(), "wb");
   std::fwrite(b.data(), 1, b.size(), f);
   std::fclose(f);
