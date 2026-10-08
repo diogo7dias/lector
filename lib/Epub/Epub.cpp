@@ -403,7 +403,9 @@ bool Epub::ensureCssCache() {
   // A load that fails for lack of heap keeps the cache: re-parsing on the same low
   // heap would only replace good rules with fewer.
   if (cssParser->hasCache()) {
-    switch (cssParser->loadFromCache()) {
+    // Header only: the rules are needed solely while building a section, and
+    // Section::createSectionFile loads them itself.
+    switch (cssParser->loadFromCache(/*headerOnly=*/true)) {
       case CssParser::CacheLoad::Ok:
         if (!cssParser->isPartial()) return true;
         LOG_DBG("EBP", "CSS rules cache is partial, retrying CSS parse");

@@ -81,5 +81,10 @@ class OpdsBookBrowserActivity final : public UiStatusActivity {
   void downloadBook(const OpdsEntry& book);
   void launchSearch();
   void performSearch(const std::string& query);
-  bool preventAutoSleep() override { return true; }
+  // Only while network work is in flight: an idle catalogue left open must still auto-sleep,
+  // or the radio stays up until the battery dies.
+  bool preventAutoSleep() override {
+    return state == BrowserState::CHECK_WIFI || state == BrowserState::LOADING || state == BrowserState::RECONNECTING ||
+           state == BrowserState::DOWNLOADING;
+  }
 };

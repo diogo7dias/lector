@@ -207,6 +207,22 @@ TEST_F(CssParserTest, SaveLoadRoundTrip) {
   EXPECT_FALSE(reader.resolveStyle("ol", "").hasListStyleType());
 }
 
+TEST_F(CssParserTest, HeaderOnlyLoadChecksWithoutReadingRules) {
+  CssParser writer(cachePath());
+  loadCss(writer, ".a { font-weight: bold; }\n.b { font-style: italic; }\n");
+  writer.markPartial();
+  ASSERT_TRUE(writer.saveToCache());
+
+  CssParser reader(cachePath());
+  ASSERT_EQ(reader.loadFromCache(/*headerOnly=*/true), CssParser::CacheLoad::Ok);
+  EXPECT_TRUE(reader.isPartial());
+  EXPECT_EQ(reader.ruleCount(), 0u);
+
+  // Same rejection as a full load: a truncated payload is caught from the header.
+  fs::resize_file(cacheFilePath(), fs::file_size(cacheFilePath()) - 4);
+  EXPECT_EQ(reader.loadFromCache(/*headerOnly=*/true), CssParser::CacheLoad::Invalid);
+}
+
 TEST_F(CssParserTest, EmptyRuleSetRoundTrips) {
   CssParser writer(cachePath());
   ASSERT_TRUE(writer.saveToCache());

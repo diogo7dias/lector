@@ -507,7 +507,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
   }
 
   auto atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth);
-  if (!atkinsonDitherer) {
+  if (!atkinsonDitherer || !atkinsonDitherer->valid()) {
     LOG_ERR("PNG", "OOM: AtkinsonDitherer (%u bytes)", static_cast<unsigned>(sizeof(AtkinsonDitherer)));
     free(rowBuffer);
     free(ctx.currentRow);

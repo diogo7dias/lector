@@ -1006,12 +1006,6 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // No current section, attempt to rerender the book
-  if (!section) {
-    requestUpdate();
-    return;
-  }
-
   if (prevTriggered) {
     pageTurn(false);
   } else {
@@ -2353,9 +2347,16 @@ void EpubReaderActivity::drawQuoteUnderlines(const Page& page, const int marginL
 }
 
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {
+  // No current section (alloc failure, mid-relayout): rerender the book instead. Every
+  // caller (loop, bound long-press actions) routes through here.
+  if (!section) {
+    requestUpdate();
+    return;
+  }
+
   // Nothing precedes the first page: skip the state resets and the e-ink refresh
   // that a no-op "back" would otherwise trigger.
-  if (!isForwardTurn && section && currentSpineIndex == 0 && section->currentPage == 0) return;
+  if (!isForwardTurn && currentSpineIndex == 0 && section->currentPage == 0) return;
 
   // A page turn is authoritative: do not let a resume/reflow position captured
   // at session start snap the reader back after the incremental build completes.
