@@ -999,7 +999,11 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
     bottomStack -= barPx;
     drawEdgeBar(bottomStack, data.chapterPercent, 0, bottomOutermost ? stretchBottom : 0);
   }
-  const int bottomTextY = bottomStack - lineH - 2;
+  // Above a bar the line keeps its full descent clear of it. At the bare edge the band
+  // is mostly digits, which never use the descent, so the line drops by the 2 px gap
+  // plus most of the descent: a descender may reach the bezel inset, the digits sit
+  // close to the edge instead of floating ~10 px above it.
+  const int bottomTextY = anyBottomBar ? bottomStack - lineH - 2 : bottomStack - lineH + 2;
 
   if (!drawText) return;  // bars-only: the status bar is hidden, sbOffBar kept them
 
