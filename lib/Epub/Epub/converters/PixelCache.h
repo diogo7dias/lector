@@ -70,6 +70,9 @@ struct PixelCache {
     flushedRows = 0;
     ok = false;
 
+    // A padded decode block cannot cover more rows than the output image; without
+    // the clamp a short upscaled image fails the band check below and is never cached.
+    if (maxBlockDstRows > h) maxBlockDstRows = h;
     int wantRows = maxBlockDstRows + 2;
     if (wantRows < MIN_BAND_ROWS) wantRows = MIN_BAND_ROWS;
     if (wantRows > h) wantRows = h;
