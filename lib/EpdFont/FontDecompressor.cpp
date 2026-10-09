@@ -5,6 +5,8 @@
 #include <Utf8.h>
 
 #include <cstdlib>
+#include <memory>
+#include <new>
 
 FontDecompressor::~FontDecompressor() { deinit(); }
 
@@ -234,8 +236,14 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
   }
   PageSlot& slot = pageSlots[pageSlotCount];
 
-  // Step 1: Collect unique glyph indices needed for this page
-  uint32_t neededGlyphs[MAX_PAGE_GLYPHS];
+  // Step 1: Collect unique glyph indices needed for this page. 2 KB, so on the
+  // heap: this runs on the 8 KB render task.
+  std::unique_ptr<uint32_t[]> neededGlyphsBuf(new (std::nothrow) uint32_t[MAX_PAGE_GLYPHS]);
+  if (!neededGlyphsBuf) {
+    LOG_ERR("FDC", "Failed to allocate prewarm glyph list");
+    return 0;
+  }
+  uint32_t* const neededGlyphs = neededGlyphsBuf.get();
   uint16_t glyphCount = 0;
   bool glyphCapWarned = false;
 
