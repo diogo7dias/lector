@@ -164,6 +164,8 @@ struct ReaderPrefs {
   uint8_t sbBookBar = 0;          // SB_EDGE_OFF
   uint8_t sbChapterBar = 0;       // SB_EDGE_OFF
   uint8_t sbBarThickness = 1;     // SB_BAR_MEDIUM
+  // Retired options (Floating Bar, Bar Outline), no longer read. The bytes stay so every
+  // later offset in the binary sidecar holds.
   uint8_t sbFloatingBar = 0;
   uint8_t sbBarOutline = 0;
   uint8_t sbOffBar = 0;  // SB_OFFBAR_OFF
@@ -369,8 +371,8 @@ struct StatusBarBlock {
   uint8_t bookBar = 0;
   uint8_t chapterBar = 0;
   uint8_t barThickness = 0;
-  uint8_t floatingBar = 0;
-  uint8_t barOutline = 0;
+  uint8_t floatingBar = 0;  // retired option, no longer read
+  uint8_t barOutline = 0;   // retired option, no longer read
   uint8_t offBar = 0;
 
   bool textOn() const { return enabled != 0; }
@@ -388,10 +390,6 @@ struct StatusBarBlock {
     if (textOn() || offBar == OFF_BAR_OFF) return barThickness;
     return static_cast<uint8_t>(offBar - 1);  // Slim/Medium/Fat -> 0/1/2
   }
-  // Gap between a floating progress bar and the screen edge, in pixels. Every site that
-  // draws OR reserves space for a bar must add it, or the two disagree.
-  static constexpr int FLOATING_BAR_MARGIN_PX = 12;
-  int floatingBarMarginPx() const { return floatingBar ? FLOATING_BAR_MARGIN_PX : 0; }
   // CrossPointSettings::SB_OFFBAR_OFF, asserted equal there.
   static constexpr uint8_t OFF_BAR_OFF = 0;
 };

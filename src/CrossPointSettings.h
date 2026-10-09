@@ -368,13 +368,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sbBookBar = SB_EDGE_OFF;           // book progress bar edge (Off/Top/Bottom)
   uint8_t sbChapterBar = SB_EDGE_BOTTOM;     // chapter progress bar edge
   uint8_t sbBarThickness = SB_BAR_MEDIUM;    // progress bar thickness slim/med/fat
-  // Lift the progress bars off the screen edge: one small margin applied to the
-  // outer edge and to both ends, so the bar reads as a floating pill instead of
-  // a strip welded to the frame. Position and thickness are unaffected.
+  // Retired options (Floating Bar, Bar Outline), no longer read or saved. Kept only
+  // because the per-book field lists copy them into ReaderPrefs.
   uint8_t sbFloatingBar = 0;
-  // Outline the full length of the progress bar so the unfilled part of the
-  // track stays visible. Independent of sbFloatingBar; all four combinations
-  // are valid.
   uint8_t sbBarOutline = 0;
   // Off / Slim / Medium / Fat. Only consulted while the status bar is hidden, where it
   // keeps the configured Book Bar / Chapter Bar edges drawing at its own thickness.
@@ -898,11 +894,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // The global status bar: for every screen that is not a book with its own bar.
   StatusBarBlock statusBar() const;
   void setStatusBar(const StatusBarBlock& b);
-
-  // Gap between a floating progress bar and the screen edge, in pixels. Applied
-  // to the outer edge and to both ends. Twelve reads clearly as a lifted pill on
-  // the panel; six was too close to the bezel to be seen as deliberate.
-  static constexpr int SB_FLOATING_BAR_MARGIN_PX = StatusBarBlock::FLOATING_BAR_MARGIN_PX;
 
  private:
   // Runs after current fields are decoded; reports whether the legacy document needs a resave.
