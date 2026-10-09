@@ -1,3 +1,10 @@
+// Hot translation unit: compiled -O2 instead of the global -Os. Its layout and
+// pixel loops dominate chapter builds and page renders on the flash-cache-starved
+// ESP32-C3; the size cost is confined to this file.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC optimize("O2")
+#endif
+
 #include "ChapterHtmlSlimParser.h"
 
 #include <FsHelpers.h>
