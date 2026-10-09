@@ -24,6 +24,7 @@ class TxtReaderActivity final : public Activity {
   int linesPerPage = 0;
   int viewportWidth = 0;
   bool initialized = false;
+  bool unsupportedEncoding = false;  // UTF-16 file: nothing indexed, a message instead
 
   // Pairs the Back release with the press this activity saw, so a release left over by a
   // child screen that closed on press is not read as "leave the book".
