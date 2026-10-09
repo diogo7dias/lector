@@ -2913,6 +2913,14 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   renderer.clearScreen();
 
   if (section->pageCount == 0) {
+    if (!section->isBuilding()) {
+      // An empty chapter skipped the clamp above, so a backward turn's last-page sentinel
+      // (65535) stayed in currentPage and Back took one press per page to leave. Jumps
+      // meant for a laid-out chapter must not fire in whatever chapter loads next either.
+      section->currentPage = 0;
+      pendingPercentJump = false;
+      pendingParagraphScan_.reset();
+    }
     returnHistory.finishReturn(false);
     LOG_DBG("ERS", "No pages to render");
     renderer.drawCenteredText(UI_10_FONT_ID, 300, tr(STR_EMPTY_CHAPTER), true, EpdFontFamily::REGULAR);
