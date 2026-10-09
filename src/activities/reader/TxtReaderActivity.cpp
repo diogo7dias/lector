@@ -280,6 +280,10 @@ void TxtReaderActivity::buildPageIndex() {
     }
   }
 
+  // Nothing past offset 0 (a 0-byte file, or one that is only a byte-order mark): no
+  // pages, so render shows the empty-file message instead of one blank page.
+  if (offset == 0) pageOffsets.clear();
+
   totalPages = pageOffsets.size();
   LOG_DBG("TRS", "Built page index: %d pages", totalPages);
 }
