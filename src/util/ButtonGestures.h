@@ -50,7 +50,12 @@ class Detector {
       swallowRelease_ = true;
       return hasDouble_ ? Event::Double : Event::None;
     }
-    awaitingSecond_ = false;
+    if (awaitingSecond_) {
+      // The window closed while the loop was busy (an e-ink refresh), so no tick() ran to
+      // report the first click. Report it now, or it is lost under this new press.
+      awaitingSecond_ = false;
+      return hasSingle_ ? Event::Single : Event::None;
+    }
     return Event::None;
   }
 
