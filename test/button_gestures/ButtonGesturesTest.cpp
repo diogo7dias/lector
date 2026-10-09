@@ -63,6 +63,17 @@ TEST(ButtonGestures, ASecondPressAfterTheWindowIsANewSingle) {
   EXPECT_EQ(d.tick(560 + button_gestures::DOUBLE_WINDOW_MS), Event::Single);
 }
 
+TEST(ButtonGestures, AnExpiredSingleIsReportedByTheNextPressWhenNoTickRan) {
+  // A long refresh can block the loop past the window: the next press must still
+  // report the first click instead of dropping it.
+  Detector d = armed();
+  d.onPress(0);
+  d.onRelease(60);
+  EXPECT_EQ(d.onPress(60 + button_gestures::DOUBLE_WINDOW_MS + 200), Event::Single);
+  EXPECT_EQ(d.onRelease(60 + button_gestures::DOUBLE_WINDOW_MS + 260), Event::None);
+  EXPECT_EQ(d.tick(60 + 2 * button_gestures::DOUBLE_WINDOW_MS + 260), Event::Single);
+}
+
 TEST(ButtonGestures, HoldFiresWhileTheButtonIsStillDown) {
   Detector d = armed();
   d.onPress(0);
