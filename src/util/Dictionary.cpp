@@ -76,8 +76,14 @@ IfoFacts readIfoFacts(const std::string& ifoPath) {
   IfoFacts facts;
   HalFile ifo;
   if (!Storage.openFileForRead("DICT", ifoPath, ifo)) return facts;
-  char buf[2048];
-  const int n = ifo.read(buf, sizeof(buf) - 1);
+  constexpr size_t IFO_READ_BYTES = 2048;
+  const auto bufOwner = makeUniqueNoThrow<char[]>(IFO_READ_BYTES);
+  if (!bufOwner) {
+    LOG_ERR("DICT", "OOM: ifo buffer");
+    return facts;
+  }
+  char* const buf = bufOwner.get();
+  const int n = ifo.read(buf, IFO_READ_BYTES - 1);
   if (n <= 0) return facts;
   buf[n] = '\0';
   const char* line = strstr(buf, "idxoffsetbits");
