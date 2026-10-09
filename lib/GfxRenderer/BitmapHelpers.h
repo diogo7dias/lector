@@ -113,10 +113,17 @@ inline void scaleToFit(const int srcWidth, const int srcHeight, const int target
   const float scaleToFitWidth = static_cast<float>(targetWidth) / static_cast<float>(srcWidth);
   const float scaleToFitHeight = static_cast<float>(targetHeight) / static_cast<float>(srcHeight);
   float scale;
+  const float fitScale = (scaleToFitWidth < scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
+  scale = fitScale;
   if (crop) {
     scale = (scaleToFitWidth > scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
-  } else {
-    scale = (scaleToFitWidth < scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
+    // Covering a sliver (a 2x3072 image) would scale its long side to hundreds of
+    // thousands of pixels and write a BMP of tens of MB. Past 2x the target on either
+    // side, cropping keeps almost nothing of the image anyway, so fit it instead.
+    if (static_cast<float>(srcWidth) * scale > 2.0f * static_cast<float>(targetWidth) ||
+        static_cast<float>(srcHeight) * scale > 2.0f * static_cast<float>(targetHeight)) {
+      scale = fitScale;
+    }
   }
 
   outWidth = static_cast<int>(static_cast<float>(srcWidth) * scale);

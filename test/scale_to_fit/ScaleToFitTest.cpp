@@ -29,6 +29,13 @@ TEST(ScaleToFit, CropCoversTarget) {
   EXPECT_EQ(out.height, 800);
 }
 
+TEST(ScaleToFit, CropOfASliverFallsBackToFit) {
+  int w = 0, h = 0;
+  scaleToFit(2, 3072, 480, 800, /*crop=*/true, w, h);
+  EXPECT_LE(h, 800);
+  EXPECT_LE(w, 480);
+}
+
 TEST(ScaleToFit, UpscalesSmallSource) {
   const Size out = fit(100, 50, 400, 400, false);
   EXPECT_EQ(out.width, 400);
