@@ -21,8 +21,8 @@ namespace ProgressFile {
 //
 // This is crash-safe, not metadata-atomic: on FAT the replace is remove + rename,
 // two separate directory operations, so a crash between them can leave neither
-// file -- which simply reads as "no saved progress" on next launch, never a
-// corrupt or unclearable file. The point is that progress.bin is never torn.
+// file but the finished temp, which openForRead below renames into place, so the
+// reader's place survives. The point is that progress.bin is never torn.
 //
 // Note: this prevents corruption on a healthy card going forward. It cannot
 // repair an already-corrupted progress.bin -- removing the stale file may itself
@@ -72,6 +72,20 @@ inline bool writeAtomic(const std::string& cachePath, const uint8_t* data, size_
   }
   f.flush();
   return true;
+}
+
+// Opens `<cachePath>/progress.bin` for reading. A power cut between writeAtomic's
+// remove and rename leaves only the temp, which was fully written and closed
+// before the remove, so it is renamed into place first instead of reading as
+// "no saved progress".
+inline bool openForRead(const char* tag, const std::string& cachePath, HalFile& f) {
+  const std::string finalPath = cachePath + "/progress.bin";
+  const std::string tmpPath = finalPath + ".tmp";
+  if (!Storage.exists(finalPath.c_str()) && Storage.exists(tmpPath.c_str())) {
+    LOG_INF("PRG", "Recovering progress from %s", tmpPath.c_str());
+    Storage.rename(tmpPath.c_str(), finalPath.c_str());
+  }
+  return Storage.openFileForRead(tag, finalPath, f);
 }
 
 }  // namespace ProgressFile

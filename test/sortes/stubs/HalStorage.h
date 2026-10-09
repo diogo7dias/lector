@@ -65,6 +65,11 @@ class HalStorage {
     ++mutations;
     return std::rename(resolve(from).c_str(), resolve(to).c_str()) == 0;
   }
+  bool exists(const char* path) const { return std::filesystem::exists(resolve(path)); }
+  bool openFileForRead(const char*, const std::string& path, HalFile& file) {
+    file = HalFile(resolve(path), "rb");
+    return bool(file);
+  }
   bool openFileForWrite(const char*, const std::string& path, HalFile& file) {
     ++mutations;
     file = HalFile(resolve(path), "wb");

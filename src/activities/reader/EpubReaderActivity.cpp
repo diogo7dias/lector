@@ -173,7 +173,7 @@ void EpubReaderActivity::onEnter() {
   loadQuoteAnchors();
 
   HalFile f;
-  if (!sortesMode && Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
+  if (!sortesMode && ProgressFile::openForRead("ERS", epub->getCachePath(), f)) {
     uint8_t data[10];
     const int dataSize = f.read(data, sizeof(data));
     // Decoded by the same tested function the position sync uses. The reader keeps a
