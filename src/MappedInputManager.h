@@ -32,7 +32,7 @@ class MappedInputManager {
     if (!touchTapValid) hintStroke.tapOver();
     // After the poll and before anything queries the buttons: the gate has to see this
     // pass's edges to decide whether the release it is waiting for has gone by.
-    releaseGate.tick(isAnyPressed(), gpio.wasAnyReleased());
+    releaseGate.tick(buttonMask(&HalGPIO::isPressed), buttonMask(&HalGPIO::wasReleased));
   }
 
   // Swallow the release of whatever button is held right now. A screen that acted on the
@@ -42,12 +42,14 @@ class MappedInputManager {
   // dropped here too: a pop-back (a confirmation answered by tap) never re-enters the
   // screen it returns to.
   void suppressHeldButtonRelease() const {
-    releaseGate.arm(isAnyPressed());
+    releaseGate.arm(buttonMask(&HalGPIO::isPressed));
     hintStroke.clear();
   }
 
   // True while any physical button is down.
   bool isAnyPressed() const;
+  // One bit per physical button for which `query` holds this pass.
+  uint8_t buttonMask(bool (HalGPIO::*query)(uint8_t) const) const;
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
   bool isPressed(Button button) const;
