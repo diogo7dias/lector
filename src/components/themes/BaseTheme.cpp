@@ -937,55 +937,33 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   // Drawn before the text so the bars-only path can return early. topTextY /
   // bottomTextY fall out of the same stacking, so the text band always sits inside
   // whatever the bars left free — matching the heights UITheme reserved.
-  //
-  // Flush by default. With sbFloatingBar on, one small margin lifts the band off
-  // the outer edge and pulls both ends in by the same amount, so the bar reads as
-  // a floating pill. The margin is paid once per band (the gap is outside the
-  // stack), which is exactly what UITheme reserves.
-  const bool outlined = sb.barOutline != 0;
-  const int barPx = statusBarDrawThicknessPx(sb.activeBarThickness(), outlined);
-  const int floatMargin = sb.floatingBarMarginPx();
+  const int barPx = statusBarThicknessPx(sb.activeBarThickness());
   // Edge bars bleed past both ends of the logical screen. On the X4 Pro the panel sits
   // slightly off-centre behind its bezel, so a bar drawn exactly to x=0 stops short of
   // the glass on one side and its starting edge shows as a stub at low percentages.
   // Overdrawing costs nothing (fillRect clips) and makes an empty bar start off-screen
-  // and a full one run off the other end, which is what reads as edge to edge. A
-  // floating bar wants its gap, so it takes no bleed.
-  const int edgeBleed = floatMargin > 0 ? 0 : kEdgeBarBleedPx;
-  const int barLeft = ml + floatMargin - edgeBleed;
-  const int barMaxW = std::max(1, screenW - ml - mr - floatMargin * 2 + edgeBleed * 2);
+  // and a full one run off the other end, which is what reads as edge to edge.
+  const int barLeft = ml - kEdgeBarBleedPx;
+  const int barMaxW = std::max(1, screenW - ml - mr + kEdgeBarBleedPx * 2);
   auto clampPct = [](int p) { return p < 0 ? 0 : (p > 100 ? 100 : p); };
   // How far the bar nearest an edge is stretched to reach the panel itself. The
   // viewable margins hold content clear of the bezel, which leaves a strip of paper
   // between a "flush" bar and the edge of the screen; filling it is what makes the
-  // bar read as flush. A floating bar wants that gap, so it keeps it.
-  const int stretchTop = floatMargin > 0 ? 0 : mt;
-  const int stretchBottom = floatMargin > 0 ? 0 : mb;
+  // bar read as flush.
+  const int stretchTop = mt;
+  const int stretchBottom = mb;
   auto drawEdgeBar = [&](int y, int pct, int stretchUp = 0, int stretchDown = 0) {
     const int top = y - stretchUp;
     const int height = barPx + stretchUp + stretchDown;
-    if (!outlined) {
-      const int w = barMaxW * clampPct(pct) / 100;
-      if (w > 0) renderer.fillRect(barLeft, top, w, height, true);
-      return;
-    }
-    // Outlined: a frame over the whole track, the fill inset inside it so the empty
-    // remainder stays readable as a track.
-    renderer.drawRect(barLeft, top, barMaxW, height, kLine, true);
-    const int innerW = barMaxW - 2 * kLine;
-    const int innerH = height - 2 * kLine;
-    if (innerW <= 0 || innerH <= 0) return;
-    const int w = innerW * clampPct(pct) / 100;
-    if (w > 0) renderer.fillRect(barLeft + kLine, top + kLine, w, innerH, true);
+    const int w = barMaxW * clampPct(pct) / 100;
+    if (w > 0) renderer.fillRect(barLeft, top, w, height, true);
   };
 
-  const bool anyTopBar = sb.bookBar == CrossPointSettings::SB_EDGE_TOP ||
-                         (sb.chapterBar == CrossPointSettings::SB_EDGE_TOP && data.hasChapters);
   const bool anyBottomBar = sb.bookBar == CrossPointSettings::SB_EDGE_BOTTOM ||
                             (sb.chapterBar == CrossPointSettings::SB_EDGE_BOTTOM && data.hasChapters);
 
   // Top edge: book bar then chapter bar; text band below them.
-  int topStack = mt + (anyTopBar ? floatMargin : 0);
+  int topStack = mt;
   // Only the bar nearest the edge reaches for it; a second bar stacks under the first.
   bool topOutermost = true;
   if (sb.bookBar == CrossPointSettings::SB_EDGE_TOP) {
@@ -1000,7 +978,7 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   const int topTextY = topStack + 2;
 
   // Bottom edge: bars along the bottom; text band above them.
-  int bottomStack = screenH - mb - (anyBottomBar ? floatMargin : 0);
+  int bottomStack = screenH - mb;
   bool bottomOutermost = true;
   if (sb.bookBar == CrossPointSettings::SB_EDGE_BOTTOM) {
     bottomStack -= barPx;

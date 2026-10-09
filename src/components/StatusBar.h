@@ -34,26 +34,18 @@ struct StatusBarData {
   int paragraphPagesLeft = -1;
 };
 
-// Progress bar thickness in pixels for the slim/medium/fat setting (0/1/2). Kept
-// deliberately far apart so the three levels read as "plenty distinct".
+// Progress bar thickness in pixels for the slim/medium/fat setting (0/1/2). Every
+// site that draws OR reserves space for a bar must call this, or the reserved band
+// and the drawn bar disagree.
 inline int statusBarThicknessPx(uint8_t thickness) {
   switch (thickness) {
     case 0:
-      return 2;  // slim
+      return 3;  // slim
     case 2:
-      return 12;  // fat
+      return 9;  // fat
     default:
       return 6;  // medium
   }
-}
-
-// Thickness actually drawn. An outlined bar spends 2px per side on the frame, so
-// a slim bar would have no room left to show a partial fill; it is nudged to 5px.
-// Every site that draws OR reserves space for a bar must call this, or the
-// reserved band and the drawn bar disagree.
-inline int statusBarDrawThicknessPx(const uint8_t thickness, const bool outline) {
-  const int px = statusBarThicknessPx(thickness);
-  return outline && px < 5 ? 5 : px;
 }
 
 // ---------------------------------------------------------------------------

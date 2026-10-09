@@ -33,8 +33,6 @@ enum ItemId {
   ITEM_BOOK_BAR,        // Off / Top / Bottom (cycle)
   ITEM_CHAPTER_BAR,     // Off / Top / Bottom (cycle)
   ITEM_BAR_THICKNESS,   // Slim / Medium / Fat (cycle)
-  ITEM_FLOATING_BAR,    // On / Off (toggle)
-  ITEM_BAR_OUTLINE,     // On / Off (toggle)
   ITEM_ID_COUNT
 };
 
@@ -74,10 +72,6 @@ StrId itemLabel(int id) {
       return StrId::STR_CHAPTER_BAR;
     case ITEM_BAR_THICKNESS:
       return StrId::STR_BAR_THICKNESS;
-    case ITEM_FLOATING_BAR:
-      return StrId::STR_FLOATING_BAR;
-    case ITEM_BAR_OUTLINE:
-      return StrId::STR_BAR_OUTLINE;
     default:
       return StrId::STR_STATUS_BAR;
   }
@@ -227,12 +221,6 @@ void StatusBarSettingsActivity::handleSelection(const int index) {
     case ITEM_BAR_THICKNESS:
       sb.barThickness = cycle(sb.barThickness, CrossPointSettings::STATUS_BAR_BAR_THICKNESS_COUNT);
       break;
-    case ITEM_FLOATING_BAR:
-      sb.floatingBar = cycle(sb.floatingBar, 2);
-      break;
-    case ITEM_BAR_OUTLINE:
-      sb.barOutline = cycle(sb.barOutline, 2);
-      break;
     default:
       return;
   }
@@ -271,10 +259,6 @@ std::string StatusBarSettingsActivity::rowValue(const int id) const {
     case ITEM_BAR_THICKNESS:
       return I18N.get(
           thicknessNames[sb.barThickness < CrossPointSettings::STATUS_BAR_BAR_THICKNESS_COUNT ? sb.barThickness : 0]);
-    case ITEM_FLOATING_BAR:
-      return sb.floatingBar ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-    case ITEM_BAR_OUTLINE:
-      return sb.barOutline ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     default:
       return std::string();
   }
