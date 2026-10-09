@@ -2005,7 +2005,15 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsServer->sendTXT(num, "ERROR:Invalid START format");
             return;
           }
-          wsUploadSize = sizeToken.toInt();
+          // toInt() is atol: it clamps at 2 GiB, so a larger file was cut off there and
+          // still reported done. FAT32 holds up to 4 GiB - 1, so parse unsigned and refuse
+          // anything bigger outright.
+          const unsigned long long parsedSize = strtoull(sizeToken.c_str(), nullptr, 10);
+          if (parsedSize > 0xFFFFFFFFull) {
+            wsServer->sendTXT(num, "ERROR:File too large for the SD card (4 GB max)");
+            return;
+          }
+          wsUploadSize = static_cast<size_t>(parsedSize);
           wsUploadPath = normalizeWebPath(msg.substring(secondColon + 1));
           if (WebDAVHandler::isProtectedPath(wsUploadPath)) {
             wsServer->sendTXT(num, "ERROR:Cannot write to a protected folder");
@@ -2029,8 +2037,8 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             return;
           }
 
-          LOG_DBG("WS", "Starting upload: %s (%d bytes) to %s", wsUploadFileName.c_str(), wsUploadSize,
-                  wsUploadFinalPath.c_str());
+          LOG_DBG("WS", "Starting upload: %s (%u bytes) to %s", wsUploadFileName.c_str(),
+                  static_cast<unsigned>(wsUploadSize), wsUploadFinalPath.c_str());
 
           // One partial per folder. Nothing else ever deletes these, so without a
           // sweep the leftovers of uploads that were never retried would sit on
