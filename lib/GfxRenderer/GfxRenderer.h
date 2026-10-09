@@ -391,6 +391,7 @@ class GfxRenderer {
   // Low level functions
   uint8_t* getFrameBuffer() const;
   size_t getBufferSize() const;
+  bool lastPassCleaned() const { return display.lastPassCleaned(); }
   uint16_t getDisplayWidth() const { return panelWidth; }
   uint16_t getDisplayHeight() const { return panelHeight; }
   uint16_t getDisplayWidthBytes() const { return panelWidthBytes; }

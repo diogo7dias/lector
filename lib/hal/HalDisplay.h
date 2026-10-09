@@ -144,6 +144,11 @@ class HalDisplay {
   // which is what makes those rules pure functions a host test can call.
   const DeviceProfile& profile() const { return deviceProfile; }
 
+  // Whether the last pass ran as a clean (HALF or FULL), asked for or promoted by the
+  // anti-ghost cap. Lets a caller's own clean countdown restart after a promotion
+  // instead of spending a second clean a few turns later.
+  bool lastPassCleaned() const { return lastPassWasClean; }
+
  private:
   // Anti-ghosting cap, ported verbatim from the pre-rebase fork. Every refresh this
   // class performs is routed through it, so no run of FAST passes can grow long
@@ -173,6 +178,7 @@ class HalDisplay {
   // What the last pass actually ran, for the perf log: what was asked for and what the
   // reload cadence allowed are not the same thing.
   bool lastPassWasTurbo = false;
+  bool lastPassWasClean = false;
   FrameInkMetrics inkMetrics;
 
   // In-flight async refresh, so waitRefreshComplete() can close the PerfLog record the
