@@ -556,11 +556,14 @@ void reconcileAtColdBoot(GfxRenderer& renderer) {
     // records), not a seek per record.
     sleep_reconcile::NameHashSet known;
     known.reserve(recordCount);
+    // A read error part-way leaves `known` short, and every name it missed would be
+    // appended a second time. Only a complete pass may drive the append.
+    bool knownComplete = false;
     {
       Reader reader;
       if (reader.open()) {
         size_t seen = 0;
-        reader.forEachName([&](const std::string_view name) {
+        knownComplete = reader.forEachName([&](const std::string_view name) {
           known.add(sleep_reconcile::nameHash(name));
           if (++seen % kWdtInterval == 0) {
             resetTaskWatchdogIfSubscribed();
@@ -577,11 +580,11 @@ void reconcileAtColdBoot(GfxRenderer& renderer) {
     // sweep. Seek record-aligned so a torn tail from an earlier crash is
     // overwritten, not extended.
     uint32_t appends = 0;
-    bool appendFailed = false;
+    bool appendFailed = !knownComplete;  // an incomplete pass 1 goes to the full rebuild
     liveCount = 0;
     fingerprint = 0;
     HalFile idx = Storage.open(kIndexPath, O_RDWR);
-    if (idx && idx.seek((static_cast<size_t>(recordCount) + 1) * kRecordBytes)) {
+    if (!appendFailed && idx && idx.seek((static_cast<size_t>(recordCount) + 1) * kRecordBytes)) {
       walkFolder(dirPathForId(dirId), liveCount, fingerprint, &progress,
                  [&](HalFile&, const char* name, const size_t len) {
                    if (appendFailed) return;
