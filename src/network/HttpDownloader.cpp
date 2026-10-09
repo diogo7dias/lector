@@ -13,6 +13,7 @@
 
 #if defined(FREEINK_NET_WOLFSSL)
 #include <SecureHttpClient.h>
+#include <TrustedRoots.h>
 
 #include "TlsScratchHeap.h"
 
@@ -88,7 +89,7 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
   for (int hop = 0; hop <= MAX_REDIRECTS; ++hop) {
     freeink::SecureHttpClient http;
     http.setTimeout(timeoutMs);
-    http.setInsecure();
+    trusted_roots::apply(http, url.c_str());
     if (sink.contentDisposition) {
       // The default retained set is deliberately small (holding every header of a
       // CDN response has exhausted the heap before), so ask for this one by name
