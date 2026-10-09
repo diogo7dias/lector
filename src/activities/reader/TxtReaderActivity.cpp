@@ -29,7 +29,8 @@ namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
-constexpr uint8_t CACHE_VERSION = 4;          // Increment when cache format changes (4: form-feed page breaks)
+constexpr uint8_t CACHE_VERSION =
+    5;  // Increment when cache format changes (4: form-feed page breaks, 5: UTF-16 refused)
 }  // namespace
 
 void TxtReaderActivity::onEnter() {
@@ -234,10 +235,22 @@ void TxtReaderActivity::initializeReader() {
 
 void TxtReaderActivity::buildPageIndex() {
   pageOffsets.clear();
-  pageOffsets.push_back(0);  // First page starts at offset 0
 
   size_t offset = 0;
   const size_t fileSize = txt->getFileSize();
+
+  // UTF-16 puts a NUL after every ASCII byte, so each line would draw one character.
+  // Refuse it with a message rather than show that.
+  uint8_t bom[2] = {0, 0};
+  if (fileSize >= 2 && txt->readContent(bom, 0, 2) &&
+      ((bom[0] == 0xFF && bom[1] == 0xFE) || (bom[0] == 0xFE && bom[1] == 0xFF))) {
+    LOG_ERR("TRS", "UTF-16 text is not supported");
+    unsupportedEncoding = true;
+    totalPages = 0;
+    return;
+  }
+
+  pageOffsets.push_back(0);  // First page starts at offset 0
 
   LOG_DBG("TRS", "Building page index for %zu bytes...", fileSize);
 
@@ -304,8 +317,9 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
     renderer.ensureSdCardFontReady(cachedFontId, reinterpret_cast<const char*>(buffer), /*styleMask=*/0x01);
   }
 
-  // Parse lines from buffer
-  size_t pos = 0;
+  // Parse lines from buffer. A UTF-8 byte-order mark is not text: skip it, or the
+  // first line opens with a stray glyph.
+  size_t pos = (offset == 0 && chunkSize >= 3 && buffer[0] == 0xEF && buffer[1] == 0xBB && buffer[2] == 0xBF) ? 3 : 0;
 
   while (pos < chunkSize && static_cast<int>(outLines.size()) < linesPerPage) {
     // Find end of line
@@ -437,7 +451,9 @@ void TxtReaderActivity::render(RenderLock&&) {
 
   if (pageOffsets.empty()) {
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, tr(STR_EMPTY_FILE), true, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(UI_10_FONT_ID, 300,
+                              unsupportedEncoding ? tr(STR_UNSUPPORTED_ENCODING) : tr(STR_EMPTY_FILE), true,
+                              EpdFontFamily::REGULAR);
     renderer.displayBuffer();
     return;
   }
