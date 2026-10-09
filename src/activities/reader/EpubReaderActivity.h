@@ -192,6 +192,8 @@ class EpubReaderActivity final : public Activity {
   // Flushed on exit, which is also the sleep path (ActivityManager::goToSleep()
   // replaces this activity and so runs onExit()).
   ReaderProgressSaveDebouncer progressSaveDebouncer;
+  // Set when the debouncer says a save is due; loop() writes it at the next pause.
+  bool progressSaveDue = false;
 
   // Grayscale strip scratch for the blocking (X3) tier of renderContents(). It used to be
   // allocated and freed on every page render; a whole reading session of that churn measurably
@@ -289,7 +291,7 @@ class EpubReaderActivity final : public Activity {
   void rememberCurrentContentOffset();
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Ordinary renders, including changed pagination, wait until the batch is due.
-  bool queueProgressSave(int spineIndex, int currentPage, int pageCount);
+  void queueProgressSave(int spineIndex, int currentPage, int pageCount);
   // Write whatever the debouncer is still holding. Call before the book goes away.
   bool flushQueuedProgress();
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
