@@ -394,8 +394,14 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
     return false;
   }
 
-  // Initialize decode context
-  PngDecodeContext ctx = {};
+  // Initialize decode context. ~2.9 KB of buffers, so on the heap rather than the
+  // calling task's stack.
+  const auto ctxBuf = makeUniqueNoThrow<PngDecodeContext>();
+  if (!ctxBuf) {
+    LOG_ERR("PNG", "OOM: decode context");
+    return false;
+  }
+  PngDecodeContext& ctx = *ctxBuf;
   ctx.file = &pngFile;
   ctx.width = width;
   ctx.height = height;
