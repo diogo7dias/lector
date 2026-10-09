@@ -428,7 +428,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
   }
 
   ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth);
-  if (!ctx.atkinsonDitherer) {
+  if (!ctx.atkinsonDitherer || !ctx.atkinsonDitherer->valid()) {
     LOG_ERR("JPG", "OOM: AtkinsonDitherer");
     return false;
   }
