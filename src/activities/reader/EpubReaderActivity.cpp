@@ -2372,6 +2372,9 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
     returnHistory.finishReturn(false);
     pendingOffsetJump.reset();
     clearDeferredReposition();
+    // The relayout's paragraph anchor too: kept, it would snap the reader back to that
+    // paragraph when the background build finishes, undoing these turns.
+    pendingOrdinalAnchor_.reset();
   }
 
   if (isForwardTurn) {
