@@ -484,6 +484,21 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     if (!allowResume) Storage.remove(destPath.c_str());
     return INCOMPLETE;
   }
+  // A rewound partial (ignored Range) is overwritten from byte 0 but never truncated.
+  // If the whole body was shorter than that partial, the file now ends in the old
+  // partial's tail: an EPUB with its zip directory past the real end, unreadable.
+  if (sink.rangeStart > 0) {
+    size_t onCard = 0;
+    if (HalFile existing; Storage.openFileForRead("HTTP", destPath.c_str(), existing)) {
+      onCard = existing.fileSize();
+      existing.close();
+    }
+    if (onCard != sink.downloaded) {
+      LOG_ERR("HTTP", "file is %zu bytes after a %zu-byte download, starting clean", onCard, sink.downloaded);
+      Storage.remove(destPath.c_str());
+      return INCOMPLETE;
+    }
+  }
   LOG_DBG("HTTP", "Downloaded %zu bytes", sink.downloaded);
   return OK;
 }
