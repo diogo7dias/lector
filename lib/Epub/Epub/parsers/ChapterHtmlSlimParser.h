@@ -120,6 +120,14 @@ class ChapterHtmlSlimParser {
     bool hasSub = false, sub = false;
   };
   std::vector<StyleStackEntry> inlineStyleStack;
+  // ponytail: hard cap on nested inline styles. A hostile chapter of thousands of nested
+  // <span style> grew this vector until the C3 aborted, and every push rescans the whole
+  // stack. Deeper elements keep their parent's style; pops match on depth, so a skipped
+  // push never pops a parent's entry.
+  static constexpr size_t MAX_INLINE_STYLE_DEPTH = 64;
+  void pushInlineStyle(const StyleStackEntry& entry) {
+    if (inlineStyleStack.size() < MAX_INLINE_STYLE_DEPTH) inlineStyleStack.push_back(entry);
+  }
   std::vector<BlockStyle> blockStyleStack;  // accumulated block styles from open ancestor elements
   CssStyle currentCssStyle;
   bool effectiveBold = false;
