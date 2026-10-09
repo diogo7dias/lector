@@ -451,8 +451,9 @@ void TxtReaderActivity::render(RenderLock&&) {
 
   if (pageOffsets.empty()) {
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_10_FONT_ID, 300, tr(unsupportedEncoding ? STR_UNSUPPORTED_ENCODING : STR_EMPTY_FILE),
-                              true, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(UI_10_FONT_ID, 300,
+                              unsupportedEncoding ? tr(STR_UNSUPPORTED_ENCODING) : tr(STR_EMPTY_FILE), true,
+                              EpdFontFamily::REGULAR);
     renderer.displayBuffer();
     return;
   }
