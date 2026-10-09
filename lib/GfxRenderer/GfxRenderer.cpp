@@ -2135,6 +2135,14 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
   // Route CJK-bearing strings to the fallback font (see resolveTextFontId).
   const int resolvedFontId = resolveTextFontId(fontId, text, style);
+
+  // A prewarm scan only records the glyphs, as drawText does: drawing here would load and
+  // decompress them during the scan, the work the scan exists to batch.
+  if (fontCacheManager_ && fontCacheManager_->isScanning()) {
+    fontCacheManager_->recordText(text, resolvedFontId, style);
+    return;
+  }
+
   // Redirected to the SD fallback: batch-load the string's glyphs so the draw
   // loop below doesn't fault them in one SD read at a time (#2725).
   if (resolvedFontId != fontId) {
