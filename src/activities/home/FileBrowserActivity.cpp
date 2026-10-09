@@ -36,7 +36,9 @@
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
-constexpr size_t NAME_BUFFER_SIZE = 500;
+// A FAT long name is up to 255 UTF-16 units, so up to 765 bytes of UTF-8 (CJK names).
+// SdFat returns an empty name when it does not fit, which dropped such a file from the list.
+constexpr size_t NAME_BUFFER_SIZE = 768;
 // Cache sentinel: this entry's badge has not been looked up yet. A real answer is -1
 // (never opened) or 0-100, so it cannot collide with one.
 constexpr int16_t PERCENT_NOT_LOOKED_UP = -2;
