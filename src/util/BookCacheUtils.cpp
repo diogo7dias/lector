@@ -175,9 +175,14 @@ bool collectLiveBookCacheKeys(std::vector<BookCacheKey>& live) {
       }
 
       if (isDir) {
-        if (depth + 1 <= MAX_SCAN_DEPTH) {
-          pending.emplace_back(std::move(childPath), depth + 1);
+        // Skipping a too-deep folder would make its books look like orphans, so the cap
+        // aborts the walk like the other caps.
+        if (depth + 1 > MAX_SCAN_DEPTH) {
+          LOG_ERR("BookCache", "live scan aborted: deeper than %d folders at %s", MAX_SCAN_DEPTH, childPath.c_str());
+          dir.close();
+          return false;
         }
+        pending.emplace_back(std::move(childPath), depth + 1);
         continue;
       }
 
