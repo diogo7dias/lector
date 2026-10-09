@@ -135,6 +135,11 @@ void CrossPointWebServer::begin() {
     return;
   }
 
+  server->addMiddleware([this](WebServer&, Middleware::Callback next) {
+    lastRequestAt = millis();
+    return next();
+  });
+
   // Disable WiFi sleep to improve responsiveness and prevent 'unreachable' errors.
   // This is critical for reliable web server operation on ESP32.
   WiFi.setSleep(false);
@@ -241,6 +246,7 @@ void CrossPointWebServer::begin() {
   // catches hard CPU lockups, matching the rest of the application lifecycle.
 
   running = true;
+  lastRequestAt = millis();
 
   LOG_DBG("WEB", "Web server started on port %d", port);
   // Show the correct IP based on network mode
@@ -416,6 +422,13 @@ void CrossPointWebServer::handleClient() {
   if (fetchQueued) {
     runQueuedFetch();
   }
+}
+
+bool CrossPointWebServer::recentlyActive() const {
+  // A browser tab left open polls status, which counts: someone is looking at it.
+  constexpr unsigned long REQUEST_HOLD_MS = 10000;
+  return running && (wsUploadInProgress || fetch.state == FetchStatus::State::Running ||
+                     millis() - lastRequestAt < REQUEST_HOLD_MS);
 }
 
 CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() const {
@@ -1936,6 +1949,7 @@ void CrossPointWebServer::wsEventCallback(uint8_t num, WStype_t type, uint8_t* p
 //   3. Server sends TEXT "PROGRESS:<received>:<total>" after each chunk
 //   4. Server sends TEXT "DONE" or "ERROR:<message>" when complete
 void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
+  lastRequestAt = millis();
   switch (type) {
     case WStype_DISCONNECTED:
       LOG_DBG("WS", "Client %u disconnected", num);

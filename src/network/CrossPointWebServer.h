@@ -78,6 +78,11 @@ class CrossPointWebServer {
 
   WsUploadStatus getWsUploadStatus() const;
 
+  // True while an upload or fetch runs, or a request came in the last few
+  // seconds. The screens hosting the server hold auto-sleep off only then, so a
+  // server left open with no client sleeps on the normal timeout.
+  bool recentlyActive() const;
+
   // Installs the cancel poll described on `cancelPoll`.
   void setFetchCancelPoll(std::function<bool()> poll) { cancelPoll = std::move(poll); }
 
@@ -147,6 +152,7 @@ class CrossPointWebServer {
   bool fetchRunning = false;
   bool fetchCancelRequested = false;
   unsigned long lastFetchPumpAt = 0;
+  unsigned long lastRequestAt = 0;
   // Polled between chunks of a running fetch. The activity sets it so the Back
   // button still cancels while the transfer holds the loop; without it the only
   // way out of a slow download is the reset pin.
