@@ -150,6 +150,12 @@ class HalPowerManager {
   // the loop's slow chores wait on it: battery, USB, the auto-sleep clock.
   static constexpr unsigned long IDLE_BUTTON_WAIT_MS = 1000;
 
+  // Touch poll period once idle past IDLE_PANEL_POWER_OFF_MS with touch awake (X4 Pro
+  // default). Buttons wake the chip themselves in between, so this only bounds how
+  // late the first tap after a pause lands: 50 ms costs at most that, against 5x
+  // fewer wakes than IDLE_POLL_MS. Lower it if that first tap feels late.
+  static constexpr unsigned long IDLE_TOUCH_POLL_MS = 50;
+
   static constexpr unsigned long BATTERY_POLL_MS = 1500;  // ms
 
   // Timer bound for one BUSY-wait light-sleep slice. The refresh end itself
