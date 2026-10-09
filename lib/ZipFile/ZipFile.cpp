@@ -333,6 +333,12 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
 
   const auto deflatedDataSize = fileStat.compressedSize;
   const auto inflatedDataSize = fileStat.uncompressedSize;
+  // A size of 0xFFFFFFFF from a hostile zip would wrap the +1 to 0: a zero-byte buffer,
+  // then a terminator written 4 GB past it.
+  if (inflatedDataSize == UINT32_MAX) {
+    LOG_ERR("ZIP", "Entry size out of range: %s", filename);
+    return nullptr;
+  }
   const auto dataSize = trailingNullByte ? inflatedDataSize + 1 : inflatedDataSize;
   const auto data = static_cast<uint8_t*>(malloc(dataSize));
   if (data == nullptr) {
