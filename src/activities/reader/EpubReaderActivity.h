@@ -47,6 +47,7 @@ class EpubReaderActivity final : public Activity {
   // whatever page now holds it. This is the same ordinal the in-book numbering draws
   // and Go To Paragraph accepts.
   std::optional<uint16_t> pendingOrdinalAnchor_;
+  void awaitParagraphInBuild(uint16_t ordinal);
   // True when this book's sidecar was written before the 0.8.1 reading defaults. The
   // upgrade is deferred until the chapter has been laid out under the old settings, so
   // the reading position can be carried across as a paragraph rather than a page.
