@@ -444,8 +444,35 @@ bool Epub::ensureCssCache() {
   return true;
 }
 
+void Epub::dropCacheIfSourceChanged() const {
+  // The cache is keyed on the path alone. A book replaced outside the firmware (USB
+  // Drive, a card reader) keeps that path, and the cache would serve the old book's
+  // spine and layout over the new file. Writes made on the device already call
+  // clearBookCache(); this catches the rest by the file size, stamped in the cache.
+  HalFile source;
+  if (!Storage.openFileForRead("EBP", filepath, source)) return;
+  const uint32_t size = static_cast<uint32_t>(source.size());
+  source.close();
+
+  const std::string stampPath = cachePath + "/source.bin";
+  HalFile stamp;
+  if (Storage.openFileForRead("EBP", stampPath, stamp)) {
+    uint32_t stamped = 0;
+    const bool read = stamp.read(&stamped, sizeof(stamped)) == static_cast<int>(sizeof(stamped));
+    stamp.close();
+    if (read && stamped == size) return;
+    LOG_INF("EBP", "Book file changed (%u -> %u bytes), clearing its cache", static_cast<unsigned>(stamped),
+            static_cast<unsigned>(size));
+    clearCache();
+  }
+  // No stamp: a new book, or a cache from before stamps, which is trusted as it was.
+  setupCacheDir();
+  if (Storage.openFileForWrite("EBP", stampPath, stamp)) stamp.write(&size, sizeof(size));
+}
+
 bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   LOG_DBG("EBP", "Loading ePub: %s", filepath.c_str());
+  dropCacheIfSourceChanged();
 
   // Initialize spine/TOC cache
   bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
