@@ -281,6 +281,10 @@ void enterDeepSleep(bool fromTimeout = false) {
   // safety net for anything recorded since, before the card loses power.
   diag::flushIfPending();
 
+  // LEDC stops in deep sleep with the pads in whatever state isolation leaves
+  // them; drive the light to zero first. Not saved: the next boot's
+  // FrontlightBootPolicy still decides from SETTINGS.frontlightOn.
+  Frontlight.setOn(false);
   display.deepSleep();
   Storage.prepareForDeepSleep();
   const unsigned long sleepTPanel = millis();
