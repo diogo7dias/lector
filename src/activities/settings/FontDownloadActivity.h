@@ -45,11 +45,13 @@ class FontDownloadActivity : public UiStatusActivity {
   void onEnter() override;
   void onExit() override;
   bool preventAutoSleep() override {
-    return state_ == LOADING_MANIFEST || state_ == DOWNLOADING ||
-           // The download is synchronous and blocks the main loop until it
-           // completes, so activityManager.preventAutoSleep() is never polled
-           // during downloading.
-           state_ == COMPLETE || state_ == ERROR;
+    if (state_ == LOADING_MANIFEST || state_ == DOWNLOADING) return true;
+    // The download is synchronous and blocks the main loop, so the auto-sleep clock is
+    // stale when it ends. One true on each state change restarts the clock from the
+    // result screen, which then sleeps on the normal timeout instead of never.
+    if (state_ == sleepClockState_) return false;
+    sleepClockState_ = state_;
+    return true;
   }
   bool skipLoopDelay() override { return true; }
 
@@ -134,6 +136,7 @@ class FontDownloadActivity : public UiStatusActivity {
   // rewriting the "(n/total)" and retry lines leaves the old text behind as grey
   // residue. Those moments take a cleanup pass; the progress bar's own ticks do not.
   State lastDisplayedState_ = WIFI_SELECTION;
+  State sleepClockState_ = WIFI_SELECTION;
   int lastDisplayedFamilyIndex_ = -1;
   size_t lastDisplayedFileIndex_ = SIZE_MAX;
   int lastDisplayedRetry_ = -1;
