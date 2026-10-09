@@ -92,6 +92,16 @@ inline Snapshot applyAddition(Snapshot s, const uint32_t entryHash) {
   return s;
 }
 
+// A wallpaper came back under a name whose record is still in the index as a hole
+// (unpaused, or re-uploaded after a delete): the record serves it again, so the hole
+// closes instead of a second record being appended.
+inline Snapshot applyRevival(Snapshot s, const uint32_t entryHash) {
+  s.fingerprint += entryHash;
+  ++s.liveCount;
+  if (s.deadSlots > 0) --s.deadSlots;
+  return s;
+}
+
 // Holes cost one skipped record per pick (budget kMaxDeadSlotSkips) and dead
 // weight in the index file, so they are tolerated up to the same ratio the
 // walking reconcile uses. Past it the index needs compacting.

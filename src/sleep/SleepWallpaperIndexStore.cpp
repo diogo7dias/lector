@@ -390,6 +390,23 @@ void noteCreated(const std::string& path) {
   const uint32_t hash = folderEntryHash(file, name.c_str(), name.size());
   file.close();
 
+  // A name can still have a record only as a hole, so with no holes there is nothing to
+  // scan for. Otherwise appending would give the name two records and the picker would
+  // serve it twice a lap.
+  if (APP_STATE.sleepIndexDeadSlots > 0) {
+    bool recorded = false;
+    Reader reader;
+    if (reader.open()) {
+      reader.forEachName([&](const std::string_view recordName) { recorded = recorded || recordName == name; });
+    }
+    if (recorded) {
+      storeSnapshot(sleep_reconcile::applyRevival(snapshotFromState(), hash));
+      stampFolderMarkers(dirId);
+      APP_STATE.saveToFile();
+      return;
+    }
+  }
+
   // Append at a record-aligned end of file: a torn tail from an earlier crash
   // is overwritten rather than extended.
   const uint32_t recordCount = indexRecordCount();
