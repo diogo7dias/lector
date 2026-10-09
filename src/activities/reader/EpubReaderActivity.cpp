@@ -2360,9 +2360,15 @@ void EpubReaderActivity::drawQuoteUnderlines(const Page& page, const int marginL
 }
 
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {
+  // A chapter that failed to load (or was dropped for a relayout) leaves no section. Bound
+  // long-press actions reach here without the loop's check, so retry the render as it does.
+  if (!section) {
+    requestUpdate();
+    return;
+  }
   // Nothing precedes the first page: skip the state resets and the e-ink refresh
   // that a no-op "back" would otherwise trigger.
-  if (!isForwardTurn && section && currentSpineIndex == 0 && section->currentPage == 0) return;
+  if (!isForwardTurn && currentSpineIndex == 0 && section->currentPage == 0) return;
 
   // A page turn is authoritative: do not let a resume/reflow position captured
   // at session start snap the reader back after the incremental build completes.
