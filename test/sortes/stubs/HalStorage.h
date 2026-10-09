@@ -43,6 +43,7 @@ class HalFile {
   }
   int read(void* out, size_t count) { return file ? std::fread(out, 1, count, file.get()) : -1; }
   size_t write(const void* data, size_t count) { return file ? std::fwrite(data, 1, count, file.get()) : 0; }
+  bool close() { return !file || std::fclose(file.release()) == 0; }
   void flush() {
     if (file) std::fflush(file.get());
   }

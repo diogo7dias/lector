@@ -45,9 +45,13 @@ inline bool writeAtomic(const std::string& cachePath, const uint8_t* data, size_
               (unsigned)len);
       return false;
     }
-    f.flush();
-    // f (the temp file) is closed at scope exit (DESTRUCTOR_CLOSES_FILE=1) before
-    // the rename below -- SdFat must not rename a path that still has an open FsFile.
+    // Closed here, not at scope exit: close() is where the last sector reaches the card,
+    // and a failed one must not let this temp replace the saved progress. SdFat must not
+    // rename a path that still has an open FsFile either.
+    if (!f.close()) {
+      LOG_ERR("PRG", "Failed to close temp progress %s", tmpPath.c_str());
+      return false;
+    }
   }
 
   // SdFat's rename does not overwrite an existing destination, so drop the old
