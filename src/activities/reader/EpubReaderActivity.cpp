@@ -2052,6 +2052,14 @@ void EpubReaderActivity::captureOrdinalAnchor() {
   }
 }
 
+void EpubReaderActivity::awaitParagraphInBuild(const uint16_t ordinal) {
+  // The chapter is not laid out that far yet, so the scan landed on the build watermark.
+  // Hand the paragraph to the relayout anchor, which moves the reader once the build
+  // reaches it (render) or finishes (applyDeferredReposition).
+  pendingOrdinalAnchor_ = ordinal;
+  cachedSpineIndex = currentSpineIndex;
+}
+
 void EpubReaderActivity::jumpToParagraph(const int target) {
   if (!epub || target < 1) {
     requestUpdate();
@@ -2070,9 +2078,11 @@ void EpubReaderActivity::jumpToParagraph(const int target) {
     recordJumpOrigin();
     clearDeferredReposition();
     if (section) {
-      const int page = findPageForOrdinal(*section, localOrdinal);
+      bool found = false;
+      const int page = findPageForOrdinal(*section, localOrdinal, &found);
       section->currentPage = page;
       nextPageNumber = page;
+      if (!found && !section->isBuildComplete()) awaitParagraphInBuild(localOrdinal);
     } else {
       // Section not loaded yet: defer the page scan until it is.
       nextPageNumber = 0;
@@ -2856,7 +2866,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     if (pendingParagraphScan_.has_value() && section->pageCount > 0) {
       // A cross-chapter Go-to-Paragraph landed in this freshly loaded section; scan it
       // for the target local ordinal now that its pages exist.
-      section->currentPage = findPageForOrdinal(*section, *pendingParagraphScan_);
+      bool found = false;
+      section->currentPage = findPageForOrdinal(*section, *pendingParagraphScan_, &found);
+      if (!found && !section->isBuildComplete()) awaitParagraphInBuild(*pendingParagraphScan_);
       pendingParagraphScan_.reset();
     }
   }
