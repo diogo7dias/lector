@@ -541,6 +541,12 @@ void WebDAVHandler::handleMove(WebServer& s) {
     return;
   }
 
+  // A folder moved into its own subtree would detach from the tree it lives in.
+  if (dstPath.startsWith(srcPath + "/")) {
+    s.send(409, "text/plain", "Cannot move a folder into itself");
+    return;
+  }
+
   if (!Storage.exists(srcPath.c_str())) {
     s.send(404, "text/plain", "Source not found");
     return;
