@@ -771,6 +771,13 @@ void EpubReaderActivity::loop() {
     }
   }
 
+  if (progressSaveDue && !inputActive && !RenderLock::peek() && lastRenderCompleteMs != 0 &&
+      millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS) {
+    RenderLock lock;  // saveProgress reads the section the render task replaces
+    progressSaveDue = false;
+    flushQueuedProgress();
+  }
+
   // Lazily resume a partial's extension build once the reader nears its watermark. Far from
   // it the rebuild is all cost (whole-chapter re-layout from page 0) and no benefit this
   // session, so reopening a partial deliberately does NOT start it (see the deferral in
@@ -3079,13 +3086,12 @@ bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
   return true;
 }
 
-bool EpubReaderActivity::queueProgressSave(const int spineIndex, const int currentPage, const int pageCount) {
-  const bool due =
-      progressSaveDebouncer.observe(positionKeyFor(spineIndex, currentPage), static_cast<uint32_t>(pageCount));
-  if (!due) {
-    return true;
+void EpubReaderActivity::queueProgressSave(const int spineIndex, const int currentPage, const int pageCount) {
+  // Only marks the save due; loop() writes it once the reader pauses, so the SD write
+  // never sits inside the page turn that made it due.
+  if (progressSaveDebouncer.observe(positionKeyFor(spineIndex, currentPage), static_cast<uint32_t>(pageCount))) {
+    progressSaveDue = true;
   }
-  return saveProgress(spineIndex, currentPage, pageCount);
 }
 
 uint8_t* EpubReaderActivity::acquireGrayscaleStripScratch(const size_t bytes) {
