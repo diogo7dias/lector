@@ -536,14 +536,7 @@ void FileBrowserActivity::confirmDelete(const std::string& fullPath) {
           // buildScreen() reads files/basepath on the render task; loadFiles() frees and
           // rebuilds those strings, so the swap has to happen under the render lock.
           RenderLock lock(*this);
-          loadFiles();
-          const int rows = totalRowCount();
-          if (rows == 0) {
-            selectorIndex = 0;
-          } else if (selectorIndex >= static_cast<size_t>(rows)) {
-            // Move selection to the new "last" item
-            selectorIndex = static_cast<size_t>(rows - 1);
-          }
+          reloadAfterRemoving(fullPath);
         }
 
         requestUpdate(true);
@@ -967,10 +960,33 @@ void FileBrowserActivity::onMoveDestinationResult(const std::string& fullPath, c
     // entry and the resume pointer, which are all keyed by the old path.
     const std::string target = bookfiling::buildFolderDestination(fullPath, folderArg.c_str());
     bookfiling::moveBookToFolder(fullPath, target);
-    loadFiles();
-    if (selectorIndex >= static_cast<size_t>(totalRowCount())) selectorIndex = 0;
+    reloadAfterRemoving(fullPath);
   }
   requestUpdate();
+}
+
+void FileBrowserActivity::reloadAfterRemoving(const std::string& removedPath) {
+  // The cursor lands on the entry that followed the removed one. Located in the full
+  // listing, not the selected row: loadFiles() ends any search, so a search-row index
+  // would point at an unrelated entry of the unfiltered folder.
+  const std::string name = removedPath.substr(removedPath.find_last_of('/') + 1);
+  size_t removedIndex = files.size();
+  for (size_t i = 0; i < files.size(); i++) {
+    if (files[i] == name || files[i] == name + "/") {
+      removedIndex = i;
+      break;
+    }
+  }
+  const bool found = removedIndex < files.size();
+  loadFiles();
+  const int rows = totalRowCount();
+  if (rows == 0) {
+    selectorIndex = 0;
+  } else if (found) {
+    selectorIndex = std::min(static_cast<size_t>(headerRowCount()) + removedIndex, static_cast<size_t>(rows - 1));
+  } else if (selectorIndex >= static_cast<size_t>(rows)) {
+    selectorIndex = static_cast<size_t>(rows - 1);
+  }
 }
 
 size_t FileBrowserActivity::findEntryRow(const std::string& name) const {

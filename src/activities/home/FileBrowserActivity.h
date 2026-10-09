@@ -135,6 +135,8 @@ class FileBrowserActivity final : public Activity {
   // the length of a load only: the browser reads it once, in applyBrowserOrder().
   std::vector<uint32_t> sortKeys;
   size_t findEntryRow(const std::string& name) const;
+  // Reloads the folder after `removedPath` left it, keeping the cursor in place.
+  void reloadAfterRemoving(const std::string& removedPath);
 
  public:
   explicit FileBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialPath = "/",
