@@ -55,6 +55,9 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
       if (pressQuery && override.injectPress) return true;
       if (heldQuery ? override.suppressHeld : override.suppressEdges) return false;
     }
+    // The release of a press that was already acted on reaches nobody: see
+    // suppressHeldButtonRelease(). Per key, so another key's tap still counts.
+    if (releaseQuery && releaseGate.swallowsRelease(hw)) return false;
     if ((gpio.*fn)(hw)) return true;
     if (!tapCounts) return false;
     return hintStroke.query(static_cast<int>(hw), tapped, releaseQuery, millis());
@@ -432,13 +435,13 @@ bool MappedInputManager::wasPressed(const Button button) const {
 
 bool MappedInputManager::wasReleased(const Button button) const {
   // A release that belongs to a press already acted on reaches nobody: see
-  // suppressHeldButtonRelease(). The back gesture is a touch event with no press behind
-  // it, so it is checked after the gate rather than before.
-  if (releaseGate.swallowsRelease()) return false;
-  if (button == Button::Back && wasBackGesture()) return WakeTiming::noteAcceptedInput(true);
+  // suppressHeldButtonRelease(). The keys are gated one by one in mapButton(); the back
+  // gesture is a touch event that belongs to no key, so it waits while any release is owed.
+  if (button == Button::Back && wasBackGesture()) return !releaseGate.armed() && WakeTiming::noteAcceptedInput(true);
   // See setPowerReleaseOverride(): the reader's double-click detector holds a power release
   // back for one window and then replays it here, so every consumer keeps its existing code.
   if (button == Button::Power) {
+    if (releaseGate.swallowsRelease(HalGPIO::BTN_POWER)) return false;
     if (powerReleaseInjected) return WakeTiming::noteAcceptedInput(true);
     if (powerReleaseSuppressed) return false;
   }
@@ -446,6 +449,14 @@ bool MappedInputManager::wasReleased(const Button button) const {
 }
 
 bool MappedInputManager::isPressed(const Button button) const { return mapButton(button, &HalGPIO::isPressed); }
+
+uint8_t MappedInputManager::buttonMask(bool (HalGPIO::*query)(uint8_t) const) const {
+  uint8_t mask = 0;
+  for (uint8_t i = HalGPIO::BTN_BACK; i <= HalGPIO::BTN_POWER; ++i) {
+    if ((gpio.*query)(i)) mask |= static_cast<uint8_t>(1u << i);
+  }
+  return mask;
+}
 
 bool MappedInputManager::isAnyPressed() const {
   // Every physical button, not the logical ones: a logical button can map to two
