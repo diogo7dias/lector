@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 
 #include "UITheme.h"
+#include "activities/RenderLock.h"
 #include "fontIds.h"
 #include "util/BusyTick.h"
 
@@ -44,6 +45,13 @@ void BusyBanner::onTick() {
 
 void BusyBanner::showNow() {
   if (drawn) return;
+  // The render task may be painting the one framebuffer right now (truly in parallel on
+  // the S3). Draw only when this task already holds the render lock or can take it at
+  // once; a busy render leaves the banner for the next tick. Never block: the caller may
+  // be holding something the render task needs.
+  const bool alreadyHeld = RenderLock::heldByCurrentTask();
+  RenderLock lock(RenderLock::TryOnly{});
+  if (!alreadyHeld && !lock.owns()) return;
   drawn = true;
 
   // A wake's clearing pass may still be running on the panel while the reader loads its
