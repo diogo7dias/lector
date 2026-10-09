@@ -191,8 +191,9 @@ BmpReaderError Bitmap::parseHeaders() {
     const Gray4QuantizationMode quantizationMode =
         adaptiveToneMapping ? Gray4QuantizationMode::Native : Gray4QuantizationMode::DisplayTuned;
     atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(width, quantizationMode);
-    if (!atkinsonDitherer) {
+    if (!atkinsonDitherer || !atkinsonDitherer->valid()) {
       LOG_ERR("BMP", "OOM: AtkinsonDitherer (%u bytes)", static_cast<unsigned>(sizeof(AtkinsonDitherer)));
+      atkinsonDitherer.reset();
       return BmpReaderError::OomRowBuffer;
     }
   }

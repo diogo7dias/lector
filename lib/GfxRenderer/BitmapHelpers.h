@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <new>
 
 // Helper functions
 uint8_t quantizeSimple(int gray);
@@ -42,16 +43,17 @@ class AtkinsonDitherer {
  public:
   explicit AtkinsonDitherer(int width, Gray4QuantizationMode quantizationMode = Gray4QuantizationMode::DisplayTuned)
       : width(width), quantizationMode(quantizationMode) {
-    errorRow0 = new int16_t[width + 4]();  // Current row
-    errorRow1 = new int16_t[width + 4]();  // Next row
-    errorRow2 = new int16_t[width + 4]();  // Row after next
+    // One nothrow block for the three rows: a bare new aborts on OOM (-fno-exceptions)
+    // even when the object itself came from a nothrow allocation. Callers check valid().
+    rows = new (std::nothrow) int16_t[3 * (width + 4)]();
+    errorRow0 = rows;                                     // Current row
+    errorRow1 = rows ? rows + (width + 4) : nullptr;      // Next row
+    errorRow2 = rows ? rows + 2 * (width + 4) : nullptr;  // Row after next
   }
 
-  ~AtkinsonDitherer() {
-    delete[] errorRow0;
-    delete[] errorRow1;
-    delete[] errorRow2;
-  }
+  ~AtkinsonDitherer() { delete[] rows; }
+
+  bool valid() const { return rows != nullptr; }
   // **1. EXPLICITLY DELETE THE COPY CONSTRUCTOR**
   AtkinsonDitherer(const AtkinsonDitherer& other) = delete;
 
@@ -97,6 +99,7 @@ class AtkinsonDitherer {
  private:
   int width;
   Gray4QuantizationMode quantizationMode;
+  int16_t* rows;
   int16_t* errorRow0;
   int16_t* errorRow1;
   int16_t* errorRow2;
