@@ -6,6 +6,7 @@
 #include <set>
 
 #include "activities/reader/EpubReaderUtils.h"
+#include "activities/reader/ProgressFile.h"
 #include "util/BookFilingNames.h"
 #include "util/BookProgressFile.h"
 #include "util/Sortes.h"
@@ -110,6 +111,27 @@ TEST_F(SortesTest, SavedProgressRemainsByteIdenticalAcrossSortesSaves) {
   EXPECT_EQ(bytes(Storage.resolve(epub.getCachePath() + "/progress.bin")), std::string("\1\0\2\0\3\0", 6));
   EXPECT_GT(Storage.mutations, 0);  // the same writer still persists ordinary reading
 }
+TEST_F(SortesTest, ProgressReadRecoversTheTempACutSaveLeftBehind) {
+  const std::string dir = "/.crosspoint/epub_cut";
+  // Power cut between writeAtomic's remove and rename: only the finished temp is left.
+  put(dir + "/progress.bin.tmp", std::string("\x05\x00\x09\x00", 4));
+  HalFile f;
+  ASSERT_TRUE(ProgressFile::openForRead("T", dir, f));
+  uint8_t data[4] = {};
+  EXPECT_EQ(f.read(data, 4), 4);
+  EXPECT_EQ(data[0], 5);
+  EXPECT_EQ(data[2], 9);
+  EXPECT_FALSE(std::filesystem::exists(Storage.resolve(dir + "/progress.bin.tmp")));
+
+  // With both present, progress.bin is the committed save and the temp is not touched.
+  put(dir + "/progress.bin.tmp", std::string("\x01\x00\x01\x00", 4));
+  HalFile g;
+  ASSERT_TRUE(ProgressFile::openForRead("T", dir, g));
+  EXPECT_EQ(g.read(data, 4), 4);
+  EXPECT_EQ(data[0], 5);
+  EXPECT_TRUE(std::filesystem::exists(Storage.resolve(dir + "/progress.bin.tmp")));
+}
+
 TEST(SortesRandom, RejectsBiasedTailAndReturnsRealPageIndices) {
   static int calls;
   calls = 0;
