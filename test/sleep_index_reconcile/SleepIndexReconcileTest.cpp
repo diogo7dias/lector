@@ -272,6 +272,22 @@ TEST(SleepIndexSnapshot, AddThenDeleteRestoresTheFingerprint) {
   EXPECT_EQ(round.liveCount, snap.liveCount);
 }
 
+// Delete then revive (pause, unpause) closes the hole the delete opened, so the
+// snapshot ends where it started instead of with a hole and a second record.
+TEST(SleepIndexSnapshot, DeleteThenReviveRestoresTheSnapshot) {
+  const uint32_t hash = sleep_reconcile::entryHash("a.bmp", 111, 5000);
+  sleep_reconcile::Snapshot snap;
+  snap.fingerprint = hash;
+  snap.liveCount = 3;
+  snap.deadSlots = 1;
+
+  const sleep_reconcile::Snapshot round =
+      sleep_reconcile::applyRevival(sleep_reconcile::applyDeletion(snap, hash), hash);
+  EXPECT_EQ(round.fingerprint, snap.fingerprint);
+  EXPECT_EQ(round.liveCount, snap.liveCount);
+  EXPECT_EQ(round.deadSlots, snap.deadSlots);
+}
+
 // Holes are cheap until they are not: a handful of deletes must NOT force a
 // rebuild (that is the whole point of deferring), a pileup must.
 TEST(SleepIndexSnapshot, DeadSlotsDemandRebuildOnlyPastTheThreshold) {
