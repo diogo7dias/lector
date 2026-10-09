@@ -215,7 +215,7 @@ void CrossPointWebServer::begin() {
                                     "Lock-Token", "Timeout",     "If-None-Match"};
   server->collectHeaders(collectedHeaders, 7);
   // Raw new: WebServer takes ownership and deletes the handler when it stops.
-  auto* davHandler = new (std::nothrow) WebDAVHandler();
+  auto* davHandler = new (std::nothrow) WebDAVHandler(*this);
   if (davHandler) {
     server->addHandler(davHandler);
   } else {

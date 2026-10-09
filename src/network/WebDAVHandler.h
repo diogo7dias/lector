@@ -3,8 +3,12 @@
 #include <HalStorage.h>
 #include <WebServer.h>
 
+class CrossPointWebServer;
+
 class WebDAVHandler : public RequestHandler {
  public:
+  explicit WebDAVHandler(const CrossPointWebServer& owner) : owner(owner) {}
+
   // RequestHandler interface
   bool canHandle(WebServer& server, HTTPMethod method, const String& uri) override;
   bool canRaw(WebServer& server, const String& uri) override;
@@ -16,6 +20,11 @@ class WebDAVHandler : public RequestHandler {
   static bool isProtectedPath(const String& path);
 
  private:
+  const CrossPointWebServer& owner;
+  // True (after a 423 reply) when `path` is a running fetch's file or its folder:
+  // changing it would leave the fetch writing into freed clusters.
+  bool busyWithFetch(WebServer& s, const String& path) const;
+
   // PUT streaming state (raw() is called in chunks)
   HalFile _putFile;
   String _putPath;

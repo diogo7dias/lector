@@ -5,6 +5,7 @@
 #include <Logging.h>
 #include <Memory.h>
 
+#include "CrossPointWebServer.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "util/BookCacheUtils.h"
 #include "util/TaskWatchdog.h"
@@ -53,7 +54,7 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
   (void)uri;
   if (raw.status == RAW_START) {
     _putPath = getRequestPath(server);
-    if (isProtectedPath(_putPath)) {
+    if (isProtectedPath(_putPath) || owner.conflictsWithActiveFetch(_putPath)) {
       _putOk = false;
       return;
     }
@@ -401,6 +402,7 @@ void WebDAVHandler::handlePut(WebServer& s) {
     s.send(403, "text/plain", "Forbidden");
     return;
   }
+  if (busyWithFetch(s, path)) return;
 
   if (!_putOk) {
     String tempPath = path + ".davtmp";
@@ -429,6 +431,7 @@ void WebDAVHandler::handleDelete(WebServer& s) {
     s.send(403, "text/plain", "Forbidden");
     return;
   }
+  if (busyWithFetch(s, path)) return;
 
   if (!Storage.exists(path.c_str())) {
     s.send(404, "text/plain", "Not Found");
@@ -535,6 +538,7 @@ void WebDAVHandler::handleMove(WebServer& s) {
     s.send(400, "text/plain", "Missing Destination header");
     return;
   }
+  if (busyWithFetch(s, srcPath) || busyWithFetch(s, dstPath)) return;
 
   if (srcPath == dstPath) {
     s.send(204);
@@ -612,6 +616,7 @@ void WebDAVHandler::handleCopy(WebServer& s) {
     s.send(400, "text/plain", "Missing Destination header");
     return;
   }
+  if (busyWithFetch(s, srcPath) || busyWithFetch(s, dstPath)) return;
 
   if (srcPath == dstPath) {
     s.send(204);
@@ -783,6 +788,12 @@ void WebDAVHandler::urlEncodePath(const String& path, String& out) const {
       out += c;
     }
   }
+}
+
+bool WebDAVHandler::busyWithFetch(WebServer& s, const String& path) const {
+  if (!owner.conflictsWithActiveFetch(path)) return false;
+  s.send(423, "text/plain", "A download is writing this file");
+  return true;
 }
 
 bool WebDAVHandler::isProtectedPath(const String& path) {
