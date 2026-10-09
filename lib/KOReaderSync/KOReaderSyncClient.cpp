@@ -4,6 +4,7 @@
 #include <Logging.h>
 #include <ObfuscationUtils.h>
 #include <SecureHttpClient.h>
+#include <TrustedRoots.h>
 
 #include <string>
 
@@ -80,7 +81,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
   if (insufficientHeap()) return LOW_MEMORY;
 
   freeink::SecureHttpClient http;
-  http.setInsecure();
+  trusted_roots::apply(http, url.c_str());
   if (!http.begin(url)) {
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
@@ -119,7 +120,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::createUser() {
   serializeJson(doc, body);
 
   freeink::SecureHttpClient http;
-  http.setInsecure();
+  trusted_roots::apply(http, url.c_str());
   if (!http.begin(url)) {
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
@@ -151,7 +152,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
   if (insufficientHeap()) return LOW_MEMORY;
 
   freeink::SecureHttpClient http;
-  http.setInsecure();
+  trusted_roots::apply(http, url.c_str());
   if (!http.begin(url)) {
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
@@ -265,7 +266,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   LOG_DBG("KOSync", "Request body: %s", body.c_str());
 
   freeink::SecureHttpClient http;
-  http.setInsecure();
+  trusted_roots::apply(http, url.c_str());
   if (!http.begin(url)) {
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;

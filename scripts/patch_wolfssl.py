@@ -18,6 +18,11 @@ OVERRIDES = f"""
    heap, and TLS cert verification allocates dozens at once. */
 #undef FP_MAX_BITS
 #define FP_MAX_BITS 8192
+/* Pinned-root verification (lib/TrustedRoots): an X4 has no RTC and the clock can
+   sit at 1970, so certificate dates are not checked. GitHub and Let's Encrypt send
+   cross-signed chains, so a chain may end at a trusted root before its last cert. */
+#define NO_ASN_TIME
+#define WOLFSSL_ALT_CERT_CHAINS
 """
 
 
