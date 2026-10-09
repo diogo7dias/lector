@@ -230,4 +230,18 @@ bool waitForIdle(const uint32_t timeoutMs) {
   return true;
 }
 
+bool abandonUnstarted(const uint32_t timeoutMs) {
+  {
+    std::lock_guard<std::mutex> lock(stateMutex());
+    // Newest first: each failed outcome undoes its job's promise in reconcile(), and a
+    // chain (A->B, later B->A) only unwinds to the name on the card in reverse order.
+    while (!pending().empty()) {
+      finished().push_back(Outcome{pending().back().fromPath, pending().back().toPath, false});
+      pending().pop_back();
+    }
+  }
+  // With the queue empty the worker exits after the rename it is in, if any.
+  return waitForIdle(timeoutMs);
+}
+
 }  // namespace DeferredFavorite
