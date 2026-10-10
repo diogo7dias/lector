@@ -3,7 +3,6 @@
 #include <ArduinoJson.h>
 #include <DeviceProfile.h>
 #include <FsHelpers.h>
-#include <HalGPIO.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -2320,7 +2319,6 @@ void CrossPointWebServer::handleFontUploadData() {
       resetTaskWatchdogIfSubscribed();
       String family = server->arg("family");
       fontUpload.file = HalFile();
-      fontUpload.familyName.clear();
       fontUpload.filePath.clear();
       fontUpload.partialPath.clear();
       fontUpload.valid = false;
@@ -2347,8 +2345,6 @@ void CrossPointWebServer::handleFontUploadData() {
         LOG_ERR("WEB", "Invalid font filename: %s", filename.c_str());
         break;
       }
-
-      fontUpload.familyName = family.c_str();
 
       // Create a temporary FontInstaller for directory creation
       FontInstaller installer(sdFontSystem.registry());

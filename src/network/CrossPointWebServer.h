@@ -179,7 +179,6 @@ class CrossPointWebServer {
   // Font upload state
   struct FontUploadState {
     HalFile file;
-    std::string familyName;
     std::string filePath;
     std::string partialPath;
     bool valid = false;

@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <deque>
 #include <string>
-#include <vector>
 
 #include "EpdFont.h"
 #include "EpdFontData.h"
@@ -132,7 +131,6 @@ class SdCardFont {
   };
   void logStats(const char* label = "SDCF");
   void resetStats();
-  const Stats& getStats() const { return stats_; }
 
   // Content hash of the file header + style TOC entries (computed during load).
   // Used to generate deterministic font IDs for section cache invalidation.

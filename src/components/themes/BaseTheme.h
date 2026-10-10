@@ -20,7 +20,6 @@ struct RecentBook;
 struct ListVisibility {
   int firstVisible;  // index of the first fully-rendered book
   int lastVisible;   // index of the last fully-rendered book (inclusive)
-  int totalCount;
 };
 
 struct Rect {
@@ -30,11 +29,6 @@ struct Rect {
   int height;
 
   explicit Rect(int x = 0, int y = 0, int width = 0, int height = 0) : x(x), y(y), width(width), height(height) {}
-};
-
-struct TabInfo {
-  const char* label;
-  bool selected;
 };
 
 struct ThemeMetrics {
@@ -51,7 +45,6 @@ struct ThemeMetrics {
   int menuRowHeight;
   int menuSpacing;
 
-  int tabSpacing;
   int tabBarHeight;
 
   // FreeInkUI theme tokens. The SDK's UI toolkit takes its shape from these rather
@@ -157,7 +150,6 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .listWithSubtitleRowHeight = 50,
                                  .menuRowHeight = 45,
                                  .menuSpacing = 8,
-                                 .tabSpacing = 10,
                                  .tabBarHeight = 50,
                                  .listRowGap = 0,
                                  .listRowRadius = 0,
@@ -274,9 +266,6 @@ class BaseTheme {
   void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle = nullptr,
                   const char* right = nullptr) const;
   void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel = nullptr) const;
-  void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, bool selected) const;
-  bool tabIndexFromPoint(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, int x, int y,
-                         int& index) const;
   // Home in-progress list: each book's full title + author initials wrapped across as
   // many lines as it needs, with an inline [NN%] black-background badge, the selected
   // row inverted, and "N more above/below" indicators when the list scrolls. Returns
@@ -361,12 +350,4 @@ class BaseTheme {
   static void drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight,
                                  bool ink = true);
   static void drawBatteryLightningBolt(const GfxRenderer& renderer, int boltX, int boltY, bool ink = false);
-
- protected:
-  // Index of the leftmost tab the bar draws. Zero while every label fits; once they do
-  // not, the bar scrolls so the selected tab is the one guaranteed to be readable.
-  // drawTabBar and tabIndexFromPoint both go through this, and apply the same
-  // right-edge cut-off, so what is on screen and what answers to a touch cannot
-  // disagree. A change to either of those owns keeping that true.
-  size_t firstVisibleTab(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs) const;
 };

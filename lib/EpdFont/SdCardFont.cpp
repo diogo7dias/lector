@@ -6,7 +6,6 @@
 #include <Utf8.h>
 
 #include <algorithm>
-#include <climits>
 #include <cstring>
 #include <memory>
 
