@@ -17,6 +17,7 @@
 #include "ReaderUtils.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
+#include "components/StatusBar.h"
 
 class Page;  // for drawParagraphNumbers (full type in the .cpp via <Epub/Page.h>)
 
@@ -33,6 +34,11 @@ class EpubReaderActivity final : public Activity {
   // mutated for reading and a custom book stays decoupled from global changes.
   ReaderPrefs prefs_;
   int sessionPages = 0;  // Status bar only; reset with this reader activity.
+  // Book-bar chapter marks, built once on enter (statusbar::addChapterMark). 128 bytes
+  // as a member rather than a vector: fixed, and read on the stack-tight render task.
+  uint16_t chapterMarks_[statusbar::kMaxChapterMarks] = {};
+  int chapterMarkCount_ = 0;
+  void buildChapterMarks();
   bool prefsCustom_ = false;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
