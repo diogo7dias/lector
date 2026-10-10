@@ -43,6 +43,7 @@ constexpr PresetField FIELDS[] = {
     {"embeddedStyle", &ReaderPrefs::embeddedTextStyle},
     {"embeddedLayoutStyle", &ReaderPrefs::embeddedLayoutStyle},
     {"textAntiAliasing", &ReaderPrefs::textAntiAliasing},
+    {"textContrast", &ReaderPrefs::textContrast},
     {"imageRendering", &ReaderPrefs::imageRendering},
     {"paragraphNumbering", &ReaderPrefs::paragraphNumbering},
     {"paragraphNumberSize", &ReaderPrefs::paragraphNumberSize},

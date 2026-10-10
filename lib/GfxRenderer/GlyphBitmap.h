@@ -90,14 +90,18 @@ __attribute__((always_inline)) inline void paint(uint8_t* buffer, int destinatio
 //   set bits, because there 0 means leave alone and 1 means update: MSB paints
 //   both grays, LSB paints dark gray only. 1bpp glyphs paint ink with state on
 //   every plane.
+// contrast: darkens the 2bpp grays on the gray planes. 1 (High) paints light gray
+//   on LSB too, so it shows as dark gray. 2 (Max) also leaves dark gray off both
+//   gray planes, so it keeps the black the BW pass gave it.
 // Clipping happens before pixel decoding, so fully hidden glyphs cost nothing.
 inline void draw(const uint8_t* bitmap, int width, int height, bool twoBit, Plane plane, bool state,
-                 const Target& target, Clip clip) {
+                 const Target& target, Clip clip, uint8_t contrast = 0) {
   // Bit n of levels set means source value n is painted.
   uint8_t levels = 0x02;
   bool clearBits = state;
   if (twoBit) {
     levels = plane == Plane::BW ? 0x0e : plane == Plane::GrayMSB ? 0x06 : 0x04;
+    if (plane != Plane::BW && contrast > 0) levels = contrast > 1 ? 0x02 : 0x06;
     if (plane != Plane::BW) clearBits = false;
   }
 
