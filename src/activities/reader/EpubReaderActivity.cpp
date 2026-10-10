@@ -275,8 +275,6 @@ void EpubReaderActivity::onExit() {
   const uint32_t readOrder = ++APP_STATE.readOrderCounter;
   APP_STATE.saveToFile();
 
-  // Persist whole-book paragraph counts gathered this session (epub still valid here).
-
   // Update this book's home-list progress badge from the current position. One write
   // per reading session (setProgress skips if unchanged), so no page-turn cost.
   if (epub) {
@@ -2477,7 +2475,6 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   requestUpdate();
 }
 
-// TODO: Failure handling
 void EpubReaderActivity::render(RenderLock&& lock) {
   if (!epub) {
     return;

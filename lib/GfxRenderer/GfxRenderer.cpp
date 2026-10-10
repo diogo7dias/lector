@@ -978,7 +978,7 @@ void GfxRenderer::drawArc(const int maxRadius, const int cx, const int cy, const
       fillRect(left, py, width, 1, state);
     }
   }
-};
+}
 
 // Border is inside the rectangle, rounded corners
 void GfxRenderer::drawRoundedRect(const int x, const int y, const int width, const int height, const int lineWidth,
@@ -1044,33 +1044,6 @@ void GfxRenderer::fillRect(const int x, const int y, const int width, const int 
   } else {
     fillRectImpl<Color::White>(x, y, width, height);
   }
-}
-
-// NOTE: Those are in critical path, and need to be templated to avoid runtime checks for every pixel.
-// Any branching must be done outside the loops to avoid performance degradation.
-template <>
-void GfxRenderer::drawPixelDither<Color::Clear>(const int x, const int y) const {
-  // Do nothing
-}
-
-template <>
-void GfxRenderer::drawPixelDither<Color::Black>(const int x, const int y) const {
-  drawPixel(x, y, true);
-}
-
-template <>
-void GfxRenderer::drawPixelDither<Color::White>(const int x, const int y) const {
-  drawPixel(x, y, false);
-}
-
-template <>
-void GfxRenderer::drawPixelDither<Color::LightGray>(const int x, const int y) const {
-  drawPixel(x, y, x % 2 == 0 && y % 2 == 0);
-}
-
-template <>
-void GfxRenderer::drawPixelDither<Color::DarkGray>(const int x, const int y) const {
-  drawPixel(x, y, (x + y) % 2 == 0);  // TODO: maybe find a better pattern?
 }
 
 void GfxRenderer::fillRectDither(const int x, const int y, const int width, const int height, Color color) const {
@@ -2231,9 +2204,6 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 uint8_t* GfxRenderer::getFrameBuffer() const { return frameBuffer; }
 
 size_t GfxRenderer::getBufferSize() const { return frameBufferSize; }
-
-// unused
-// void GfxRenderer::grayscaleRevert() const { display.grayscaleRevert(); }
 
 void GfxRenderer::displayGrayscaleBase(HalDisplay::RefreshMode fallback) const {
   display.displayGrayscaleBase(fallback, fadingFix);
