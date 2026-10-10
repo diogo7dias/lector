@@ -202,3 +202,61 @@ void utf8TruncateChars(std::string& str, const size_t numChars) {
     utf8RemoveLastChar(str);
   }
 }
+
+TextEncodingGuess utf8GuessEncoding(const unsigned char* data, const size_t len) {
+  bool sawMultiByte = false;
+  size_t i = 0;
+  while (i < len) {
+    const unsigned char b = data[i];
+    if (b < 0x80) {
+      ++i;
+      continue;
+    }
+    size_t need;
+    uint32_t minCp;
+    if ((b & 0xE0) == 0xC0) {
+      need = 1;
+      minCp = 0x80;
+    } else if ((b & 0xF0) == 0xE0) {
+      need = 2;
+      minCp = 0x800;
+    } else if ((b & 0xF8) == 0xF0) {
+      need = 3;
+      minCp = 0x10000;
+    } else {
+      return TextEncodingGuess::Legacy8Bit;  // a stray continuation byte or 0xF8-0xFF
+    }
+    if (i + need >= len) break;  // cut off by the end of the sample
+    uint32_t cp = b & (0x3F >> need);
+    for (size_t k = 1; k <= need; ++k) {
+      const unsigned char c = data[i + k];
+      if ((c & 0xC0) != 0x80) return TextEncodingGuess::Legacy8Bit;
+      cp = (cp << 6) | (c & 0x3F);
+    }
+    if (cp < minCp || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return TextEncodingGuess::Legacy8Bit;
+    sawMultiByte = true;
+    i += need + 1;
+  }
+  return sawMultiByte ? TextEncodingGuess::Utf8 : TextEncodingGuess::Undecided;
+}
+
+std::string cp1252ToUtf8(const char* data, const size_t len) {
+  // 0x80-0x9F; 0 marks the five bytes Windows-1252 leaves unassigned.
+  static constexpr uint16_t kHigh[32] = {0x20AC, 0,      0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021,
+                                         0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0,      0x017D, 0,
+                                         0,      0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014,
+                                         0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0,      0x017E, 0x0178};
+  std::string out;
+  out.reserve(len + len / 16);
+  for (size_t i = 0; i < len; ++i) {
+    const auto b = static_cast<unsigned char>(data[i]);
+    if (b < 0x80) {
+      out.push_back(static_cast<char>(b));
+    } else if (b < 0xA0) {
+      utf8AppendCodepoint(kHigh[b - 0x80] ? kHigh[b - 0x80] : '?', out);
+    } else {
+      utf8AppendCodepoint(b, out);
+    }
+  }
+  return out;
+}
