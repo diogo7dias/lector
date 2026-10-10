@@ -924,6 +924,8 @@ other numbers in Settings use the same band.
   of each dot, keeping the dot the same size. Changing it re-paginates the book.
 - **Kerning** — on by default: the font's pair adjustments, such as tucking a V under an A.
   Off sets every letter at its plain width. Only the reading text changes; menus keep it.
+- **Ligatures** — on by default: joined letter pairs such as fi, fl and ff, where the font has them.
+  Off draws each letter on its own. Only the reading text changes; menus keep it.
   Changing it re-paginates the book.
 - **Guide Dots** — draws a middle dot in a widened gap between words.
 - **Hidden Dots** — only listed while Guide Dots is on: keeps the widened gaps and draws no dot in them.

@@ -55,6 +55,9 @@ class GfxRenderer {
   static constexpr int NO_FONT = -1;
   int kerningOffFontId = NO_FONT;
   bool kerns(const int fontId) const { return fontId != kerningOffFontId; }
+  // Same, for the reader's Ligatures switch.
+  int ligaturesOffFontId = NO_FONT;
+  bool ligates(const int fontId) const { return fontId != ligaturesOffFontId; }
   // Mutable because ensureSdCardFontReady() is const (called from layout code
   // that holds a const GfxRenderer&) but triggers SD card reads and heap
   // allocation inside the SdCardFont objects. Same pragmatic compromise as
@@ -311,6 +314,8 @@ class GfxRenderer {
   /// Turns kerning off for one font (the reader's Kerning switch), or back on for all
   /// with on=true. Measuring and drawing both honour it, so layout and paint agree.
   void setKerning(const int fontId, const bool on) { kerningOffFontId = on ? NO_FONT : fontId; }
+  /// Same for ligatures (fi, fl, ff ...): off draws and measures the letters one by one.
+  void setLigatures(const int fontId, const bool on) { ligaturesOffFontId = on ? NO_FONT : fontId; }
   int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style) const;
   int getFontAscenderSize(int fontId) const;
   /// Distance in pixels from the baseline up to the top of \p codepoint's ink.

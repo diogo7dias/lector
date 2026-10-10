@@ -31,6 +31,7 @@
   X(paragraphSpacing)                \
   X(wordSpacing)                     \
   X(kerning)                         \
+  X(ligatures)                       \
   X(screenMargin)                    \
   X(screenMarginTop)                 \
   X(screenMarginBottom)              \

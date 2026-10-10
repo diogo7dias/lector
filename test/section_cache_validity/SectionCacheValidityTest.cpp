@@ -39,6 +39,7 @@ TEST(SectionCacheValidity, EveryLayoutFieldInvalidatesIndependently) {
   CHECK_FIELD(firstLineIndentMode, 1);
   CHECK_FIELD(firstLineIndentPercent, 20);
   CHECK_FIELD(kerning, false);
+  CHECK_FIELD(ligatures, false);
 #undef CHECK_FIELD
 }
 
