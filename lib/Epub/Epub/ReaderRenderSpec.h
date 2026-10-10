@@ -68,6 +68,9 @@ struct ReaderRenderSpec {
   // Keep the book's CSS margins and padding (with Embedded Layout Style on). Off drops them and keeps the rest of the
   // book's layout; part of the cache key.
   bool bookMargins = true;
+  // Start each h1/h2 heading on a new page (a heading right after another heading stays with it). Moves page breaks, so
+  // part of the cache key.
+  bool headingPageBreak = false;
 
   // Memberwise: padding is ignored and float equality keeps its usual semantics.
   constexpr bool operator==(const ReaderRenderSpec&) const = default;

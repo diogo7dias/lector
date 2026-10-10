@@ -72,6 +72,7 @@ class TextSettingsActivity final : public UiGridActivity {
     EmbeddedLayoutStyle,
     BookMargins,
     LinkUnderline,
+    HeadingPageBreak,
     AntiAliasing,
     TextContrast,  // only listed while Text Anti-Aliasing is on: it darkens the greys
     DebugBorders,

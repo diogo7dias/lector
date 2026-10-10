@@ -261,7 +261,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 72
+#define EXPECTED_VERSION 73
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -432,6 +432,7 @@ struct SectionBin {
     bool ligatures [[comment("Font ligatures for the reading font")]];
     bool linkUnderline [[comment("Link Underline switch")]];
     bool bookMargins [[comment("Book Margins switch")]];
+    bool headingPageBreak [[comment("Break Before Headings switch")]];
 
     u16 pageCount;
     u32 pageLutOffset;

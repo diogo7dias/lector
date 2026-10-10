@@ -435,6 +435,10 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
                                     StrId::STR_CAT_READER)
                     .withTextSettings());
 
+    v.push_back(SettingInfo::Toggle(StrId::STR_HEADING_PAGE_BREAK, &CrossPointSettings::headingPageBreak,
+                                    "headingPageBreak", StrId::STR_CAT_READER)
+                    .withTextSettings());
+
     v.push_back(SettingInfo::Toggle(StrId::STR_FOCUS_READING, &CrossPointSettings::focusReadingEnabled,
                                     "focusReadingEnabled", StrId::STR_CAT_READER)
                     .withTextSettings());
