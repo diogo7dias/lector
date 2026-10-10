@@ -18,7 +18,8 @@ TEST(ReaderReturnHistory, EmptyHasNoReturn) {
   history.finishReturn(true);
   EXPECT_TRUE(history.empty());
   static_assert(sizeof(ReaderReturnHistory::Position) == 8);
-  static_assert(sizeof(ReaderReturnHistory) <= 68);  // 64-byte payload + bookkeeping/alignment
+  // Two 64-byte rings (Return and Forward) plus the in-flight step's origin.
+  static_assert(sizeof(ReaderReturnHistory) <= 152);
 }
 
 TEST(ReaderReturnHistory, SingleJumpKeepsFullWidthContentPosition) {
@@ -117,4 +118,50 @@ TEST(ReaderReturnHistory, NewJumpSupersedesPendingReturnAndReusesPoppedSlots) {
     history.finishReturn(true);
   }
   EXPECT_TRUE(history.empty());
+}
+
+TEST(ReaderReturnHistory, ForwardRedoesALandedReturn) {
+  ReaderReturnHistory history;
+  EXPECT_TRUE(history.forwardEmpty());
+  history.recordJump({2, 100});                  // left page (2,100) for a chapter pick
+  ASSERT_TRUE(history.beginReturn({{9, 900}}));  // now on (9,900), going back
+  history.finishReturn(true);
+  EXPECT_TRUE(history.empty());
+  ASSERT_FALSE(history.forwardEmpty());
+  const auto target = history.beginForward({{2, 100}});
+  ASSERT_TRUE(target);
+  EXPECT_EQ(target->spineIndex, 9);
+  EXPECT_EQ(target->contentOffset, 900u);
+  history.finishReturn(true);
+  EXPECT_TRUE(history.forwardEmpty());
+  expectReturn(history, 2, 100);  // and Return undoes the Forward again
+}
+
+TEST(ReaderReturnHistory, FailedForwardKeepsItsEntry) {
+  ReaderReturnHistory history;
+  history.recordJump({1, 10});
+  history.beginReturn({{5, 50}});
+  history.finishReturn(true);
+  history.beginForward({{1, 10}});
+  history.finishReturn(false);
+  EXPECT_FALSE(history.forwardEmpty());
+  EXPECT_TRUE(history.empty());
+}
+
+TEST(ReaderReturnHistory, NewJumpDropsTheForwardList) {
+  ReaderReturnHistory history;
+  history.recordJump({1, 10});
+  history.beginReturn({{5, 50}});
+  history.finishReturn(true);
+  ASSERT_FALSE(history.forwardEmpty());
+  history.recordJump({1, 10});
+  EXPECT_TRUE(history.forwardEmpty());
+}
+
+TEST(ReaderReturnHistory, ReturnWithoutAnOriginLeavesNothingToRedo) {
+  ReaderReturnHistory history;
+  history.recordJump({1, 10});
+  history.beginReturn();
+  history.finishReturn(true);
+  EXPECT_TRUE(history.forwardEmpty());
 }
