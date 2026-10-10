@@ -215,6 +215,10 @@ books copied from a computer carry a real date, while books the device downloade
 | `.pxc`          | Image viewer for the packed wallpaper format          |
 | `.bin`          | Offered as a firmware file, see [section 13](#13-updating-the-firmware) |
 
+Text files are read as UTF-8. A file that is not valid UTF-8 is read as Windows-1252, the
+usual encoding of older Western text files (Latin-1 accents, curly quotes, the euro sign).
+UTF-16 files are not supported and show a message instead.
+
 From the image viewers you can set the picture as your sleep wallpaper.
 
 Opening a wallpaper from `/sleep` gives you the triage buttons: **Favorite**, **Pause** and

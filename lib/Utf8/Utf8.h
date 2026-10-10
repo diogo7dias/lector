@@ -90,3 +90,16 @@ inline bool utf8IsCombiningMark(const uint32_t cp) {
          || (cp >= 0x20D0 && cp <= 0x20FF)   // Combining Diacritical Marks for Symbols
          || (cp >= 0xFE20 && cp <= 0xFE2F);  // Combining Half Marks
 }
+
+// What a sample of a plain-text file says about its encoding. Undecided means plain
+// ASCII so far, which reads the same either way.
+enum class TextEncodingGuess : uint8_t { Undecided, Utf8, Legacy8Bit };
+
+// Classifies one sample: Legacy8Bit at the first byte sequence UTF-8 cannot hold, Utf8
+// once a valid multi-byte sequence has been seen and none was invalid. A sequence cut
+// off by the end of the sample is not held against it.
+TextEncodingGuess utf8GuessEncoding(const unsigned char* data, size_t len);
+
+// Windows-1252 (a superset of the printable Latin-1 range) to UTF-8. Its five unused
+// bytes in 0x80-0x9F come out as '?'.
+std::string cp1252ToUtf8(const char* data, size_t len);
