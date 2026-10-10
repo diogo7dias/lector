@@ -948,7 +948,9 @@ other numbers in Settings use the same band.
 
 **Look**
 
-- **Paperback Look**, **Paperback Status Bar**.
+- **Paperback Look**, **Paperback Status Bar**. Paperback Look thickens the reading text like
+  heavier paperback ink: **ON** adds one pixel, **BOLDER** a second pixel to vertical strokes.
+  The in-book menu row cycles OFF, ON, BOLDER.
 - **Night mode** — inverts the screen.
 - **Customise Status Bar** — see below.
 
