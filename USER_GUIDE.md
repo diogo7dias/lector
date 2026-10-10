@@ -926,6 +926,8 @@ other numbers in Settings use the same band.
   Off sets every letter at its plain width. Only the reading text changes; menus keep it.
 - **Ligatures** — on by default: joined letter pairs such as fi, fl and ff, where the font has them.
   Off draws each letter on its own. Only the reading text changes; menus keep it.
+- **Link Underline** — on by default: footnote and cross-reference links in the book are underlined.
+  Off leaves them as plain text; they still open from Footnotes.
   Changing it re-paginates the book.
 - **Guide Dots** — draws a middle dot in a widened gap between words.
 - **Hidden Dots** — only listed while Guide Dots is on: keeps the widened gaps and draws no dot in them.

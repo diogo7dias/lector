@@ -1351,11 +1351,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->currentFootnote.number[0] = '\0';
       self->currentFootnoteLinkTextLen = 0;
 
-      // Apply underline style to visually indicate the link.
+      // Underline the link unless the reader turned Link Underline off.
       StyleStackEntry entry;
       entry.depth = self->depth;
-      entry.hasTextDecoration = true;
-      entry.textDecoration = CssTextDecoration::Underline;
+      if (self->linkUnderline) {
+        entry.hasTextDecoration = true;
+        entry.textDecoration = CssTextDecoration::Underline;
+      }
       applyDirectionToEntry(entry, cssStyle);
       applyVerticalAlignToEntry(entry, cssStyle);
       self->pushInlineStyle(entry);

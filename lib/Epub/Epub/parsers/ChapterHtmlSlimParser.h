@@ -96,6 +96,7 @@ class ChapterHtmlSlimParser {
   uint8_t guideDotsMode;  // GuideDotsMode: off / visible dots / hidden dots (gap only)
   uint8_t firstLineIndentMode;
   uint8_t firstLineIndentPercent;
+  bool linkUnderline;  // underline in-book links; off leaves them plain
   const CssParser* cssParser;
   bool embeddedTextStyle;
   bool embeddedLayoutStyle;
@@ -271,6 +272,7 @@ class ChapterHtmlSlimParser {
         guideDotsMode(spec.guideDotsMode),
         firstLineIndentMode(spec.firstLineIndentMode),
         firstLineIndentPercent(spec.firstLineIndentPercent),
+        linkUnderline(spec.linkUnderline),
         completePageFn(completePageFn),
         completePageCtx(completePageCtx),
         popupFn(popupFn),
