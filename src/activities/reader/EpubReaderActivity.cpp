@@ -31,6 +31,7 @@
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
+#include "EpubReaderSearchActivity.h"
 #include "EpubReaderUtils.h"
 #include "IdlePrewarmNeighbour.h"
 #include "KOReaderCredentialStore.h"
@@ -1168,6 +1169,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS:
       openBookmarks();
       break;
+    case EpubReaderMenuActivity::MenuAction::SEARCH:
+      openSearch();
+      break;
     case EpubReaderMenuActivity::MenuAction::TOGGLE_BOOKMARK:
       addBookmark();
       break;
@@ -1665,6 +1669,23 @@ void EpubReaderActivity::returnToLastPage() {
 void EpubReaderActivity::openBookmarks() {
   startActivityForResult(std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, *epub, epub->getPath()),
                          [this](const ActivityResult& result) { onBookmarkJumpResult(result); });
+}
+
+void EpubReaderActivity::openSearch() {
+  startActivityForResult(
+      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, std::string(tr(STR_SEARCH)), lastSearchQuery,
+                                              SearchMatcher::MAX_QUERY, InputType::Text),
+      [this](const ActivityResult& result) {
+        const auto* kr = result.isCancelled ? nullptr : std::get_if<KeyboardResult>(&result.data);
+        if (!kr || kr->text.empty()) {
+          requestUpdate();
+          return;
+        }
+        lastSearchQuery = kr->text;
+        // A picked hit comes back like a bookmark with an exact offset, and lands the same way.
+        startActivityForResult(std::make_unique<EpubReaderSearchActivity>(renderer, mappedInput, *epub, kr->text),
+                               [this](const ActivityResult& found) { onBookmarkJumpResult(found); });
+      });
 }
 
 bool EpubReaderActivity::blockSortesAction() {
@@ -3027,6 +3048,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
     // Collect footnotes from the loaded page
     currentPageFootnotes = std::move(p->footnotes);
+
+    // Refresh at Chapter Start: the first page of a chapter just entered gets the clean pass.
+    if (SETTINGS.chapterStartRefresh && section->currentPage == 0 && currentSpineIndex != lastRenderedSpine) {
+      scheduleGhostCleanup();
+    }
+    lastRenderedSpine = currentSpineIndex;
 
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
