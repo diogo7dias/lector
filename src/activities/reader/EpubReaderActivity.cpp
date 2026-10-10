@@ -171,6 +171,7 @@ void EpubReaderActivity::onEnter() {
   sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontPointSize);
   // Where this book's saved quotes sit, so their underlines can be drawn back in.
   loadQuoteAnchors();
+  buildChapterMarks();
 
   HalFile f;
   if (!sortesMode && ProgressFile::openForRead("ERS", epub->getCachePath(), f)) {
@@ -1283,6 +1284,21 @@ void EpubReaderActivity::openChapterSelection() {
                              section.reset();
                            }
                          });
+}
+
+void EpubReaderActivity::buildChapterMarks() {
+  // Each TOC read is a seek on the SD, so the walk is capped: a TOC this long is a
+  // reference book whose top-level marks would not fit the bar anyway.
+  constexpr int kMaxTocScan = 512;
+  const int tocCount = std::min(epub->getTocItemsCount(), kMaxTocScan);
+  int count = 0;
+  for (int i = 0; i < tocCount && count >= 0; i++) {
+    const auto entry = epub->getTocItem(i);
+    if (entry.level != 1 || entry.spineIndex < 0) continue;
+    count = statusbar::addChapterMark(chapterMarks_, count,
+                                      static_cast<int>(epub->calculateProgress(entry.spineIndex, 0.0f) * 1000.0f));
+  }
+  chapterMarkCount_ = count > 0 ? count : 0;
 }
 
 int EpubReaderActivity::bookPercent() const {
@@ -3452,6 +3468,8 @@ void EpubReaderActivity::renderStatusBar() const {
   d.chapterPages = static_cast<int>(section->estimatedTotalPages());
   d.chapterPercent = reading_percent::pagePercent(section->currentPage, d.chapterPages);
   d.bookPercent = bookPercent();
+  d.chapterMarks = chapterMarks_;
+  d.chapterMarkCount = chapterMarkCount_;
   d.bookTitle = epub->getTitle();
   d.chapterTotal = epub->getTocItemsCount();
 

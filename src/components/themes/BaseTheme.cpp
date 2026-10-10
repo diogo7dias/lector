@@ -958,6 +958,16 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
     const int w = barMaxW * clampPct(pct) / 100;
     if (w > 0) renderer.fillRect(barLeft, top, w, height, true);
   };
+  // A 1 px notch at each chapter start on the book bar: paper inside the filled part,
+  // ink past it, so a mark reads on both. Only the bar's own band, not the stretch to
+  // the bezel, so the notches line up whichever edge the bar sits on.
+  auto drawChapterMarks = [&](int y, int pct) {
+    const int fillRight = barLeft + barMaxW * clampPct(pct) / 100;
+    for (int i = 0; i < data.chapterMarkCount; i++) {
+      const int x = barLeft + barMaxW * data.chapterMarks[i] / 1000;
+      renderer.fillRect(x, y, 1, barPx, x >= fillRight);
+    }
+  };
 
   const bool anyBottomBar = sb.bookBar == CrossPointSettings::SB_EDGE_BOTTOM ||
                             (sb.chapterBar == CrossPointSettings::SB_EDGE_BOTTOM && data.hasChapters);
@@ -968,6 +978,7 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   bool topOutermost = true;
   if (sb.bookBar == CrossPointSettings::SB_EDGE_TOP) {
     drawEdgeBar(topStack, data.bookPercent, stretchTop);
+    drawChapterMarks(topStack, data.bookPercent);
     topStack += barPx;
     topOutermost = false;
   }
@@ -983,6 +994,7 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   if (sb.bookBar == CrossPointSettings::SB_EDGE_BOTTOM) {
     bottomStack -= barPx;
     drawEdgeBar(bottomStack, data.bookPercent, 0, stretchBottom);
+    drawChapterMarks(bottomStack, data.bookPercent);
     bottomOutermost = false;
   }
   if (sb.chapterBar == CrossPointSettings::SB_EDGE_BOTTOM && data.hasChapters) {

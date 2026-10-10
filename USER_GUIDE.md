@@ -948,7 +948,8 @@ Session**, **Pages to Paragraph**. Alongside them:
 - **Pages to Paragraph** shows `>P.0` on most pages: the paragraph you are in ends before the
   next one starts. `>P.2` means it runs two more pages.
 - **Book Bar** and **Chapter Bar** — Off, Top or Bottom, with **Bar Thickness** (Slim 3 px,
-  Medium 6 px, Fat 9 px).
+  Medium 6 px, Fat 9 px). On EPUB books the Book Bar has a small notch where each chapter
+  starts. A book with more than 64 chapters shows a plain bar.
 - **Progress Bar** — Off, Slim, Medium or Fat, for when the status bar itself is off.
 - **XTC Status Bar** — Hide, Bottom or Top, for XTC books.
 - **Clock UTC Offset**, **Clock Format** (24-hour or 12-hour) and **Clock Synced**. The offset
