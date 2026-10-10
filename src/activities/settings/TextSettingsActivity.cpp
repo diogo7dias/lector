@@ -184,6 +184,7 @@ constexpr RowSpec ROW_SPECS[] = {
     {&CrossPointSettings::guideDotsHidden, StrId::STR_NONE_OPT, false},         // HiddenDots
     {&CrossPointSettings::embeddedTextStyle, StrId::STR_NONE_OPT, false},       // EmbeddedTextStyle
     {&CrossPointSettings::embeddedLayoutStyle, StrId::STR_NONE_OPT, false},     // EmbeddedLayoutStyle
+    {&CrossPointSettings::bookMargins, StrId::STR_NONE_OPT, false},             // BookMargins
     {&CrossPointSettings::linkUnderline, StrId::STR_NONE_OPT, false},           // LinkUnderline
     {&CrossPointSettings::textAntiAliasing, StrId::STR_NONE_OPT, false},        // AntiAliasing
     {&CrossPointSettings::textContrast, StrId::STR_NONE_OPT, false},            // TextContrast
@@ -223,7 +224,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   // The section headings the list used to carry are gone: a cell shows its own name, and
   // four bands would have cost two grid rows to say what the pairing already says.
   std::vector<Row> rows;
-  rows.reserve(29);
+  rows.reserve(30);
 
   rows.push_back(Row::Font);
   rows.push_back(Row::Size);
@@ -273,6 +274,8 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
 
   rows.push_back(Row::EmbeddedTextStyle);
   rows.push_back(Row::EmbeddedLayoutStyle);
+  // Book Margins splits the margins out of the Layout bucket, so it only shows beside it.
+  if (look_.embeddedLayoutStyle) rows.push_back(Row::BookMargins);
   rows.push_back(Row::LinkUnderline);
   // Kept at the end so it coming and going only reflows the last pair of cells.
   if (look_.textAntiAliasing) rows.push_back(Row::TextContrast);

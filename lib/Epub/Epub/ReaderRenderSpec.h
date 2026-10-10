@@ -65,6 +65,9 @@ struct ReaderRenderSpec {
   // Underline in-book links (footnotes, cross-references). Off leaves them plain; baked into the cached words, so part
   // of the cache key.
   bool linkUnderline = true;
+  // Keep the book's CSS margins and padding (with Embedded Layout Style on). Off drops them and keeps the rest of the
+  // book's layout; part of the cache key.
+  bool bookMargins = true;
 
   // Memberwise: padding is ignored and float equality keeps its usual semantics.
   constexpr bool operator==(const ReaderRenderSpec&) const = default;

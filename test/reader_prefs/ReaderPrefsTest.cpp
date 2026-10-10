@@ -57,6 +57,7 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.sbChapterTimePos, b.sbChapterTimePos);
   EXPECT_EQ(a.sbBookTimePos, b.sbBookTimePos);
   EXPECT_EQ(a.textContrast, b.textContrast);
+  EXPECT_EQ(a.bookMargins, b.bookMargins);
   EXPECT_EQ(a.screenMargin, b.screenMargin);
   EXPECT_EQ(a.screenMarginTop, b.screenMarginTop);
   EXPECT_EQ(a.screenMarginBottom, b.screenMarginBottom);
@@ -552,7 +553,9 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V15_SIZE + 1, READER_PREFS_V16_SIZE);
   EXPECT_EQ(READER_PREFS_V16_SIZE + 1, READER_PREFS_V17_SIZE);
   EXPECT_EQ(READER_PREFS_V17_SIZE + 2, READER_PREFS_V18_SIZE);
-  EXPECT_EQ(READER_PREFS_V18_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V18_SIZE + 1, READER_PREFS_V19_SIZE);
+  EXPECT_EQ(READER_PREFS_V19_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V19_SIZE, readerPrefsRecordSize(19));
   EXPECT_EQ(READER_PREFS_V18_SIZE, readerPrefsRecordSize(18));
   EXPECT_EQ(READER_PREFS_V17_SIZE, readerPrefsRecordSize(17));
   EXPECT_EQ(READER_PREFS_V16_SIZE, readerPrefsRecordSize(16));
@@ -563,7 +566,7 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(19, ReaderPrefs::VERSION);
+  EXPECT_EQ(20, ReaderPrefs::VERSION);
 }
 
 TEST(ReaderPrefs, AV12RecordKeepsItsFieldsAndLeavesTheNewItemOff) {
@@ -893,4 +896,28 @@ TEST(ReaderPrefs, AV18RecordKeepsNormalContrast) {
   ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
   EXPECT_TRUE(migrated);
   EXPECT_EQ(0, loaded.textContrast);
+}
+
+TEST(ReaderPrefs, AV19RecordLeavesBookMarginsAtItsDefault) {
+  auto old = makeSample();
+  old.bookMargins = 0;  // outside the v19 record, must not be read
+  std::stringstream file;
+  file.put(static_cast<char>(19));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(19));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(1, loaded.bookMargins);
+}
+
+TEST(ReaderPrefs, BookMarginsFlippedRoundTrips) {
+  auto original = makeSample();
+  original.bookMargins = 0;
+  std::stringstream file;
+  writeReaderPrefs(file, original);
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(file, loaded));
+  expectEqual(original, loaded);
+  EXPECT_EQ(false, makeRenderSpec(loaded, 1, 480, 800).bookMargins);
 }

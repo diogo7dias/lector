@@ -274,17 +274,24 @@ struct CssStyle {
   //                 direction, list markers, and display:none (the book declaring a run is
   //                 not content).
   // Layout bucket — where the block sits: alignment, first-line indent, margins, padding
-  //                 and book-set image dimensions.
-  void keepBuckets(const bool text, const bool layout) {
+  //                 and book-set image dimensions. `margins` (Book Margins) drops just the
+  //                 margins and padding out of a kept Layout bucket.
+  void keepBuckets(const bool text, const bool layout, const bool margins = true) {
     if (!text) {
       defined.fontStyle = defined.fontWeight = defined.textDecoration = 0;
       defined.verticalAlign = defined.direction = defined.display = defined.listStyleType = 0;
     }
     if (!layout) {
       defined.textAlign = defined.textIndent = 0;
+      defined.imageWidth = defined.imageHeight = 0;
+    }
+    if (!layout || !margins) {
       defined.marginTop = defined.marginBottom = defined.marginLeft = defined.marginRight = 0;
       defined.paddingTop = defined.paddingBottom = defined.paddingLeft = defined.paddingRight = 0;
-      defined.imageWidth = defined.imageHeight = 0;
+      // The values too: BlockStyle::fromCssStyle reads margins and padding without
+      // asking `defined`, so a dropped flag alone still left the book's insets in place.
+      marginTop = marginBottom = marginLeft = marginRight = CssLength{};
+      paddingTop = paddingBottom = paddingLeft = paddingRight = CssLength{};
     }
   }
 

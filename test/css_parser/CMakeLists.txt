@@ -6,6 +6,7 @@ add_executable(CssParserTest
 target_include_directories(CssParserTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/stubs  # no-op Logging.h + stdio HalStorage.h (real ones need Arduino/SdFat)
   ${REPO_ROOT}/lib/Epub/Epub/css
+  ${REPO_ROOT}/lib/Epub
   ${REPO_ROOT}/lib/Memory
 )
 

@@ -100,6 +100,7 @@ class ChapterHtmlSlimParser {
   const CssParser* cssParser;
   bool embeddedTextStyle;
   bool embeddedLayoutStyle;
+  bool bookMargins;
   uint8_t imageRendering;
   std::string contentBase;
   std::string imageBasePath;
@@ -280,6 +281,7 @@ class ChapterHtmlSlimParser {
         cssParser(cssParser),
         embeddedTextStyle(spec.embeddedTextStyle),
         embeddedLayoutStyle(spec.embeddedLayoutStyle),
+        bookMargins(spec.bookMargins),
         imageRendering(spec.imageRendering),
         contentBase(contentBase),
         imageBasePath(imageBasePath),
