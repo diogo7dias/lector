@@ -1197,6 +1197,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   self->currentPage = makeUniqueNoThrow<Page>();
                   if (!self->currentPage) {
                     LOG_ERR("EHP", "Failed to create new page");
+                    self->depth += 1;  // endElement still decrements for this <img>
                     return;
                   }
                   self->currentPageNextY = 0;
@@ -1205,6 +1206,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   self->currentPage = makeUniqueNoThrow<Page>();
                   if (!self->currentPage) {
                     LOG_ERR("EHP", "Failed to create initial page");
+                    self->depth += 1;  // endElement still decrements for this <img>
                     return;
                   }
                   self->currentPageNextY = 0;
@@ -1233,6 +1235,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     new (std::nothrow) ImageBlock(cachedImagePath, resolvedPath, displayWidth, displayHeight));
                 if (!imageBlock) {
                   LOG_ERR("EHP", "Failed to create ImageBlock");
+                  self->depth += 1;  // endElement still decrements for this <img>
                   return;
                 }
                 int xPos = (self->viewportWidth - displayWidth) / 2;
@@ -1240,6 +1243,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     std::shared_ptr<PageImage>(new (std::nothrow) PageImage(imageBlock, xPos, self->currentPageNextY));
                 if (!pageImage) {
                   LOG_ERR("EHP", "Failed to create PageImage");
+                  self->depth += 1;  // endElement still decrements for this <img>
                   return;
                 }
                 self->currentPage->elements.push_back(pageImage);
