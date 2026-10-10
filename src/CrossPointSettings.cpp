@@ -461,7 +461,8 @@ const char* CrossPointSettings::getEffectiveDeviceName() const {
 }
 
 int CrossPointSettings::getRefreshFrequency() const {
-  switch (refreshFrequency) {
+  const bool night = screenInverted && refreshFrequencyNight != NIGHT_REFRESH_SAME;
+  switch (night ? refreshFrequencyNight - 1 : refreshFrequency) {
     case REFRESH_1:
       return 1;
     case REFRESH_5:

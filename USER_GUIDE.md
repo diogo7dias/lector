@@ -859,6 +859,8 @@ belongs to, so the rows here appear in the same order as on the device.
 - **Refresh Frequency** — a full refresh every 1, 5, 10, 15 or 30 pages, or **Never**. Never
   turns off the page-counted refresh only; the reader still cleans the panel when enough ink
   has moved to need it, so a long session does not end up smeared.
+- **Night Refresh Frequency** — the same choice while night mode is on. **Same as Day** (the
+  default) keeps Refresh Frequency; any other value applies only to inverted pages.
 - **Sunlight Fading Fix** — software fix for white X4 units fading in direct sunlight.
 
 **Home**

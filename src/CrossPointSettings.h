@@ -452,6 +452,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   }
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
+  // The same count while night mode is on: 0 = same as refreshFrequency, otherwise a
+  // REFRESH_FREQUENCY index + 1. Inverted pages ghost differently, so they get their own.
+  static constexpr uint8_t NIGHT_REFRESH_SAME = 0;
+  uint8_t refreshFrequencyNight = NIGHT_REFRESH_SAME;
 
   // Reader screen margins. screenMargin is the horizontal (left/right) margin, shared by
   // both sides. The vertical margins always live in screenMarginTop/Bottom;
