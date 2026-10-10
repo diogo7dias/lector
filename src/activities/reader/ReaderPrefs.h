@@ -64,12 +64,12 @@ inline constexpr uint8_t WORD_SPACING = 100;  // percent of the font's natural s
 struct ReaderPrefs {
   // Bump whenever the field set changes: readReaderPrefs rejects a mismatched
   // version, so an old sidecar is ignored and the book falls back to global.
-  // v5 through v16 are the exceptions: they are read and upgraded instead of dropped.
+  // v5 through v17 are the exceptions: they are read and upgraded instead of dropped.
   // Dropping a sidecar silently discards every per-book setting the user ever chose,
   // which is far worse than carrying an old one forward. Each of those older layouts is
   // a strict prefix of this struct, so a record is read at its own length and every
   // field appended since keeps its constructed default — see readerPrefsRecordSize().
-  static constexpr uint8_t VERSION = 17;  // v17: Link Underline switch
+  static constexpr uint8_t VERSION = 18;  // v18: chapter and book time-left status bar items
 
   // Bring a sidecar written before the current version onto the current reading
   // defaults. Only these values are re-seeded, and only for books that predate them.
@@ -199,6 +199,10 @@ struct ReaderPrefs {
   // Underline in-book links, on unless turned off. APPENDED LAST.
   uint8_t linkUnderline = 1;
 
+  // Time left in the chapter and in the book (status bar anchors, off by default). APPENDED LAST.
+  uint8_t sbChapterTimePos = 0;  // SB_ANCHOR_OFF
+  uint8_t sbBookTimePos = 0;     // SB_ANCHOR_OFF
+
   // Copy the status bar block from `source`.
   //
   // A sidecar written before v11 stops before that block, so every field would
@@ -268,6 +272,7 @@ inline constexpr size_t READER_PREFS_V13_SIZE = offsetof(ReaderPrefs, wordSpacin
 inline constexpr size_t READER_PREFS_V14_SIZE = offsetof(ReaderPrefs, kerning);
 inline constexpr size_t READER_PREFS_V15_SIZE = offsetof(ReaderPrefs, ligatures);
 inline constexpr size_t READER_PREFS_V16_SIZE = offsetof(ReaderPrefs, linkUnderline);
+inline constexpr size_t READER_PREFS_V17_SIZE = offsetof(ReaderPrefs, sbChapterTimePos);
 
 // A record older than v12 carries one "Embedded Style" choice, in what is now the text
 // switch. Someone who turned it off wanted the book's own styling gone, so the layout
@@ -321,6 +326,7 @@ inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
   if (version == 14) return READER_PREFS_V14_SIZE;
   if (version == 15) return READER_PREFS_V15_SIZE;
   if (version == 16) return READER_PREFS_V16_SIZE;
+  if (version == 17) return READER_PREFS_V17_SIZE;
   if (version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
   return 0;
 }
@@ -341,8 +347,9 @@ static_assert(READER_PREFS_V13_SIZE == READER_PREFS_V12_SIZE + 1, "v13 adds sbPa
 static_assert(READER_PREFS_V14_SIZE == READER_PREFS_V13_SIZE + 1, "v14 adds wordSpacing");
 static_assert(READER_PREFS_V15_SIZE == READER_PREFS_V14_SIZE + 1, "v15 adds kerning");
 static_assert(READER_PREFS_V16_SIZE == READER_PREFS_V15_SIZE + 1, "v16 adds ligatures");
-static_assert(sizeof(ReaderPrefs) == READER_PREFS_V16_SIZE + 1,
-              "linkUnderline must be the last byte: every new field goes last, or "
+static_assert(READER_PREFS_V17_SIZE == READER_PREFS_V16_SIZE + 1, "v17 adds linkUnderline");
+static_assert(sizeof(ReaderPrefs) == READER_PREFS_V17_SIZE + 2,
+              "sbBookTimePos must be the last byte: every new field goes last, or "
               "this firmware misreads every sidecar written by the version before it");
 
 // ── The field lists cover the struct ──────────────────────────────────────────
@@ -390,6 +397,8 @@ struct StatusBarBlock {
   uint8_t chapterNumPos = 0;
   uint8_t sessionPagesPos = 0;
   uint8_t paraPagesPos = 0;
+  uint8_t chapterTimePos = 0;
+  uint8_t bookTimePos = 0;
   uint8_t bookBar = 0;
   uint8_t chapterBar = 0;
   uint8_t barThickness = 0;

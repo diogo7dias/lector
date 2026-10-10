@@ -2431,6 +2431,7 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   {
     RenderLock lock(*this);
     if (!sortesMode && isForwardTurn && sessionPages < std::numeric_limits<int>::max()) ++sessionPages;
+    if (!sortesMode) pageTimer.onTurn(millis(), isForwardTurn);
     returnHistory.finishReturn(false);
     pendingOffsetJump.reset();
     clearDeferredReposition();
@@ -3527,6 +3528,15 @@ void EpubReaderActivity::renderStatusBar() const {
     if (const auto left = section->pagesUntilNextParagraph(section->currentPage)) {
       d.paragraphPagesLeft = static_cast<int>(*left);
     }
+  }
+  if (sb.chapterTimePos != CrossPointSettings::SB_ANCHOR_OFF || sb.bookTimePos != CrossPointSettings::SB_ANCHOR_OFF) {
+    const int32_t msPerPage = pageTimer.msPerPage();
+    const int chapterLeft = std::max(0, d.chapterPages - d.chapterPage);
+    d.chapterMinutesLeft = reading_time::minutesFor(chapterLeft, msPerPage);
+    const int bookLeft =
+        reading_time::bookPagesLeft(chapterLeft, d.chapterPages, epub->calculateProgress(currentSpineIndex, 0.0f),
+                                    epub->calculateProgress(currentSpineIndex, 1.0f));
+    d.bookMinutesLeft = reading_time::minutesFor(bookLeft, msPerPage);
   }
 
   // Paperback Look (status bar): thicken only the status-bar glyphs, then reset so

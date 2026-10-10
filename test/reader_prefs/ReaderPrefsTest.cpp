@@ -54,6 +54,8 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.kerning, b.kerning);
   EXPECT_EQ(a.ligatures, b.ligatures);
   EXPECT_EQ(a.linkUnderline, b.linkUnderline);
+  EXPECT_EQ(a.sbChapterTimePos, b.sbChapterTimePos);
+  EXPECT_EQ(a.sbBookTimePos, b.sbBookTimePos);
   EXPECT_EQ(a.screenMargin, b.screenMargin);
   EXPECT_EQ(a.screenMarginTop, b.screenMarginTop);
   EXPECT_EQ(a.screenMarginBottom, b.screenMarginBottom);
@@ -547,7 +549,9 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V13_SIZE + 1, READER_PREFS_V14_SIZE);
   EXPECT_EQ(READER_PREFS_V14_SIZE + 1, READER_PREFS_V15_SIZE);
   EXPECT_EQ(READER_PREFS_V15_SIZE + 1, READER_PREFS_V16_SIZE);
-  EXPECT_EQ(READER_PREFS_V16_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V16_SIZE + 1, READER_PREFS_V17_SIZE);
+  EXPECT_EQ(READER_PREFS_V17_SIZE + 2, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V17_SIZE, readerPrefsRecordSize(17));
   EXPECT_EQ(READER_PREFS_V16_SIZE, readerPrefsRecordSize(16));
   EXPECT_EQ(READER_PREFS_V15_SIZE, readerPrefsRecordSize(15));
   EXPECT_EQ(READER_PREFS_V13_SIZE, readerPrefsRecordSize(13));
@@ -556,7 +560,7 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(17, ReaderPrefs::VERSION);
+  EXPECT_EQ(18, ReaderPrefs::VERSION);
 }
 
 TEST(ReaderPrefs, AV12RecordKeepsItsFieldsAndLeavesTheNewItemOff) {
@@ -858,4 +862,19 @@ TEST(ReaderPrefs, LinkUnderlineFlippedRoundTrips) {
   ASSERT_TRUE(readReaderPrefs(file, loaded));
   expectEqual(original, loaded);
   EXPECT_EQ(false, makeRenderSpec(loaded, 1, 480, 800).linkUnderline);
+}
+
+TEST(ReaderPrefs, AV17RecordLeavesTheTimeLeftItemsOff) {
+  auto old = makeSample();
+  old.sbChapterTimePos = 3;  // outside the v17 record, must not be read
+  old.sbBookTimePos = 4;
+  std::stringstream file;
+  file.put(static_cast<char>(17));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(17));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(0, loaded.sbChapterTimePos);
+  EXPECT_EQ(0, loaded.sbBookTimePos);
 }

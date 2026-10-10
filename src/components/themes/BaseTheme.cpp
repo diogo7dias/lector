@@ -1104,6 +1104,25 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
     set(statusbar::ParaPages, paraBuf);
   }
 
+  // Time left at this sitting's pace ("C:12m", "B:3h05"), in the B:/C: letter scheme.
+  auto formatMinutes = [](char* buf, size_t size, char tag, int minutes) {
+    if (minutes < 60) {
+      snprintf(buf, size, "%c:%dm", tag, minutes);
+    } else {
+      snprintf(buf, size, "%c:%dh%02d", tag, minutes / 60, minutes % 60);
+    }
+  };
+  char chapTimeBuf[16];
+  char bookTimeBuf[16];
+  if (data.chapterMinutesLeft >= 0) {
+    formatMinutes(chapTimeBuf, sizeof(chapTimeBuf), 'C', data.chapterMinutesLeft);
+    set(statusbar::ChapterTime, chapTimeBuf);
+  }
+  if (data.bookMinutesLeft >= 0) {
+    formatMinutes(bookTimeBuf, sizeof(bookTimeBuf), 'B', data.bookMinutesLeft);
+    set(statusbar::BookTime, bookTimeBuf);
+  }
+
   // Place the items in table order (STATUS_BAR_ITEMS), the same list the band heights
   // are reserved from.
   auto push = [&](statusbar::Item item, uint8_t anchor, bool chapterOnly) {

@@ -717,6 +717,12 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
     v.push_back(SettingInfo::Enum(StrId::STR_PARA_PAGES, &CrossPointSettings::sbParaPagesPos, anchorPositions,
                                   "sbParaPagesPos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
+    v.push_back(SettingInfo::Enum(StrId::STR_CHAPTER_TIME_LEFT, &CrossPointSettings::sbChapterTimePos, anchorPositions,
+                                  "sbChapterTimePos", StrId::STR_CUSTOMISE_STATUS_BAR));
+
+    v.push_back(SettingInfo::Enum(StrId::STR_BOOK_TIME_LEFT, &CrossPointSettings::sbBookTimePos, anchorPositions,
+                                  "sbBookTimePos", StrId::STR_CUSTOMISE_STATUS_BAR));
+
     v.push_back(SettingInfo::Enum(StrId::STR_BOOK_BAR, &CrossPointSettings::sbBookBar,
                                   {StrId::STR_STATE_OFF, StrId::STR_TOP, StrId::STR_BOTTOM}, "sbBookBar",
                                   StrId::STR_CUSTOMISE_STATUS_BAR));
