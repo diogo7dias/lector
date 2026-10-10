@@ -431,6 +431,10 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
                                   StrId::STR_CAT_READER)
                     .withTextSettings());
 
+    v.push_back(SettingInfo::Toggle(StrId::STR_BOOK_MARGINS, &CrossPointSettings::bookMargins, "bookMargins",
+                                    StrId::STR_CAT_READER)
+                    .withTextSettings());
+
     v.push_back(SettingInfo::Toggle(StrId::STR_FOCUS_READING, &CrossPointSettings::focusReadingEnabled,
                                     "focusReadingEnabled", StrId::STR_CAT_READER)
                     .withTextSettings());

@@ -64,12 +64,12 @@ inline constexpr uint8_t WORD_SPACING = 100;  // percent of the font's natural s
 struct ReaderPrefs {
   // Bump whenever the field set changes: readReaderPrefs rejects a mismatched
   // version, so an old sidecar is ignored and the book falls back to global.
-  // v5 through v18 are the exceptions: they are read and upgraded instead of dropped.
+  // v5 through v19 are the exceptions: they are read and upgraded instead of dropped.
   // Dropping a sidecar silently discards every per-book setting the user ever chose,
   // which is far worse than carrying an old one forward. Each of those older layouts is
   // a strict prefix of this struct, so a record is read at its own length and every
   // field appended since keeps its constructed default — see readerPrefsRecordSize().
-  static constexpr uint8_t VERSION = 19;  // v19: Text Contrast
+  static constexpr uint8_t VERSION = 20;  // v20: Book Margins switch
 
   // Bring a sidecar written before the current version onto the current reading
   // defaults. Only these values are re-seeded, and only for books that predate them.
@@ -206,6 +206,9 @@ struct ReaderPrefs {
   // How dark anti-aliased greys are drawn: 0 Normal, 1 High, 2 Max. APPENDED LAST.
   uint8_t textContrast = 0;
 
+  // Keep the book's CSS margins and padding, on unless turned off. APPENDED LAST.
+  uint8_t bookMargins = 1;
+
   // Copy the status bar block from `source`.
   //
   // A sidecar written before v11 stops before that block, so every field would
@@ -261,6 +264,7 @@ inline ReaderRenderSpec makeRenderSpec(const ReaderPrefs& p, const int fontId, c
   spec.kerning = p.kerning != 0;
   spec.ligatures = p.ligatures != 0;
   spec.linkUnderline = p.linkUnderline != 0;
+  spec.bookMargins = p.bookMargins != 0;
   return spec;
 }
 
@@ -277,6 +281,7 @@ inline constexpr size_t READER_PREFS_V15_SIZE = offsetof(ReaderPrefs, ligatures)
 inline constexpr size_t READER_PREFS_V16_SIZE = offsetof(ReaderPrefs, linkUnderline);
 inline constexpr size_t READER_PREFS_V17_SIZE = offsetof(ReaderPrefs, sbChapterTimePos);
 inline constexpr size_t READER_PREFS_V18_SIZE = offsetof(ReaderPrefs, textContrast);
+inline constexpr size_t READER_PREFS_V19_SIZE = offsetof(ReaderPrefs, bookMargins);
 
 // A record older than v12 carries one "Embedded Style" choice, in what is now the text
 // switch. Someone who turned it off wanted the book's own styling gone, so the layout
@@ -332,6 +337,7 @@ inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
   if (version == 16) return READER_PREFS_V16_SIZE;
   if (version == 17) return READER_PREFS_V17_SIZE;
   if (version == 18) return READER_PREFS_V18_SIZE;
+  if (version == 19) return READER_PREFS_V19_SIZE;
   if (version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
   return 0;
 }
@@ -354,8 +360,9 @@ static_assert(READER_PREFS_V15_SIZE == READER_PREFS_V14_SIZE + 1, "v15 adds kern
 static_assert(READER_PREFS_V16_SIZE == READER_PREFS_V15_SIZE + 1, "v16 adds ligatures");
 static_assert(READER_PREFS_V17_SIZE == READER_PREFS_V16_SIZE + 1, "v17 adds linkUnderline");
 static_assert(READER_PREFS_V18_SIZE == READER_PREFS_V17_SIZE + 2, "v18 adds the two time-left anchors");
-static_assert(sizeof(ReaderPrefs) == READER_PREFS_V18_SIZE + 1,
-              "textContrast must be the last byte: every new field goes last, or "
+static_assert(READER_PREFS_V19_SIZE == READER_PREFS_V18_SIZE + 1, "v19 adds textContrast");
+static_assert(sizeof(ReaderPrefs) == READER_PREFS_V19_SIZE + 1,
+              "bookMargins must be the last byte: every new field goes last, or "
               "this firmware misreads every sidecar written by the version before it");
 
 // ── The field lists cover the struct ──────────────────────────────────────────

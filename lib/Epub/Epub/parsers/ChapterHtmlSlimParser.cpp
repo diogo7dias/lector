@@ -781,7 +781,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     // Drop whatever the reader is no longer honouring before anything reads it, so the
     // rest of the parser only ever sees properties both switches allow.
-    cssStyle.keepBuckets(self->embeddedTextStyle, self->embeddedLayoutStyle);
+    cssStyle.keepBuckets(self->embeddedTextStyle, self->embeddedLayoutStyle, self->bookMargins);
   }
 
   // HTML hidden attribute overrides CSS display.
@@ -1374,19 +1374,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       cssStyle, emSize, static_cast<CssTextAlign>(self->paragraphAlignment), self->viewportWidth);
 
   if (strcmp(name, "hr") == 0) {
-    auto hrBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Left, self->viewportWidth);
-    if (!self->embeddedLayoutStyle) {
-      hrBlockStyle.marginLeft = 0;
-      hrBlockStyle.marginRight = 0;
-      hrBlockStyle.marginTop = 0;
-      hrBlockStyle.marginBottom = 0;
-      hrBlockStyle.paddingLeft = 0;
-      hrBlockStyle.paddingRight = 0;
-      hrBlockStyle.paddingTop = 0;
-      hrBlockStyle.paddingBottom = 0;
-      hrBlockStyle.textIndentDefined = false;
-      hrBlockStyle.textIndent = 0;
-    }
+    const auto hrBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Left, self->viewportWidth);
     self->emitHorizontalRule(hrBlockStyle);
     self->depth += 1;
     return;
