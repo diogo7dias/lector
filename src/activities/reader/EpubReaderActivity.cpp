@@ -3025,6 +3025,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     // Collect footnotes from the loaded page
     currentPageFootnotes = std::move(p->footnotes);
 
+    // Refresh at Chapter Start: the first page of a chapter just entered gets the clean pass.
+    if (SETTINGS.chapterStartRefresh && section->currentPage == 0 && currentSpineIndex != lastRenderedSpine) {
+      scheduleGhostCleanup();
+    }
+    lastRenderedSpine = currentSpineIndex;
+
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);

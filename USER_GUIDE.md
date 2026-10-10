@@ -865,6 +865,8 @@ belongs to, so the rows here appear in the same order as on the device.
   has moved to need it, so a long session does not end up smeared.
 - **Night Refresh Frequency** — the same choice while night mode is on. **Same as Day** (the
   default) keeps Refresh Frequency; any other value applies only to inverted pages.
+- **Refresh at Chapter Start** — off by default. On adds a full refresh on the first page of
+  each chapter you enter, on top of Refresh Frequency, so every chapter opens clean. EPUB only.
 - **Sunlight Fading Fix** — software fix for white X4 units fading in direct sunlight.
 
 **Home**
