@@ -334,6 +334,8 @@ class EpubReaderActivity final : public Activity {
   int bookPercent() const;
   void openParagraphEntry();
   void openBookmarks();
+  void openSearch();
+  std::string lastSearchQuery;  // offered again the next time Search opens
   // A bookmark picked in the list: jump to it by content offset, else by saved page.
   void onBookmarkJumpResult(const ActivityResult& result);
   // Reading tools

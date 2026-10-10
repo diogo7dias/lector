@@ -325,6 +325,10 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 - **Select Chapter** — the table of contents. Chapters the book lists but cannot actually
   open are left out, so every row here goes somewhere.
 - **Go to %** — jump by percentage.
+- **Search** — type a word or phrase and the book is searched chapter by chapter, straight
+  from the card; hits appear as they are found, each with a line of context and its chapter.
+  Case, curly quotes and line breaks do not matter. Up to 100 hits. Pick one to land on its
+  page (Return takes you back); Back stops the search. The last search is offered again.
 - **Return** — go back to where you were before selecting a chapter, jumping by percentage,
   or opening a bookmark. Keeps the last eight jump origins during this reading session;
   ordinary page turns do not add entries. Shown only while there is somewhere to return to.

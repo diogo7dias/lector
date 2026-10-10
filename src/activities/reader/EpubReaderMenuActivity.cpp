@@ -121,8 +121,9 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
   {
     auto& items = page(Tab::Navigate, StrId::STR_SEC_NAVIGATE);
     std::vector<MenuItem> position{{MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER},
-                                   {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT}};
-    position.reserve(5);  // chapter, percentage, optional Return, Forward and paragraph
+                                   {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT},
+                                   {MenuAction::SEARCH, StrId::STR_SEARCH}};
+    position.reserve(6);  // chapter, percentage, search, optional Return, Forward and paragraph
     if (hasReturn) position.push_back({MenuAction::RETURN, StrId::STR_RETURN});
     if (hasForward) position.push_back({MenuAction::FORWARD, StrId::STR_FORWARD});
     // Jump to a paragraph number — only meaningful when this book shows paragraph
