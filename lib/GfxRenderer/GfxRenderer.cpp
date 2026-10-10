@@ -528,9 +528,15 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
   // Paperback Look: smear the ink +1 right and +1 down for heavier strokes, on
   // the BW (base-frame) pass only so grayscale planes stay untouched. Every BW
   // write uses the same state, so redrawing the glyph shifted is the same union.
-  if (renderMode == GfxRenderer::BW && renderer.getPaperbackLook()) {
+  const uint8_t weight = renderMode == GfxRenderer::BW ? renderer.getPaperbackLook() : 0;
+  if (weight > 0) {
     frame.x++;
     renderer.drawGlyphBitmap(bitmap, width, height, frame, is2Bit, renderMode, pixelState);
+    if (weight > 1) {  // Bolder: a second column of ink
+      frame.x++;
+      renderer.drawGlyphBitmap(bitmap, width, height, frame, is2Bit, renderMode, pixelState);
+      frame.x--;
+    }
     frame.x--;
     frame.y++;
     renderer.drawGlyphBitmap(bitmap, width, height, frame, is2Bit, renderMode, pixelState);
