@@ -123,6 +123,13 @@ TEST(SdCardFontIntervals, SameRecordsInDifferentResidentFormsAreNotShared) {
   EXPECT_TRUE(covers(font, 1, 0xE9));
 }
 
+TEST(SdCardFontIntervals, FullRangeIntervalIsRejected) {
+  // last - first + 1 wraps to 0 here, which would slip past every span check.
+  const auto path = writeFont("wrap.cpfont", {{300, {{0, 0xFFFFFFFF}}}});
+  SdCardFont font;
+  EXPECT_FALSE(font.load(path.c_str()));
+}
+
 TEST(SdCardFontIntervals, ReloadAndDestroyFreeSharedTableOnce) {
   const auto same = writeFont("reload-same.cpfont", {{300, LATIN}, {300, LATIN}});
   const auto diff = writeFont("reload-diff.cpfont", {{300, LATIN}, {20000, HANGUL}});
