@@ -111,6 +111,27 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
   return HalGPIO::DeviceType::X4;
 }
 
+// The display-bus probe costs ~117 ms of reset pulses and BUSY waits (WAKE-BUDGET #3)
+// and its answer cannot change while the chip only deep-sleeps. RTC slow memory
+// survives deep sleep but is reloaded by a power cut, a reset or a reflash, so the
+// cached verdict never outlives the panel it was read from. (NVS was rejected for
+// exactly that: a flash image cloned from another unit carries it along.)
+RTC_DATA_ATTR bool rtcControllerValid = false;
+RTC_DATA_ATTR uint8_t rtcController = 0;
+RTC_DATA_ATTR uint8_t rtcControllerVariant = 0;
+
+void resolveDisplayController() {
+  if (rtcControllerValid && esp_reset_reason() == ESP_RST_DEEPSLEEP) {
+    BoardConfig::ACTIVE.displayController = static_cast<BoardConfig::DisplayController>(rtcController);
+    BoardConfig::ACTIVE.displayControllerVariant = rtcControllerVariant;
+    return;
+  }
+  freeink::applyXteinkDisplayController();
+  rtcController = static_cast<uint8_t>(BoardConfig::ACTIVE.displayController);
+  rtcControllerVariant = BoardConfig::ACTIVE.displayControllerVariant;
+  rtcControllerValid = true;
+}
+
 }  // namespace
 
 void HalGPIO::begin() {
@@ -122,7 +143,7 @@ void HalGPIO::begin() {
   // checks the OEM hw_calib/screenType value first, then falls back to its
   // two-pass display-bus probe. X3's facade keys panel selection off the sibling
   // board profile, so preserve a detected UC8279 through setDisplayX3().
-  freeink::applyXteinkDisplayController();
+  resolveDisplayController();
   if (deviceIsX3() && BoardConfig::ACTIVE.displayController == BoardConfig::DisplayController::UC8279) {
     BoardConfig::selectDevice(BoardConfig::Board::XteinkX3Uc8279);
   }
@@ -141,7 +162,7 @@ void HalGPIO::begin() {
   // bus before FreeInkDisplay claims the pins. Without this the build always
   // drives SSD1677 commands, so an UltraChip unit paints nothing and every BUSY
   // wait returns in 0 ms because BUSY is never asserted.
-  freeink::applyXteinkDisplayController();
+  resolveDisplayController();
   LOG_INF("HW", "X4 Pro display controller=%u busy pin=%d level=%d",
           static_cast<unsigned>(BoardConfig::ACTIVE.displayController), BoardConfig::ACTIVE.display.busy,
           BoardConfig::ACTIVE.display.busy >= 0 ? digitalRead(BoardConfig::ACTIVE.display.busy) : -1);

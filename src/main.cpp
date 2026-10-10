@@ -1333,6 +1333,12 @@ void loop() {
       // Touch is asleep, so the buttons are the only input left and they wake
       // the chip themselves: one wake a second for the slow chores instead of
       // a hundred.
+    } else if (idleMs >= HalPowerManager::IDLE_PANEL_POWER_OFF_MS && !powerManager.isPerfLockHeld() &&
+               powerManager.waitForButtons(HalPowerManager::IDLE_TOUCH_POLL_MS)) {
+      // Touch is awake but the device is sitting: buttons still wake the chip at
+      // once, and the touch controller holds each frame until it is read, so
+      // polling it less often delays a tap instead of dropping it. No-op on the
+      // ADC-ladder boards, where waitForButtons() has no pins to arm.
     } else {
       idlePoll(HalPowerManager::IDLE_POLL_MS);
     }
