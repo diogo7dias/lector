@@ -193,8 +193,9 @@ void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bo
   const int y = batteryIconTop(renderer, rect, fontId);
 
   if (showPercentage) {
-    const auto percentageText = std::to_string(percentage) + "%";
-    renderer.drawText(fontId, rect.x + batteryPercentSpacing + rect.width, rect.y, percentageText.c_str());
+    char percentageText[8];
+    snprintf(percentageText, sizeof(percentageText), "%u%%", percentage);
+    renderer.drawText(fontId, rect.x + batteryPercentSpacing + rect.width, rect.y, percentageText);
   }
 
   const Rect iconRect{rect.x, y, rect.width, rect.height};
@@ -210,9 +211,10 @@ void BaseTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const b
   const int y = batteryIconTop(renderer, rect, batteryPercentFontId);
 
   if (showPercentage) {
-    const auto percentageText = std::to_string(percentage) + "%";
-    const int textWidth = renderer.getTextWidth(batteryPercentFontId, percentageText.c_str());
-    renderer.drawText(batteryPercentFontId, rect.x - textWidth - batteryPercentSpacing, rect.y, percentageText.c_str(),
+    char percentageText[8];
+    snprintf(percentageText, sizeof(percentageText), "%u%%", percentage);
+    const int textWidth = renderer.getTextWidth(batteryPercentFontId, percentageText);
+    renderer.drawText(batteryPercentFontId, rect.x - textWidth - batteryPercentSpacing, rect.y, percentageText,
                       /*black=*/!onBlack);
   }
 
