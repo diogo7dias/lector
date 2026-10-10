@@ -52,6 +52,7 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.paragraphSpacing, b.paragraphSpacing);
   EXPECT_EQ(a.wordSpacing, b.wordSpacing);
   EXPECT_EQ(a.kerning, b.kerning);
+  EXPECT_EQ(a.ligatures, b.ligatures);
   EXPECT_EQ(a.screenMargin, b.screenMargin);
   EXPECT_EQ(a.screenMarginTop, b.screenMarginTop);
   EXPECT_EQ(a.screenMarginBottom, b.screenMarginBottom);
@@ -543,14 +544,16 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V11_SIZE + 1, READER_PREFS_V12_SIZE);
   EXPECT_EQ(READER_PREFS_V12_SIZE + 1, READER_PREFS_V13_SIZE);
   EXPECT_EQ(READER_PREFS_V13_SIZE + 1, READER_PREFS_V14_SIZE);
-  EXPECT_EQ(READER_PREFS_V14_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V14_SIZE + 1, READER_PREFS_V15_SIZE);
+  EXPECT_EQ(READER_PREFS_V15_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V15_SIZE, readerPrefsRecordSize(15));
   EXPECT_EQ(READER_PREFS_V13_SIZE, readerPrefsRecordSize(13));
   EXPECT_EQ(READER_PREFS_V14_SIZE, readerPrefsRecordSize(14));
   EXPECT_LT(READER_PREFS_V10_SIZE, READER_PREFS_V11_SIZE);
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(15, ReaderPrefs::VERSION);
+  EXPECT_EQ(16, ReaderPrefs::VERSION);
 }
 
 TEST(ReaderPrefs, AV12RecordKeepsItsFieldsAndLeavesTheNewItemOff) {
@@ -802,4 +805,30 @@ TEST(ReaderPrefs, KerningOffRoundTripsAndReachesTheSpec) {
   expectEqual(original, loaded);
   EXPECT_FALSE(makeRenderSpec(loaded, 1, 480, 800).kerning);
   EXPECT_TRUE(makeRenderSpec(ReaderPrefs{}, 1, 480, 800).kerning);
+}
+
+TEST(ReaderPrefs, AV15RecordKeepsKerningAndLeavesLigaturesOn) {
+  auto old = makeSample();
+  old.kerning = 0;
+  old.ligatures = 0;  // outside the v15 record, must not be read
+  std::stringstream file;
+  file.put(static_cast<char>(15));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(15));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(0, loaded.kerning);
+  EXPECT_EQ(1, loaded.ligatures);
+}
+
+TEST(ReaderPrefs, LigaturesOffRoundTripsAndReachesTheSpec) {
+  auto original = makeSample();
+  original.ligatures = 0;
+  std::stringstream file;
+  writeReaderPrefs(file, original);
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(file, loaded));
+  expectEqual(original, loaded);
+  EXPECT_FALSE(makeRenderSpec(loaded, 1, 480, 800).ligatures);
 }

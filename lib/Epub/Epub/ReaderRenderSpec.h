@@ -60,6 +60,8 @@ struct ReaderRenderSpec {
   // Pair kerning for the reading font. Off widens or narrows almost every word, so it is
   // part of the cache key; the renderer applies it (GfxRenderer::setKerning).
   bool kerning = true;
+  // Font ligatures (fi, fl, ff ...) for the reading font, likewise part of the cache key.
+  bool ligatures = true;
 
   // Memberwise: padding is ignored and float equality keeps its usual semantics.
   constexpr bool operator==(const ReaderRenderSpec&) const = default;

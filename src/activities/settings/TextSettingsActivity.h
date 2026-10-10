@@ -55,6 +55,7 @@ class TextSettingsActivity final : public UiGridActivity {
     ExtraSpacing,
     WordSpacing,
     Kerning,
+    Ligatures,
     Alignment,
     IndentMode,
     IndentPercent,     // only in Custom % mode

@@ -64,12 +64,12 @@ inline constexpr uint8_t WORD_SPACING = 100;  // percent of the font's natural s
 struct ReaderPrefs {
   // Bump whenever the field set changes: readReaderPrefs rejects a mismatched
   // version, so an old sidecar is ignored and the book falls back to global.
-  // v5 through v14 are the exceptions: they are read and upgraded instead of dropped.
+  // v5 through v15 are the exceptions: they are read and upgraded instead of dropped.
   // Dropping a sidecar silently discards every per-book setting the user ever chose,
   // which is far worse than carrying an old one forward. Each of those older layouts is
   // a strict prefix of this struct, so a record is read at its own length and every
   // field appended since keeps its constructed default — see readerPrefsRecordSize().
-  static constexpr uint8_t VERSION = 15;  // v15: kerning switch
+  static constexpr uint8_t VERSION = 16;  // v16: ligatures switch
 
   // Bring a sidecar written before the current version onto the current reading
   // defaults. Only these values are re-seeded, and only for books that predate them.
@@ -193,6 +193,9 @@ struct ReaderPrefs {
   // field since paragraphNumberSize; a v14 record stops before it and keeps it on.
   uint8_t kerning = 1;
 
+  // Font ligatures for the reading font, on unless turned off. APPENDED LAST.
+  uint8_t ligatures = 1;
+
   // Copy the status bar block from `source`.
   //
   // A sidecar written before v11 stops before that block, so every field would
@@ -246,6 +249,7 @@ inline ReaderRenderSpec makeRenderSpec(const ReaderPrefs& p, const int fontId, c
   spec.firstLineIndentMode = p.firstLineIndentMode;
   spec.firstLineIndentPercent = p.firstLineIndentPercent;
   spec.kerning = p.kerning != 0;
+  spec.ligatures = p.ligatures != 0;
   return spec;
 }
 
@@ -258,6 +262,7 @@ inline constexpr size_t READER_PREFS_V11_SIZE = offsetof(ReaderPrefs, embeddedLa
 inline constexpr size_t READER_PREFS_V12_SIZE = offsetof(ReaderPrefs, sbParaPagesPos);
 inline constexpr size_t READER_PREFS_V13_SIZE = offsetof(ReaderPrefs, wordSpacing);
 inline constexpr size_t READER_PREFS_V14_SIZE = offsetof(ReaderPrefs, kerning);
+inline constexpr size_t READER_PREFS_V15_SIZE = offsetof(ReaderPrefs, ligatures);
 
 // A record older than v12 carries one "Embedded Style" choice, in what is now the text
 // switch. Someone who turned it off wanted the book's own styling gone, so the layout
@@ -309,6 +314,7 @@ inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
   if (version == 12) return READER_PREFS_V12_SIZE;
   if (version == 13) return READER_PREFS_V13_SIZE;
   if (version == 14) return READER_PREFS_V14_SIZE;
+  if (version == 15) return READER_PREFS_V15_SIZE;
   if (version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
   return 0;
 }
@@ -327,8 +333,9 @@ static_assert(READER_PREFS_V12_SIZE == READER_PREFS_V11_SIZE + 1,
               "embeddedLayoutStyle must sit between the v11 and v12 record ends, with no padding");
 static_assert(READER_PREFS_V13_SIZE == READER_PREFS_V12_SIZE + 1, "v13 adds sbParaPagesPos");
 static_assert(READER_PREFS_V14_SIZE == READER_PREFS_V13_SIZE + 1, "v14 adds wordSpacing");
-static_assert(sizeof(ReaderPrefs) == READER_PREFS_V14_SIZE + 1,
-              "kerning must be the last byte: every new field goes last, or "
+static_assert(READER_PREFS_V15_SIZE == READER_PREFS_V14_SIZE + 1, "v15 adds kerning");
+static_assert(sizeof(ReaderPrefs) == READER_PREFS_V15_SIZE + 1,
+              "ligatures must be the last byte: every new field goes last, or "
               "this firmware misreads every sidecar written by the version before it");
 
 // ── The field lists cover the struct ──────────────────────────────────────────

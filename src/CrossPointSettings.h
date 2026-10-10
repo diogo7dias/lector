@@ -400,6 +400,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t MAX_WORD_SPACING = reader_defaults::MAX_WORD_SPACING;
   uint8_t wordSpacing = reader_defaults::WORD_SPACING;  // percent of natural space advance; no limit on justification
   uint8_t kerning = 1;                                  // pair kerning for the reading font (0 = off)
+  uint8_t ligatures = 1;                                // font ligatures for the reading font (0 = off)
   // Off by default, as in the old fork. The grayscale text pass is imperceptible on
   // this panel but costs a fading grey refresh on every page turn, which is very
   // perceptible. The toggle is kept so it can still be tried; only the default moved.

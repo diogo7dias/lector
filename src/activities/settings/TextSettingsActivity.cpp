@@ -143,8 +143,10 @@ int TextSettingsActivity::reservedHeight() const {
 void TextSettingsActivity::drawReserved(const Rect& rect) {
   // The preview is a real page rendered by the reader engine, so it stays a raw
   // painter; the base only decides where it goes. It measures and draws with this look's
-  // Kerning switch; the reader sets its own again on its next page.
-  renderer.setKerning(SETTINGS.getReaderFontId(look_), look_.kerning != 0);
+  // Kerning and Ligatures switches; the reader sets its own again on its next page.
+  const int previewFontId = SETTINGS.getReaderFontId(look_);
+  renderer.setKerning(previewFontId, look_.kerning != 0);
+  renderer.setLigatures(previewFontId, look_.ligatures != 0);
   textsettings::renderPreview(renderer, previewLayout_, look_, rect.y, rect.height - metrics_.verticalSpacing);
 }
 
@@ -167,6 +169,7 @@ constexpr RowSpec ROW_SPECS[] = {
     {&CrossPointSettings::extraParagraphSpacing, StrId::STR_NONE_OPT, false},   // ExtraSpacing
     {&CrossPointSettings::wordSpacing, StrId::STR_NONE_OPT, true},              // WordSpacing
     {&CrossPointSettings::kerning, StrId::STR_NONE_OPT, false},                 // Kerning
+    {&CrossPointSettings::ligatures, StrId::STR_NONE_OPT, false},               // Ligatures
     {&CrossPointSettings::paragraphAlignment, StrId::STR_ALIGNMENT, false},     // Alignment
     {&CrossPointSettings::firstLineIndentMode, StrId::STR_NONE_OPT, false},     // IndentMode
     {&CrossPointSettings::firstLineIndentPercent, StrId::STR_NONE_OPT, false},  // IndentPercent
@@ -218,7 +221,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   // The section headings the list used to carry are gone: a cell shows its own name, and
   // four bands would have cost two grid rows to say what the pairing already says.
   std::vector<Row> rows;
-  rows.reserve(26);
+  rows.reserve(27);
 
   rows.push_back(Row::Font);
   rows.push_back(Row::Size);
@@ -231,6 +234,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   rows.push_back(Row::ExtraSpacing);
   rows.push_back(Row::WordSpacing);
   rows.push_back(Row::Kerning);
+  rows.push_back(Row::Ligatures);
 
   rows.push_back(Row::Alignment);
   rows.push_back(Row::IndentMode);
