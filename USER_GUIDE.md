@@ -947,13 +947,17 @@ other numbers in Settings use the same band.
 **Customise Status Bar** places each element in one of six slots (top left, top centre, top
 right, bottom left, bottom centre, bottom right) or turns it off: **Battery**, **Clock**,
 **Title**, **Page in Chapter**, **Book %**, **Chapter %**, **Chapter Number**, **Pages This
-Session**, **Pages to Paragraph**. Alongside them:
+Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Alongside them:
 
 - **Title Source** — Book or Chapter, and **Truncate Title**.
 - **Page Format** — `N/M` or `N left`.
 - **Pages This Session** counts forward page turns in the open EPUB and resets when the book closes.
 - **Pages to Paragraph** shows `>P.0` on most pages: the paragraph you are in ends before the
   next one starts. `>P.2` means it runs two more pages.
+- **Chapter time left** (`C:12m`) and **Book time left** (`B:3h05`) estimate from how long you
+  spend per page this sitting. They appear after three timed pages; turns under 2 seconds or
+  over 10 minutes are not counted. The book estimate scales the rest of the book by the
+  current chapter, so it settles as you read. EPUB only.
 - **Book Bar** and **Chapter Bar** — Off, Top or Bottom, with **Bar Thickness** (Slim 3 px,
   Medium 6 px, Fat 9 px).
 - **Progress Bar** — Off, Slim, Medium or Fat, for when the status bar itself is off.

@@ -15,6 +15,7 @@
 #include "ReaderProgressSaveDebouncer.h"
 #include "ReaderReturnHistory.h"
 #include "ReaderUtils.h"
+#include "ReadingTime.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
 
@@ -32,7 +33,8 @@ class EpubReaderActivity final : public Activity {
   // The reader lays out exclusively through prefs_, so the global singleton is never
   // mutated for reading and a custom book stays decoupled from global changes.
   ReaderPrefs prefs_;
-  int sessionPages = 0;  // Status bar only; reset with this reader activity.
+  int sessionPages = 0;               // Status bar only; reset with this reader activity.
+  reading_time::PageTimer pageTimer;  // pace for the time-left items, this sitting only
   bool prefsCustom_ = false;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
