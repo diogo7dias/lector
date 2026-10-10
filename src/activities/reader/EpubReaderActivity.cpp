@@ -399,6 +399,7 @@ void EpubReaderActivity::openReaderMenu() {
   menuContext.wallpaperPausable = wallpaperPausable;
   menuContext.hasQuotes = hasQuotes;
   menuContext.hasReturn = !returnHistory.empty();
+  menuContext.hasForward = !returnHistory.forwardEmpty();
   startActivityForResult(std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, menuContext),
                          [this](const ActivityResult& result) {
                            // Always apply orientation / paragraph-number / paperback changes even if cancelled
@@ -1135,11 +1136,16 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
   }
   switch (action) {
     // Navigation
-    case EpubReaderMenuActivity::MenuAction::RETURN: {
+    case EpubReaderMenuActivity::MenuAction::RETURN:
+    case EpubReaderMenuActivity::MenuAction::FORWARD: {
       RenderLock lock(*this);
-      if (const auto origin = returnHistory.beginReturn()) {
-        jumpToContentOffset(origin->spineIndex, origin->contentOffset);
+      std::optional<ReaderReturnHistory::Position> here;
+      if (currentPageSpineIndex >= 0 && currentPageVisibleOffset) {
+        here = ReaderReturnHistory::Position{currentPageSpineIndex, *currentPageVisibleOffset};
       }
+      const auto target = action == EpubReaderMenuActivity::MenuAction::RETURN ? returnHistory.beginReturn(here)
+                                                                               : returnHistory.beginForward(here);
+      if (target) jumpToContentOffset(target->spineIndex, target->contentOffset);
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER:

@@ -326,6 +326,8 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
   ordinary page turns do not add entries. Shown only while there is somewhere to return to.
   Changing text size still returns to the same passage. Leaving the book (including sleep)
   clears this history; the Back button and footnote returns keep their usual behavior.
+- **Forward** — after a Return, go back to the page you returned from. Shown only after a
+  Return. A new jump (chapter, percentage, bookmark) clears it.
 - **Go to Paragraph** — jump by paragraph number, shown only while paragraph numbering is on.
 - **Bookmarks** — the list, shown once the book has one.
 - **Toggle Bookmark** — drop or lift a bookmark on this page.

@@ -49,7 +49,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
     REMOVE_FROM_RECENTS,        // drop this book from the home list and put its file back at the card root
     DELETE_BOOK,                // erase this book's file and its cache from the card, behind a confirmation
     RETURN,                     // back to the last deliberate-jump origin
-    VIEW_QUOTES                 // browse (and delete) the quotes saved in <book>_QUOTES.txt
+    VIEW_QUOTES,                // browse (and delete) the quotes saved in <book>_QUOTES.txt
+    FORWARD                     // redo the last Return
   };
 
   // Tab pages of the menu. Sleep exists only when the lock screen last showed a
@@ -81,6 +82,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
     bool wallpaperPausable = false;
     bool hasQuotes = false;
     bool hasReturn = false;
+    bool hasForward = false;
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const Context& context);
