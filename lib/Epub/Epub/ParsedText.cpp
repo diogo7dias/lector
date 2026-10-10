@@ -14,9 +14,7 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cmath>
 #include <cstring>
-#include <functional>
 #include <iterator>
 #include <limits>
 #include <vector>
@@ -539,14 +537,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style baseStyle,
       wordFocusBoundary.push_back(0);
       pushVisibleOffset(segmentOffset);
     } else {
-      size_t charCount = 0;
-      const unsigned char* countPtr = reinterpret_cast<const unsigned char*>(segment.data());
-      const unsigned char* countEnd = countPtr + segment.length();
-
-      while (countPtr < countEnd) {
-        utf8NextCodepoint(&countPtr);
-        charCount++;
-      }
+      const size_t charCount = countCodepoints(segment);
 
       // Target 45% for 1-bold at 4 chars and 3-bold at 7 chars with floor truncation
       constexpr size_t FOCUS_READING_PERCENT = 45;
@@ -562,7 +553,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style baseStyle,
         wordFocusBoundary.push_back(0);
         pushVisibleOffset(segmentOffset);
       } else {
-        countPtr = reinterpret_cast<const unsigned char*>(segment.data());
+        const unsigned char* countPtr = reinterpret_cast<const unsigned char*>(segment.data());
         for (size_t i = 0; i < targetBoldChars; ++i) {
           utf8NextCodepoint(&countPtr);
         }

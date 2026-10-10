@@ -33,12 +33,6 @@
 // rules between the in-book menu's headings.
 constexpr int kLine = 2;
 
-// Internal constants
-namespace {
-constexpr int homeMenuMargin = 20;
-constexpr int homeMarginTop = 30;
-}  // namespace
-
 // Greedy word-wrap of input in the one UI font. Line 0 is wrapped to firstLineMaxWidth
 // (leaving room for an inline [NN%] badge), later lines to restMaxWidth. An over-long
 // single word is broken by character; a line that still will not fit is truncated.
@@ -548,128 +542,6 @@ void BaseTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char
   }
 }
 
-// How far the focused-tab highlight bleeds past its label on each side. Shared by the
-// draw loop that paints it and the two loops that decide whether a tab still fits.
-static constexpr int tabHighlightBleed = 3;
-
-size_t BaseTheme::firstVisibleTab(const GfxRenderer& renderer, const Rect rect,
-                                  const std::vector<TabInfo>& tabs) const {
-  if (tabs.empty()) return 0;
-
-  const int spacing = BaseMetrics::values.tabSpacing;
-  // Measured against the space the bar actually draws into: it starts one side padding
-  // in and may run to the far edge. Deliberately not a symmetric margin. The widest
-  // shipped bar is the Portuguese (PT) Text Settings tabs at 446px of the 460px this
-  // leaves; a symmetric 2 * contentSidePadding would budget 440px and drop a tab there,
-  // trading a real tab for a margin the bar never had.
-  const int available = rect.width - BaseMetrics::values.contentSidePadding;
-
-  int wanted = 0;
-  size_t selectedIndex = 0;
-  for (size_t i = 0; i < tabs.size(); i++) {
-    if (i > 0) wanted += spacing;
-    wanted += renderer.getTextWidth(UI_10_FONT_ID, tabs[i].label, EpdFontFamily::REGULAR);
-    if (tabs[i].selected) selectedIndex = i;
-  }
-  // Everything fits. This is the path every shipped configuration takes: measured
-  // across all 31 translations and both built-in UI fonts, the widest of the three tab
-  // bars is 446px against 460px available. The branch below is a guard, not a fix for
-  // anything currently on screen — it becomes reachable with a wider SD-card UI font,
-  // a translation of the reader-menu tab labels (they are English-only today), or a
-  // sixth tab.
-  if (wanted <= available) return 0;
-
-  // Overflow. Start from the selected tab and widen the window leftwards while there is
-  // room, so the selected tab is always drawn whole. The window is filled leftward only,
-  // so it is the tabs to the RIGHT of the selected one that are dropped first — moving
-  // rightwards therefore reveals the next tab only once it is selected.
-  size_t first = selectedIndex;
-  int used = renderer.getTextWidth(UI_10_FONT_ID, tabs[selectedIndex].label, EpdFontFamily::REGULAR);
-  while (first > 0) {
-    const int widened =
-        used + spacing + renderer.getTextWidth(UI_10_FONT_ID, tabs[first - 1].label, EpdFontFamily::REGULAR);
-    if (widened > available) break;
-    used = widened;
-    first--;
-  }
-  return first;
-}
-
-void BaseTheme::drawTabBar(const GfxRenderer& renderer, const Rect rect, const std::vector<TabInfo>& tabs,
-                           bool selected) const {
-  constexpr int underlineHeight = 2;  // Height of selection underline
-  constexpr int underlineGap = 4;     // Gap between text and underline
-
-  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-
-  const size_t first = firstVisibleTab(renderer, rect, tabs);
-  const int rightEdge = rect.x + rect.width;
-
-  int currentX = rect.x + BaseMetrics::values.contentSidePadding;
-
-  for (size_t i = first; i < tabs.size(); i++) {
-    const auto& tab = tabs[i];
-    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, tab.label, EpdFontFamily::REGULAR);
-
-    // Stop before painting past the right edge: a tab that does not fit whole is left
-    // out rather than drawn half. The first tab is always drawn, so a label wider than
-    // the whole bar still shows (clipped) instead of the bar coming out empty.
-    // The bleed is charged to every tab, not just the focused one, so that
-    // tabIndexFromPoint can apply the identical test without being told which tab has
-    // focus. Costing 3px on tabs that will not draw a highlight is the price of the two
-    // loops staying in lockstep.
-    if (i > first && currentX + textWidth + tabHighlightBleed > rightEdge) break;
-
-    // Draw underline for selected tab. A tab that is selected but does not hold focus
-    // always keeps its plain underline; the user's selection style applies only to the
-    // focused tab. A tab is already a short label with air around it, so both styles
-    // paint the same block here.
-    bool inverted = false;
-    if (tab.selected) {
-      if (selected) {
-        const Rect tabRect(currentX - tabHighlightBleed, rect.y, textWidth + 2 * tabHighlightBleed,
-                           lineHeight + underlineGap);
-        inverted = drawSelection(renderer, tabRect);
-      } else {
-        renderer.fillRect(currentX, rect.y + lineHeight + underlineGap, textWidth, underlineHeight);
-      }
-    }
-
-    // Draw tab label
-    renderer.drawText(UI_10_FONT_ID, currentX, rect.y, tab.label, !inverted, EpdFontFamily::REGULAR);
-
-    currentX += textWidth + BaseMetrics::values.tabSpacing;
-  }
-}
-
-bool BaseTheme::tabIndexFromPoint(const GfxRenderer& renderer, const Rect rect, const std::vector<TabInfo>& tabs,
-                                  const int x, const int y, int& index) const {
-  if (tabs.empty() || y < rect.y || y >= rect.y + rect.height) {
-    return false;
-  }
-
-  const size_t first = firstVisibleTab(renderer, rect, tabs);
-  const int rightEdge = rect.x + rect.width;
-
-  int currentX = rect.x + BaseMetrics::values.contentSidePadding;
-  for (size_t i = first; i < tabs.size(); i++) {
-    const auto& tab = tabs[i];
-    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, tab.label, EpdFontFamily::REGULAR);
-    // Same cut-off as drawTabBar, bleed included: an undrawn tab must not answer to a
-    // touch.
-    if (i > first && currentX + textWidth + tabHighlightBleed > rightEdge) break;
-    const int left = (i == first) ? rect.x : currentX - BaseMetrics::values.tabSpacing / 2;
-    const int right = currentX + textWidth + BaseMetrics::values.tabSpacing / 2;
-    if (x >= left && x < right) {
-      index = static_cast<int>(i);
-      return true;
-    }
-    currentX += textWidth + BaseMetrics::values.tabSpacing;
-  }
-
-  return false;
-}
-
 // Defined below, next to the home list they were written for.
 void badgeChipMetrics(const GfxRenderer& renderer, const char* text, int* chipW, int* textDx);
 void drawBadgeChip(const GfxRenderer& renderer, int x, int rowY, int lineHeight, int chipW, int textDx,
@@ -681,7 +553,7 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
                                           const std::function<std::string(int index)>& rowValue,
                                           const std::function<std::string(int index)>& rowBadge) const {
   if (itemCount <= 0 || !rowTitle) {
-    return {0, 0, itemCount > 0 ? itemCount : 0};
+    return {0, 0};
   }
 
   const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
@@ -697,7 +569,7 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
   const int listTop = rect.y + indicatorH;
   const int listHeight = rect.height - indicatorH * 2;
   if (contentW <= 0 || listHeight < lineHeight) {
-    return {0, 0, itemCount};
+    return {0, 0};
   }
 
   constexpr int badgeGap = 6;  // blank between the chip and the first character of the title
@@ -802,7 +674,7 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
     rowY += row.height + rowGap;
   }
 
-  return {firstVisible, lastVisible, itemCount};
+  return {firstVisible, lastVisible};
 }
 
 void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
@@ -1475,7 +1347,7 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
   const int contentHeight = effectiveBottomY - effectiveTopY;
 
   if (rowsAvailableHeight <= 0 || contentHeight <= 0 || count == 0) {
-    return {0, 0, count};
+    return {0, 0};
   }
 
   struct BookEntry {
@@ -1577,5 +1449,5 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
     rowY += entry.height + rowGap;
   }
 
-  return {firstVisible, lastVisible, count};
+  return {firstVisible, lastVisible};
 }
