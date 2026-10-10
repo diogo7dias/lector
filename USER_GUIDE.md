@@ -916,6 +916,9 @@ other numbers in Settings use the same band.
   100% keeps the original spacing. Justified lines still stretch to the right margin;
   this does not limit their gaps. With Guide Dots, it adjusts the spaces on both sides
   of each dot, keeping the dot the same size. Changing it re-paginates the book.
+- **Kerning** — on by default: the font's pair adjustments, such as tucking a V under an A.
+  Off sets every letter at its plain width. Only the reading text changes; menus keep it.
+  Changing it re-paginates the book.
 - **Guide Dots** — draws a middle dot in a widened gap between words.
 - **Hidden Dots** — only listed while Guide Dots is on: keeps the widened gaps and draws no dot in them.
 - **Extra Paragraph Spacing** — space between paragraphs instead of a first-line indent.

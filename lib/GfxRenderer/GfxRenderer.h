@@ -50,6 +50,11 @@ class GfxRenderer {
   uint32_t frameBufferSize = HalDisplay::BUFFER_SIZE;
   std::vector<uint8_t*> bwBufferChunks;
   std::map<int, EpdFontFamily> fontMap;
+  // The reading font with the reader's Kerning switch off, or NO_FONT. Only that font
+  // loses its kern pairs; UI text keeps them.
+  static constexpr int NO_FONT = -1;
+  int kerningOffFontId = NO_FONT;
+  bool kerns(const int fontId) const { return fontId != kerningOffFontId; }
   // Mutable because ensureSdCardFontReady() is const (called from layout code
   // that holds a const GfxRenderer&) but triggers SD card reads and heap
   // allocation inside the SdCardFont objects. Same pragmatic compromise as
@@ -303,6 +308,9 @@ class GfxRenderer {
   int getSpaceAdvance(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
   /// Returns the kerning adjustment between two adjacent codepoints.
   int getKerning(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
+  /// Turns kerning off for one font (the reader's Kerning switch), or back on for all
+  /// with on=true. Measuring and drawing both honour it, so layout and paint agree.
+  void setKerning(const int fontId, const bool on) { kerningOffFontId = on ? NO_FONT : fontId; }
   int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style) const;
   int getFontAscenderSize(int fontId) const;
   /// Distance in pixels from the baseline up to the top of \p codepoint's ink.

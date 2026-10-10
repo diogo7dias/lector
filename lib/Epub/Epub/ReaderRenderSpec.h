@@ -57,6 +57,9 @@ struct ReaderRenderSpec {
   // Both are part of the cache key.
   uint8_t firstLineIndentMode = 0;
   uint8_t firstLineIndentPercent = 0;
+  // Pair kerning for the reading font. Off widens or narrows almost every word, so it is
+  // part of the cache key; the renderer applies it (GfxRenderer::setKerning).
+  bool kerning = true;
 
   // Memberwise: padding is ignored and float equality keeps its usual semantics.
   constexpr bool operator==(const ReaderRenderSpec&) const = default;

@@ -38,6 +38,7 @@ TEST(SectionCacheValidity, EveryLayoutFieldInvalidatesIndependently) {
   CHECK_FIELD(guideDotsMode, GUIDE_DOTS_HIDDEN);
   CHECK_FIELD(firstLineIndentMode, 1);
   CHECK_FIELD(firstLineIndentPercent, 20);
+  CHECK_FIELD(kerning, false);
 #undef CHECK_FIELD
 }
 

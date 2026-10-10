@@ -124,7 +124,8 @@ namespace {
 //      numbered it v46). Marker text and list layout change.
 // v68: a soft-flushed long paragraph no longer gets top margin/padding before its continuation
 //      lines (upstream #3875; upstream numbered it v51).
-constexpr uint8_t SECTION_FILE_VERSION = 68;
+// v69: the reader's Kerning switch enters the header; kerning off moves every line break.
+constexpr uint8_t SECTION_FILE_VERSION = 69;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -145,7 +146,7 @@ constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE - (SECTION_FILE_VERSION - 
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) +
                                  sizeof(uint16_t) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) +
-                                 sizeof(bool) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint32_t) +
+                                 sizeof(bool) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t) +
                                  sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t);
 // The header ends with the patched-later fields, in this order. Named once so a seek
 // never re-derives its offset from the end of the header by hand.
@@ -225,8 +226,8 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
                          sizeof(spec.paragraphAlignment) + sizeof(spec.viewportWidth) + sizeof(spec.viewportHeight) +
                          sizeof(pageCount) + sizeof(spec.embeddedTextStyle) + sizeof(spec.embeddedLayoutStyle) +
                          sizeof(spec.imageRendering) + sizeof(spec.focusReadingEnabled) + sizeof(spec.guideDotsMode) +
-                         sizeof(spec.firstLineIndentMode) + sizeof(spec.firstLineIndentPercent) + sizeof(uint32_t) +
-                         sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
+                         sizeof(spec.firstLineIndentMode) + sizeof(spec.firstLineIndentPercent) + sizeof(spec.kerning) +
+                         sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
       "Header size mismatch");
   // Written as the incomplete sentinel; finalizeBuild() patches it to
   // SECTION_FILE_VERSION as the last step, committing the file.
@@ -246,6 +247,7 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   serialization::writePod(file, spec.guideDotsMode);
   serialization::writePod(file, spec.firstLineIndentMode);
   serialization::writePod(file, spec.firstLineIndentPercent);
+  serialization::writePod(file, spec.kerning);
   serialization::writePod(file, pageCount);  // Placeholder for page count (will be initially 0, patched later)
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for LUT offset (patched later)
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for anchor map offset (patched later)
@@ -289,6 +291,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     serialization::readPod(file, cached.guideDotsMode);
     serialization::readPod(file, cached.firstLineIndentMode);
     serialization::readPod(file, cached.firstLineIndentPercent);
+    serialization::readPod(file, cached.kerning);
 
     if (!sectionCacheMatches(spec, cached)) {
       file.close();

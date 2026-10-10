@@ -398,6 +398,9 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
                                    "wordSpacing", StrId::STR_CAT_READER)
                     .withTextSettings());
 
+    v.push_back(SettingInfo::Toggle(StrId::STR_KERNING, &CrossPointSettings::kerning, "kerning", StrId::STR_CAT_READER)
+                    .withTextSettings());
+
     // Retired in 0.8.2: the granular paragraph gap (% of line height) duplicated what
     // the Extra Paragraph Spacing toggle above already does. The field and its render
     // spec entry are kept (old caches and sidecars still carry it) but it is pinned to
