@@ -79,6 +79,7 @@ class EpubReaderActivity final : public Activity {
   // Image pages use a dedicated double-FAST refresh path, so retain a manual
   // refresh request until renderContents can issue its clean base pass.
   bool forcedRefreshPending = false;
+  int lastRenderedSpine = -1;  // spine of the page last drawn, for Refresh at Chapter Start
   int cachedSpineIndex = 0;
   int cachedChapterTotalPageCount = 0;
   std::optional<uint32_t> cachedVisibleTextOffset;
