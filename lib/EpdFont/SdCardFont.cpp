@@ -655,9 +655,10 @@ bool SdCardFont::load(const char* path) {
         freeAll();
         return false;
       }
+      // Compare before adding 1: [0, 0xFFFFFFFF] would wrap span to 0 and pass.
+      const bool spanTooBig = (iv.last - iv.first >= s.header.glyphCount);
       const uint32_t span = iv.last - iv.first + 1;
       const bool overlapsPrev = (j > 0 && iv.first <= prevLast);
-      const bool spanTooBig = (span > s.header.glyphCount);
       const bool offsetMismatch = (iv.offset != expectedOffset);
       const bool offsetOverruns = (iv.offset > s.header.glyphCount - span);
       if (overlapsPrev || spanTooBig || offsetMismatch || offsetOverruns) {
