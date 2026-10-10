@@ -957,7 +957,14 @@ void CrossPointWebServer::handleDownload() const {
 
   NetworkClient client = server->client();
   const size_t chunkSize = 4096;
-  uint8_t buffer[chunkSize];
+  // Heap, not stack: 4 KB is far past the 256-byte local limit on the loop task.
+  auto chunk = makeUniqueNoThrow<uint8_t[]>(chunkSize);
+  if (!chunk) {
+    LOG_ERR("WEB", "OOM: %u byte download buffer", static_cast<unsigned>(chunkSize));
+    client.clear();
+    return;
+  }
+  uint8_t* buffer = chunk.get();
 
   bool downloadOk = true;
   while (downloadOk && file.available()) {
