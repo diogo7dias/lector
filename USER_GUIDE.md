@@ -325,6 +325,10 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 - **Select Chapter** — the table of contents. Chapters the book lists but cannot actually
   open are left out, so every row here goes somewhere.
 - **Go to %** — jump by percentage.
+- **Search** — type a word or phrase and the book is searched chapter by chapter, straight
+  from the card; hits appear as they are found, each with a line of context and its chapter.
+  Case, curly quotes and line breaks do not matter. Up to 100 hits. Pick one to land on its
+  page (Return takes you back); Back stops the search. The last search is offered again.
 - **Return** — go back to where you were before selecting a chapter, jumping by percentage,
   or opening a bookmark. Keeps the last eight jump origins during this reading session;
   ordinary page turns do not add entries. Shown only while there is somewhere to return to.
@@ -865,6 +869,8 @@ belongs to, so the rows here appear in the same order as on the device.
   has moved to need it, so a long session does not end up smeared.
 - **Night Refresh Frequency** — the same choice while night mode is on. **Same as Day** (the
   default) keeps Refresh Frequency; any other value applies only to inverted pages.
+- **Refresh at Chapter Start** — off by default. On adds a full refresh on the first page of
+  each chapter you enter, on top of Refresh Frequency, so every chapter opens clean. EPUB only.
 - **Sunlight Fading Fix** — software fix for white X4 units fading in direct sunlight.
 
 **Home**
@@ -951,7 +957,9 @@ other numbers in Settings use the same band.
 
 **Look**
 
-- **Paperback Look**, **Paperback Status Bar**.
+- **Paperback Look**, **Paperback Status Bar**. Paperback Look thickens the reading text like
+  heavier paperback ink: **ON** adds one pixel, **BOLDER** a second pixel to vertical strokes.
+  The in-book menu row cycles OFF, ON, BOLDER.
 - **Night mode** — inverts the screen.
 - **Customise Status Bar** — see below.
 
