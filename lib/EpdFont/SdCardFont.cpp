@@ -845,22 +845,7 @@ int SdCardFont::prewarm(TextGetter getter, const void* ctx, uint32_t textCount, 
   for (uint32_t ti = 0; ti < textCount && cpCount < cpBudget; ti++) {
     const char* text = getter(ctx, ti);
     if (text == nullptr) continue;
-    const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
-    while (*p && cpCount < cpBudget) {
-      uint32_t cp = utf8NextCodepoint(&p);
-      if (cp == 0) break;
-
-      bool found = false;
-      for (uint32_t i = 0; i < cpCount; i++) {
-        if (codepoints[i] == cp) {
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        codepoints[cpCount++] = cp;
-      }
-    }
+    collectUniqueCodepoints(text, codepoints.get(), cpCount, cpBudget);
   }
 
   // Always include the replacement character
@@ -944,15 +929,7 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
     int missedInMini = 0;
     for (uint32_t i = 0; i < cpCount && covered; i++) {
       const uint32_t cp = codepoints[i];
-      bool inMini = false;
-      for (uint32_t iv = 0; iv < s.miniIntervalCount; iv++) {
-        if (cp < s.miniIntervals[iv].first) break;  // intervals sorted ascending
-        if (cp <= s.miniIntervals[iv].last) {
-          inMini = true;
-          break;
-        }
-      }
-      if (inMini) continue;
+      if (findInterval(s.miniIntervals, s.miniIntervalCount, cp)) continue;
       if (findGlobalGlyphIndex(s, cp) < 0) {
         missedInMini++;  // not in font coverage: the rebuild couldn't load it either
       } else {
@@ -1389,24 +1366,9 @@ bool SdCardFont::hasAdvanceTable() const {
 }
 
 uint16_t SdCardFont::getAdvance(uint32_t codepoint, uint8_t style) const {
-  style &= (MAX_STYLES - 1);
-  if (!advanceTable_[style]) return 0;
-  const AdvanceEntry* table = advanceTable_[style];
-  const uint32_t size = advanceTableSize_[style];
-  // Binary search sorted by codepoint
-  uint32_t lo = 0, hi = size;
-  while (lo < hi) {
-    uint32_t mid = lo + (hi - lo) / 2;
-    if (table[mid].codepoint < codepoint) {
-      lo = mid + 1;
-    } else {
-      hi = mid;
-    }
-  }
-  if (lo < size && table[lo].codepoint == codepoint) {
-    return table[lo].advanceX;
-  }
-  return 0;
+  uint16_t advance = 0;
+  advanceTableLookup(style & (MAX_STYLES - 1), codepoint, &advance);
+  return advance;
 }
 
 // Given a sorted array of unique codepoints, resolve glyph indices per style,
