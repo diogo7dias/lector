@@ -1,4 +1,4 @@
-<!-- lector-version: 0.40.0 -->
+<!-- lector-version: 0.41.1 -->
 
 # Lector User Guide
 
@@ -215,6 +215,10 @@ books copied from a computer carry a real date, while books the device downloade
 | `.pxc`          | Image viewer for the packed wallpaper format          |
 | `.bin`          | Offered as a firmware file, see [section 13](#13-updating-the-firmware) |
 
+Text files are read as UTF-8. A file that is not valid UTF-8 is read as Windows-1252, the
+usual encoding of older Western text files (Latin-1 accents, curly quotes, the euro sign).
+UTF-16 files are not supported and show a message instead.
+
 From the image viewers you can set the picture as your sleep wallpaper.
 
 Opening a wallpaper from `/sleep` gives you the triage buttons: **Favorite**, **Pause** and
@@ -321,11 +325,17 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 - **Select Chapter** — the table of contents. Chapters the book lists but cannot actually
   open are left out, so every row here goes somewhere.
 - **Go to %** — jump by percentage.
+- **Search** — type a word or phrase and the book is searched chapter by chapter, straight
+  from the card; hits appear as they are found, each with a line of context and its chapter.
+  Case, curly quotes and line breaks do not matter. Up to 100 hits. Pick one to land on its
+  page (Return takes you back); Back stops the search. The last search is offered again.
 - **Return** — go back to where you were before selecting a chapter, jumping by percentage,
   or opening a bookmark. Keeps the last eight jump origins during this reading session;
   ordinary page turns do not add entries. Shown only while there is somewhere to return to.
   Changing text size still returns to the same passage. Leaving the book (including sleep)
   clears this history; the Back button and footnote returns keep their usual behavior.
+- **Forward** — after a Return, go back to the page you returned from. Shown only after a
+  Return. A new jump (chapter, percentage, bookmark) clears it.
 - **Go to Paragraph** — jump by paragraph number, shown only while paragraph numbering is on.
 - **Bookmarks** — the list, shown once the book has one.
 - **Toggle Bookmark** — drop or lift a bookmark on this page.
@@ -857,6 +867,10 @@ belongs to, so the rows here appear in the same order as on the device.
 - **Refresh Frequency** — a full refresh every 1, 5, 10, 15 or 30 pages, or **Never**. Never
   turns off the page-counted refresh only; the reader still cleans the panel when enough ink
   has moved to need it, so a long session does not end up smeared.
+- **Night Refresh Frequency** — the same choice while night mode is on. **Same as Day** (the
+  default) keeps Refresh Frequency; any other value applies only to inverted pages.
+- **Refresh at Chapter Start** — off by default. On adds a full refresh on the first page of
+  each chapter you enter, on top of Refresh Frequency, so every chapter opens clean. EPUB only.
 - **Sunlight Fading Fix** — software fix for white X4 units fading in direct sunlight.
 
 **Home**
@@ -911,16 +925,37 @@ other numbers in Settings use the same band.
 - **Embedded Layout Style** — honour the book's own CSS for where blocks sit: alignment,
   first-line indent, margins, padding and image sizes. **Paragraph Alignment: Book's Style**
   and **First Line Indent: Book** both read the book's CSS, so they need this on.
+- **Book Margins** — on by default, shown while Embedded Layout Style is on: the book's own
+  margins and padding. Off drops them, so blocks sit flush with your page margins, and keeps the
+  book's alignment, indents and image sizes. The book's fonts, sizes and line height are never
+  used: the reader's own settings always win.
 - **Bionic Reading** — bolds the first part of each word as a fixation point.
 - **Word Spacing %** — sets the baseline gap between words, from 75% to 150% in steps of 5.
   100% keeps the original spacing. Justified lines still stretch to the right margin;
   this does not limit their gaps. With Guide Dots, it adjusts the spaces on both sides
   of each dot, keeping the dot the same size. Changing it re-paginates the book.
+- **Kerning** — on by default: the font's pair adjustments, such as tucking a V under an A.
+  Off sets every letter at its plain width. Only the reading text changes; menus keep it.
+- **Ligatures** — on by default: joined letter pairs such as fi, fl and ff, where the font has them.
+  Off draws each letter on its own. Only the reading text changes; menus keep it.
+- **Link Underline** — on by default: footnote and cross-reference links in the book are underlined.
+  Off leaves them as plain text; they still open from Footnotes.
+- **Break Before Headings** — off by default. On starts every top-level heading (h1, h2) on a
+  fresh page, for books that run chapters or sections together. A heading straight after another
+  heading ("Part One" then "Chapter 1") stays on the same page.
+- **Word Expansion** — Off by default. On a justified line whose gaps would grow past one and
+  a half spaces, **Some** adds up to 1 pixel between letters and **More** up to 2, so the slack
+  spreads into the words instead of opening wide holes. Lines with Focus Reading, Guide Dots,
+  ruby or right-to-left text keep plain justification.
+  Changing it re-paginates the book.
 - **Guide Dots** — draws a middle dot in a widened gap between words.
 - **Hidden Dots** — only listed while Guide Dots is on: keeps the widened gaps and draws no dot in them.
 - **Extra Paragraph Spacing** — space between paragraphs instead of a first-line indent.
   When a nested block ends, the enclosing block's top and bottom spacing is not added again.
 - **Text Anti-Aliasing** — smoother edges, slightly slower page turns.
+- **Text Contrast** — Normal, High or Max, shown while Text Anti-Aliasing is on. High draws
+  the light grey edge pixels as dark grey; Max also draws the dark grey ones black, for
+  crisper, darker anti-aliased text.
 - **Debug Layout Borders** — draws the layout boxes; a diagnostic, not a reading feature.
 
 **Page**
@@ -933,22 +968,29 @@ other numbers in Settings use the same band.
 
 **Look**
 
-- **Paperback Look**, **Paperback Status Bar**.
+- **Paperback Look**, **Paperback Status Bar**. Paperback Look thickens the reading text like
+  heavier paperback ink: **ON** adds one pixel, **BOLDER** a second pixel to vertical strokes.
+  The in-book menu row cycles OFF, ON, BOLDER.
 - **Night mode** — inverts the screen.
 - **Customise Status Bar** — see below.
 
 **Customise Status Bar** places each element in one of six slots (top left, top centre, top
 right, bottom left, bottom centre, bottom right) or turns it off: **Battery**, **Clock**,
 **Title**, **Page in Chapter**, **Book %**, **Chapter %**, **Chapter Number**, **Pages This
-Session**, **Pages to Paragraph**. Alongside them:
+Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Alongside them:
 
 - **Title Source** — Book or Chapter, and **Truncate Title**.
 - **Page Format** — `N/M` or `N left`.
 - **Pages This Session** counts forward page turns in the open EPUB and resets when the book closes.
 - **Pages to Paragraph** shows `>P.0` on most pages: the paragraph you are in ends before the
   next one starts. `>P.2` means it runs two more pages.
-- **Book Bar** and **Chapter Bar** — Off, Top or Bottom, with **Bar Thickness** (Slim, Medium,
-  Fat), **Floating Bar** and **Bar Outline**.
+- **Chapter time left** (`C:12m`) and **Book time left** (`B:3h05`) estimate from how long you
+  spend per page this sitting. They appear after three timed pages; turns under 2 seconds or
+  over 10 minutes are not counted. The book estimate scales the rest of the book by the
+  current chapter, so it settles as you read. EPUB only.
+- **Book Bar** and **Chapter Bar** — Off, Top or Bottom, with **Bar Thickness** (Slim 3 px,
+  Medium 6 px, Fat 9 px). On EPUB books the Book Bar has a small notch where each chapter
+  starts. A book with more than 64 chapters shows a plain bar.
 - **Progress Bar** — Off, Slim, Medium or Fat, for when the status bar itself is off.
 - **XTC Status Bar** — Hide, Bottom or Top, for XTC books.
 - **Clock UTC Offset**, **Clock Format** (24-hour or 12-hour) and **Clock Synced**. The offset

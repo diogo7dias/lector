@@ -347,3 +347,36 @@ TEST(KoreanLayout, HangulGluedAcrossInlineStyleStaysOneWord) {
   EXPECT_EQ(std::vector<std::string>{"가나"}, lines[0].words);
   EXPECT_EQ((std::vector<std::string>{"한국", "어"}), lines[1].words);
 }
+
+TEST(WordExpansion, LooseJustifiedLineSpreadsSlackIntoLetters) {
+  // 4-letter words are 40 px and spaces 7 px, so a 100 px line holds two words with 13 px
+  // spare. Past half a space (3 px) the 10 px excess over 6 letter steps allows 1 px each.
+  const auto run = [](uint8_t maxSpacing, std::vector<int>& spacings) {
+    lines.clear();
+    spacings.clear();
+    BlockStyle style;
+    style.alignment = CssTextAlign::Justify;
+    style.textAlignDefined = true;
+    ParsedText parsed(false, GUIDE_DOTS_OFF, style, 1, 0, 100, maxSpacing);
+    for (const char* w : {"cccc", "dddd", "eeee", "ffff", "gggg", "hhhh"}) parsed.addWord(w, EpdFontFamily::REGULAR);
+    parsed.layoutAndExtractLines(
+        renderer, FONT, 100,
+        [](void* ctx, std::shared_ptr<TextBlock> block, uint32_t) {
+          static_cast<std::vector<int>*>(ctx)->push_back(block->getLetterSpacing());
+        },
+        &spacings);
+  };
+  std::vector<int> spacings;
+  run(2, spacings);
+  ASSERT_GE(lines.size(), 3u);
+  const Line& middle = lines[1];
+  ASSERT_EQ(2u, middle.words.size());
+  EXPECT_EQ(1, spacings[1]);
+  EXPECT_EQ(40 + 3 + 14, middle.x[1] - middle.x[0]);  // widened word, then 7 + 7 px gap
+  EXPECT_EQ(100, middle.x[1] + 40 + 3);               // still flush with the right margin
+  EXPECT_EQ(0, spacings.back());                      // last line is never justified
+
+  run(0, spacings);
+  EXPECT_EQ(0, spacings[1]);
+  EXPECT_EQ(40 + 20, lines[1].x[1] - lines[1].x[0]);  // Off: all 13 px go to the gap
+}

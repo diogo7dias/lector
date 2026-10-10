@@ -390,6 +390,23 @@ void noteCreated(const std::string& path) {
   const uint32_t hash = folderEntryHash(file, name.c_str(), name.size());
   file.close();
 
+  // A name can still have a record only as a hole, so with no holes there is nothing to
+  // scan for. Otherwise appending would give the name two records and the picker would
+  // serve it twice a lap.
+  if (APP_STATE.sleepIndexDeadSlots > 0) {
+    bool recorded = false;
+    Reader reader;
+    if (reader.open()) {
+      reader.forEachName([&](const std::string_view recordName) { recorded = recorded || recordName == name; });
+    }
+    if (recorded) {
+      storeSnapshot(sleep_reconcile::applyRevival(snapshotFromState(), hash));
+      stampFolderMarkers(dirId);
+      APP_STATE.saveToFile();
+      return;
+    }
+  }
+
   // Append at a record-aligned end of file: a torn tail from an earlier crash
   // is overwritten rather than extended.
   const uint32_t recordCount = indexRecordCount();
@@ -556,11 +573,14 @@ void reconcileAtColdBoot(GfxRenderer& renderer) {
     // records), not a seek per record.
     sleep_reconcile::NameHashSet known;
     known.reserve(recordCount);
+    // A read error part-way leaves `known` short, and every name it missed would be
+    // appended a second time. Only a complete pass may drive the append.
+    bool knownComplete = false;
     {
       Reader reader;
       if (reader.open()) {
         size_t seen = 0;
-        reader.forEachName([&](const std::string_view name) {
+        knownComplete = reader.forEachName([&](const std::string_view name) {
           known.add(sleep_reconcile::nameHash(name));
           if (++seen % kWdtInterval == 0) {
             resetTaskWatchdogIfSubscribed();
@@ -577,11 +597,11 @@ void reconcileAtColdBoot(GfxRenderer& renderer) {
     // sweep. Seek record-aligned so a torn tail from an earlier crash is
     // overwritten, not extended.
     uint32_t appends = 0;
-    bool appendFailed = false;
+    bool appendFailed = !knownComplete;  // an incomplete pass 1 goes to the full rebuild
     liveCount = 0;
     fingerprint = 0;
     HalFile idx = Storage.open(kIndexPath, O_RDWR);
-    if (idx && idx.seek((static_cast<size_t>(recordCount) + 1) * kRecordBytes)) {
+    if (!appendFailed && idx && idx.seek((static_cast<size_t>(recordCount) + 1) * kRecordBytes)) {
       walkFolder(dirPathForId(dirId), liveCount, fingerprint, &progress,
                  [&](HalFile&, const char* name, const size_t len) {
                    if (appendFailed) return;

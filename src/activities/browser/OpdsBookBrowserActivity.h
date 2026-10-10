@@ -43,6 +43,7 @@ class OpdsBookBrowserActivity final : public UiStatusActivity {
 
  private:
   BrowserState state = BrowserState::LOADING;
+  BrowserState sleepClockState = BrowserState::LOADING;
   // The rows borrow the entries' strings, so they are rebuilt whenever the feed
   // is, and cleared whenever it is released.
   std::vector<freeink::ui::ListItem> rows;
@@ -81,10 +82,13 @@ class OpdsBookBrowserActivity final : public UiStatusActivity {
   void downloadBook(const OpdsEntry& book);
   void launchSearch();
   void performSearch(const std::string& query);
-  // Only while network work is in flight: an idle catalogue left open must still auto-sleep,
-  // or the radio stays up until the battery dies.
+  // Fetches block the loop, so a state change restarts the auto-sleep clock once; an idle
+  // list or error screen then sleeps on the normal timeout instead of keeping Wi-Fi up.
   bool preventAutoSleep() override {
-    return state == BrowserState::CHECK_WIFI || state == BrowserState::LOADING || state == BrowserState::RECONNECTING ||
-           state == BrowserState::DOWNLOADING;
+    if (state == BrowserState::LOADING || state == BrowserState::RECONNECTING || state == BrowserState::DOWNLOADING)
+      return true;
+    if (state == sleepClockState) return false;
+    sleepClockState = state;
+    return true;
   }
 };

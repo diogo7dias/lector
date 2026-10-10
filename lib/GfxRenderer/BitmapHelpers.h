@@ -43,17 +43,17 @@ class AtkinsonDitherer {
  public:
   explicit AtkinsonDitherer(int width, Gray4QuantizationMode quantizationMode = Gray4QuantizationMode::DisplayTuned)
       : width(width), quantizationMode(quantizationMode) {
-    // One nothrow block for the three rows: bare new aborts on OOM under -fno-exceptions.
-    // Callers must check valid() as well as the object pointer.
-    errorRows = new (std::nothrow) int16_t[3 * (width + 4)]();
-    errorRow0 = errorRows;                                          // Current row
-    errorRow1 = errorRows ? errorRows + (width + 4) : nullptr;      // Next row
-    errorRow2 = errorRows ? errorRows + 2 * (width + 4) : nullptr;  // Row after next
+    // One nothrow block for the three rows: a bare new aborts on OOM (-fno-exceptions)
+    // even when the object itself came from a nothrow allocation. Callers check valid().
+    rows = new (std::nothrow) int16_t[3 * (width + 4)]();
+    errorRow0 = rows;                                     // Current row
+    errorRow1 = rows ? rows + (width + 4) : nullptr;      // Next row
+    errorRow2 = rows ? rows + 2 * (width + 4) : nullptr;  // Row after next
   }
 
-  ~AtkinsonDitherer() { delete[] errorRows; }
+  ~AtkinsonDitherer() { delete[] rows; }
 
-  bool valid() const { return errorRows != nullptr; }
+  bool valid() const { return rows != nullptr; }
   // **1. EXPLICITLY DELETE THE COPY CONSTRUCTOR**
   AtkinsonDitherer(const AtkinsonDitherer& other) = delete;
 
@@ -99,7 +99,7 @@ class AtkinsonDitherer {
  private:
   int width;
   Gray4QuantizationMode quantizationMode;
-  int16_t* errorRows;
+  int16_t* rows;
   int16_t* errorRow0;
   int16_t* errorRow1;
   int16_t* errorRow2;
@@ -113,10 +113,17 @@ inline void scaleToFit(const int srcWidth, const int srcHeight, const int target
   const float scaleToFitWidth = static_cast<float>(targetWidth) / static_cast<float>(srcWidth);
   const float scaleToFitHeight = static_cast<float>(targetHeight) / static_cast<float>(srcHeight);
   float scale;
+  const float fitScale = (scaleToFitWidth < scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
+  scale = fitScale;
   if (crop) {
     scale = (scaleToFitWidth > scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
-  } else {
-    scale = (scaleToFitWidth < scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
+    // Covering a sliver (a 2x3072 image) would scale its long side to hundreds of
+    // thousands of pixels and write a BMP of tens of MB. Past 2x the target on either
+    // side, cropping keeps almost nothing of the image anyway, so fit it instead.
+    if (static_cast<float>(srcWidth) * scale > 2.0f * static_cast<float>(targetWidth) ||
+        static_cast<float>(srcHeight) * scale > 2.0f * static_cast<float>(targetHeight)) {
+      scale = fitScale;
+    }
   }
 
   outWidth = static_cast<int>(static_cast<float>(srcWidth) * scale);

@@ -142,7 +142,9 @@ inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntil
   } else {
     renderer.displayBuffer(mode);
   }
-  if (pagesUntilFullRefresh <= 1) {
+  // Restart the countdown after any clean, including one the anti-ghost cap promoted
+  // from this FAST: counting on would land the next clean only a turn or two later.
+  if (pagesUntilFullRefresh <= 1 || renderer.lastPassCleaned()) {
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
   } else {
     pagesUntilFullRefresh--;

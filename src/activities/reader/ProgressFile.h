@@ -21,17 +21,21 @@ namespace ProgressFile {
 //
 // This is crash-safe, not metadata-atomic: on FAT the replace is remove + rename,
 // two separate directory operations, so a crash between them can leave neither
-// file -- which simply reads as "no saved progress" on next launch, never a
-// corrupt or unclearable file. The point is that progress.bin is never torn.
+// file but the finished temp, which openForRead below renames into place, so the
+// reader's place survives. The point is that progress.bin is never torn.
 //
 // Note: this prevents corruption on a healthy card going forward. It cannot
 // repair an already-corrupted progress.bin -- removing the stale file may itself
 // fail at the FAT level, in which case recovery still requires fsck on a host.
 //
 // Returns true only if the new progress.bin is fully in place.
-inline bool writeAtomic(const std::string& cachePath, const uint8_t* data, size_t len) {
-  const std::string finalPath = cachePath + "/progress.bin";
-  const std::string tmpPath = cachePath + "/progress.bin.tmp";
+//
+// `name` lets other small per-book records (the library's percent badge) use the same
+// write; the default is the reader's progress.bin.
+inline bool writeAtomic(const std::string& cachePath, const uint8_t* data, size_t len,
+                        const char* name = "/progress.bin") {
+  const std::string finalPath = cachePath + name;
+  const std::string tmpPath = finalPath + ".tmp";
 
   {
     HalFile f;
@@ -45,9 +49,13 @@ inline bool writeAtomic(const std::string& cachePath, const uint8_t* data, size_
               (unsigned)len);
       return false;
     }
-    f.flush();
-    // f (the temp file) is closed at scope exit (DESTRUCTOR_CLOSES_FILE=1) before
-    // the rename below -- SdFat must not rename a path that still has an open FsFile.
+    // Closed here, not at scope exit: close() is where the last sector reaches the card,
+    // and a failed one must not let this temp replace the saved progress. SdFat must not
+    // rename a path that still has an open FsFile either.
+    if (!f.close()) {
+      LOG_ERR("PRG", "Failed to close temp progress %s", tmpPath.c_str());
+      return false;
+    }
   }
 
   // SdFat's rename does not overwrite an existing destination, so drop the old
@@ -72,6 +80,20 @@ inline bool writeAtomic(const std::string& cachePath, const uint8_t* data, size_
   }
   f.flush();
   return true;
+}
+
+// Opens `<cachePath>/progress.bin` for reading. A power cut between writeAtomic's
+// remove and rename leaves only the temp, which was fully written and closed
+// before the remove, so it is renamed into place first instead of reading as
+// "no saved progress".
+inline bool openForRead(const char* tag, const std::string& cachePath, HalFile& f) {
+  const std::string finalPath = cachePath + "/progress.bin";
+  const std::string tmpPath = finalPath + ".tmp";
+  if (!Storage.exists(finalPath.c_str()) && Storage.exists(tmpPath.c_str())) {
+    LOG_INF("PRG", "Recovering progress from %s", tmpPath.c_str());
+    Storage.rename(tmpPath.c_str(), finalPath.c_str());
+  }
+  return Storage.openFileForRead(tag, finalPath, f);
 }
 
 }  // namespace ProgressFile

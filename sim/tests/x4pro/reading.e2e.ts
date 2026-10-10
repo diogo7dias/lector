@@ -53,5 +53,6 @@ test('opens a book, swipes a page, opens the menu, resumes after a reboot', asyn
   await screen.getByRole('button', { name: 'Reboot' }).click();
   await expect(busy).toHaveText('no', { timeout: 180_000 });
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
-  expect(await body(), 'the book reopens on the page it was left at').toEqual(second);
+  // The activity flips to EpubReader before its first page is painted: poll, never one read.
+  await expect.poll(body, { message: 'the book reopens on the page it was left at', timeout: 60_000 }).toEqual(second);
 });

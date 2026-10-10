@@ -503,7 +503,7 @@ void XtcReaderActivity::saveProgress(const uint32_t page) {
 
 void XtcReaderActivity::loadProgress() {
   HalFile f;
-  if (Storage.openFileForRead("XTR", xtc->getCachePath() + "/progress.bin", f)) {
+  if (ProgressFile::openForRead("XTR", xtc->getCachePath(), f)) {
     uint8_t data[4];
     if (f.read(data, 4) == 4) {
       currentPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);

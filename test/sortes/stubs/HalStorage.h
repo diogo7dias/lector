@@ -43,6 +43,7 @@ class HalFile {
   }
   int read(void* out, size_t count) { return file ? std::fread(out, 1, count, file.get()) : -1; }
   size_t write(const void* data, size_t count) { return file ? std::fwrite(data, 1, count, file.get()) : 0; }
+  bool close() { return !file || std::fclose(file.release()) == 0; }
   void flush() {
     if (file) std::fflush(file.get());
   }
@@ -64,6 +65,11 @@ class HalStorage {
   bool rename(const char* from, const char* to) {
     ++mutations;
     return std::rename(resolve(from).c_str(), resolve(to).c_str()) == 0;
+  }
+  bool exists(const char* path) const { return std::filesystem::exists(resolve(path)); }
+  bool openFileForRead(const char*, const std::string& path, HalFile& file) {
+    file = HalFile(resolve(path), "rb");
+    return bool(file);
   }
   bool openFileForWrite(const char*, const std::string& path, HalFile& file) {
     ++mutations;

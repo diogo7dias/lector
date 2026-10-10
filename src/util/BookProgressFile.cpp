@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "RecentBooksStore.h"
+#include "activities/reader/ProgressFile.h"
 #include "util/BookCacheUtils.h"
 
 namespace book_progress {
@@ -42,12 +43,13 @@ bool write(const std::string& cacheDir, const Marker& marker) {
     }
   }
 
-  HalFile file;
-  if (!Storage.openFileForWrite("BPRG", path, file)) {
+  // Temp file and rename, like progress.bin: a cut write in place left a short file
+  // that reads back as no badge and no read order.
+  if (!ProgressFile::writeAtomic(cacheDir, bytes, RECORD_BYTES, FILE_NAME)) {
     LOG_ERR("BPRG", "Could not write progress marker: %s", path.c_str());
     return false;
   }
-  return file.write(bytes, RECORD_BYTES) == RECORD_BYTES;
+  return true;
 }
 
 bool readForBook(const std::string& bookPath, Marker& markerOut) {

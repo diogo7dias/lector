@@ -193,6 +193,7 @@ BmpReaderError Bitmap::parseHeaders() {
     atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(width, quantizationMode);
     if (!atkinsonDitherer || !atkinsonDitherer->valid()) {
       LOG_ERR("BMP", "OOM: AtkinsonDitherer (%u bytes)", static_cast<unsigned>(sizeof(AtkinsonDitherer)));
+      atkinsonDitherer.reset();
       return BmpReaderError::OomRowBuffer;
     }
   }

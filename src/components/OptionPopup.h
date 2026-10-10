@@ -146,7 +146,11 @@ class OptionPopup {
     title = titleStr;
     disabled.clear();
     leftAligned = false;
-    selectedIndex = currentIndex;
+    // Every show() fills ownedStrings first. A stored value past the list (a setting from
+    // a newer or corrupt file) would leave no row highlighted, and Confirm would hand that
+    // out-of-range index to the setter.
+    const int count = static_cast<int>(ownedStrings.size());
+    selectedIndex = count > 0 ? std::clamp(currentIndex, 0, count - 1) : 0;
     onSelectCallback = std::move(onSelect);
     layoutValid = false;
     closing = false;

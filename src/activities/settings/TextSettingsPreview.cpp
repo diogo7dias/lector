@@ -61,7 +61,8 @@ void collectStatusBarSlots(const StatusBarBlock& sb, bool top, std::string slots
   } items[] = {
       {sb.batteryPos, SAMPLE_BATTERY}, {sb.clockPos, SAMPLE_CLOCK},        {sb.pagePos, SAMPLE_PAGE},
       {sb.bookPctPos, SAMPLE_PERCENT}, {sb.chapterPctPos, SAMPLE_PERCENT}, {sb.chapterNumPos, "Ch 2/14"},
-      {sb.sessionPagesPos, "+8"},      {sb.paraPagesPos, ">P.0"},
+      {sb.sessionPagesPos, "+8"},      {sb.paraPagesPos, ">P.0"},          {sb.chapterTimePos, "C:12m"},
+      {sb.bookTimePos, "B:3h05"},
   };
   for (const auto& item : items) {
     if (item.anchor == CrossPointSettings::SB_ANCHOR_OFF) continue;
@@ -257,7 +258,8 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const Rea
   const int textLimit = top + height;
   int y = textTop;
   int drawn = 0;
-  renderer.setPaperbackLook(true);
+  // The smeared paragraph shows the chosen weight, or plain On while the setting is off.
+  renderer.setPaperbackLook(look.paperbackLookBody > 1 ? look.paperbackLookBody : 1);
   for (const auto& entry : layout.lines) {
     if (drawn == layout.secondParagraphLine) renderer.setPaperbackLook(false);
     y += entry.gapBefore;

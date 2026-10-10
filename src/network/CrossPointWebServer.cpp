@@ -135,6 +135,11 @@ void CrossPointWebServer::begin() {
     return;
   }
 
+  server->addMiddleware([this](WebServer&, Middleware::Callback next) {
+    lastRequestAt = millis();
+    return next();
+  });
+
   // Disable WiFi sleep to improve responsiveness and prevent 'unreachable' errors.
   // This is critical for reliable web server operation on ESP32.
   WiFi.setSleep(false);
@@ -210,7 +215,7 @@ void CrossPointWebServer::begin() {
                                     "Lock-Token", "Timeout",     "If-None-Match"};
   server->collectHeaders(collectedHeaders, 7);
   // Raw new: WebServer takes ownership and deletes the handler when it stops.
-  auto* davHandler = new (std::nothrow) WebDAVHandler();
+  auto* davHandler = new (std::nothrow) WebDAVHandler(*this);
   if (davHandler) {
     server->addHandler(davHandler);
   } else {
@@ -241,6 +246,7 @@ void CrossPointWebServer::begin() {
   // catches hard CPU lockups, matching the rest of the application lifecycle.
 
   running = true;
+  lastRequestAt = millis();
 
   LOG_DBG("WEB", "Web server started on port %d", port);
   // Show the correct IP based on network mode
@@ -416,6 +422,13 @@ void CrossPointWebServer::handleClient() {
   if (fetchQueued) {
     runQueuedFetch();
   }
+}
+
+bool CrossPointWebServer::recentlyActive() const {
+  // A browser tab left open polls status, which counts: someone is looking at it.
+  constexpr unsigned long REQUEST_HOLD_MS = 10000;
+  return running && (wsUploadInProgress || fetch.state == FetchStatus::State::Running ||
+                     millis() - lastRequestAt < REQUEST_HOLD_MS);
 }
 
 CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() const {
@@ -1936,6 +1949,7 @@ void CrossPointWebServer::wsEventCallback(uint8_t num, WStype_t type, uint8_t* p
 //   3. Server sends TEXT "PROGRESS:<received>:<total>" after each chunk
 //   4. Server sends TEXT "DONE" or "ERROR:<message>" when complete
 void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
+  lastRequestAt = millis();
   switch (type) {
     case WStype_DISCONNECTED:
       LOG_DBG("WS", "Client %u disconnected", num);
@@ -1991,7 +2005,15 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsServer->sendTXT(num, "ERROR:Invalid START format");
             return;
           }
-          wsUploadSize = sizeToken.toInt();
+          // toInt() is atol: it clamps at 2 GiB, so a larger file was cut off there and
+          // still reported done. FAT32 holds up to 4 GiB - 1, so parse unsigned and refuse
+          // anything bigger outright.
+          const unsigned long long parsedSize = strtoull(sizeToken.c_str(), nullptr, 10);
+          if (parsedSize > 0xFFFFFFFFull) {
+            wsServer->sendTXT(num, "ERROR:File too large for the SD card (4 GB max)");
+            return;
+          }
+          wsUploadSize = static_cast<size_t>(parsedSize);
           wsUploadPath = normalizeWebPath(msg.substring(secondColon + 1));
           if (WebDAVHandler::isProtectedPath(wsUploadPath)) {
             wsServer->sendTXT(num, "ERROR:Cannot write to a protected folder");
@@ -2015,8 +2037,8 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             return;
           }
 
-          LOG_DBG("WS", "Starting upload: %s (%d bytes) to %s", wsUploadFileName.c_str(), wsUploadSize,
-                  wsUploadFinalPath.c_str());
+          LOG_DBG("WS", "Starting upload: %s (%u bytes) to %s", wsUploadFileName.c_str(),
+                  static_cast<unsigned>(wsUploadSize), wsUploadFinalPath.c_str());
 
           // One partial per folder. Nothing else ever deletes these, so without a
           // sweep the leftovers of uploads that were never retried would sit on

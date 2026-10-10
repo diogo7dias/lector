@@ -237,3 +237,27 @@ TEST(StatusBarItems, EveryAnchorFieldIsAnItem) {
   // Every item can sit on one anchor without being dropped.
   EXPECT_GE(kMaxPerAnchor, statusbar::kItemCount);
 }
+
+TEST(ChapterMarks, SkipsTheBookStartAndRepeatedStarts) {
+  uint16_t marks[statusbar::kMaxChapterMarks] = {};
+  int n = 0;
+  n = statusbar::addChapterMark(marks, n, 0);  // the book's start: nothing to mark
+  n = statusbar::addChapterMark(marks, n, 250);
+  n = statusbar::addChapterMark(marks, n, 250);  // two chapters in one spine file
+  n = statusbar::addChapterMark(marks, n, 100);  // out of order: would overdraw
+  n = statusbar::addChapterMark(marks, n, 600);
+  n = statusbar::addChapterMark(marks, n, 1000);  // the book's end
+  ASSERT_EQ(n, 2);
+  EXPECT_EQ(marks[0], 250);
+  EXPECT_EQ(marks[1], 600);
+}
+
+TEST(ChapterMarks, TooManyChaptersDropsThemAll) {
+  uint16_t marks[statusbar::kMaxChapterMarks] = {};
+  int n = 0;
+  for (int i = 1; i <= statusbar::kMaxChapterMarks; i++) n = statusbar::addChapterMark(marks, n, i * 10);
+  EXPECT_EQ(n, statusbar::kMaxChapterMarks);
+  n = statusbar::addChapterMark(marks, n, 999);
+  EXPECT_EQ(n, -1);
+  EXPECT_EQ(statusbar::addChapterMark(marks, n, 999), -1);  // stays dropped
+}

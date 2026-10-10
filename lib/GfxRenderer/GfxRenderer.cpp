@@ -1,3 +1,10 @@
+// Hot translation unit: compiled -O2 instead of the global -Os. Its layout and
+// pixel loops dominate chapter builds and page renders on the flash-cache-starved
+// ESP32-C3; the size cost is confined to this file.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC optimize("O2")
+#endif
+
 #include "GfxRenderer.h"
 
 #include <BidiUtils.h>
@@ -521,9 +528,15 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
   // Paperback Look: smear the ink +1 right and +1 down for heavier strokes, on
   // the BW (base-frame) pass only so grayscale planes stay untouched. Every BW
   // write uses the same state, so redrawing the glyph shifted is the same union.
-  if (renderMode == GfxRenderer::BW && renderer.getPaperbackLook()) {
+  const uint8_t weight = renderMode == GfxRenderer::BW ? renderer.getPaperbackLook() : 0;
+  if (weight > 0) {
     frame.x++;
     renderer.drawGlyphBitmap(bitmap, width, height, frame, is2Bit, renderMode, pixelState);
+    if (weight > 1) {  // Bolder: a second column of ink
+      frame.x++;
+      renderer.drawGlyphBitmap(bitmap, width, height, frame, is2Bit, renderMode, pixelState);
+      frame.x--;
+    }
     frame.x--;
     frame.y++;
     renderer.drawGlyphBitmap(bitmap, width, height, frame, is2Bit, renderMode, pixelState);
@@ -558,7 +571,7 @@ void GfxRenderer::drawGlyphBitmap(const uint8_t* bitmap, const int width, const 
   const glyphBitmap::Plane plane = mode == BW              ? glyphBitmap::Plane::BW
                                    : mode == GRAYSCALE_MSB ? glyphBitmap::Plane::GrayMSB
                                                            : glyphBitmap::Plane::GrayLSB;
-  glyphBitmap::draw(bitmap, width, height, twoBit, plane, state, target, {0, 0, width, height});
+  glyphBitmap::draw(bitmap, width, height, twoBit, plane, state, target, {0, 0, width, height}, textContrast_);
 }
 
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and
@@ -659,7 +672,8 @@ void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* te
 }
 
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
-                           const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir) const {
+                           const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir,
+                           const int letterSpacing) const {
   // cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
     return;
@@ -731,14 +745,14 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       continue;
     }
 
-    cp = font.applyLigatures(cp, textCursor, style);
+    if (ligates(fontId)) cp = font.applyLigatures(cp, textCursor, style);
 
     // Differential rounding: snap (previous advance + current kern) as one unit so
     // identical character pairs always produce the same pixel step regardless of
     // where they fall on the line.
     if (prevCp != 0) {
-      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
-      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);       // snap 12.4 fixed-point to nearest pixel
+      const auto kernFP = kerns(fontId) ? font.getKerning(prevCp, cp, style) : 0;  // 4.4 fixed-point kern
+      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP) + letterSpacing;  // snap 12.4 fixed-point to nearest pixel
     }
 
     const EpdGlyph* glyph = font.getGlyph(cp, style);
@@ -763,6 +777,20 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     }
     prevCp = cp;
   }
+}
+
+int GfxRenderer::spacedGlyphCount(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+  const auto fontIt = fontMap.find(resolveTextFontId(fontId, text, style));
+  if (text == nullptr || fontIt == fontMap.end()) return 0;
+  int count = 0;
+  const char* cursor = text;
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&cursor)))) {
+    if (utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp)) continue;
+    if (ligates(fontId)) fontIt->second.applyLigatures(cp, cursor, style);
+    ++count;
+  }
+  return count;
 }
 
 void GfxRenderer::drawTextScaled(const int fontId, const int x, const int y, const char* text, const int percent,
@@ -1983,15 +2011,16 @@ int GfxRenderer::getSpaceAdvance(const int fontId, const uint32_t leftCp, const 
   const int32_t spaceAdvanceFP = spaceGlyph ? static_cast<int32_t>(spaceGlyph->advanceX) : 0;
   // Combine space advance + flanking kern into one fixed-point sum before snapping.
   // Snapping the combined value avoids the +/-1 px error from snapping each component separately.
-  const int32_t kernFP = static_cast<int32_t>(font.getKerning(leftCp, ' ', style)) +
-                         static_cast<int32_t>(font.getKerning(' ', rightCp, style));
+  const int32_t kernFP = kerns(fontId) ? static_cast<int32_t>(font.getKerning(leftCp, ' ', style)) +
+                                             static_cast<int32_t>(font.getKerning(' ', rightCp, style))
+                                       : 0;
   return fp4::toPixel(spaceAdvanceFP + kernFP);
 }
 
 int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
                             const EpdFontFamily::Style style) const {
   const auto fontIt = fontMap.find(fontId);
-  if (fontIt == fontMap.end()) return 0;
+  if (fontIt == fontMap.end() || !kerns(fontId)) return 0;
   const int kernFP = fontIt->second.getKerning(leftCp, rightCp, style);  // 4.4 fixed-point
   return fp4::toPixel(kernFP);                                           // snap 4.4 fixed-point to nearest pixel
 }
@@ -2056,13 +2085,13 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     if (utf8IsCombiningMark(cp)) {
       continue;
     }
-    cp = font.applyLigatures(cp, text, style);
+    if (ligates(fontId)) cp = font.applyLigatures(cp, text, style);
 
     // Differential rounding: snap (previous advance + current kern) together,
     // matching drawText so measurement and rendering agree exactly.
     if (prevCp != 0) {
-      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
-      widthPx += fp4::toPixel(prevAdvanceFP + kernFP);         // snap 12.4 fixed-point to nearest pixel
+      const auto kernFP = kerns(fontId) ? font.getKerning(prevCp, cp, style) : 0;  // 4.4 fixed-point kern
+      widthPx += fp4::toPixel(prevAdvanceFP + kernFP);  // snap 12.4 fixed-point to nearest pixel
     }
 
     const EpdGlyph* glyph = font.getGlyph(cp, style);
@@ -2128,6 +2157,14 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
   // Route CJK-bearing strings to the fallback font (see resolveTextFontId).
   const int resolvedFontId = resolveTextFontId(fontId, text, style);
+
+  // A prewarm scan only records the glyphs, as drawText does: drawing here would load and
+  // decompress them during the scan, the work the scan exists to batch.
+  if (fontCacheManager_ && fontCacheManager_->isScanning()) {
+    fontCacheManager_->recordText(text, resolvedFontId, style);
+    return;
+  }
+
   // Redirected to the SD fallback: batch-load the string's glyphs so the draw
   // loop below doesn't fault them in one SD read at a time (#2725).
   if (resolvedFontId != fontId) {

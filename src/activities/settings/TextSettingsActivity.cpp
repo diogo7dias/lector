@@ -142,7 +142,11 @@ int TextSettingsActivity::reservedHeight() const {
 
 void TextSettingsActivity::drawReserved(const Rect& rect) {
   // The preview is a real page rendered by the reader engine, so it stays a raw
-  // painter; the base only decides where it goes.
+  // painter; the base only decides where it goes. It measures and draws with this look's
+  // Kerning and Ligatures switches; the reader sets its own again on its next page.
+  const int previewFontId = SETTINGS.getReaderFontId(look_);
+  renderer.setKerning(previewFontId, look_.kerning != 0);
+  renderer.setLigatures(previewFontId, look_.ligatures != 0);
   textsettings::renderPreview(renderer, previewLayout_, look_, rect.y, rect.height - metrics_.verticalSpacing);
 }
 
@@ -164,6 +168,8 @@ constexpr RowSpec ROW_SPECS[] = {
     {&CrossPointSettings::lineSpacingPercent, StrId::STR_NONE_OPT, false},      // LineSpacing
     {&CrossPointSettings::extraParagraphSpacing, StrId::STR_NONE_OPT, false},   // ExtraSpacing
     {&CrossPointSettings::wordSpacing, StrId::STR_NONE_OPT, true},              // WordSpacing
+    {&CrossPointSettings::kerning, StrId::STR_NONE_OPT, false},                 // Kerning
+    {&CrossPointSettings::ligatures, StrId::STR_NONE_OPT, false},               // Ligatures
     {&CrossPointSettings::paragraphAlignment, StrId::STR_ALIGNMENT, false},     // Alignment
     {&CrossPointSettings::firstLineIndentMode, StrId::STR_NONE_OPT, false},     // IndentMode
     {&CrossPointSettings::firstLineIndentPercent, StrId::STR_NONE_OPT, false},  // IndentPercent
@@ -178,7 +184,12 @@ constexpr RowSpec ROW_SPECS[] = {
     {&CrossPointSettings::guideDotsHidden, StrId::STR_NONE_OPT, false},         // HiddenDots
     {&CrossPointSettings::embeddedTextStyle, StrId::STR_NONE_OPT, false},       // EmbeddedTextStyle
     {&CrossPointSettings::embeddedLayoutStyle, StrId::STR_NONE_OPT, false},     // EmbeddedLayoutStyle
+    {&CrossPointSettings::bookMargins, StrId::STR_NONE_OPT, false},             // BookMargins
+    {&CrossPointSettings::linkUnderline, StrId::STR_NONE_OPT, false},           // LinkUnderline
+    {&CrossPointSettings::headingPageBreak, StrId::STR_NONE_OPT, false},        // HeadingPageBreak
+    {&CrossPointSettings::wordExpansion, StrId::STR_NONE_OPT, false},           // WordExpansion
     {&CrossPointSettings::textAntiAliasing, StrId::STR_NONE_OPT, false},        // AntiAliasing
+    {&CrossPointSettings::textContrast, StrId::STR_NONE_OPT, false},            // TextContrast
     {&CrossPointSettings::debugBorders, StrId::STR_NONE_OPT, false},            // DebugBorders
 };
 }  // namespace
@@ -215,7 +226,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   // The section headings the list used to carry are gone: a cell shows its own name, and
   // four bands would have cost two grid rows to say what the pairing already says.
   std::vector<Row> rows;
-  rows.reserve(25);
+  rows.reserve(32);
 
   rows.push_back(Row::Font);
   rows.push_back(Row::Size);
@@ -227,6 +238,8 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   rows.push_back(Row::LineSpacing);
   rows.push_back(Row::ExtraSpacing);
   rows.push_back(Row::WordSpacing);
+  rows.push_back(Row::Kerning);
+  rows.push_back(Row::Ligatures);
 
   rows.push_back(Row::Alignment);
   rows.push_back(Row::IndentMode);
@@ -263,6 +276,13 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
 
   rows.push_back(Row::EmbeddedTextStyle);
   rows.push_back(Row::EmbeddedLayoutStyle);
+  // Book Margins splits the margins out of the Layout bucket, so it only shows beside it.
+  if (look_.embeddedLayoutStyle) rows.push_back(Row::BookMargins);
+  rows.push_back(Row::LinkUnderline);
+  rows.push_back(Row::HeadingPageBreak);
+  rows.push_back(Row::WordExpansion);
+  // Kept at the end so it coming and going only reflows the last pair of cells.
+  if (look_.textAntiAliasing) rows.push_back(Row::TextContrast);
 
   rows.push_back(Row::DebugBorders);
   return rows;

@@ -32,28 +32,29 @@ struct StatusBarData {
   // a new paragraph begins on the next page. -1 = the chapter cannot answer (no
   // paragraph table), which hides the item rather than showing a wrong 0.
   int paragraphPagesLeft = -1;
+  // Minutes left in the chapter and in the book at this sitting's pace. -1 hides the item
+  // until enough pages were timed (reading_time::MIN_SAMPLES).
+  int chapterMinutesLeft = -1;
+  int bookMinutesLeft = -1;
+  // Book-bar chapter marks: where each top-level chapter starts, in thousandths of the
+  // book. Points at storage the reader owns, so the render path stays allocation-free.
+  // A count of 0 draws a plain bar.
+  const uint16_t* chapterMarks = nullptr;
+  int chapterMarkCount = 0;
 };
 
-// Progress bar thickness in pixels for the slim/medium/fat setting (0/1/2). Kept
-// deliberately far apart so the three levels read as "plenty distinct".
+// Progress bar thickness in pixels for the slim/medium/fat setting (0/1/2). Every
+// site that draws OR reserves space for a bar must call this, or the reserved band
+// and the drawn bar disagree.
 inline int statusBarThicknessPx(uint8_t thickness) {
   switch (thickness) {
     case 0:
-      return 2;  // slim
+      return 3;  // slim
     case 2:
-      return 12;  // fat
+      return 9;  // fat
     default:
       return 6;  // medium
   }
-}
-
-// Thickness actually drawn. An outlined bar spends 2px per side on the frame, so
-// a slim bar would have no room left to show a partial fill; it is nudged to 5px.
-// Every site that draws OR reserves space for a bar must call this, or the
-// reserved band and the drawn bar disagree.
-inline int statusBarDrawThicknessPx(const uint8_t thickness, const bool outline) {
-  const int px = statusBarThicknessPx(thickness);
-  return outline && px < 5 ? 5 : px;
 }
 
 // ---------------------------------------------------------------------------
@@ -70,6 +71,22 @@ inline int statusBarDrawThicknessPx(const uint8_t thickness, const bool outline)
 // column = idx%3 (0 left, 1 centre, 2 right).
 // ---------------------------------------------------------------------------
 namespace statusbar {
+
+// More chapter marks than this crowd a 480 px bar into a solid stripe, so a book with
+// more top-level chapters gets none.
+constexpr int kMaxChapterMarks = 64;
+
+// Appends one chapter-start mark (thousandths of the book) and returns the new count.
+// The book's own start and end have nothing to mark, and a mark at or before the
+// previous one (a chapter sharing its spine file, or an out-of-order TOC) would draw on
+// top of it, so those are skipped. Returns -1 once the bar would hold too many.
+inline int addChapterMark(uint16_t* marks, int count, int permille) {
+  if (count < 0 || permille <= 0 || permille >= 1000) return count;
+  if (count > 0 && marks[count - 1] >= permille) return count;
+  if (count >= kMaxChapterMarks) return -1;
+  marks[count] = static_cast<uint16_t>(permille);
+  return count + 1;
+}
 
 // One drawn item. `text` points at a caller-owned buffer (never copied here);
 // `isBattery` selects the icon draw. POD so buckets can be relocated by value.
@@ -94,7 +111,9 @@ struct Seg {
   X(ChapterPct, chapterPctPos, true)      \
   X(ChapterNum, chapterNumPos, true)      \
   X(SessionPages, sessionPagesPos, false) \
-  X(ParaPages, paraPagesPos, false)
+  X(ParaPages, paraPagesPos, false)       \
+  X(ChapterTime, chapterTimePos, true)    \
+  X(BookTime, bookTimePos, false)
 
 #define SB_ITEM_ENUM(id, field, chapterOnly) id,
 enum Item : uint8_t { STATUS_BAR_ITEMS(SB_ITEM_ENUM) kItemCount };

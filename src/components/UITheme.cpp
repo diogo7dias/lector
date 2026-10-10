@@ -124,27 +124,25 @@ int UITheme::getStatusBarV2TopHeight(const StatusBarBlock& sb, bool hasChapters,
   // band reserves the bar only. See StatusBarBlock::progressBarsVisible().
   if (!sb.progressBarsVisible()) return 0;
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  const int barPx = statusBarDrawThicknessPx(sb.activeBarThickness(), sb.barOutline != 0);
+  const int barPx = statusBarThicknessPx(sb.activeBarThickness());
   int bars = 0;
   if (sb.bookBar == CrossPointSettings::SB_EDGE_TOP) bars += barPx;
   if (sb.chapterBar == CrossPointSettings::SB_EDGE_TOP && hasChapters) bars += barPx;
   const bool hasText = sb.textOn() && sbBandHasText(sb, true, hasChapters);
   const int text = hasText ? metrics.statusBarVerticalMargin + (extraTitleHeightPx > 0 ? extraTitleHeightPx : 0) : 0;
-  // The floating margin is the gap ABOVE the topmost bar, so it is paid once per
-  // band, not once per bar.
-  return text + (bars > 0 ? bars + metrics.progressBarMarginTop + sb.floatingBarMarginPx() : 0);
+  return text + (bars > 0 ? bars + metrics.progressBarMarginTop : 0);
 }
 
 int UITheme::getStatusBarV2BottomHeight(const StatusBarBlock& sb, bool hasChapters, int extraTitleHeightPx) {
   if (!sb.progressBarsVisible()) return 0;
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  const int barPx = statusBarDrawThicknessPx(sb.activeBarThickness(), sb.barOutline != 0);
+  const int barPx = statusBarThicknessPx(sb.activeBarThickness());
   int bars = 0;
   if (sb.bookBar == CrossPointSettings::SB_EDGE_BOTTOM) bars += barPx;
   if (sb.chapterBar == CrossPointSettings::SB_EDGE_BOTTOM && hasChapters) bars += barPx;
   const bool hasText = sb.textOn() && sbBandHasText(sb, false, hasChapters);
   const int text = hasText ? metrics.statusBarVerticalMargin + (extraTitleHeightPx > 0 ? extraTitleHeightPx : 0) : 0;
-  return text + (bars > 0 ? bars + metrics.progressBarMarginTop + sb.floatingBarMarginPx() : 0);
+  return text + (bars > 0 ? bars + metrics.progressBarMarginTop : 0);
 }
 
 int UITheme::getStatusBarV2BandWidth(const GfxRenderer& renderer) {

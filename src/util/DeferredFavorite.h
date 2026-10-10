@@ -72,4 +72,10 @@ std::string pendingTargetFor(const std::string& fromPath);
 // wallpaper the queue may still be renaming (pause, delete).
 bool waitForIdle(uint32_t timeoutMs);
 
+// Before a chip reset that waitForIdle() could not wait out: drops the renames not yet
+// started (as failures, so reconcile() puts back the names they promised) and waits up
+// to timeoutMs for the one in flight. A reset in the middle of a FAT rename can tear the
+// directory entry; the queued ones are only lost favorites. Main task only.
+bool abandonUnstarted(uint32_t timeoutMs);
+
 }  // namespace DeferredFavorite

@@ -232,3 +232,26 @@ TEST(GlyphBitmapDownscale, NeverDropsAnAxisToZero) {
   glyphBitmap::downscale(src.data(), 3, 3, true, 35, dst.data());
   EXPECT_EQ(pixel2(dst, 1, 0, 0), 3);
 }
+
+// Text Contrast on the gray planes, for one row of the four 2bpp values 0..3 (white, light
+// gray, dark gray, black). Returns which of the four pixels the plane sets.
+static uint8_t contrastBits(const glyphBitmap::Plane plane, const uint8_t contrast) {
+  const uint8_t glyph[1] = {0x1B};  // 00 01 10 11
+  uint8_t row[1] = {0};
+  glyphBitmap::Target target{row, 8, 1, 0, 1, {0, 0, 1, 0, 0, 1}};
+  glyphBitmap::draw(glyph, 4, 1, true, plane, false, target, {0, 0, 4, 1}, contrast);
+  return row[0] >> 4;
+}
+
+TEST(GlyphBitmap, TextContrastDarkensTheGrays) {
+  using P = glyphBitmap::Plane;
+  // Normal: MSB marks both grays, LSB dark gray only (light gray = MSB alone).
+  EXPECT_EQ(0b0110, contrastBits(P::GrayMSB, 0));
+  EXPECT_EQ(0b0010, contrastBits(P::GrayLSB, 0));
+  // High: light gray takes LSB too, so it reads as dark gray.
+  EXPECT_EQ(0b0110, contrastBits(P::GrayMSB, 1));
+  EXPECT_EQ(0b0110, contrastBits(P::GrayLSB, 1));
+  // Max: dark gray is left to the BW pass's black; light gray becomes dark gray.
+  EXPECT_EQ(0b0100, contrastBits(P::GrayMSB, 2));
+  EXPECT_EQ(0b0100, contrastBits(P::GrayLSB, 2));
+}

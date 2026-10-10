@@ -64,12 +64,12 @@ inline constexpr uint8_t WORD_SPACING = 100;  // percent of the font's natural s
 struct ReaderPrefs {
   // Bump whenever the field set changes: readReaderPrefs rejects a mismatched
   // version, so an old sidecar is ignored and the book falls back to global.
-  // v5 through v13 are the exceptions: they are read and upgraded instead of dropped.
+  // v5 through v21 are the exceptions: they are read and upgraded instead of dropped.
   // Dropping a sidecar silently discards every per-book setting the user ever chose,
   // which is far worse than carrying an old one forward. Each of those older layouts is
   // a strict prefix of this struct, so a record is read at its own length and every
   // field appended since keeps its constructed default — see readerPrefsRecordSize().
-  static constexpr uint8_t VERSION = 14;  // v14: baseline word spacing
+  static constexpr uint8_t VERSION = 22;  // v22: Word Expansion switch
 
   // Bring a sidecar written before the current version onto the current reading
   // defaults. Only these values are re-seeded, and only for books that predate them.
@@ -164,6 +164,8 @@ struct ReaderPrefs {
   uint8_t sbBookBar = 0;          // SB_EDGE_OFF
   uint8_t sbChapterBar = 0;       // SB_EDGE_OFF
   uint8_t sbBarThickness = 1;     // SB_BAR_MEDIUM
+  // Retired options (Floating Bar, Bar Outline), no longer read. The bytes stay so every
+  // later offset in the binary sidecar holds.
   uint8_t sbFloatingBar = 0;
   uint8_t sbBarOutline = 0;
   uint8_t sbOffBar = 0;  // SB_OFFBAR_OFF
@@ -186,6 +188,32 @@ struct ReaderPrefs {
 
   // Appended so v5-v13 sidecars retain every existing field and default to unchanged spacing.
   uint8_t wordSpacing = reader_defaults::WORD_SPACING;
+
+  // Pair kerning for the reading font, on unless turned off. APPENDED LAST, like every
+  // field since paragraphNumberSize; a v14 record stops before it and keeps it on.
+  uint8_t kerning = 1;
+
+  // Font ligatures for the reading font, on unless turned off. APPENDED LAST.
+  uint8_t ligatures = 1;
+
+  // Underline in-book links, on unless turned off. APPENDED LAST.
+  uint8_t linkUnderline = 1;
+
+  // Time left in the chapter and in the book (status bar anchors, off by default). APPENDED LAST.
+  uint8_t sbChapterTimePos = 0;  // SB_ANCHOR_OFF
+  uint8_t sbBookTimePos = 0;     // SB_ANCHOR_OFF
+
+  // How dark anti-aliased greys are drawn: 0 Normal, 1 High, 2 Max. APPENDED LAST.
+  uint8_t textContrast = 0;
+
+  // Keep the book's CSS margins and padding, on unless turned off. APPENDED LAST.
+  uint8_t bookMargins = 1;
+
+  // Start each h1/h2 heading on a new page, off unless turned on. APPENDED LAST.
+  uint8_t headingPageBreak = 0;
+
+  // Word Expansion: 0 Off, 1 Some, 2 More (px between letters on loose justified lines). APPENDED LAST.
+  uint8_t wordExpansion = 0;
 
   // Copy the status bar block from `source`.
   //
@@ -239,6 +267,12 @@ inline ReaderRenderSpec makeRenderSpec(const ReaderPrefs& p, const int fontId, c
   spec.guideDotsMode = resolveGuideDotsMode(p.guideDotsEnabled, p.guideDotsHidden);
   spec.firstLineIndentMode = p.firstLineIndentMode;
   spec.firstLineIndentPercent = p.firstLineIndentPercent;
+  spec.kerning = p.kerning != 0;
+  spec.ligatures = p.ligatures != 0;
+  spec.linkUnderline = p.linkUnderline != 0;
+  spec.bookMargins = p.bookMargins != 0;
+  spec.headingPageBreak = p.headingPageBreak != 0;
+  spec.wordExpansion = std::min<uint8_t>(p.wordExpansion, 2);
   return spec;
 }
 
@@ -250,6 +284,14 @@ inline constexpr size_t READER_PREFS_V10_SIZE = offsetof(ReaderPrefs, sbBatteryP
 inline constexpr size_t READER_PREFS_V11_SIZE = offsetof(ReaderPrefs, embeddedLayoutStyle);
 inline constexpr size_t READER_PREFS_V12_SIZE = offsetof(ReaderPrefs, sbParaPagesPos);
 inline constexpr size_t READER_PREFS_V13_SIZE = offsetof(ReaderPrefs, wordSpacing);
+inline constexpr size_t READER_PREFS_V14_SIZE = offsetof(ReaderPrefs, kerning);
+inline constexpr size_t READER_PREFS_V15_SIZE = offsetof(ReaderPrefs, ligatures);
+inline constexpr size_t READER_PREFS_V16_SIZE = offsetof(ReaderPrefs, linkUnderline);
+inline constexpr size_t READER_PREFS_V17_SIZE = offsetof(ReaderPrefs, sbChapterTimePos);
+inline constexpr size_t READER_PREFS_V18_SIZE = offsetof(ReaderPrefs, textContrast);
+inline constexpr size_t READER_PREFS_V19_SIZE = offsetof(ReaderPrefs, bookMargins);
+inline constexpr size_t READER_PREFS_V20_SIZE = offsetof(ReaderPrefs, headingPageBreak);
+inline constexpr size_t READER_PREFS_V21_SIZE = offsetof(ReaderPrefs, wordExpansion);
 
 // A record older than v12 carries one "Embedded Style" choice, in what is now the text
 // switch. Someone who turned it off wanted the book's own styling gone, so the layout
@@ -300,6 +342,14 @@ inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
   if (version == 11) return READER_PREFS_V11_SIZE;
   if (version == 12) return READER_PREFS_V12_SIZE;
   if (version == 13) return READER_PREFS_V13_SIZE;
+  if (version == 14) return READER_PREFS_V14_SIZE;
+  if (version == 15) return READER_PREFS_V15_SIZE;
+  if (version == 16) return READER_PREFS_V16_SIZE;
+  if (version == 17) return READER_PREFS_V17_SIZE;
+  if (version == 18) return READER_PREFS_V18_SIZE;
+  if (version == 19) return READER_PREFS_V19_SIZE;
+  if (version == 20) return READER_PREFS_V20_SIZE;
+  if (version == 21) return READER_PREFS_V21_SIZE;
   if (version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
   return 0;
 }
@@ -317,8 +367,16 @@ static_assert(READER_PREFS_V11_SIZE == READER_PREFS_V10_SIZE + 17,
 static_assert(READER_PREFS_V12_SIZE == READER_PREFS_V11_SIZE + 1,
               "embeddedLayoutStyle must sit between the v11 and v12 record ends, with no padding");
 static_assert(READER_PREFS_V13_SIZE == READER_PREFS_V12_SIZE + 1, "v13 adds sbParaPagesPos");
-static_assert(sizeof(ReaderPrefs) == READER_PREFS_V13_SIZE + 1,
-              "wordSpacing must be the last byte: every new field goes last, or "
+static_assert(READER_PREFS_V14_SIZE == READER_PREFS_V13_SIZE + 1, "v14 adds wordSpacing");
+static_assert(READER_PREFS_V15_SIZE == READER_PREFS_V14_SIZE + 1, "v15 adds kerning");
+static_assert(READER_PREFS_V16_SIZE == READER_PREFS_V15_SIZE + 1, "v16 adds ligatures");
+static_assert(READER_PREFS_V17_SIZE == READER_PREFS_V16_SIZE + 1, "v17 adds linkUnderline");
+static_assert(READER_PREFS_V18_SIZE == READER_PREFS_V17_SIZE + 2, "v18 adds the two time-left anchors");
+static_assert(READER_PREFS_V19_SIZE == READER_PREFS_V18_SIZE + 1, "v19 adds textContrast");
+static_assert(READER_PREFS_V20_SIZE == READER_PREFS_V19_SIZE + 1, "v20 adds bookMargins");
+static_assert(READER_PREFS_V21_SIZE == READER_PREFS_V20_SIZE + 1, "v21 adds headingPageBreak");
+static_assert(sizeof(ReaderPrefs) == READER_PREFS_V21_SIZE + 1,
+              "wordExpansion must be the last byte: every new field goes last, or "
               "this firmware misreads every sidecar written by the version before it");
 
 // ── The field lists cover the struct ──────────────────────────────────────────
@@ -366,11 +424,13 @@ struct StatusBarBlock {
   uint8_t chapterNumPos = 0;
   uint8_t sessionPagesPos = 0;
   uint8_t paraPagesPos = 0;
+  uint8_t chapterTimePos = 0;
+  uint8_t bookTimePos = 0;
   uint8_t bookBar = 0;
   uint8_t chapterBar = 0;
   uint8_t barThickness = 0;
-  uint8_t floatingBar = 0;
-  uint8_t barOutline = 0;
+  uint8_t floatingBar = 0;  // retired option, no longer read
+  uint8_t barOutline = 0;   // retired option, no longer read
   uint8_t offBar = 0;
 
   bool textOn() const { return enabled != 0; }
@@ -388,10 +448,6 @@ struct StatusBarBlock {
     if (textOn() || offBar == OFF_BAR_OFF) return barThickness;
     return static_cast<uint8_t>(offBar - 1);  // Slim/Medium/Fat -> 0/1/2
   }
-  // Gap between a floating progress bar and the screen edge, in pixels. Every site that
-  // draws OR reserves space for a bar must add it, or the two disagree.
-  static constexpr int FLOATING_BAR_MARGIN_PX = 12;
-  int floatingBarMarginPx() const { return floatingBar ? FLOATING_BAR_MARGIN_PX : 0; }
   // CrossPointSettings::SB_OFFBAR_OFF, asserted equal there.
   static constexpr uint8_t OFF_BAR_OFF = 0;
 };

@@ -30,6 +30,9 @@
   X(extraParagraphSpacing)           \
   X(paragraphSpacing)                \
   X(wordSpacing)                     \
+  X(kerning)                         \
+  X(ligatures)                       \
+  X(linkUnderline)                   \
   X(screenMargin)                    \
   X(screenMarginTop)                 \
   X(screenMarginBottom)              \
@@ -43,6 +46,10 @@
   X(embeddedTextStyle)               \
   X(embeddedLayoutStyle)             \
   X(textAntiAliasing)                \
+  X(textContrast)                    \
+  X(bookMargins)                     \
+  X(headingPageBreak)                \
+  X(wordExpansion)                   \
   X(imageRendering)
 
 // Per-book toggles that live in the in-book menu, not on the Reader Settings screen.
@@ -73,6 +80,8 @@
   X(sbChapterNumPos, sbChapterNumPos, chapterNumPos)       \
   X(sbSessionPagesPos, sbSessionPagesPos, sessionPagesPos) \
   X(sbParaPagesPos, sbParaPagesPos, paraPagesPos)          \
+  X(sbChapterTimePos, sbChapterTimePos, chapterTimePos)    \
+  X(sbBookTimePos, sbBookTimePos, bookTimePos)             \
   X(sbBookBar, sbBookBar, bookBar)                         \
   X(sbChapterBar, sbChapterBar, chapterBar)                \
   X(sbBarThickness, sbBarThickness, barThickness)          \

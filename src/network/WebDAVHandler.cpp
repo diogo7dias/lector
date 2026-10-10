@@ -3,7 +3,9 @@
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 
+#include "CrossPointWebServer.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "util/BookCacheUtils.h"
 #include "util/TaskWatchdog.h"
@@ -52,7 +54,7 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
   (void)uri;
   if (raw.status == RAW_START) {
     _putPath = getRequestPath(server);
-    if (isProtectedPath(_putPath)) {
+    if (isProtectedPath(_putPath) || owner.conflictsWithActiveFetch(_putPath)) {
       _putOk = false;
       return;
     }
@@ -330,6 +332,15 @@ void WebDAVHandler::handleGet(WebServer& s) {
     return;
   }
 
+  constexpr size_t CHUNK_BYTES = 4096;  // heap: too big for the loop task's stack
+  const auto bufOwner = makeUniqueNoThrow<uint8_t[]>(CHUNK_BYTES);
+  if (!bufOwner) {
+    file.close();
+    s.send(500, "text/plain", "Out of memory");
+    return;
+  }
+  uint8_t* const buf = bufOwner.get();
+
   String contentType = getMimeType(path);
   s.setContentLength(file.size());
   s.send(200, contentType.c_str(), "");
@@ -337,10 +348,9 @@ void WebDAVHandler::handleGet(WebServer& s) {
   // HalFile is a Print, not a Stream: client.write(file) took operator bool and
   // sent a single 0x01 (upstream #3410). Stream in chunks, feeding the watchdog.
   NetworkClient client = s.client();
-  uint8_t buf[4096];
   while (file.available()) {
     resetTaskWatchdogIfSubscribed();
-    int bytesRead = file.read(buf, sizeof(buf));
+    int bytesRead = file.read(buf, CHUNK_BYTES);
     if (bytesRead <= 0) break;
     if (client.write(buf, bytesRead) != (size_t)bytesRead) break;
   }
@@ -392,6 +402,7 @@ void WebDAVHandler::handlePut(WebServer& s) {
     s.send(403, "text/plain", "Forbidden");
     return;
   }
+  if (busyWithFetch(s, path)) return;
 
   if (!_putOk) {
     String tempPath = path + ".davtmp";
@@ -420,6 +431,7 @@ void WebDAVHandler::handleDelete(WebServer& s) {
     s.send(403, "text/plain", "Forbidden");
     return;
   }
+  if (busyWithFetch(s, path)) return;
 
   if (!Storage.exists(path.c_str())) {
     s.send(404, "text/plain", "Not Found");
@@ -526,9 +538,16 @@ void WebDAVHandler::handleMove(WebServer& s) {
     s.send(400, "text/plain", "Missing Destination header");
     return;
   }
+  if (busyWithFetch(s, srcPath) || busyWithFetch(s, dstPath)) return;
 
   if (srcPath == dstPath) {
     s.send(204);
+    return;
+  }
+
+  // A folder moved into its own subtree would detach from the tree it lives in.
+  if (dstPath.startsWith(srcPath + "/")) {
+    s.send(409, "text/plain", "Cannot move a folder into itself");
     return;
   }
 
@@ -603,6 +622,7 @@ void WebDAVHandler::handleCopy(WebServer& s) {
     s.send(400, "text/plain", "Missing Destination header");
     return;
   }
+  if (busyWithFetch(s, srcPath) || busyWithFetch(s, dstPath)) return;
 
   if (srcPath == dstPath) {
     s.send(204);
@@ -644,6 +664,17 @@ void WebDAVHandler::handleCopy(WebServer& s) {
     return;
   }
 
+  // Streaming copy through a 4 KB heap buffer (too big for the loop task's stack).
+  // Taken before the destination is touched, so running out leaves it intact.
+  constexpr size_t COPY_BYTES = 4096;
+  const auto bufOwner = makeUniqueNoThrow<uint8_t[]>(COPY_BYTES);
+  if (!bufOwner) {
+    srcFile.close();
+    s.send(500, "text/plain", "Out of memory");
+    return;
+  }
+  uint8_t* const buf = bufOwner.get();
+
   if (dstExists) {
     Storage.remove(dstPath.c_str());
   }
@@ -655,12 +686,10 @@ void WebDAVHandler::handleCopy(WebServer& s) {
     return;
   }
 
-  // Streaming copy with 4KB buffer on stack
-  uint8_t buf[4096];
   bool copyOk = true;
   while (srcFile.available()) {
     resetTaskWatchdogIfSubscribed();
-    int bytesRead = srcFile.read(buf, sizeof(buf));
+    int bytesRead = srcFile.read(buf, COPY_BYTES);
     if (bytesRead <= 0) break;
     size_t written = dstFile.write(buf, bytesRead);
     if (written != (size_t)bytesRead) {
@@ -765,6 +794,12 @@ void WebDAVHandler::urlEncodePath(const String& path, String& out) const {
       out += c;
     }
   }
+}
+
+bool WebDAVHandler::busyWithFetch(WebServer& s, const String& path) const {
+  if (!owner.conflictsWithActiveFetch(path)) return false;
+  s.send(423, "text/plain", "A download is writing this file");
+  return true;
 }
 
 bool WebDAVHandler::isProtectedPath(const String& path) {

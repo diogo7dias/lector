@@ -57,6 +57,23 @@ struct ReaderRenderSpec {
   // Both are part of the cache key.
   uint8_t firstLineIndentMode = 0;
   uint8_t firstLineIndentPercent = 0;
+  // Pair kerning for the reading font. Off widens or narrows almost every word, so it is
+  // part of the cache key; the renderer applies it (GfxRenderer::setKerning).
+  bool kerning = true;
+  // Font ligatures (fi, fl, ff ...) for the reading font, likewise part of the cache key.
+  bool ligatures = true;
+  // Underline in-book links (footnotes, cross-references). Off leaves them plain; baked into the cached words, so part
+  // of the cache key.
+  bool linkUnderline = true;
+  // Keep the book's CSS margins and padding (with Embedded Layout Style on). Off drops them and keeps the rest of the
+  // book's layout; part of the cache key.
+  bool bookMargins = true;
+  // Start each h1/h2 heading on a new page (a heading right after another heading stays with it). Moves page breaks, so
+  // part of the cache key.
+  bool headingPageBreak = false;
+  // Word Expansion: 0 Off, 1 Some, 2 More. Up to that many px between letters on a justified line whose gaps would
+  // pass 1.5 spaces. Moves glyphs, so part of the cache key.
+  uint8_t wordExpansion = 0;
 
   // Memberwise: padding is ignored and float equality keeps its usual semantics.
   constexpr bool operator==(const ReaderRenderSpec&) const = default;
