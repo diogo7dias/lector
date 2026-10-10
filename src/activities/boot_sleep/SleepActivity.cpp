@@ -327,7 +327,7 @@ void SleepActivity::onEnter() {
   // Deep sleep is a chip reset: a rename still sitting in the queue would be lost, while
   // the name it was promised could already have been saved to the card. Bounded so a
   // jammed worker can never block sleeping; sized for a few scan-heavy renames.
-  DeferredFavorite::waitForIdle(15000);
+  if (!DeferredFavorite::waitForIdle(15000)) DeferredFavorite::abandonUnstarted(30000);
   DeferredFavorite::reconcile();
   SleepTiming::mark("favs");
 

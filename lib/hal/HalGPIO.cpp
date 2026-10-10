@@ -261,7 +261,9 @@ bool HalGPIO::isUsbConnected() const {
       }
       delay(2);
     }
-    return false;
+    // A failed gauge read is not an unplug: flipping the state would fake a USB edge
+    // (re-render, wrong battery icon, light sleep dropping the console). Keep the last one.
+    return lastUsbConnected;
   }
   if (BoardConfig::ACTIVE.usbDetect >= 0) {
     return digitalRead(BoardConfig::ACTIVE.usbDetect) == HIGH;

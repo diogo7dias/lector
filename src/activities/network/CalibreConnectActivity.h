@@ -42,7 +42,7 @@ class CalibreConnectActivity final : public UiStatusActivity {
   void onEnter() override;
   void onExit() override;
   bool skipLoopDelay() override { return webServer && webServer->isRunning(); }
-  bool preventAutoSleep() override { return webServer && webServer->isRunning(); }
+  bool preventAutoSleep() override { return webServer && webServer->recentlyActive(); }
 
  protected:
   StatusView statusView() const override;

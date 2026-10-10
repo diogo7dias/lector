@@ -13,6 +13,7 @@
 
 #if defined(FREEINK_NET_WOLFSSL)
 #include <SecureHttpClient.h>
+#include <TrustedRoots.h>
 
 #include "TlsScratchHeap.h"
 
@@ -88,7 +89,7 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
   for (int hop = 0; hop <= MAX_REDIRECTS; ++hop) {
     freeink::SecureHttpClient http;
     http.setTimeout(timeoutMs);
-    http.setInsecure();
+    trusted_roots::apply(http, url.c_str());
     if (sink.contentDisposition) {
       // The default retained set is deliberately small (holding every header of a
       // CDN response has exhausted the heap before), so ask for this one by name
@@ -482,6 +483,21 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     LOG_ERR("HTTP", "short download: got %zu of %zu bytes", sink.downloaded, sink.total);
     if (!allowResume) Storage.remove(destPath.c_str());
     return INCOMPLETE;
+  }
+  // A rewound partial (ignored Range) is overwritten from byte 0 but never truncated.
+  // If the whole body was shorter than that partial, the file now ends in the old
+  // partial's tail: an EPUB with its zip directory past the real end, unreadable.
+  if (sink.rangeStart > 0) {
+    size_t onCard = 0;
+    if (HalFile existing; Storage.openFileForRead("HTTP", destPath.c_str(), existing)) {
+      onCard = existing.fileSize();
+      existing.close();
+    }
+    if (onCard != sink.downloaded) {
+      LOG_ERR("HTTP", "file is %zu bytes after a %zu-byte download, starting clean", onCard, sink.downloaded);
+      Storage.remove(destPath.c_str());
+      return INCOMPLETE;
+    }
   }
   LOG_DBG("HTTP", "Downloaded %zu bytes", sink.downloaded);
   return OK;

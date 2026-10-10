@@ -61,6 +61,7 @@ class ParsedText {
   // with a middle dot in it) or GUIDE_DOTS_HIDDEN (the same widened gap, no dot drawn).
   uint8_t guideDotsMode;
   uint8_t wordSpacing;
+  uint8_t maxLetterSpacing;  // Word Expansion cap, px between letters (0 = off)
   // First-line paragraph indent (restored old-lector model): mode 0 = Book (respect the
   // CSS indent), 1 = Custom % of the column width; percent applies in mode 1.
   uint8_t firstLineIndentMode;
@@ -113,11 +114,13 @@ class ParsedText {
  public:
   explicit ParsedText(const bool focusReadingEnabled = false, const uint8_t guideDotsMode = GUIDE_DOTS_OFF,
                       const BlockStyle& blockStyle = BlockStyle(), const uint8_t firstLineIndentMode = 0,
-                      const uint8_t firstLineIndentPercent = 0, const uint8_t wordSpacing = 100)
+                      const uint8_t firstLineIndentPercent = 0, const uint8_t wordSpacing = 100,
+                      const uint8_t maxLetterSpacing = 0)
       : blockStyle(blockStyle),
         focusReadingEnabled(focusReadingEnabled),
         guideDotsMode(guideDotsMode),
         wordSpacing(std::clamp<uint8_t>(wordSpacing, 75, 150)),
+        maxLetterSpacing(maxLetterSpacing),
         firstLineIndentMode(firstLineIndentMode),
         firstLineIndentPercent(firstLineIndentPercent),
         isNaturalAlign(false),

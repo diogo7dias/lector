@@ -25,6 +25,12 @@ class GfxRenderer {
     }
     return width;
   }
+  int spacedGlyphCount(int, const char* text, EpdFontFamily::Style) const {
+    int count = 0;
+    const auto* p = reinterpret_cast<const unsigned char*>(text);
+    while (*p) count += utf8NextCodepoint(&p) != 0;
+    return count;
+  }
   bool isSdCardFont(int) const { return false; }
   void ensureSdCardFontReady(int, const std::deque<std::string>&, uint8_t) const {}
   void ensureSdCardFontReady(int, const char*, uint8_t) const {}

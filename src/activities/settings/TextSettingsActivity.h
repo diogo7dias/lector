@@ -54,6 +54,8 @@ class TextSettingsActivity final : public UiGridActivity {
     LineSpacing,
     ExtraSpacing,
     WordSpacing,
+    Kerning,
+    Ligatures,
     Alignment,
     IndentMode,
     IndentPercent,     // only in Custom % mode
@@ -68,7 +70,12 @@ class TextSettingsActivity final : public UiGridActivity {
     HiddenDots,  // sub-option of GuideDots: only listed while Guide Dots is on
     EmbeddedTextStyle,
     EmbeddedLayoutStyle,
+    BookMargins,
+    LinkUnderline,
+    HeadingPageBreak,
+    WordExpansion,
     AntiAliasing,
+    TextContrast,  // only listed while Text Anti-Aliasing is on: it darkens the greys
     DebugBorders,
     Count,
   };

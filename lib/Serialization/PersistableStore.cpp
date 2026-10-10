@@ -55,6 +55,7 @@ bool PersistableStoreBase::writeDocToFile(const char* path, const JsonDocument& 
   // a failure anywhere below leaves the previous save in place instead of destroying it.
   const std::string tmp = tmpPathFor(path);
   size_t written = 0;
+  bool closed = false;
   {
     HalFile file;
     if (!Storage.openFileForWrite("PERSIST", tmp.c_str(), file)) {
@@ -63,11 +64,13 @@ bool PersistableStoreBase::writeDocToFile(const char* path, const JsonDocument& 
     }
     Print& sink = file;
     written = serializeJson(doc, sink);
-    file.close();
+    // close() is where SdFat flushes its cached sector: a failure here means the bytes
+    // counted above never reached the card, so the staged file must not replace the old.
+    closed = file.close();
   }
-  if (written != expected) {
-    LOG_ERR("PERSIST", "Refusing to swap %s: wrote %u of %u bytes", path, static_cast<unsigned>(written),
-            static_cast<unsigned>(expected));
+  if (written != expected || !closed) {
+    LOG_ERR("PERSIST", "Refusing to swap %s: wrote %u of %u bytes, close %s", path, static_cast<unsigned>(written),
+            static_cast<unsigned>(expected), closed ? "ok" : "failed");
     Storage.remove(tmp.c_str());
     return false;
   }

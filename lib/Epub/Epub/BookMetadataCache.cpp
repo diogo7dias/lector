@@ -17,6 +17,9 @@ namespace {
 // that still resolves to nothing is left out of the cache entirely.
 constexpr uint8_t BOOK_CACHE_VERSION = 12;
 constexpr char bookBinFile[] = "/book.bin";
+// book.bin is built here and renamed into place only when complete: its header is
+// written first, so a build cut by power loss would otherwise pass load()'s checks.
+constexpr char bookBinTmpFile[] = "/book.bin.tmp";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
 // Buffer size for the buildBookBin streams. 3 buffers x 4KB, transient (freed on
@@ -186,7 +189,7 @@ bool BookMetadataCache::endWrite() {
 
 bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMetadata& metadata) {
   // Open all three files, writing to meta, reading from spine and toc
-  if (!Storage.openFileForWrite("BMC", cachePath + bookBinFile, bookFile)) {
+  if (!Storage.openFileForWrite("BMC", cachePath + bookBinTmpFile, bookFile)) {
     return false;
   }
 
@@ -382,7 +385,15 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     // A short write (card full/removed) would leave a truncated book.bin that
     // still passes the version check on load; remove it so the next open rebuilds.
     LOG_ERR("BMC", "Failed writing book.bin, removing truncated file");
-    Storage.remove((cachePath + bookBinFile).c_str());
+    Storage.remove((cachePath + bookBinTmpFile).c_str());
+    return false;
+  }
+
+  const std::string finalPath = cachePath + bookBinFile;
+  Storage.remove(finalPath.c_str());
+  if (!Storage.rename((cachePath + bookBinTmpFile).c_str(), finalPath.c_str())) {
+    LOG_ERR("BMC", "Failed moving book.bin into place");
+    Storage.remove((cachePath + bookBinTmpFile).c_str());
     return false;
   }
 

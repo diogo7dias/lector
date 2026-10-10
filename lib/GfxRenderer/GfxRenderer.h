@@ -50,6 +50,14 @@ class GfxRenderer {
   uint32_t frameBufferSize = HalDisplay::BUFFER_SIZE;
   std::vector<uint8_t*> bwBufferChunks;
   std::map<int, EpdFontFamily> fontMap;
+  // The reading font with the reader's Kerning switch off, or NO_FONT. Only that font
+  // loses its kern pairs; UI text keeps them.
+  static constexpr int NO_FONT = -1;
+  int kerningOffFontId = NO_FONT;
+  bool kerns(const int fontId) const { return fontId != kerningOffFontId; }
+  // Same, for the reader's Ligatures switch.
+  int ligaturesOffFontId = NO_FONT;
+  bool ligates(const int fontId) const { return fontId != ligaturesOffFontId; }
   // Mutable because ensureSdCardFontReady() is const (called from layout code
   // that holds a const GfxRenderer&) but triggers SD card reads and heap
   // allocation inside the SdCardFont objects. Same pragmatic compromise as
@@ -84,10 +92,12 @@ class GfxRenderer {
   // Emits the summary (if any) and rearms the limiter for the next frame.
   void reportOutOfRangePixels() const;
 
-  // "Paperback Look": when set, drawn glyph pixels are smeared +1px right and
-  // +1px down (BW pass only) to fake heavier paperback ink. Plain bool owned by
-  // the renderer (lib/ must not depend on src/); callers bracket it per region.
-  mutable bool paperbackLook_ = false;
+  // "Paperback Look": drawn glyph pixels are smeared to fake heavier paperback ink (BW pass
+  // only). Level 1 adds +1px right and +1px down; level 2 (Bolder) also adds +2px right, so
+  // vertical strokes gain a second pixel. Plain byte owned by the renderer (lib/ must not
+  // depend on src/); callers bracket it per region.
+  mutable uint8_t paperbackLook_ = 0;
+  mutable uint8_t textContrast_ = 0;
 
   // CJK UI font fallback map: primary (built-in, Latin-only) UI font id -> a
   // size-matched SD-card font id that carries CJK glyphs. When a string drawn
@@ -246,8 +256,10 @@ class GfxRenderer {
   // plain bool; reader activities bracket the body/status text regions only, and
   // reset to false so menus/overlays render thin. const (mutates a mutable field)
   // so it can be called on the const GfxRenderer& that layout/render code holds.
-  void setPaperbackLook(const bool v) const { paperbackLook_ = v; }
-  bool getPaperbackLook() const { return paperbackLook_; }
+  // Text Contrast for anti-aliased glyphs (0 Normal, 1 High, 2 Max): see glyphBitmap::draw.
+  void setTextContrast(const uint8_t level) const { textContrast_ = level; }
+  void setPaperbackLook(const uint8_t level) const { paperbackLook_ = level; }
+  uint8_t getPaperbackLook() const { return paperbackLook_; }
 
   // Drawing
   void drawPixel(int x, int y, bool state = true) const;
@@ -293,9 +305,13 @@ class GfxRenderer {
   // averaged down from its bitmap. Plain runs only (digits, Latin): no BiDi, combining
   // marks or SD fallback. 100 is drawText(). y is the top of the scaled ascender box.
   void drawTextScaled(int fontId, int x, int y, const char* text, int percent, bool black = true) const;
+  // letterSpacing: extra pixels after every glyph but the last (Word Expansion). Each word
+  // gains letterSpacing * (spacedGlyphCount - 1).
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR,
-                BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
+                BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO, int letterSpacing = 0) const;
+  // Glyphs drawText steps between for `text`: ligatures applied, combining marks not counted.
+  int spacedGlyphCount(int fontId, const char* text, EpdFontFamily::Style style) const;
   int getSpaceWidth(int fontId, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   /// Returns the total inter-word advance: fp4::toPixel(spaceAdvance + kern(leftCp,' ') + kern(' ',rightCp)).
   /// Using a single snap avoids the +/-1 px rounding error that arises when space advance and kern are
@@ -303,6 +319,11 @@ class GfxRenderer {
   int getSpaceAdvance(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
   /// Returns the kerning adjustment between two adjacent codepoints.
   int getKerning(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
+  /// Turns kerning off for one font (the reader's Kerning switch), or back on for all
+  /// with on=true. Measuring and drawing both honour it, so layout and paint agree.
+  void setKerning(const int fontId, const bool on) { kerningOffFontId = on ? NO_FONT : fontId; }
+  /// Same for ligatures (fi, fl, ff ...): off draws and measures the letters one by one.
+  void setLigatures(const int fontId, const bool on) { ligaturesOffFontId = on ? NO_FONT : fontId; }
   int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style) const;
   int getFontAscenderSize(int fontId) const;
   /// Distance in pixels from the baseline up to the top of \p codepoint's ink.
@@ -391,6 +412,7 @@ class GfxRenderer {
   // Low level functions
   uint8_t* getFrameBuffer() const;
   size_t getBufferSize() const;
+  bool lastPassCleaned() const { return display.lastPassCleaned(); }
   uint16_t getDisplayWidth() const { return panelWidth; }
   uint16_t getDisplayHeight() const { return panelHeight; }
   uint16_t getDisplayWidthBytes() const { return panelWidthBytes; }

@@ -89,7 +89,9 @@ HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode request
       allowTurbo && policyMode == DisplayRefreshPolicy::Mode::Fast && refreshPolicy.useTurbo(turboPossible);
   einkDisplay.setFastQuality(lastPassWasTurbo ? EInkDisplay::FAST_TURBO : EInkDisplay::FAST_STANDARD);
 
-  switch (refreshPolicy.choose(policyMode, inkScore, lastPassWasTurbo)) {
+  const DisplayRefreshPolicy::Mode chosen = refreshPolicy.choose(policyMode, inkScore, lastPassWasTurbo);
+  lastPassWasClean = chosen != DisplayRefreshPolicy::Mode::Fast;
+  switch (chosen) {
     case DisplayRefreshPolicy::Mode::Clean:
       return RefreshMode::HALF_REFRESH;
     case DisplayRefreshPolicy::Mode::Full:

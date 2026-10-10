@@ -1,3 +1,10 @@
+// Hot translation unit: compiled -O2 instead of the global -Os. Its layout and
+// pixel loops dominate chapter builds and page renders on the flash-cache-starved
+// ESP32-C3; the size cost is confined to this file.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC optimize("O2")
+#endif
+
 #include "ChapterHtmlSlimParser.h"
 
 #include <FsHelpers.h>
@@ -195,7 +202,7 @@ void ChapterHtmlSlimParser::pushTableTextStyleEntry(const CssStyle& cssStyle) {
     entry.hasTextAlign = true;
     entry.textAlign = cssStyle.textAlign;
   }
-  inlineStyleStack.push_back(entry);
+  pushInlineStyle(entry);
   updateEffectiveInlineStyle();
 }
 
@@ -214,7 +221,7 @@ void ChapterHtmlSlimParser::pushDecorationStyleEntry(const CssTextDecoration def
     entry.italic = cssStyle.fontStyle == CssFontStyle::Italic;
   }
   applyDirectionToEntry(entry, cssStyle);
-  inlineStyleStack.push_back(entry);
+  pushInlineStyle(entry);
   updateEffectiveInlineStyle();
 }
 
@@ -289,24 +296,37 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   if (std::find(tocAnchors.begin(), tocAnchors.end(), *pendingAnchorId) != tocAnchors.end()) {
-    if (currentPage && !currentPage->elements.empty()) {
-      currentPage->centerFullTextPage(renderer, fontId, lineCompression, viewportHeight);
-      completePageFn(completePageCtx, std::move(currentPage), xpathParagraphIndex, xpathListItemIndex,
-                     currentPageVisibleOffset);
-      completedPageCount++;
-      currentPage = makeUniqueNoThrow<Page>();
-      if (!currentPage) {
-        LOG_ERR("EHP", "OOM: Page");
-        return;
-      }
-      currentPageNextY = 0;
-      currentPageVisibleOffsetSet = false;
-    }
+    if (!breakPage()) return;
   }
 
   // Record deferred anchor after previous block is flushed (and any TOC page break)
   anchorData.push_back({*pendingAnchorId, static_cast<uint16_t>(completedPageCount)});
   pendingAnchorId.reset();
+}
+
+bool ChapterHtmlSlimParser::breakPage() {
+  if (!currentPage || currentPage->elements.empty()) return true;
+  currentPage->centerFullTextPage(renderer, fontId, lineCompression, viewportHeight);
+  completePageFn(completePageCtx, std::move(currentPage), xpathParagraphIndex, xpathListItemIndex,
+                 currentPageVisibleOffset);
+  completedPageCount++;
+  currentPage = makeUniqueNoThrow<Page>();
+  if (!currentPage) {
+    LOG_ERR("EHP", "OOM: Page");
+    return false;
+  }
+  currentPageNextY = 0;
+  currentPageVisibleOffsetSet = false;
+  return true;
+}
+
+// Break Before Headings. Runs once the block before is laid out and before the heading's
+// anchor is recorded, so a link to the heading lands on its new page. A heading straight
+// after a heading ("Part One", "Chapter 1") keeps its page.
+void ChapterHtmlSlimParser::breakBeforeHeading() {
+  if (!breakBeforeBlock_) return;
+  breakBeforeBlock_ = false;
+  if (!lastBlockWasHeading_) breakPage();
 }
 
 void ChapterHtmlSlimParser::setCurrentPageVisibleOffset(const uint32_t offset) {
@@ -389,6 +409,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       // The empty block is being re-purposed for the element that just opened, so it
       // adopts that element's heading-ness rather than keeping the previous one's.
       currentTextBlock->setHeading(insideHeading());
+      breakBeforeHeading();
       flushPendingAnchor();
       return;
     }
@@ -405,13 +426,15 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       return;
     }
 
+    lastBlockWasHeading_ = currentTextBlock->getIsHeading();
     makePages();
   }
+  breakBeforeHeading();
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
   currentTextBlock = makeUniqueNoThrow<ParsedText>(focusReadingEnabled, guideDotsMode, blockStyle, firstLineIndentMode,
-                                                   firstLineIndentPercent, wordSpacing);
+                                                   firstLineIndentPercent, wordSpacing, wordExpansion);
   if (!currentTextBlock) {
     LOG_ERR("EHP", "OOM: ParsedText");
     return;
@@ -774,7 +797,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     // Drop whatever the reader is no longer honouring before anything reads it, so the
     // rest of the parser only ever sees properties both switches allow.
-    cssStyle.keepBuckets(self->embeddedTextStyle, self->embeddedLayoutStyle);
+    cssStyle.keepBuckets(self->embeddedTextStyle, self->embeddedLayoutStyle, self->bookMargins);
   }
 
   // HTML hidden attribute overrides CSS display.
@@ -896,9 +919,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       tableCellBlockStyle.isRtl = cssStyle.direction == CssTextDirection::Rtl;
     }
 
-    self->currentTextBlock =
-        makeUniqueNoThrow<ParsedText>(self->focusReadingEnabled, self->guideDotsMode, tableCellBlockStyle,
-                                      self->firstLineIndentMode, self->firstLineIndentPercent, self->wordSpacing);
+    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(
+        self->focusReadingEnabled, self->guideDotsMode, tableCellBlockStyle, self->firstLineIndentMode,
+        self->firstLineIndentPercent, self->wordSpacing, self->wordExpansion);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: table cell");
       self->skipUntilDepth = self->depth;
@@ -1344,14 +1367,16 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->currentFootnote.number[0] = '\0';
       self->currentFootnoteLinkTextLen = 0;
 
-      // Apply underline style to visually indicate the link.
+      // Underline the link unless the reader turned Link Underline off.
       StyleStackEntry entry;
       entry.depth = self->depth;
-      entry.hasTextDecoration = true;
-      entry.textDecoration = CssTextDecoration::Underline;
+      if (self->linkUnderline) {
+        entry.hasTextDecoration = true;
+        entry.textDecoration = CssTextDecoration::Underline;
+      }
       applyDirectionToEntry(entry, cssStyle);
       applyVerticalAlignToEntry(entry, cssStyle);
-      self->inlineStyleStack.push_back(entry);
+      self->pushInlineStyle(entry);
       self->updateEffectiveInlineStyle();
 
       // Skip CSS resolution — we already handled styling for this <a> tag
@@ -1365,19 +1390,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       cssStyle, emSize, static_cast<CssTextAlign>(self->paragraphAlignment), self->viewportWidth);
 
   if (strcmp(name, "hr") == 0) {
-    auto hrBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Left, self->viewportWidth);
-    if (!self->embeddedLayoutStyle) {
-      hrBlockStyle.marginLeft = 0;
-      hrBlockStyle.marginRight = 0;
-      hrBlockStyle.marginTop = 0;
-      hrBlockStyle.marginBottom = 0;
-      hrBlockStyle.paddingLeft = 0;
-      hrBlockStyle.paddingRight = 0;
-      hrBlockStyle.paddingTop = 0;
-      hrBlockStyle.paddingBottom = 0;
-      hrBlockStyle.textIndentDefined = false;
-      hrBlockStyle.textIndent = 0;
-    }
+    const auto hrBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Left, self->viewportWidth);
     self->emitHorizontalRule(hrBlockStyle);
     self->depth += 1;
     return;
@@ -1393,7 +1406,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     const auto accumulated =
         self->blockStyleStack.back().getCombinedBlockStyle(headerBlockStyle, BlockStyle::CombineAxis::Horizontal);
     self->blockStyleStack.push_back(accumulated);
+    self->breakBeforeBlock_ = self->headingPageBreak && (name[1] == '1' || name[1] == '2');
     self->startNewTextBlock(accumulated.withoutBottom());
+    self->breakBeforeBlock_ = false;  // spent, or skipped by a bullet-only <li> block
     // A chapter title is not paragraph 1. The watermark keeps that true for every block the
     // heading goes on to open; the heading's own first block is flagged here because
     // startNewTextBlock ran before the watermark was set.
@@ -1480,7 +1495,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     applyTextDecorationToEntry(entry, cssStyle);
     applyDirectionToEntry(entry, cssStyle);
-    self->inlineStyleStack.push_back(entry);
+    self->pushInlineStyle(entry);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, ITALIC_TAGS, std::size(ITALIC_TAGS))) {
     // Flush buffer before style change so preceding text gets current style
@@ -1500,7 +1515,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     applyTextDecorationToEntry(entry, cssStyle);
     applyDirectionToEntry(entry, cssStyle);
-    self->inlineStyleStack.push_back(entry);
+    self->pushInlineStyle(entry);
     self->updateEffectiveInlineStyle();
   } else if (strcmp(name, "sup") == 0 || strcmp(name, "sub") == 0) {
     if (self->partWordBufferIndex > 0) {
@@ -1516,7 +1531,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.hasSub = true;
       entry.sub = true;
     }
-    self->inlineStyleStack.push_back(entry);
+    self->pushInlineStyle(entry);
     self->updateEffectiveInlineStyle();
   } else if (strcmp(name, "span") == 0 || !isHeaderOrBlock(name)) {
     // Handle span and other inline elements for CSS styling.
@@ -1549,7 +1564,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         entry.textAlign = cssStyle.textAlign;
       }
       applyVerticalAlignToEntry(entry, cssStyle);
-      self->inlineStyleStack.push_back(entry);
+      self->pushInlineStyle(entry);
       self->updateEffectiveInlineStyle();
     }
   }
@@ -1604,9 +1619,9 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   if (!self->currentTextBlock) {
     const BlockStyle flowStyle =
         self->blockStyleStack.empty() ? BlockStyle() : self->blockStyleStack.back().withoutBottom();
-    self->currentTextBlock =
-        makeUniqueNoThrow<ParsedText>(self->focusReadingEnabled, self->guideDotsMode, flowStyle,
-                                      self->firstLineIndentMode, self->firstLineIndentPercent, self->wordSpacing);
+    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->focusReadingEnabled, self->guideDotsMode, flowStyle,
+                                                           self->firstLineIndentMode, self->firstLineIndentPercent,
+                                                           self->wordSpacing, self->wordExpansion);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: text block for character data");
       return;
@@ -1951,9 +1966,9 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
     const BlockStyle flowStyle =
         self->blockStyleStack.empty() ? BlockStyle() : self->blockStyleStack.back().withoutBottom();
-    self->currentTextBlock =
-        makeUniqueNoThrow<ParsedText>(self->focusReadingEnabled, self->guideDotsMode, flowStyle,
-                                      self->firstLineIndentMode, self->firstLineIndentPercent, self->wordSpacing);
+    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->focusReadingEnabled, self->guideDotsMode, flowStyle,
+                                                           self->firstLineIndentMode, self->firstLineIndentPercent,
+                                                           self->wordSpacing, self->wordExpansion);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: text block after table");
     }

@@ -38,6 +38,12 @@ TEST(SectionCacheValidity, EveryLayoutFieldInvalidatesIndependently) {
   CHECK_FIELD(guideDotsMode, GUIDE_DOTS_HIDDEN);
   CHECK_FIELD(firstLineIndentMode, 1);
   CHECK_FIELD(firstLineIndentPercent, 20);
+  CHECK_FIELD(kerning, false);
+  CHECK_FIELD(ligatures, false);
+  CHECK_FIELD(linkUnderline, false);
+  CHECK_FIELD(bookMargins, false);
+  CHECK_FIELD(headingPageBreak, true);
+  CHECK_FIELD(wordExpansion, 2);
 #undef CHECK_FIELD
 }
 

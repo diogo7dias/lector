@@ -15,8 +15,10 @@
 #include "ReaderProgressSaveDebouncer.h"
 #include "ReaderReturnHistory.h"
 #include "ReaderUtils.h"
+#include "ReadingTime.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
+#include "components/StatusBar.h"
 
 class Page;  // for drawParagraphNumbers (full type in the .cpp via <Epub/Page.h>)
 
@@ -32,7 +34,13 @@ class EpubReaderActivity final : public Activity {
   // The reader lays out exclusively through prefs_, so the global singleton is never
   // mutated for reading and a custom book stays decoupled from global changes.
   ReaderPrefs prefs_;
-  int sessionPages = 0;  // Status bar only; reset with this reader activity.
+  int sessionPages = 0;               // Status bar only; reset with this reader activity.
+  reading_time::PageTimer pageTimer;  // pace for the time-left items, this sitting only
+  // Book-bar chapter marks, built once on enter (statusbar::addChapterMark). 128 bytes
+  // as a member rather than a vector: fixed, and read on the stack-tight render task.
+  uint16_t chapterMarks_[statusbar::kMaxChapterMarks] = {};
+  int chapterMarkCount_ = 0;
+  void buildChapterMarks();
   bool prefsCustom_ = false;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
@@ -47,6 +55,7 @@ class EpubReaderActivity final : public Activity {
   // whatever page now holds it. This is the same ordinal the in-book numbering draws
   // and Go To Paragraph accepts.
   std::optional<uint16_t> pendingOrdinalAnchor_;
+  void awaitParagraphInBuild(uint16_t ordinal);
   // True when this book's sidecar was written before the 0.8.1 reading defaults. The
   // upgrade is deferred until the chapter has been laid out under the old settings, so
   // the reading position can be carried across as a paragraph rather than a page.
@@ -72,6 +81,7 @@ class EpubReaderActivity final : public Activity {
   // Image pages use a dedicated double-FAST refresh path, so retain a manual
   // refresh request until renderContents can issue its clean base pass.
   bool forcedRefreshPending = false;
+  int lastRenderedSpine = -1;  // spine of the page last drawn, for Refresh at Chapter Start
   int cachedSpineIndex = 0;
   int cachedChapterTotalPageCount = 0;
   std::optional<uint32_t> cachedVisibleTextOffset;
@@ -192,6 +202,8 @@ class EpubReaderActivity final : public Activity {
   // Flushed on exit, which is also the sleep path (ActivityManager::goToSleep()
   // replaces this activity and so runs onExit()).
   ReaderProgressSaveDebouncer progressSaveDebouncer;
+  // Set when the debouncer says a save is due; loop() writes it at the next pause.
+  bool progressSaveDue = false;
 
   // Grayscale strip scratch for the blocking (X3) tier of renderContents(). It used to be
   // allocated and freed on every page render; a whole reading session of that churn measurably
@@ -289,7 +301,7 @@ class EpubReaderActivity final : public Activity {
   void rememberCurrentContentOffset();
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Ordinary renders, including changed pagination, wait until the batch is due.
-  bool queueProgressSave(int spineIndex, int currentPage, int pageCount);
+  void queueProgressSave(int spineIndex, int currentPage, int pageCount);
   // Write whatever the debouncer is still holding. Call before the book goes away.
   bool flushQueuedProgress();
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
@@ -324,6 +336,8 @@ class EpubReaderActivity final : public Activity {
   int bookPercent() const;
   void openParagraphEntry();
   void openBookmarks();
+  void openSearch();
+  std::string lastSearchQuery;  // offered again the next time Search opens
   // A bookmark picked in the list: jump to it by content offset, else by saved page.
   void onBookmarkJumpResult(const ActivityResult& result);
   // Reading tools

@@ -35,12 +35,12 @@ TEST(SectionCacheValidity, OldHeadersRejectedBeforeSpecReadAndNewHeadersRoundTri
     EXPECT_FALSE(section.file.opened);
   }
 
-  EXPECT_EQ(68, SECTION_FILE_VERSION);
-  EXPECT_EQ(214, SECTION_FILE_PARTIAL_VERSION);
+  EXPECT_EQ(74, SECTION_FILE_VERSION);
+  EXPECT_EQ(208, SECTION_FILE_PARTIAL_VERSION);
   for (uint8_t version : {SECTION_FILE_VERSION, SECTION_FILE_PARTIAL_VERSION}) {
     Section writer;
     writer.writeSectionFileHeader(spec);
-    ASSERT_EQ(46u, writer.file.size());
+    ASSERT_EQ(52u, writer.file.size());  // v74 added the wordExpansion byte
     writer.file.seek(0);
     serialization::writePod(writer.file, version);
     if (version == SECTION_FILE_PARTIAL_VERSION) {

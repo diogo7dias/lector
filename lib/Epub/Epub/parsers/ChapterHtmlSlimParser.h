@@ -96,9 +96,15 @@ class ChapterHtmlSlimParser {
   uint8_t guideDotsMode;  // GuideDotsMode: off / visible dots / hidden dots (gap only)
   uint8_t firstLineIndentMode;
   uint8_t firstLineIndentPercent;
+  bool linkUnderline;  // underline in-book links; off leaves them plain
   const CssParser* cssParser;
   bool embeddedTextStyle;
   bool embeddedLayoutStyle;
+  bool bookMargins;
+  uint8_t wordExpansion;              // Word Expansion cap, px between letters
+  bool headingPageBreak;              // h1/h2 start a new page
+  bool lastBlockWasHeading_ = false;  // the last block laid out was a heading
+  bool breakBeforeBlock_ = false;     // the block being opened is an h1/h2 to break before
   uint8_t imageRendering;
   std::string contentBase;
   std::string imageBasePath;
@@ -120,6 +126,14 @@ class ChapterHtmlSlimParser {
     bool hasSub = false, sub = false;
   };
   std::vector<StyleStackEntry> inlineStyleStack;
+  // ponytail: hard cap on nested inline styles. A hostile chapter of thousands of nested
+  // <span style> grew this vector until the C3 aborted, and every push rescans the whole
+  // stack. Deeper elements keep their parent's style; pops match on depth, so a skipped
+  // push never pops a parent's entry.
+  static constexpr size_t MAX_INLINE_STYLE_DEPTH = 64;
+  void pushInlineStyle(const StyleStackEntry& entry) {
+    if (inlineStyleStack.size() < MAX_INLINE_STYLE_DEPTH) inlineStyleStack.push_back(entry);
+  }
   std::vector<BlockStyle> blockStyleStack;  // accumulated block styles from open ancestor elements
   CssStyle currentCssStyle;
   bool effectiveBold = false;
@@ -217,6 +231,9 @@ class ChapterHtmlSlimParser {
 
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
+  // Close the current page if it holds anything; false only on OOM for the next one.
+  bool breakPage();
+  void breakBeforeHeading();
   void flushPendingAnchor();
   void flushPartWordBuffer();
   void fallbackTableRowToStacked();
@@ -263,6 +280,7 @@ class ChapterHtmlSlimParser {
         guideDotsMode(spec.guideDotsMode),
         firstLineIndentMode(spec.firstLineIndentMode),
         firstLineIndentPercent(spec.firstLineIndentPercent),
+        linkUnderline(spec.linkUnderline),
         completePageFn(completePageFn),
         completePageCtx(completePageCtx),
         popupFn(popupFn),
@@ -270,6 +288,9 @@ class ChapterHtmlSlimParser {
         cssParser(cssParser),
         embeddedTextStyle(spec.embeddedTextStyle),
         embeddedLayoutStyle(spec.embeddedLayoutStyle),
+        bookMargins(spec.bookMargins),
+        wordExpansion(spec.wordExpansion),
+        headingPageBreak(spec.headingPageBreak),
         imageRendering(spec.imageRendering),
         contentBase(contentBase),
         imageBasePath(imageBasePath),

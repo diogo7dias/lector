@@ -260,7 +260,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       const int suffixX = drawX + focusSuffixXArr[i];
       renderer.drawText(fontId, suffixX, wordY, word + boldLen, true, currentStyle, baseDir);
     } else {
-      renderer.drawText(fontId, drawX, wordY, word, true, currentStyle, baseDir);
+      renderer.drawText(fontId, drawX, wordY, word, true, currentStyle, baseDir, letterSpacing);
     }
 
     // Horizontal ruby text rendering
@@ -301,6 +301,12 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
         if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
           lineWidth = (lineWidth + 1) / 2;
         }
+      }
+      if (letterSpacing) {
+        // Word Expansion widened the word; the underline follows. The em-space indent is one
+        // glyph, so counting the whole word adds exactly the steps under the visible text.
+        lineWidth += letterSpacing * std::max(0, renderer.spacedGlyphCount(fontId, word, currentStyle) - 2 +
+                                                     (lineStartX == drawX ? 1 : 0));
       }
 
       for (auto& line : decorationLines) {
@@ -367,6 +373,7 @@ bool TextBlock::serialize(HalFile& file) const {
   serialization::writePod(file, blockStyle.textIndentDefined);
   serialization::writePod(file, blockStyle.isRtl);
   serialization::writePod(file, blockStyle.directionDefined);
+  serialization::writePod(file, letterSpacing);
 
   return true;
 }
@@ -448,7 +455,11 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   // overwrites every byte, so a moved-from value carries nothing into the next iteration.
   std::string scratch;
   for (uint16_t i = 0; i < wc; i++) {
-    serialization::readString(file, scratch);
+    // Every field after this one is positional: a refused string would misalign them all.
+    if (!serialization::readString(file, scratch)) {
+      LOG_ERR("TXB", "Deserialization failed: ruby text %u", i);
+      return nullptr;
+    }
     if (scratch.empty()) continue;
     if (block->rubyTexts.empty()) {
       block->rubyTexts.resize(wc);
@@ -472,6 +483,7 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   serialization::readPod(file, blockStyle.textIndentDefined);
   serialization::readPod(file, blockStyle.isRtl);
   serialization::readPod(file, blockStyle.directionDefined);
+  serialization::readPod(file, block->letterSpacing);
 
   return block;
 }

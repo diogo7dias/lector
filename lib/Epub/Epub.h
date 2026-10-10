@@ -52,6 +52,7 @@ class Epub {
   bool hasCssCache() const { return cssParser && cssParser->hasCache(); }
   bool clearCache() const;
   void setupCacheDir() const;
+  void dropCacheIfSourceChanged() const;
   const std::string& getCachePath() const;
   const std::string& getPath() const;
   std::string getTitle() const;

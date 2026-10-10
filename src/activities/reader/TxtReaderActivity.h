@@ -24,6 +24,8 @@ class TxtReaderActivity final : public Activity {
   int linesPerPage = 0;
   int viewportWidth = 0;
   bool initialized = false;
+  bool unsupportedEncoding = false;  // UTF-16 file: nothing indexed, a message instead
+  bool legacy8Bit = false;           // Windows-1252 / Latin-1 bytes, decoded to UTF-8 per page
 
   // Pairs the Back release with the press this activity saw, so a release left over by a
   // child screen that closed on press is not read as "leave the book".
@@ -64,6 +66,7 @@ class TxtReaderActivity final : public Activity {
   bool loadPageAtOffset(size_t offset, std::vector<std::string>& outLines, size_t& nextOffset);
   void buildPageIndex();
   bool loadPageIndexCache();
+  void detectEncoding();
   void savePageIndexCache() const;
   void saveProgress(uint32_t page);
   void loadProgress();

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "CssParser.h"
+#include "Epub/blocks/BlockStyle.h"
 
 namespace fs = std::filesystem;
 
@@ -563,4 +564,29 @@ TEST(CssStyleBuckets, BothOnKeepsEverythingAndBothOffKeepsNothing) {
   CssStyle neither = fullyDefinedStyle();
   neither.keepBuckets(false, false);
   EXPECT_FALSE(neither.defined.anySet());
+}
+
+TEST(CssStyleBuckets, BookMarginsOffDropsOnlyMarginsAndPadding) {
+  CssStyle s = fullyDefinedStyle();
+  s.keepBuckets(true, true, false);
+
+  // The values go too: BlockStyle::fromCssStyle reads them without asking `defined`.
+  const BlockStyle block = BlockStyle::fromCssStyle(s, 16.0f, CssTextAlign::Left, 480);
+  EXPECT_EQ(block.totalHorizontalInset(), 0);
+  EXPECT_EQ(block.marginTop + block.marginBottom + block.paddingTop + block.paddingBottom, 0);
+
+  EXPECT_FALSE(s.hasMarginTop());
+  EXPECT_FALSE(s.hasMarginBottom());
+  EXPECT_FALSE(s.hasMarginLeft());
+  EXPECT_FALSE(s.hasMarginRight());
+  EXPECT_FALSE(s.hasPaddingTop());
+  EXPECT_FALSE(s.hasPaddingBottom());
+  EXPECT_FALSE(s.hasPaddingLeft());
+  EXPECT_FALSE(s.hasPaddingRight());
+
+  EXPECT_TRUE(s.hasTextAlign());
+  EXPECT_TRUE(s.hasTextIndent());
+  EXPECT_TRUE(s.hasImageWidth());
+  EXPECT_TRUE(s.hasImageHeight());
+  EXPECT_TRUE(s.hasFontWeight());
 }

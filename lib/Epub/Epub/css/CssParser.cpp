@@ -736,9 +736,16 @@ bool CssParser::loadFromStream(HalFile& source) {
 
   size_t totalRead = 0;
 
-  // Use stack-allocated buffers for parsing to avoid heap reallocations
-  StackBuffer selector;
-  StackBuffer declBuffer;
+  // Fixed-capacity buffers, so no reallocation while parsing. 2 KB together: on the
+  // heap, since the parse can run on the 8 KB render task.
+  const auto selectorBuf = makeUniqueNoThrow<StackBuffer>();
+  const auto declBuf = makeUniqueNoThrow<StackBuffer>();
+  if (!selectorBuf || !declBuf) {
+    LOG_ERR("CSS", "OOM: parse buffers");
+    return false;
+  }
+  StackBuffer& selector = *selectorBuf;
+  StackBuffer& declBuffer = *declBuf;
 
   bool inComment = false;
   bool maybeSlash = false;

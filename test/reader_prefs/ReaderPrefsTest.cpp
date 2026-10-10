@@ -51,6 +51,15 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.extraParagraphSpacing, b.extraParagraphSpacing);
   EXPECT_EQ(a.paragraphSpacing, b.paragraphSpacing);
   EXPECT_EQ(a.wordSpacing, b.wordSpacing);
+  EXPECT_EQ(a.kerning, b.kerning);
+  EXPECT_EQ(a.ligatures, b.ligatures);
+  EXPECT_EQ(a.linkUnderline, b.linkUnderline);
+  EXPECT_EQ(a.sbChapterTimePos, b.sbChapterTimePos);
+  EXPECT_EQ(a.sbBookTimePos, b.sbBookTimePos);
+  EXPECT_EQ(a.textContrast, b.textContrast);
+  EXPECT_EQ(a.bookMargins, b.bookMargins);
+  EXPECT_EQ(a.headingPageBreak, b.headingPageBreak);
+  EXPECT_EQ(a.wordExpansion, b.wordExpansion);
   EXPECT_EQ(a.screenMargin, b.screenMargin);
   EXPECT_EQ(a.screenMarginTop, b.screenMarginTop);
   EXPECT_EQ(a.screenMarginBottom, b.screenMarginBottom);
@@ -541,13 +550,29 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(offsetof(ReaderPrefs, sbParaPagesPos), READER_PREFS_V12_SIZE);
   EXPECT_EQ(READER_PREFS_V11_SIZE + 1, READER_PREFS_V12_SIZE);
   EXPECT_EQ(READER_PREFS_V12_SIZE + 1, READER_PREFS_V13_SIZE);
-  EXPECT_EQ(READER_PREFS_V13_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V13_SIZE + 1, READER_PREFS_V14_SIZE);
+  EXPECT_EQ(READER_PREFS_V14_SIZE + 1, READER_PREFS_V15_SIZE);
+  EXPECT_EQ(READER_PREFS_V15_SIZE + 1, READER_PREFS_V16_SIZE);
+  EXPECT_EQ(READER_PREFS_V16_SIZE + 1, READER_PREFS_V17_SIZE);
+  EXPECT_EQ(READER_PREFS_V17_SIZE + 2, READER_PREFS_V18_SIZE);
+  EXPECT_EQ(READER_PREFS_V18_SIZE + 1, READER_PREFS_V19_SIZE);
+  EXPECT_EQ(READER_PREFS_V19_SIZE + 1, READER_PREFS_V20_SIZE);
+  EXPECT_EQ(READER_PREFS_V20_SIZE + 1, READER_PREFS_V21_SIZE);
+  EXPECT_EQ(READER_PREFS_V21_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V21_SIZE, readerPrefsRecordSize(21));
+  EXPECT_EQ(READER_PREFS_V20_SIZE, readerPrefsRecordSize(20));
+  EXPECT_EQ(READER_PREFS_V19_SIZE, readerPrefsRecordSize(19));
+  EXPECT_EQ(READER_PREFS_V18_SIZE, readerPrefsRecordSize(18));
+  EXPECT_EQ(READER_PREFS_V17_SIZE, readerPrefsRecordSize(17));
+  EXPECT_EQ(READER_PREFS_V16_SIZE, readerPrefsRecordSize(16));
+  EXPECT_EQ(READER_PREFS_V15_SIZE, readerPrefsRecordSize(15));
   EXPECT_EQ(READER_PREFS_V13_SIZE, readerPrefsRecordSize(13));
+  EXPECT_EQ(READER_PREFS_V14_SIZE, readerPrefsRecordSize(14));
   EXPECT_LT(READER_PREFS_V10_SIZE, READER_PREFS_V11_SIZE);
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(14, ReaderPrefs::VERSION);
+  EXPECT_EQ(22, ReaderPrefs::VERSION);
 }
 
 TEST(ReaderPrefs, AV12RecordKeepsItsFieldsAndLeavesTheNewItemOff) {
@@ -771,4 +796,182 @@ TEST(StatusBarBlock, HiddenBarKeepsItsProgressBarsOnlyWhenAsked) {
   EXPECT_EQ(0, b.activeBarThickness());  // the hidden-bar size, not the bar's own
   b.enabled = 1;
   EXPECT_EQ(2, b.activeBarThickness());
+}
+
+TEST(ReaderPrefs, AV14RecordKeepsItsLookAndLeavesKerningOn) {
+  auto old = makeSample();
+  old.wordSpacing = 125;
+  old.kerning = 0;  // outside the v14 record, must not be read
+  std::stringstream file;
+  file.put(static_cast<char>(14));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(14));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(1, loaded.kerning);
+  EXPECT_EQ(125, loaded.wordSpacing);
+  EXPECT_EQ(old.fontPointSize, loaded.fontPointSize);
+}
+
+TEST(ReaderPrefs, KerningOffRoundTripsAndReachesTheSpec) {
+  auto original = makeSample();
+  original.kerning = 0;
+  std::stringstream file;
+  writeReaderPrefs(file, original);
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(file, loaded));
+  expectEqual(original, loaded);
+  EXPECT_FALSE(makeRenderSpec(loaded, 1, 480, 800).kerning);
+  EXPECT_TRUE(makeRenderSpec(ReaderPrefs{}, 1, 480, 800).kerning);
+}
+
+TEST(ReaderPrefs, AV15RecordKeepsKerningAndLeavesLigaturesOn) {
+  auto old = makeSample();
+  old.kerning = 0;
+  old.ligatures = 0;  // outside the v15 record, must not be read
+  std::stringstream file;
+  file.put(static_cast<char>(15));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(15));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(0, loaded.kerning);
+  EXPECT_EQ(1, loaded.ligatures);
+}
+
+TEST(ReaderPrefs, LigaturesOffRoundTripsAndReachesTheSpec) {
+  auto original = makeSample();
+  original.ligatures = 0;
+  std::stringstream file;
+  writeReaderPrefs(file, original);
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(file, loaded));
+  expectEqual(original, loaded);
+  EXPECT_FALSE(makeRenderSpec(loaded, 1, 480, 800).ligatures);
+}
+
+TEST(ReaderPrefs, AV16RecordLeavesLinkUnderlineAtItsDefault) {
+  auto old = makeSample();
+  old.linkUnderline = 0;  // outside the v16 record, must not be read
+  std::stringstream file;
+  file.put(static_cast<char>(16));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(16));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(1, loaded.linkUnderline);
+}
+
+TEST(ReaderPrefs, LinkUnderlineFlippedRoundTrips) {
+  auto original = makeSample();
+  original.linkUnderline = 0;
+  std::stringstream file;
+  writeReaderPrefs(file, original);
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(file, loaded));
+  expectEqual(original, loaded);
+  EXPECT_EQ(false, makeRenderSpec(loaded, 1, 480, 800).linkUnderline);
+}
+
+TEST(ReaderPrefs, AV17RecordLeavesTheTimeLeftItemsOff) {
+  auto old = makeSample();
+  old.sbChapterTimePos = 3;  // outside the v17 record, must not be read
+  old.sbBookTimePos = 4;
+  std::stringstream file;
+  file.put(static_cast<char>(17));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(17));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(0, loaded.sbChapterTimePos);
+  EXPECT_EQ(0, loaded.sbBookTimePos);
+}
+
+TEST(ReaderPrefs, AV18RecordKeepsNormalContrast) {
+  auto old = makeSample();
+  old.textContrast = 2;  // outside the v18 record, must not be read
+  std::stringstream file;
+  file.put(static_cast<char>(18));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(18));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(0, loaded.textContrast);
+}
+
+TEST(ReaderPrefs, AV19RecordLeavesBookMarginsAtItsDefault) {
+  auto old = makeSample();
+  old.bookMargins = 0;  // outside the v19 record, must not be read
+  std::stringstream file;
+  file.put(static_cast<char>(19));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(19));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(1, loaded.bookMargins);
+}
+
+TEST(ReaderPrefs, BookMarginsFlippedRoundTrips) {
+  auto original = makeSample();
+  original.bookMargins = 0;
+  std::stringstream file;
+  writeReaderPrefs(file, original);
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(file, loaded));
+  expectEqual(original, loaded);
+  EXPECT_EQ(false, makeRenderSpec(loaded, 1, 480, 800).bookMargins);
+}
+
+TEST(ReaderPrefs, AV20RecordLeavesHeadingPageBreakAtItsDefault) {
+  auto old = makeSample();
+  old.headingPageBreak = 1;  // outside the v20 record, must not be read
+  std::stringstream file;
+  file.put(static_cast<char>(20));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(20));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(0, loaded.headingPageBreak);
+}
+
+TEST(ReaderPrefs, HeadingPageBreakFlippedRoundTrips) {
+  auto original = makeSample();
+  original.headingPageBreak = 1;
+  std::stringstream file;
+  writeReaderPrefs(file, original);
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(file, loaded));
+  expectEqual(original, loaded);
+  EXPECT_EQ(true, makeRenderSpec(loaded, 1, 480, 800).headingPageBreak);
+}
+
+TEST(ReaderPrefs, AV21RecordLeavesWordExpansionAtItsDefault) {
+  auto old = makeSample();
+  old.wordExpansion = 1;  // outside the v21 record, must not be read
+  std::stringstream file;
+  file.put(static_cast<char>(21));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(21));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(0, loaded.wordExpansion);
+}
+
+TEST(ReaderPrefs, WordExpansionFlippedRoundTrips) {
+  auto original = makeSample();
+  original.wordExpansion = 1;
+  std::stringstream file;
+  writeReaderPrefs(file, original);
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(file, loaded));
+  expectEqual(original, loaded);
+  EXPECT_EQ(1, makeRenderSpec(loaded, 1, 480, 800).wordExpansion);
 }

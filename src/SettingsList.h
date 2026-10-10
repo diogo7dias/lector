@@ -271,6 +271,12 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
                                   {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
                                    StrId::STR_PAGES_30, StrId::STR_REFRESH_NEVER},
                                   "refreshFrequency", StrId::STR_CAT_DISPLAY));
+    v.push_back(SettingInfo::Enum(StrId::STR_NIGHT_REFRESH_FREQ, &CrossPointSettings::refreshFrequencyNight,
+                                  {StrId::STR_SAME_AS_DAY, StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10,
+                                   StrId::STR_PAGES_15, StrId::STR_PAGES_30, StrId::STR_REFRESH_NEVER},
+                                  "refreshFrequencyNight", StrId::STR_CAT_DISPLAY));
+    v.push_back(SettingInfo::Toggle(StrId::STR_CHAPTER_START_REFRESH, &CrossPointSettings::chapterStartRefresh,
+                                    "chapterStartRefresh", StrId::STR_CAT_DISPLAY));
 
     v.push_back(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                                     StrId::STR_CAT_DISPLAY));
@@ -398,6 +404,17 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
                                    "wordSpacing", StrId::STR_CAT_READER)
                     .withTextSettings());
 
+    v.push_back(SettingInfo::Toggle(StrId::STR_KERNING, &CrossPointSettings::kerning, "kerning", StrId::STR_CAT_READER)
+                    .withTextSettings());
+
+    v.push_back(
+        SettingInfo::Toggle(StrId::STR_LIGATURES, &CrossPointSettings::ligatures, "ligatures", StrId::STR_CAT_READER)
+            .withTextSettings());
+
+    v.push_back(SettingInfo::Toggle(StrId::STR_LINK_UNDERLINE, &CrossPointSettings::linkUnderline, "linkUnderline",
+                                    StrId::STR_CAT_READER)
+                    .withTextSettings());
+
     // Retired in 0.8.2: the granular paragraph gap (% of line height) duplicated what
     // the Extra Paragraph Spacing toggle above already does. The field and its render
     // spec entry are kept (old caches and sidecars still carry it) but it is pinned to
@@ -409,6 +426,25 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
     //     .withTextSettings(),
     v.push_back(SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
                                     StrId::STR_CAT_READER)
+                    .withTextSettings());
+
+    v.push_back(SettingInfo::Enum(StrId::STR_TEXT_CONTRAST, &CrossPointSettings::textContrast,
+                                  {StrId::STR_NORMAL, StrId::STR_HIGH, StrId::STR_MAX}, "textContrast",
+                                  StrId::STR_CAT_READER)
+                    .withTextSettings());
+
+    v.push_back(SettingInfo::Toggle(StrId::STR_BOOK_MARGINS, &CrossPointSettings::bookMargins, "bookMargins",
+                                    StrId::STR_CAT_READER)
+                    .withTextSettings());
+
+    v.push_back(SettingInfo::Toggle(StrId::STR_HEADING_PAGE_BREAK, &CrossPointSettings::headingPageBreak,
+                                    "headingPageBreak", StrId::STR_CAT_READER)
+                    .withTextSettings());
+
+    v.push_back(SettingInfo::Enum(
+                    StrId::STR_WORD_EXPANSION, &CrossPointSettings::wordExpansion,
+                    {StrId::STR_WORD_EXPANSION_OFF, StrId::STR_WORD_EXPANSION_SOME, StrId::STR_WORD_EXPANSION_MORE},
+                    "wordExpansion", StrId::STR_CAT_READER)
                     .withTextSettings());
 
     v.push_back(SettingInfo::Toggle(StrId::STR_FOCUS_READING, &CrossPointSettings::focusReadingEnabled,
@@ -447,8 +483,10 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
                                     std::move(bookMenuTabValues), "bookMenuTab", StrId::STR_CAT_READER));
     }
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_PAPERBACK_LOOK, &CrossPointSettings::paperbackLookBody,
-                                    "paperbackLookBody", StrId::STR_CAT_READER));
+    // Off / On / Bolder. Stored 0/1/2, so a file written when this was a toggle reads the same.
+    v.push_back(SettingInfo::Enum(StrId::STR_PAPERBACK_LOOK, &CrossPointSettings::paperbackLookBody,
+                                  {StrId::STR_STATE_OFF, StrId::STR_STATE_ON, StrId::STR_BOLDER}, "paperbackLookBody",
+                                  StrId::STR_CAT_READER));
 
     // Defaults for the three per-book looks that used to be reachable only from the
     // in-book menu. Changing one here sets what the NEXT freshly opened book starts
@@ -698,6 +736,12 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
     v.push_back(SettingInfo::Enum(StrId::STR_PARA_PAGES, &CrossPointSettings::sbParaPagesPos, anchorPositions,
                                   "sbParaPagesPos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
+    v.push_back(SettingInfo::Enum(StrId::STR_CHAPTER_TIME_LEFT, &CrossPointSettings::sbChapterTimePos, anchorPositions,
+                                  "sbChapterTimePos", StrId::STR_CUSTOMISE_STATUS_BAR));
+
+    v.push_back(SettingInfo::Enum(StrId::STR_BOOK_TIME_LEFT, &CrossPointSettings::sbBookTimePos, anchorPositions,
+                                  "sbBookTimePos", StrId::STR_CUSTOMISE_STATUS_BAR));
+
     v.push_back(SettingInfo::Enum(StrId::STR_BOOK_BAR, &CrossPointSettings::sbBookBar,
                                   {StrId::STR_STATE_OFF, StrId::STR_TOP, StrId::STR_BOTTOM}, "sbBookBar",
                                   StrId::STR_CUSTOMISE_STATUS_BAR));
@@ -709,12 +753,6 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
     v.push_back(SettingInfo::Enum(StrId::STR_BAR_THICKNESS, &CrossPointSettings::sbBarThickness,
                                   {StrId::STR_SLIM, StrId::STR_PROGRESS_BAR_MEDIUM, StrId::STR_FAT}, "sbBarThickness",
                                   StrId::STR_CUSTOMISE_STATUS_BAR));
-
-    v.push_back(SettingInfo::Toggle(StrId::STR_FLOATING_BAR, &CrossPointSettings::sbFloatingBar, "sbFloatingBar",
-                                    StrId::STR_CUSTOMISE_STATUS_BAR));
-
-    v.push_back(SettingInfo::Toggle(StrId::STR_BAR_OUTLINE, &CrossPointSettings::sbBarOutline, "sbBarOutline",
-                                    StrId::STR_CUSTOMISE_STATUS_BAR));
 
     // Keeps the Book Bar / Chapter Bar edges drawing while the status bar itself is
     // hidden, at its own thickness. Ignored while the status bar is on.

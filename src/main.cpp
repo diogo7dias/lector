@@ -281,6 +281,10 @@ void enterDeepSleep(bool fromTimeout = false) {
   // safety net for anything recorded since, before the card loses power.
   diag::flushIfPending();
 
+  // LEDC stops in deep sleep with the pads in whatever state isolation leaves
+  // them; drive the light to zero first. Not saved: the next boot's
+  // FrontlightBootPolicy still decides from SETTINGS.frontlightOn.
+  Frontlight.setOn(false);
   display.deepSleep();
   Storage.prepareForDeepSleep();
   const unsigned long sleepTPanel = millis();
@@ -408,6 +412,35 @@ static std::string pickRandomRecentBookPath() {
   return *candidates[esp_random() % candidates.size()];
 }
 
+#if FREEINK_DEVICE_X4PRO
+namespace {
+// The X4 Pro's SDMMC mount spends ~200 ms in fixed power-cycle delays, and gpio.begin()
+// about 170 ms waiting out the GT911 reset. Pins and rails are disjoint (SD 40-42 + GPIO5,
+// touch on Wire + GPIO2/4/10, panel 6/11-14/18), so the mount runs on core 0 while input
+// comes up on core 1, and mountStorage() joins it where Storage.begin() used to run.
+TaskHandle_t sdMountJoiner = nullptr;
+bool sdMountInFlight = false;
+volatile bool sdMountResult = false;
+
+void sdMountTask(void*) {
+  sdMountResult = Storage.begin();
+  xTaskNotifyGive(sdMountJoiner);
+  vTaskDelete(nullptr);
+}
+}  // namespace
+#endif
+
+static bool mountStorage() {
+#if FREEINK_DEVICE_X4PRO
+  if (sdMountInFlight) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    sdMountInFlight = false;
+    return sdMountResult;
+  }
+#endif
+  return Storage.begin();
+}
+
 void setup() {
   // First thing of all: the earliest stamp has to be able to land, and this only zeroes
   // two small arrays.
@@ -463,6 +496,10 @@ void setup() {
   silentRebootTarget = 0;
   silentRebootPayload = 0;
 
+#if FREEINK_DEVICE_X4PRO
+  sdMountJoiner = xTaskGetCurrentTaskHandle();
+  sdMountInFlight = xTaskCreatePinnedToCore(sdMountTask, "sdmount", 6144, nullptr, 1, nullptr, 0) == pdPASS;
+#endif
   gpio.begin();
   // When the ADC button ladder came up. The recovery-combo check below needs the ladder to
   // have settled, and "settled" is time since this call, not time since that check is
@@ -484,7 +521,7 @@ void setup() {
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
   bool sdRecoveryChord = false;
-  if (!Storage.begin()) {
+  if (!mountStorage()) {
     LOG_ERR("MAIN", "SD card initialization failed");
     diag::recordSdMountFailure();  // reaches the card only if a retry mounts it
     // Classified here because the panel comes up before the main classification below.
@@ -497,10 +534,10 @@ void setup() {
     // recovery chord is held, keep asking for the card instead of giving up.
     sdRecoveryChord = earlyWakeupReason == HalGPIO::WakeupReason::PowerButton && recoveryChordHeld(inputStartedMs);
     if (!sdRecoveryChord) {
-      activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::REGULAR);
+      activityManager.goToFullScreenMessage(tr(STR_SD_CARD_ERROR), EpdFontFamily::REGULAR);
       return;
     }
-    activityManager.goToFullScreenMessage("Insert an SD card with firmware.bin", EpdFontFamily::REGULAR);
+    activityManager.goToFullScreenMessage(tr(STR_INSERT_SD_WITH_FIRMWARE), EpdFontFamily::REGULAR);
     // Five minutes of retries, not forever: a reader left in a drawer with the
     // chord stuck down should end up asleep rather than polling the card slot
     // until the battery is flat.
@@ -515,7 +552,7 @@ void setup() {
       }
     }
     if (!mounted) {
-      activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::REGULAR);
+      activityManager.goToFullScreenMessage(tr(STR_SD_CARD_ERROR), EpdFontFamily::REGULAR);
       return;
     }
     LOG_INF("MAIN", "SD card mounted on retry; entering recovery firmware mode");

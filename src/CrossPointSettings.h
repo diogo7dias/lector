@@ -365,16 +365,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sbChapterNumPos = SB_ANCHOR_BR;    // chapter #/total (Ch N/M) anchor
   uint8_t sbSessionPagesPos = SB_ANCHOR_BC;  // pages turned this sitting (+N) anchor
   uint8_t sbParaPagesPos = SB_ANCHOR_BC;     // pages left in this paragraph (>P.N) anchor
+  uint8_t sbChapterTimePos = SB_ANCHOR_OFF;  // time left in this chapter (C:12m) anchor
+  uint8_t sbBookTimePos = SB_ANCHOR_OFF;     // time left in the book (B:3h05) anchor
   uint8_t sbBookBar = SB_EDGE_OFF;           // book progress bar edge (Off/Top/Bottom)
   uint8_t sbChapterBar = SB_EDGE_BOTTOM;     // chapter progress bar edge
   uint8_t sbBarThickness = SB_BAR_MEDIUM;    // progress bar thickness slim/med/fat
-  // Lift the progress bars off the screen edge: one small margin applied to the
-  // outer edge and to both ends, so the bar reads as a floating pill instead of
-  // a strip welded to the frame. Position and thickness are unaffected.
+  // Retired options (Floating Bar, Bar Outline), no longer read or saved. Kept only
+  // because the per-book field lists copy them into ReaderPrefs.
   uint8_t sbFloatingBar = 0;
-  // Outline the full length of the progress bar so the unfilled part of the
-  // track stays visible. Independent of sbFloatingBar; all four combinations
-  // are valid.
   uint8_t sbBarOutline = 0;
   // Off / Slim / Medium / Fat. Only consulted while the status bar is hidden, where it
   // keeps the configured Book Bar / Chapter Bar edges drawing at its own thickness.
@@ -403,10 +401,18 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t MIN_WORD_SPACING = reader_defaults::MIN_WORD_SPACING;
   static constexpr uint8_t MAX_WORD_SPACING = reader_defaults::MAX_WORD_SPACING;
   uint8_t wordSpacing = reader_defaults::WORD_SPACING;  // percent of natural space advance; no limit on justification
+  uint8_t kerning = 1;                                  // pair kerning for the reading font (0 = off)
+  uint8_t ligatures = 1;                                // font ligatures for the reading font (0 = off)
+  uint8_t linkUnderline = 1;                            // underline in-book links (0 = plain)
   // Off by default, as in the old fork. The grayscale text pass is imperceptible on
   // this panel but costs a fading grey refresh on every page turn, which is very
   // perceptible. The toggle is kept so it can still be tried; only the default moved.
   uint8_t textAntiAliasing = 0;
+  // How dark anti-aliased greys are drawn (0 Normal, 1 High, 2 Max); only with textAntiAliasing.
+  uint8_t textContrast = 0;
+  uint8_t bookMargins = 1;       // keep the book's CSS margins and padding (0 = drop them)
+  uint8_t headingPageBreak = 0;  // start h1/h2 headings on a new page (1 = on)
+  uint8_t wordExpansion = 0;     // letter spacing allowed on loose justified lines: 0 off, 1 some, 2 more
   // Swipe by default: it works the same wherever the thumb lands, and it leaves the
   // whole page free of invisible tap targets.
   uint8_t touchReaderControls = TOUCH_READER_SWIPE;
@@ -456,6 +462,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   }
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
+  // The same count while night mode is on: 0 = same as refreshFrequency, otherwise a
+  // REFRESH_FREQUENCY index + 1. Inverted pages ghost differently, so they get their own.
+  static constexpr uint8_t NIGHT_REFRESH_SAME = 0;
+  uint8_t refreshFrequencyNight = NIGHT_REFRESH_SAME;
+  // Full refresh on the first page of each chapter entered, on top of the page count.
+  uint8_t chapterStartRefresh = 0;
 
   // Reader screen margins. screenMargin is the horizontal (left/right) margin, shared by
   // both sides. The vertical margins always live in screenMarginTop/Bottom;
@@ -898,11 +910,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // The global status bar: for every screen that is not a book with its own bar.
   StatusBarBlock statusBar() const;
   void setStatusBar(const StatusBarBlock& b);
-
-  // Gap between a floating progress bar and the screen edge, in pixels. Applied
-  // to the outer edge and to both ends. Twelve reads clearly as a lifted pill on
-  // the panel; six was too close to the bezel to be seen as deliberate.
-  static constexpr int SB_FLOATING_BAR_MARGIN_PX = StatusBarBlock::FLOATING_BAR_MARGIN_PX;
 
  private:
   // Runs after current fields are decoded; reports whether the legacy document needs a resave.

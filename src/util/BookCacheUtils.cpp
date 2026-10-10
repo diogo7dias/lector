@@ -160,8 +160,16 @@ bool collectLiveBookCacheKeys(std::vector<BookCacheKey>& live) {
       }
 
       const bool isDir = entry.isDirectory();
-      entry.getName(name, sizeof(name));
+      const size_t nameLen = entry.getName(name, sizeof(name));
       entry.close();
+      // SdFat returns an empty name when it does not fit (a long CJK name runs past 255
+      // bytes). That entry could be a book, and a book we cannot name looks exactly like
+      // an orphan, so refuse the clean as for an unreadable folder.
+      if (nameLen == 0) {
+        LOG_ERR("BookCache", "live scan aborted: unreadable name in %s", dirPath.c_str());
+        dir.close();
+        return false;
+      }
 
       // Hidden entries hold no user books, and descending into the cache itself
       // would let cache directories masquerade as live content.
@@ -175,9 +183,14 @@ bool collectLiveBookCacheKeys(std::vector<BookCacheKey>& live) {
       }
 
       if (isDir) {
-        if (depth + 1 <= MAX_SCAN_DEPTH) {
-          pending.emplace_back(std::move(childPath), depth + 1);
+        // Skipping a too-deep folder would make its books look like orphans, so the cap
+        // aborts the walk like the other caps.
+        if (depth + 1 > MAX_SCAN_DEPTH) {
+          LOG_ERR("BookCache", "live scan aborted: deeper than %d folders at %s", MAX_SCAN_DEPTH, childPath.c_str());
+          dir.close();
+          return false;
         }
+        pending.emplace_back(std::move(childPath), depth + 1);
         continue;
       }
 
