@@ -6,6 +6,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Memory.h>
 #include <Serialization.h>
 #include <Utf8.h>
 
@@ -29,8 +30,11 @@ namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
-constexpr uint8_t CACHE_VERSION =
-    5;  // Increment when cache format changes (4: form-feed page breaks, 5: UTF-16 refused)
+// Increment when cache format changes (4: form-feed page breaks, 5: UTF-16 refused,
+// 6: Windows-1252 files decoded, so their pages wrap at different points)
+constexpr uint8_t CACHE_VERSION = 6;
+// How far into a file detectEncoding() looks for a non-ASCII byte before calling it UTF-8.
+constexpr size_t ENCODING_SCAN_BYTES = 64 * 1024;
 }  // namespace
 
 void TxtReaderActivity::onEnter() {
@@ -219,6 +223,8 @@ void TxtReaderActivity::initializeReader() {
 
   LOG_DBG("TRS", "Viewport: %dx%d, lines per page: %d", viewportWidth, viewportHeight, linesPerPage);
 
+  detectEncoding();
+
   // Try to load cached page index first
   if (!loadPageIndexCache()) {
     // Cache not found, build page index
@@ -231,6 +237,27 @@ void TxtReaderActivity::initializeReader() {
   loadProgress();
 
   initialized = true;
+}
+
+void TxtReaderActivity::detectEncoding() {
+  // A file that is not valid UTF-8 is read as Windows-1252, the usual encoding of older
+  // Western text files. Plain ASCII up to the scan limit reads the same either way.
+  legacy8Bit = false;
+  const size_t fileSize = txt->getFileSize();
+  auto buf = makeUniqueNoThrow<uint8_t[]>(CHUNK_SIZE);
+  if (!buf) {
+    LOG_ERR("TRS", "OOM: encoding scan buffer");
+    return;
+  }
+  for (size_t offset = 0; offset < std::min(fileSize, ENCODING_SCAN_BYTES); offset += CHUNK_SIZE) {
+    const size_t len = std::min(CHUNK_SIZE, fileSize - offset);
+    if (!txt->readContent(buf.get(), offset, len)) return;
+    const auto guess = utf8GuessEncoding(buf.get(), len);
+    if (guess == TextEncodingGuess::Undecided) continue;
+    legacy8Bit = guess == TextEncodingGuess::Legacy8Bit;
+    break;
+  }
+  if (legacy8Bit) LOG_INF("TRS", "Not UTF-8: reading as Windows-1252");
 }
 
 void TxtReaderActivity::buildPageIndex() {
@@ -310,6 +337,18 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
   }
   buffer[chunkSize] = '\0';
 
+  // A Windows-1252 chunk is decoded to UTF-8 first; everything below then works on the
+  // decoded text, and the final position is mapped back to file bytes (one byte per
+  // character in that encoding).
+  std::string decoded;
+  if (legacy8Bit) {
+    decoded = cp1252ToUtf8(reinterpret_cast<const char*>(buffer), chunkSize);
+    free(buffer);
+    buffer = reinterpret_cast<uint8_t*>(decoded.data());
+  }
+  const bool chunkReachesEof = offset + chunkSize >= fileSize;
+  const size_t textLen = legacy8Bit ? decoded.size() : chunkSize;
+
   // Prime the SD card font's advance table with this chunk's codepoints.
   // Without this, every getTextAdvanceX() call in the wrap loop below triggers
   // on-demand glyph loads through the 8-slot overflow ring buffer, which
@@ -323,17 +362,19 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
 
   // Parse lines from buffer. A UTF-8 byte-order mark is not text: skip it, or the
   // first line opens with a stray glyph.
-  size_t pos = (offset == 0 && chunkSize >= 3 && buffer[0] == 0xEF && buffer[1] == 0xBB && buffer[2] == 0xBF) ? 3 : 0;
+  size_t pos =
+      (!legacy8Bit && offset == 0 && chunkSize >= 3 && buffer[0] == 0xEF && buffer[1] == 0xBB && buffer[2] == 0xBF) ? 3
+                                                                                                                    : 0;
 
-  while (pos < chunkSize && static_cast<int>(outLines.size()) < linesPerPage) {
+  while (pos < textLen && static_cast<int>(outLines.size()) < linesPerPage) {
     // Find end of line
     size_t lineEnd = pos;
-    while (lineEnd < chunkSize && buffer[lineEnd] != '\n') {
+    while (lineEnd < textLen && buffer[lineEnd] != '\n') {
       lineEnd++;
     }
 
     // Check if we have a complete line
-    bool lineComplete = (lineEnd < chunkSize) || (offset + lineEnd >= fileSize);
+    bool lineComplete = (lineEnd < textLen) || chunkReachesEof;
 
     if (!lineComplete && static_cast<int>(outLines.size()) > 0) {
       // Incomplete line and we already have some lines, stop here
@@ -431,6 +472,14 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
     pos = 1;
   }
 
+  if (legacy8Bit) {
+    // Decoded bytes back to file bytes: one per character, so count the lead bytes.
+    size_t fileBytes = 0;
+    for (size_t i = 0; i < pos && i < textLen; ++i) {
+      if ((buffer[i] & 0xC0) != 0x80) ++fileBytes;
+    }
+    pos = fileBytes;
+  }
   nextOffset = offset + pos;
 
   // Make sure we don't go past the file
@@ -438,7 +487,7 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
     nextOffset = fileSize;
   }
 
-  free(buffer);
+  if (!legacy8Bit) free(buffer);  // a decoded chunk lives in `decoded`
 
   return !outLines.empty();
 }

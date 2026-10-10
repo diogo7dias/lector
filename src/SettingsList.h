@@ -271,6 +271,10 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
                                   {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
                                    StrId::STR_PAGES_30, StrId::STR_REFRESH_NEVER},
                                   "refreshFrequency", StrId::STR_CAT_DISPLAY));
+    v.push_back(SettingInfo::Enum(StrId::STR_NIGHT_REFRESH_FREQ, &CrossPointSettings::refreshFrequencyNight,
+                                  {StrId::STR_SAME_AS_DAY, StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10,
+                                   StrId::STR_PAGES_15, StrId::STR_PAGES_30, StrId::STR_REFRESH_NEVER},
+                                  "refreshFrequencyNight", StrId::STR_CAT_DISPLAY));
 
     v.push_back(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                                     StrId::STR_CAT_DISPLAY));
