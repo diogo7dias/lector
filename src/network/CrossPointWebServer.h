@@ -181,6 +181,7 @@ class CrossPointWebServer {
     HalFile file;
     std::string familyName;
     std::string filePath;
+    std::string partialPath;
     bool valid = false;
     bool magicChecked = false;
     bool isVector = false;  // .ttf/.otf upload (CROSSPOINT_TTF_READER builds only) vs .cpfont

@@ -2322,6 +2322,7 @@ void CrossPointWebServer::handleFontUploadData() {
       fontUpload.file = HalFile();
       fontUpload.familyName.clear();
       fontUpload.filePath.clear();
+      fontUpload.partialPath.clear();
       fontUpload.valid = false;
       fontUpload.magicChecked = false;
       fontUpload.isVector = false;
@@ -2359,9 +2360,12 @@ void CrossPointWebServer::handleFontUploadData() {
       char path[128];
       FontInstaller::buildFontPath(family.c_str(), filename.c_str(), path, sizeof(path));
       fontUpload.filePath = path;
+      // Written to "<path>.part" like /upload: a bad upload must not truncate an
+      // installed font of the same name.
+      fontUpload.partialPath = FsHelpers::partialPathFor(path);
 
-      if (!Storage.openFileForWrite("WEB", path, fontUpload.file)) {
-        LOG_ERR("WEB", "Failed to open font file for write: %s", path);
+      if (!Storage.openFileForWrite("WEB", fontUpload.partialPath, fontUpload.file)) {
+        LOG_ERR("WEB", "Failed to open font file for write: %s", fontUpload.partialPath.c_str());
         break;
       }
 
@@ -2431,8 +2435,16 @@ void CrossPointWebServer::handleFontUploadData() {
         fontUpload.file.close();
       }
 
-      if (!fontUpload.valid && !fontUpload.filePath.empty()) {
-        Storage.remove(fontUpload.filePath.c_str());
+      if (fontUpload.valid) {
+        // FAT rename never replaces, so the old font goes only once the new one is whole.
+        if (Storage.exists(fontUpload.filePath.c_str())) Storage.remove(fontUpload.filePath.c_str());
+        if (!Storage.rename(fontUpload.partialPath.c_str(), fontUpload.filePath.c_str())) {
+          LOG_ERR("WEB", "Could not rename %s to %s", fontUpload.partialPath.c_str(), fontUpload.filePath.c_str());
+          fontUpload.valid = false;
+        }
+      }
+      if (!fontUpload.valid && !fontUpload.partialPath.empty()) {
+        Storage.remove(fontUpload.partialPath.c_str());
       }
 
       LOG_DBG("WEB", "Font upload end: valid=%d, %zu bytes", fontUpload.valid, fontUpload.bytesWritten);
@@ -2443,8 +2455,8 @@ void CrossPointWebServer::handleFontUploadData() {
       if (fontUpload.file) {
         fontUpload.file.close();
       }
-      if (!fontUpload.filePath.empty()) {
-        Storage.remove(fontUpload.filePath.c_str());
+      if (!fontUpload.partialPath.empty()) {
+        Storage.remove(fontUpload.partialPath.c_str());
       }
       fontUpload.valid = false;
       LOG_DBG("WEB", "Font upload aborted");
