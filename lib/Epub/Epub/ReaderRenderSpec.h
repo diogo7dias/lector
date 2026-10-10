@@ -62,6 +62,9 @@ struct ReaderRenderSpec {
   bool kerning = true;
   // Font ligatures (fi, fl, ff ...) for the reading font, likewise part of the cache key.
   bool ligatures = true;
+  // Underline in-book links (footnotes, cross-references). Off leaves them plain; baked into the cached words, so part
+  // of the cache key.
+  bool linkUnderline = true;
 
   // Memberwise: padding is ignored and float equality keeps its usual semantics.
   constexpr bool operator==(const ReaderRenderSpec&) const = default;

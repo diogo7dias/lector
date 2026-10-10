@@ -32,6 +32,7 @@
   X(wordSpacing)                     \
   X(kerning)                         \
   X(ligatures)                       \
+  X(linkUnderline)                   \
   X(screenMargin)                    \
   X(screenMarginTop)                 \
   X(screenMarginBottom)              \
