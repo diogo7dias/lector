@@ -133,8 +133,10 @@ class CssParser {
   /**
    * Load CSS rules from a cache file.
    * Clears any existing rules before loading. isPartial() reflects the cache's flag.
+   * headerOnly checks version, header and payload size and sets isPartial() without
+   * allocating or reading the rules: enough to decide whether the cache needs a rebuild.
    */
-  CacheLoad loadFromCache();
+  CacheLoad loadFromCache(bool headerOnly = false);
 
  private:
   // One rule in the selector index. 8 bytes with no padding; the in-memory

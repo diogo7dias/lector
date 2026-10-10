@@ -6,7 +6,6 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <WiFi.h>
-#include <esp_wifi.h>
 
 #include <algorithm>
 #include <cassert>
@@ -340,7 +339,10 @@ void KOReaderSyncActivity::performUpload() {
   const auto result = KOReaderSyncClient::updateProgress(progress);
 
   // Drop the radio while user reads the result; full teardown happens at silent reboot.
-  esp_wifi_stop();
+  // WiFi.mode, not esp_wifi_stop: the power manager's Wi-Fi lock reads WiFi.getMode(), so a
+  // raw stop kept the CPU pinned and light sleep vetoed on the result screen. onExit's reboot
+  // keys off wifiActivated, not the mode, so it still runs.
+  WiFi.mode(WIFI_OFF);
 
   if (result != KOReaderSyncClient::OK) {
     {

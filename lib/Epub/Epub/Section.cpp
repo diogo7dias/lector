@@ -528,6 +528,9 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const PopupFn popupFn, vo
     }
     if (cssLoad == CssParser::CacheLoad::Invalid) {
       LOG_ERR("SCT", "Failed to load CSS from cache");
+      // The book-open check reads only the header, so a corrupt body surfaces here: drop
+      // the cache so the next open re-parses the stylesheets.
+      ctx->cssParser->deleteCache();
     }
   }
 

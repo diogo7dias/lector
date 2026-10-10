@@ -984,7 +984,7 @@ bool CssParser::saveToCache() const {
   return true;
 }
 
-CssParser::CacheLoad CssParser::loadFromCache() {
+CssParser::CacheLoad CssParser::loadFromCache(const bool headerOnly) {
   if (cachePath.empty()) {
     return CacheLoad::Invalid;
   }
@@ -1031,6 +1031,10 @@ CssParser::CacheLoad CssParser::loadFromCache() {
   if (static_cast<size_t>(file.available()) != expectedBytes) {
     LOG_DBG("CSS", "CSS cache size mismatch");
     return CacheLoad::Invalid;
+  }
+  if (headerOnly) {
+    partial_ = partial;
+    return CacheLoad::Ok;
   }
 
   if (entryCount > 0) {
