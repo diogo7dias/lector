@@ -464,8 +464,10 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
                                     std::move(bookMenuTabValues), "bookMenuTab", StrId::STR_CAT_READER));
     }
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_PAPERBACK_LOOK, &CrossPointSettings::paperbackLookBody,
-                                    "paperbackLookBody", StrId::STR_CAT_READER));
+    // Off / On / Bolder. Stored 0/1/2, so a file written when this was a toggle reads the same.
+    v.push_back(SettingInfo::Enum(StrId::STR_PAPERBACK_LOOK, &CrossPointSettings::paperbackLookBody,
+                                  {StrId::STR_STATE_OFF, StrId::STR_STATE_ON, StrId::STR_BOLDER}, "paperbackLookBody",
+                                  StrId::STR_CAT_READER));
 
     // Defaults for the three per-book looks that used to be reachable only from the
     // in-book menu. Changing one here sets what the NEXT freshly opened book starts

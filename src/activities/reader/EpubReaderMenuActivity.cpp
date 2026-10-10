@@ -410,7 +410,7 @@ void EpubReaderMenuActivity::activateIndex(const int visibleIndex) {
   // Paperback Look toggles: flip in place (like the rows above) and keep the menu
   // open so the ON/OFF label updates like a checkbox; the reader applies them on exit.
   if (selectedAction == MenuAction::TOGGLE_PAPERBACK_LOOK) {
-    selectedPaperbackBody = selectedPaperbackBody ? 0 : 1;
+    selectedPaperbackBody = (selectedPaperbackBody + 1) % 3;  // Off / On / Bolder
     requestUpdate();
     return;
   }
@@ -458,7 +458,9 @@ const char* EpubReaderMenuActivity::rowValue(const int index) const {
     case MenuAction::TOGGLE_PARAGRAPH_NUM_SIZE:
       return I18N.get(paragraphNumSizeLabels[selectedParagraphNumberSize % paragraphNumSizeLabels.size()]);
     case MenuAction::TOGGLE_PAPERBACK_LOOK:
-      return I18N.get(selectedPaperbackBody ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+      return I18N.get(selectedPaperbackBody > 1   ? StrId::STR_BOLDER
+                      : selectedPaperbackBody > 0 ? StrId::STR_STATE_ON
+                                                  : StrId::STR_STATE_OFF);
     case MenuAction::TOGGLE_PAPERBACK_STATUS:
       return I18N.get(selectedPaperbackStatus ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
     case MenuAction::TOGGLE_STATUS_BAR:
