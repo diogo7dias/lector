@@ -50,7 +50,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
     DELETE_BOOK,                // erase this book's file and its cache from the card, behind a confirmation
     RETURN,                     // back to the last deliberate-jump origin
     VIEW_QUOTES,                // browse (and delete) the quotes saved in <book>_QUOTES.txt
-    FORWARD                     // redo the last Return
+    FORWARD,                    // redo the last Return
+    SEARCH                      // find a phrase anywhere in the book
   };
 
   // Tab pages of the menu. Sleep exists only when the lock screen last showed a

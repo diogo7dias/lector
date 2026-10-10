@@ -258,7 +258,8 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const Rea
   const int textLimit = top + height;
   int y = textTop;
   int drawn = 0;
-  renderer.setPaperbackLook(true);
+  // The smeared paragraph shows the chosen weight, or plain On while the setting is off.
+  renderer.setPaperbackLook(look.paperbackLookBody > 1 ? look.paperbackLookBody : 1);
   for (const auto& entry : layout.lines) {
     if (drawn == layout.secondParagraphLine) renderer.setPaperbackLook(false);
     y += entry.gapBefore;

@@ -465,6 +465,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // REFRESH_FREQUENCY index + 1. Inverted pages ghost differently, so they get their own.
   static constexpr uint8_t NIGHT_REFRESH_SAME = 0;
   uint8_t refreshFrequencyNight = NIGHT_REFRESH_SAME;
+  // Full refresh on the first page of each chapter entered, on top of the page count.
+  uint8_t chapterStartRefresh = 0;
 
   // Reader screen margins. screenMargin is the horizontal (left/right) margin, shared by
   // both sides. The vertical margins always live in screenMarginTop/Bottom;
