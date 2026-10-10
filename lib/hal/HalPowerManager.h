@@ -166,7 +166,7 @@ class HalPowerManager {
   void begin();
 
   // Setup wake up GPIO and enter deep sleep
-  void startDeepSleep() const;
+  [[noreturn]] void startDeepSleep() const;
 
   // Call once per main-loop iteration with the time since the last accepted input.
   // Publishes the USB console state and takes or releases the WiFi and
