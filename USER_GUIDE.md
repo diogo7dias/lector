@@ -940,6 +940,9 @@ other numbers in Settings use the same band.
   Off draws each letter on its own. Only the reading text changes; menus keep it.
 - **Link Underline** — on by default: footnote and cross-reference links in the book are underlined.
   Off leaves them as plain text; they still open from Footnotes.
+- **Break Before Headings** — off by default. On starts every top-level heading (h1, h2) on a
+  fresh page, for books that run chapters or sections together. A heading straight after another
+  heading ("Part One" then "Chapter 1") stays on the same page.
   Changing it re-paginates the book.
 - **Guide Dots** — draws a middle dot in a widened gap between words.
 - **Hidden Dots** — only listed while Guide Dots is on: keeps the widened gaps and draws no dot in them.

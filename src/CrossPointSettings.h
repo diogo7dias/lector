@@ -410,7 +410,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textAntiAliasing = 0;
   // How dark anti-aliased greys are drawn (0 Normal, 1 High, 2 Max); only with textAntiAliasing.
   uint8_t textContrast = 0;
-  uint8_t bookMargins = 1;  // keep the book's CSS margins and padding (0 = drop them)
+  uint8_t bookMargins = 1;       // keep the book's CSS margins and padding (0 = drop them)
+  uint8_t headingPageBreak = 0;  // start h1/h2 headings on a new page (1 = on)
   // Swipe by default: it works the same wherever the thumb lands, and it leaves the
   // whole page free of invisible tap targets.
   uint8_t touchReaderControls = TOUCH_READER_SWIPE;

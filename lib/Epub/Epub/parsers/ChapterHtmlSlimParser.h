@@ -101,6 +101,9 @@ class ChapterHtmlSlimParser {
   bool embeddedTextStyle;
   bool embeddedLayoutStyle;
   bool bookMargins;
+  bool headingPageBreak;              // h1/h2 start a new page
+  bool lastBlockWasHeading_ = false;  // the last block laid out was a heading
+  bool breakBeforeBlock_ = false;     // the block being opened is an h1/h2 to break before
   uint8_t imageRendering;
   std::string contentBase;
   std::string imageBasePath;
@@ -227,6 +230,9 @@ class ChapterHtmlSlimParser {
 
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
+  // Close the current page if it holds anything; false only on OOM for the next one.
+  bool breakPage();
+  void breakBeforeHeading();
   void flushPendingAnchor();
   void flushPartWordBuffer();
   void fallbackTableRowToStacked();
@@ -282,6 +288,7 @@ class ChapterHtmlSlimParser {
         embeddedTextStyle(spec.embeddedTextStyle),
         embeddedLayoutStyle(spec.embeddedLayoutStyle),
         bookMargins(spec.bookMargins),
+        headingPageBreak(spec.headingPageBreak),
         imageRendering(spec.imageRendering),
         contentBase(contentBase),
         imageBasePath(imageBasePath),

@@ -296,24 +296,37 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   if (std::find(tocAnchors.begin(), tocAnchors.end(), *pendingAnchorId) != tocAnchors.end()) {
-    if (currentPage && !currentPage->elements.empty()) {
-      currentPage->centerFullTextPage(renderer, fontId, lineCompression, viewportHeight);
-      completePageFn(completePageCtx, std::move(currentPage), xpathParagraphIndex, xpathListItemIndex,
-                     currentPageVisibleOffset);
-      completedPageCount++;
-      currentPage = makeUniqueNoThrow<Page>();
-      if (!currentPage) {
-        LOG_ERR("EHP", "OOM: Page");
-        return;
-      }
-      currentPageNextY = 0;
-      currentPageVisibleOffsetSet = false;
-    }
+    if (!breakPage()) return;
   }
 
   // Record deferred anchor after previous block is flushed (and any TOC page break)
   anchorData.push_back({*pendingAnchorId, static_cast<uint16_t>(completedPageCount)});
   pendingAnchorId.reset();
+}
+
+bool ChapterHtmlSlimParser::breakPage() {
+  if (!currentPage || currentPage->elements.empty()) return true;
+  currentPage->centerFullTextPage(renderer, fontId, lineCompression, viewportHeight);
+  completePageFn(completePageCtx, std::move(currentPage), xpathParagraphIndex, xpathListItemIndex,
+                 currentPageVisibleOffset);
+  completedPageCount++;
+  currentPage = makeUniqueNoThrow<Page>();
+  if (!currentPage) {
+    LOG_ERR("EHP", "OOM: Page");
+    return false;
+  }
+  currentPageNextY = 0;
+  currentPageVisibleOffsetSet = false;
+  return true;
+}
+
+// Break Before Headings. Runs once the block before is laid out and before the heading's
+// anchor is recorded, so a link to the heading lands on its new page. A heading straight
+// after a heading ("Part One", "Chapter 1") keeps its page.
+void ChapterHtmlSlimParser::breakBeforeHeading() {
+  if (!breakBeforeBlock_) return;
+  breakBeforeBlock_ = false;
+  if (!lastBlockWasHeading_) breakPage();
 }
 
 void ChapterHtmlSlimParser::setCurrentPageVisibleOffset(const uint32_t offset) {
@@ -396,6 +409,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       // The empty block is being re-purposed for the element that just opened, so it
       // adopts that element's heading-ness rather than keeping the previous one's.
       currentTextBlock->setHeading(insideHeading());
+      breakBeforeHeading();
       flushPendingAnchor();
       return;
     }
@@ -412,8 +426,10 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       return;
     }
 
+    lastBlockWasHeading_ = currentTextBlock->getIsHeading();
     makePages();
   }
+  breakBeforeHeading();
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
@@ -1390,7 +1406,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     const auto accumulated =
         self->blockStyleStack.back().getCombinedBlockStyle(headerBlockStyle, BlockStyle::CombineAxis::Horizontal);
     self->blockStyleStack.push_back(accumulated);
+    self->breakBeforeBlock_ = self->headingPageBreak && (name[1] == '1' || name[1] == '2');
     self->startNewTextBlock(accumulated.withoutBottom());
+    self->breakBeforeBlock_ = false;  // spent, or skipped by a bullet-only <li> block
     // A chapter title is not paragraph 1. The watermark keeps that true for every block the
     // heading goes on to open; the heading's own first block is flagged here because
     // startNewTextBlock ran before the watermark was set.

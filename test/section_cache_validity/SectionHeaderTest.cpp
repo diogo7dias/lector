@@ -35,12 +35,12 @@ TEST(SectionCacheValidity, OldHeadersRejectedBeforeSpecReadAndNewHeadersRoundTri
     EXPECT_FALSE(section.file.opened);
   }
 
-  EXPECT_EQ(72, SECTION_FILE_VERSION);
-  EXPECT_EQ(210, SECTION_FILE_PARTIAL_VERSION);
+  EXPECT_EQ(73, SECTION_FILE_VERSION);
+  EXPECT_EQ(209, SECTION_FILE_PARTIAL_VERSION);
   for (uint8_t version : {SECTION_FILE_VERSION, SECTION_FILE_PARTIAL_VERSION}) {
     Section writer;
     writer.writeSectionFileHeader(spec);
-    ASSERT_EQ(50u, writer.file.size());  // v72 added the bookMargins byte
+    ASSERT_EQ(51u, writer.file.size());  // v73 added the headingPageBreak byte
     writer.file.seek(0);
     serialization::writePod(writer.file, version);
     if (version == SECTION_FILE_PARTIAL_VERSION) {

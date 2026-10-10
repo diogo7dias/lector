@@ -48,6 +48,7 @@
   X(textAntiAliasing)                \
   X(textContrast)                    \
   X(bookMargins)                     \
+  X(headingPageBreak)                \
   X(imageRendering)
 
 // Per-book toggles that live in the in-book menu, not on the Reader Settings screen.
