@@ -46,6 +46,7 @@ constexpr PresetField FIELDS[] = {
     {"textContrast", &ReaderPrefs::textContrast},
     {"bookMargins", &ReaderPrefs::bookMargins},
     {"headingPageBreak", &ReaderPrefs::headingPageBreak},
+    {"wordExpansion", &ReaderPrefs::wordExpansion},
     {"imageRendering", &ReaderPrefs::imageRendering},
     {"paragraphNumbering", &ReaderPrefs::paragraphNumbering},
     {"paragraphNumberSize", &ReaderPrefs::paragraphNumberSize},

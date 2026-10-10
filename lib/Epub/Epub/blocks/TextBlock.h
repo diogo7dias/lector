@@ -45,6 +45,7 @@ class TextBlock final : public Block {
   bool focusPresent = false;
   bool guideDotsPresent = false;
   bool isValid = true;
+  uint8_t letterSpacing = 0;  // Word Expansion: px between this line's letters
   // The ONLY allocation: makeUniqueNoThrow, so OOM yields an invalid block
   // instead of abort() (bare new is not nothrow with -fno-exceptions).
   std::unique_ptr<uint8_t[]> arena;
@@ -77,6 +78,8 @@ class TextBlock final : public Block {
 
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   const BlockStyle& getBlockStyle() const { return blockStyle; }
+  void setLetterSpacing(const uint8_t px) { letterSpacing = px; }
+  uint8_t getLetterSpacing() const { return letterSpacing; }
   bool isEmpty() override { return numWords == 0; }
   bool valid() const { return isValid; }
   uint16_t wordCount() const { return numWords; }

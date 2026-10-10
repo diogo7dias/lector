@@ -59,6 +59,7 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.textContrast, b.textContrast);
   EXPECT_EQ(a.bookMargins, b.bookMargins);
   EXPECT_EQ(a.headingPageBreak, b.headingPageBreak);
+  EXPECT_EQ(a.wordExpansion, b.wordExpansion);
   EXPECT_EQ(a.screenMargin, b.screenMargin);
   EXPECT_EQ(a.screenMarginTop, b.screenMarginTop);
   EXPECT_EQ(a.screenMarginBottom, b.screenMarginBottom);
@@ -556,7 +557,9 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V17_SIZE + 2, READER_PREFS_V18_SIZE);
   EXPECT_EQ(READER_PREFS_V18_SIZE + 1, READER_PREFS_V19_SIZE);
   EXPECT_EQ(READER_PREFS_V19_SIZE + 1, READER_PREFS_V20_SIZE);
-  EXPECT_EQ(READER_PREFS_V20_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V20_SIZE + 1, READER_PREFS_V21_SIZE);
+  EXPECT_EQ(READER_PREFS_V21_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V21_SIZE, readerPrefsRecordSize(21));
   EXPECT_EQ(READER_PREFS_V20_SIZE, readerPrefsRecordSize(20));
   EXPECT_EQ(READER_PREFS_V19_SIZE, readerPrefsRecordSize(19));
   EXPECT_EQ(READER_PREFS_V18_SIZE, readerPrefsRecordSize(18));
@@ -569,7 +572,7 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(21, ReaderPrefs::VERSION);
+  EXPECT_EQ(22, ReaderPrefs::VERSION);
 }
 
 TEST(ReaderPrefs, AV12RecordKeepsItsFieldsAndLeavesTheNewItemOff) {
@@ -947,4 +950,28 @@ TEST(ReaderPrefs, HeadingPageBreakFlippedRoundTrips) {
   ASSERT_TRUE(readReaderPrefs(file, loaded));
   expectEqual(original, loaded);
   EXPECT_EQ(true, makeRenderSpec(loaded, 1, 480, 800).headingPageBreak);
+}
+
+TEST(ReaderPrefs, AV21RecordLeavesWordExpansionAtItsDefault) {
+  auto old = makeSample();
+  old.wordExpansion = 1;  // outside the v21 record, must not be read
+  std::stringstream file;
+  file.put(static_cast<char>(21));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(21));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(0, loaded.wordExpansion);
+}
+
+TEST(ReaderPrefs, WordExpansionFlippedRoundTrips) {
+  auto original = makeSample();
+  original.wordExpansion = 1;
+  std::stringstream file;
+  writeReaderPrefs(file, original);
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(file, loaded));
+  expectEqual(original, loaded);
+  EXPECT_EQ(1, makeRenderSpec(loaded, 1, 480, 800).wordExpansion);
 }

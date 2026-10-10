@@ -412,6 +412,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textContrast = 0;
   uint8_t bookMargins = 1;       // keep the book's CSS margins and padding (0 = drop them)
   uint8_t headingPageBreak = 0;  // start h1/h2 headings on a new page (1 = on)
+  uint8_t wordExpansion = 0;     // letter spacing allowed on loose justified lines: 0 off, 1 some, 2 more
   // Swipe by default: it works the same wherever the thumb lands, and it leaves the
   // whole page free of invisible tap targets.
   uint8_t touchReaderControls = TOUCH_READER_SWIPE;

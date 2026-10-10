@@ -441,6 +441,12 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
                                     "headingPageBreak", StrId::STR_CAT_READER)
                     .withTextSettings());
 
+    v.push_back(SettingInfo::Enum(
+                    StrId::STR_WORD_EXPANSION, &CrossPointSettings::wordExpansion,
+                    {StrId::STR_WORD_EXPANSION_OFF, StrId::STR_WORD_EXPANSION_SOME, StrId::STR_WORD_EXPANSION_MORE},
+                    "wordExpansion", StrId::STR_CAT_READER)
+                    .withTextSettings());
+
     v.push_back(SettingInfo::Toggle(StrId::STR_FOCUS_READING, &CrossPointSettings::focusReadingEnabled,
                                     "focusReadingEnabled", StrId::STR_CAT_READER)
                     .withTextSettings());

@@ -943,6 +943,10 @@ other numbers in Settings use the same band.
 - **Break Before Headings** — off by default. On starts every top-level heading (h1, h2) on a
   fresh page, for books that run chapters or sections together. A heading straight after another
   heading ("Part One" then "Chapter 1") stays on the same page.
+- **Word Expansion** — Off by default. On a justified line whose gaps would grow past one and
+  a half spaces, **Some** adds up to 1 pixel between letters and **More** up to 2, so the slack
+  spreads into the words instead of opening wide holes. Lines with Focus Reading, Guide Dots,
+  ruby or right-to-left text keep plain justification.
   Changing it re-paginates the book.
 - **Guide Dots** — draws a middle dot in a widened gap between words.
 - **Hidden Dots** — only listed while Guide Dots is on: keeps the widened gaps and draws no dot in them.

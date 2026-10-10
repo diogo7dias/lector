@@ -672,7 +672,8 @@ void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* te
 }
 
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
-                           const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir) const {
+                           const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir,
+                           const int letterSpacing) const {
   // cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
     return;
@@ -751,7 +752,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     // where they fall on the line.
     if (prevCp != 0) {
       const auto kernFP = kerns(fontId) ? font.getKerning(prevCp, cp, style) : 0;  // 4.4 fixed-point kern
-      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);  // snap 12.4 fixed-point to nearest pixel
+      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP) + letterSpacing;  // snap 12.4 fixed-point to nearest pixel
     }
 
     const EpdGlyph* glyph = font.getGlyph(cp, style);
@@ -776,6 +777,20 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     }
     prevCp = cp;
   }
+}
+
+int GfxRenderer::spacedGlyphCount(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+  const auto fontIt = fontMap.find(resolveTextFontId(fontId, text, style));
+  if (text == nullptr || fontIt == fontMap.end()) return 0;
+  int count = 0;
+  const char* cursor = text;
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&cursor)))) {
+    if (utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp)) continue;
+    if (ligates(fontId)) fontIt->second.applyLigatures(cp, cursor, style);
+    ++count;
+  }
+  return count;
 }
 
 void GfxRenderer::drawTextScaled(const int fontId, const int x, const int y, const char* text, const int percent,

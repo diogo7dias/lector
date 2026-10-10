@@ -64,12 +64,12 @@ inline constexpr uint8_t WORD_SPACING = 100;  // percent of the font's natural s
 struct ReaderPrefs {
   // Bump whenever the field set changes: readReaderPrefs rejects a mismatched
   // version, so an old sidecar is ignored and the book falls back to global.
-  // v5 through v20 are the exceptions: they are read and upgraded instead of dropped.
+  // v5 through v21 are the exceptions: they are read and upgraded instead of dropped.
   // Dropping a sidecar silently discards every per-book setting the user ever chose,
   // which is far worse than carrying an old one forward. Each of those older layouts is
   // a strict prefix of this struct, so a record is read at its own length and every
   // field appended since keeps its constructed default — see readerPrefsRecordSize().
-  static constexpr uint8_t VERSION = 21;  // v21: Break Before Headings switch
+  static constexpr uint8_t VERSION = 22;  // v22: Word Expansion switch
 
   // Bring a sidecar written before the current version onto the current reading
   // defaults. Only these values are re-seeded, and only for books that predate them.
@@ -212,6 +212,9 @@ struct ReaderPrefs {
   // Start each h1/h2 heading on a new page, off unless turned on. APPENDED LAST.
   uint8_t headingPageBreak = 0;
 
+  // Word Expansion: 0 Off, 1 Some, 2 More (px between letters on loose justified lines). APPENDED LAST.
+  uint8_t wordExpansion = 0;
+
   // Copy the status bar block from `source`.
   //
   // A sidecar written before v11 stops before that block, so every field would
@@ -269,6 +272,7 @@ inline ReaderRenderSpec makeRenderSpec(const ReaderPrefs& p, const int fontId, c
   spec.linkUnderline = p.linkUnderline != 0;
   spec.bookMargins = p.bookMargins != 0;
   spec.headingPageBreak = p.headingPageBreak != 0;
+  spec.wordExpansion = std::min<uint8_t>(p.wordExpansion, 2);
   return spec;
 }
 
@@ -287,6 +291,7 @@ inline constexpr size_t READER_PREFS_V17_SIZE = offsetof(ReaderPrefs, sbChapterT
 inline constexpr size_t READER_PREFS_V18_SIZE = offsetof(ReaderPrefs, textContrast);
 inline constexpr size_t READER_PREFS_V19_SIZE = offsetof(ReaderPrefs, bookMargins);
 inline constexpr size_t READER_PREFS_V20_SIZE = offsetof(ReaderPrefs, headingPageBreak);
+inline constexpr size_t READER_PREFS_V21_SIZE = offsetof(ReaderPrefs, wordExpansion);
 
 // A record older than v12 carries one "Embedded Style" choice, in what is now the text
 // switch. Someone who turned it off wanted the book's own styling gone, so the layout
@@ -344,6 +349,7 @@ inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
   if (version == 18) return READER_PREFS_V18_SIZE;
   if (version == 19) return READER_PREFS_V19_SIZE;
   if (version == 20) return READER_PREFS_V20_SIZE;
+  if (version == 21) return READER_PREFS_V21_SIZE;
   if (version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
   return 0;
 }
@@ -368,8 +374,9 @@ static_assert(READER_PREFS_V17_SIZE == READER_PREFS_V16_SIZE + 1, "v17 adds link
 static_assert(READER_PREFS_V18_SIZE == READER_PREFS_V17_SIZE + 2, "v18 adds the two time-left anchors");
 static_assert(READER_PREFS_V19_SIZE == READER_PREFS_V18_SIZE + 1, "v19 adds textContrast");
 static_assert(READER_PREFS_V20_SIZE == READER_PREFS_V19_SIZE + 1, "v20 adds bookMargins");
-static_assert(sizeof(ReaderPrefs) == READER_PREFS_V20_SIZE + 1,
-              "headingPageBreak must be the last byte: every new field goes last, or "
+static_assert(READER_PREFS_V21_SIZE == READER_PREFS_V20_SIZE + 1, "v21 adds headingPageBreak");
+static_assert(sizeof(ReaderPrefs) == READER_PREFS_V21_SIZE + 1,
+              "wordExpansion must be the last byte: every new field goes last, or "
               "this firmware misreads every sidecar written by the version before it");
 
 // ── The field lists cover the struct ──────────────────────────────────────────
