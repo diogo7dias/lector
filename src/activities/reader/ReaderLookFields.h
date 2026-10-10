@@ -30,6 +30,7 @@
   X(extraParagraphSpacing)           \
   X(paragraphSpacing)                \
   X(wordSpacing)                     \
+  X(kerning)                         \
   X(screenMargin)                    \
   X(screenMarginTop)                 \
   X(screenMarginBottom)              \

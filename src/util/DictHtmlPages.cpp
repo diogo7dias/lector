@@ -289,6 +289,7 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
     spec.extraParagraphSpacing = SETTINGS.extraParagraphSpacing;
     spec.paragraphSpacing = SETTINGS.paragraphSpacing;
     spec.wordSpacing = SETTINGS.wordSpacing;
+    spec.kerning = SETTINGS.kerning != 0;
     spec.paragraphAlignment = SETTINGS.paragraphAlignment;
     spec.viewportWidth = viewportWidth;
     spec.viewportHeight = viewportHeight;

@@ -227,6 +227,7 @@ void EpubReaderActivity::onEnter() {
 
 void EpubReaderActivity::onExit() {
   Activity::onExit();
+  renderer.setKerning(0, true);  // the reading font's Kerning switch ends with the book
 
   // Keep rebuildable font buffers from pinning the heap between reading sessions.
   if (auto* fontCache = renderer.getFontCacheManager()) {
@@ -2593,6 +2594,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   buildViewportHeight = viewportHeight;
 
   const ReaderRenderSpec renderSpec = SETTINGS.readerRenderSpec(viewportWidth, viewportHeight, prefs_);
+  // Layout and paint below both measure through the renderer, so the switch is set once
+  // here; the deferred extension build in loop() reuses it with the same prefs.
+  renderer.setKerning(renderSpec.fontId, renderSpec.kerning);
 
   if (!section) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;

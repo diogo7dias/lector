@@ -51,6 +51,7 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.extraParagraphSpacing, b.extraParagraphSpacing);
   EXPECT_EQ(a.paragraphSpacing, b.paragraphSpacing);
   EXPECT_EQ(a.wordSpacing, b.wordSpacing);
+  EXPECT_EQ(a.kerning, b.kerning);
   EXPECT_EQ(a.screenMargin, b.screenMargin);
   EXPECT_EQ(a.screenMarginTop, b.screenMarginTop);
   EXPECT_EQ(a.screenMarginBottom, b.screenMarginBottom);
@@ -541,13 +542,15 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(offsetof(ReaderPrefs, sbParaPagesPos), READER_PREFS_V12_SIZE);
   EXPECT_EQ(READER_PREFS_V11_SIZE + 1, READER_PREFS_V12_SIZE);
   EXPECT_EQ(READER_PREFS_V12_SIZE + 1, READER_PREFS_V13_SIZE);
-  EXPECT_EQ(READER_PREFS_V13_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V13_SIZE + 1, READER_PREFS_V14_SIZE);
+  EXPECT_EQ(READER_PREFS_V14_SIZE + 1, sizeof(ReaderPrefs));
   EXPECT_EQ(READER_PREFS_V13_SIZE, readerPrefsRecordSize(13));
+  EXPECT_EQ(READER_PREFS_V14_SIZE, readerPrefsRecordSize(14));
   EXPECT_LT(READER_PREFS_V10_SIZE, READER_PREFS_V11_SIZE);
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(14, ReaderPrefs::VERSION);
+  EXPECT_EQ(15, ReaderPrefs::VERSION);
 }
 
 TEST(ReaderPrefs, AV12RecordKeepsItsFieldsAndLeavesTheNewItemOff) {
@@ -771,4 +774,32 @@ TEST(StatusBarBlock, HiddenBarKeepsItsProgressBarsOnlyWhenAsked) {
   EXPECT_EQ(0, b.activeBarThickness());  // the hidden-bar size, not the bar's own
   b.enabled = 1;
   EXPECT_EQ(2, b.activeBarThickness());
+}
+
+TEST(ReaderPrefs, AV14RecordKeepsItsLookAndLeavesKerningOn) {
+  auto old = makeSample();
+  old.wordSpacing = 125;
+  old.kerning = 0;  // outside the v14 record, must not be read
+  std::stringstream file;
+  file.put(static_cast<char>(14));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(14));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(1, loaded.kerning);
+  EXPECT_EQ(125, loaded.wordSpacing);
+  EXPECT_EQ(old.fontPointSize, loaded.fontPointSize);
+}
+
+TEST(ReaderPrefs, KerningOffRoundTripsAndReachesTheSpec) {
+  auto original = makeSample();
+  original.kerning = 0;
+  std::stringstream file;
+  writeReaderPrefs(file, original);
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(file, loaded));
+  expectEqual(original, loaded);
+  EXPECT_FALSE(makeRenderSpec(loaded, 1, 480, 800).kerning);
+  EXPECT_TRUE(makeRenderSpec(ReaderPrefs{}, 1, 480, 800).kerning);
 }

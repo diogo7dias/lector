@@ -261,7 +261,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 67
+#define EXPECTED_VERSION 69
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -428,6 +428,7 @@ struct SectionBin {
     u8 guideDotsMode [[comment("0 = off, 1 = shown, 2 = hidden gap")]];
     u8 firstLineIndentMode [[comment("0 = respect the CSS indent, 1 = custom percent")]];
     u8 firstLineIndentPercent [[comment("Percent of column width, applies in mode 1")]];
+    bool kerning [[comment("Pair kerning for the reading font")]];
 
     u16 pageCount;
     u32 pageLutOffset;
