@@ -219,7 +219,23 @@ void teardownWifiAndRestart() {
 static std::string pickRandomRecentBookPath();
 static std::string pickBootBookPath();
 
-void enterDeepSleep(bool fromTimeout = false) {
+// Boot-time "not a real wake" exits: nothing was painted or changed, so none of
+// enterDeepSleep()'s state save or sleep face applies.
+[[noreturn]] static void sleepAgain() {
+  logFlush();
+  Storage.prepareForDeepSleep();
+  powerManager.startDeepSleep();
+}
+
+// Kept out of line so its log buffers (768 bytes) are not on the loop stack while
+// goToSleep() above it paints the sleep face, the deepest call the lock makes.
+[[noreturn]] __attribute__((noinline)) static void finishDeepSleep(const unsigned long sleepT0,
+                                                                   const unsigned long sleepTState,
+                                                                   const unsigned long sleepTPaint,
+                                                                   const unsigned long sleepTFrame,
+                                                                   const unsigned long sleepTWifi);
+
+[[noreturn]] void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   // Lock cost, stage by stage. The wake side has had WakeTiming since the boot path was
   // first measured; the sleep side had nothing, so "locking feels slow" could not be
@@ -253,7 +269,12 @@ void enterDeepSleep(bool fromTimeout = false) {
   }
 
   sleepTWifi = millis();
+  finishDeepSleep(sleepT0, sleepTState, sleepTPaint, sleepTFrame, sleepTWifi);
+}
 
+static void finishDeepSleep(const unsigned long sleepT0, const unsigned long sleepTState,
+                            const unsigned long sleepTPaint, const unsigned long sleepTFrame,
+                            const unsigned long sleepTWifi) {
   // Read after the sleep screen has painted, so the passes it just spent are counted,
   // and written with the state the next boot reads back. This is the lock's only
   // APP_STATE write: everything set above and in SleepActivity lands with it.
@@ -656,19 +677,14 @@ void setup() {
       if (!gpio.verifyPowerButtonWakeup()) {
         LOG_INF("SLP", "Wake press not held through debounce, back to sleep");
         debug_trace::note("wake press not held, back to sleep");
-        logFlush();
-        Storage.prepareForDeepSleep();
-        powerManager.startDeepSleep();
+        sleepAgain();
       }
       wakePowerReleasePending = true;
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // If USB power caused a cold boot, go back to sleep
       LOG_INF("SLP", "USB power cold boot, back to sleep");
-      logFlush();
-      Storage.prepareForDeepSleep();
-      powerManager.startDeepSleep();
-      break;
+      sleepAgain();
     case HalGPIO::WakeupReason::AfterFlash:
       // After flashing, just proceed to boot
     case HalGPIO::WakeupReason::Other:
@@ -1104,8 +1120,6 @@ void loop() {
   if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs) {
     LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);
     enterDeepSleep(true);
-    // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
-    return;
   }
 
   // A hold that woke the device must be released before it can count as a new in-app long
@@ -1128,8 +1142,6 @@ void loop() {
       return;
     }
     enterDeepSleep();
-    // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
-    return;
   }
 
   // Per-button bindings (Settings > Controls > Buttons).
@@ -1183,7 +1195,6 @@ void loop() {
     const auto runBoundFunction = [&](const uint8_t function) {
       if (function == CrossPointSettings::LP_MENU_SLEEP) {
         enterDeepSleep();
-        return;
       }
       if (function == CrossPointSettings::LP_MENU_FORCE_REFRESH) {
         LOG_DBG("MAIN", "Manual screen refresh triggered");
