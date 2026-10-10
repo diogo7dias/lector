@@ -942,6 +942,9 @@ other numbers in Settings use the same band.
 - **Extra Paragraph Spacing** — space between paragraphs instead of a first-line indent.
   When a nested block ends, the enclosing block's top and bottom spacing is not added again.
 - **Text Anti-Aliasing** — smoother edges, slightly slower page turns.
+- **Text Contrast** — Normal, High or Max, shown while Text Anti-Aliasing is on. High draws
+  the light grey edge pixels as dark grey; Max also draws the dark grey ones black, for
+  crisper, darker anti-aliased text.
 - **Debug Layout Borders** — draws the layout boxes; a diagnostic, not a reading feature.
 
 **Page**

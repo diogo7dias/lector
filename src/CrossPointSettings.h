@@ -408,6 +408,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // this panel but costs a fading grey refresh on every page turn, which is very
   // perceptible. The toggle is kept so it can still be tried; only the default moved.
   uint8_t textAntiAliasing = 0;
+  // How dark anti-aliased greys are drawn (0 Normal, 1 High, 2 Max); only with textAntiAliasing.
+  uint8_t textContrast = 0;
   // Swipe by default: it works the same wherever the thumb lands, and it leaves the
   // whole page free of invisible tap targets.
   uint8_t touchReaderControls = TOUCH_READER_SWIPE;

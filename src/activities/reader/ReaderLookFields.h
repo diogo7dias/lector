@@ -46,6 +46,7 @@
   X(embeddedTextStyle)               \
   X(embeddedLayoutStyle)             \
   X(textAntiAliasing)                \
+  X(textContrast)                    \
   X(imageRendering)
 
 // Per-book toggles that live in the in-book menu, not on the Reader Settings screen.

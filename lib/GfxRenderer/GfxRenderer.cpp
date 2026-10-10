@@ -571,7 +571,7 @@ void GfxRenderer::drawGlyphBitmap(const uint8_t* bitmap, const int width, const 
   const glyphBitmap::Plane plane = mode == BW              ? glyphBitmap::Plane::BW
                                    : mode == GRAYSCALE_MSB ? glyphBitmap::Plane::GrayMSB
                                                            : glyphBitmap::Plane::GrayLSB;
-  glyphBitmap::draw(bitmap, width, height, twoBit, plane, state, target, {0, 0, width, height});
+  glyphBitmap::draw(bitmap, width, height, twoBit, plane, state, target, {0, 0, width, height}, textContrast_);
 }
 
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and

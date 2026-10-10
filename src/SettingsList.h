@@ -428,6 +428,11 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
                                     StrId::STR_CAT_READER)
                     .withTextSettings());
 
+    v.push_back(SettingInfo::Enum(StrId::STR_TEXT_CONTRAST, &CrossPointSettings::textContrast,
+                                  {StrId::STR_NORMAL, StrId::STR_HIGH, StrId::STR_MAX}, "textContrast",
+                                  StrId::STR_CAT_READER)
+                    .withTextSettings());
+
     v.push_back(SettingInfo::Toggle(StrId::STR_FOCUS_READING, &CrossPointSettings::focusReadingEnabled,
                                     "focusReadingEnabled", StrId::STR_CAT_READER)
                     .withTextSettings());
