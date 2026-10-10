@@ -215,6 +215,10 @@ books copied from a computer carry a real date, while books the device downloade
 | `.pxc`          | Image viewer for the packed wallpaper format          |
 | `.bin`          | Offered as a firmware file, see [section 13](#13-updating-the-firmware) |
 
+Text files are read as UTF-8. A file that is not valid UTF-8 is read as Windows-1252, the
+usual encoding of older Western text files (Latin-1 accents, curly quotes, the euro sign).
+UTF-16 files are not supported and show a message instead.
+
 From the image viewers you can set the picture as your sleep wallpaper.
 
 Opening a wallpaper from `/sleep` gives you the triage buttons: **Favorite**, **Pause** and
@@ -326,6 +330,8 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
   ordinary page turns do not add entries. Shown only while there is somewhere to return to.
   Changing text size still returns to the same passage. Leaving the book (including sleep)
   clears this history; the Back button and footnote returns keep their usual behavior.
+- **Forward** — after a Return, go back to the page you returned from. Shown only after a
+  Return. A new jump (chapter, percentage, bookmark) clears it.
 - **Go to Paragraph** — jump by paragraph number, shown only while paragraph numbering is on.
 - **Bookmarks** — the list, shown once the book has one.
 - **Toggle Bookmark** — drop or lift a bookmark on this page.
@@ -857,6 +863,8 @@ belongs to, so the rows here appear in the same order as on the device.
 - **Refresh Frequency** — a full refresh every 1, 5, 10, 15 or 30 pages, or **Never**. Never
   turns off the page-counted refresh only; the reader still cleans the panel when enough ink
   has moved to need it, so a long session does not end up smeared.
+- **Night Refresh Frequency** — the same choice while night mode is on. **Same as Day** (the
+  default) keeps Refresh Frequency; any other value applies only to inverted pages.
 - **Sunlight Fading Fix** — software fix for white X4 units fading in direct sunlight.
 
 **Home**
@@ -959,7 +967,8 @@ Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Al
   over 10 minutes are not counted. The book estimate scales the rest of the book by the
   current chapter, so it settles as you read. EPUB only.
 - **Book Bar** and **Chapter Bar** — Off, Top or Bottom, with **Bar Thickness** (Slim 3 px,
-  Medium 6 px, Fat 9 px).
+  Medium 6 px, Fat 9 px). On EPUB books the Book Bar has a small notch where each chapter
+  starts. A book with more than 64 chapters shows a plain bar.
 - **Progress Bar** — Off, Slim, Medium or Fat, for when the status bar itself is off.
 - **XTC Status Bar** — Hide, Bottom or Top, for XTC books.
 - **Clock UTC Offset**, **Clock Format** (24-hour or 12-hour) and **Clock Synced**. The offset
