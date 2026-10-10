@@ -71,6 +71,9 @@ struct ReaderRenderSpec {
   // Start each h1/h2 heading on a new page (a heading right after another heading stays with it). Moves page breaks, so
   // part of the cache key.
   bool headingPageBreak = false;
+  // Word Expansion: 0 Off, 1 Some, 2 More. Up to that many px between letters on a justified line whose gaps would
+  // pass 1.5 spaces. Moves glyphs, so part of the cache key.
+  uint8_t wordExpansion = 0;
 
   // Memberwise: padding is ignored and float equality keeps its usual semantics.
   constexpr bool operator==(const ReaderRenderSpec&) const = default;

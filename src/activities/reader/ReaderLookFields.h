@@ -49,6 +49,7 @@
   X(textContrast)                    \
   X(bookMargins)                     \
   X(headingPageBreak)                \
+  X(wordExpansion)                   \
   X(imageRendering)
 
 // Per-book toggles that live in the in-book menu, not on the Reader Settings screen.

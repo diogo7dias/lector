@@ -1219,7 +1219,37 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   // For justified text, compute per-gap extra to distribute remaining space evenly.
   // extraEndOffset reserves space for any ruby group at the right edge of the line.
-  const int spareSpace = effectivePageWidth - extraStartOffset - extraEndOffset - lineWordWidthSum - totalNaturalGaps;
+  int spareSpace = effectivePageWidth - extraStartOffset - extraEndOffset - lineWordWidthSum - totalNaturalGaps;
+
+  // Word Expansion: once a justified line's gaps would pass 1.5 natural spaces, put up to
+  // maxLetterSpacing px between letters so the slack spreads into the words. Plain LTR
+  // lines only: focus splits, guide dots and ruby are positioned per glyph run elsewhere.
+  uint8_t letterSpacing = 0;
+  std::vector<uint16_t> glyphGaps;  // per line word: the steps letterSpacing widens
+  const bool lineHasRuby =
+      std::any_of(lineRubyTexts.begin(), lineRubyTexts.end(), [](const std::string& r) { return !r.empty(); });
+  if (maxLetterSpacing > 0 && effectiveAlignment == CssTextAlign::Justify && !isLastLine && actualGapCount > 0 &&
+      !blockStyle.isRtl && !hasRtlWord && !focusReadingEnabled && guideDotsMode == GUIDE_DOTS_OFF && !lineHasRuby) {
+    const int excess = spareSpace - totalNaturalGaps / 2;
+    if (excess > 0) {
+      glyphGaps.reserve(lineWordCount);
+      int totalGlyphGaps = 0;
+      for (size_t i = 0; i < lineWordCount; i++) {
+        const int n =
+            lineWords[i] == " " ? 0 : renderer.spacedGlyphCount(fontId, lineWords[i].c_str(), lineWordStyles[i]);
+        glyphGaps.push_back(static_cast<uint16_t>(std::max(0, n - 1)));
+        totalGlyphGaps += glyphGaps.back();
+      }
+      if (totalGlyphGaps > 0) {
+        letterSpacing = static_cast<uint8_t>(std::min<int>(maxLetterSpacing, excess / totalGlyphGaps));
+        spareSpace -= letterSpacing * totalGlyphGaps;
+      }
+    }
+  }
+  const auto wordWidthAt = [&](const size_t wordIdx) {
+    return wordWidths[lastBreakAt + wordIdx] + (letterSpacing ? letterSpacing * glyphGaps[wordIdx] : 0);
+  };
+
   JustifySpacing justifySpacing(effectiveAlignment == CssTextAlign::Justify && !isLastLine ? spareSpace : 0,
                                 actualGapCount);
 
@@ -1411,7 +1441,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
         const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
         if (nextIsContinuation) {
-          int advance = wordWidths[lastBreakAt + wordIdx];
+          int advance = wordWidthAt(wordIdx);
           advance += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx]),
                                          firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
           // wordIdx > 0 mirrors the gap accounting above (which skips index 0): a leading
@@ -1437,7 +1467,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
           if (wordIdx + 1 < lineWordCount && effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
             gap += justifySpacing.nextExtra();
           }
-          xpos += wordWidths[lastBreakAt + wordIdx] + gap;
+          xpos += wordWidthAt(wordIdx) + gap;
         }
       }
     }
@@ -1469,6 +1499,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
       return;
     }
+    block->setLetterSpacing(letterSpacing);
     processLine(processLineCtx, std::move(block), lineVisibleOffset);
     return;
   }

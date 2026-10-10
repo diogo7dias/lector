@@ -304,9 +304,13 @@ class GfxRenderer {
   // averaged down from its bitmap. Plain runs only (digits, Latin): no BiDi, combining
   // marks or SD fallback. 100 is drawText(). y is the top of the scaled ascender box.
   void drawTextScaled(int fontId, int x, int y, const char* text, int percent, bool black = true) const;
+  // letterSpacing: extra pixels after every glyph but the last (Word Expansion). Each word
+  // gains letterSpacing * (spacedGlyphCount - 1).
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR,
-                BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
+                BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO, int letterSpacing = 0) const;
+  // Glyphs drawText steps between for `text`: ligatures applied, combining marks not counted.
+  int spacedGlyphCount(int fontId, const char* text, EpdFontFamily::Style style) const;
   int getSpaceWidth(int fontId, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   /// Returns the total inter-word advance: fp4::toPixel(spaceAdvance + kern(leftCp,' ') + kern(' ',rightCp)).
   /// Using a single snap avoids the +/-1 px rounding error that arises when space advance and kern are
