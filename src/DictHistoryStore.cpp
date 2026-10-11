@@ -37,6 +37,11 @@ void DictHistoryStore::ensureLoaded() {
 
 void DictHistoryStore::add(const std::string& word) {
   ensureLoaded();
+  // Unreadable this once: saving now would replace the whole history with one word.
+  if (!loaded) {
+    LOG_ERR("DHIS", "History unreadable, word not recorded");
+    return;
+  }
   // The list rule itself lives in recent_words, where it is host-tested; false means
   // nothing moved, so the write is skipped.
   if (!recent_words::moveToFront(words, word, MAX_WORDS)) return;
