@@ -29,6 +29,16 @@ class Epub {
   std::unique_ptr<CssParser> cssParser;
   // CSS files
   std::vector<std::string> cssFiles;
+  // Link taps: FNV-1a of each spine href and of its file name, built on the first tap so
+  // later taps scan RAM instead of reading every spine entry off the card. Tied to the
+  // cache instance it was built from; every hit is confirmed against the real href.
+  struct SpineHrefHash {
+    uint64_t href;
+    uint64_t fileName;
+  };
+  mutable std::unique_ptr<SpineHrefHash[]> spineHrefHashes;
+  mutable int spineHrefHashCount = 0;
+  mutable const BookMetadataCache* spineHrefHashOwner = nullptr;
 
   bool findContentOpfFile(std::string* contentOpfFile) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true);
