@@ -427,7 +427,11 @@ void NearbyFileTransferActivity::sendChunk(const TransferAction& action) {
     return;
   }
 
-  if (!sendPacket(PacketType::Data, action.peerMac, action.sequence, buffer.data(), action.length)) return;
+  // Marked sent even when the radio refused it: the session then retries the chunk on its
+  // resend timer. Skipping this left the chunk "offered" forever and stalled the sender.
+  if (!sendPacket(PacketType::Data, action.peerMac, action.sequence, buffer.data(), action.length)) {
+    LOG_ERR(LOG_TAG, "Data send failed at offset %llu, will retry", static_cast<unsigned long long>(action.offset));
+  }
   session.onChunkSent(buffer.data(), action.length, millis());
 }
 
