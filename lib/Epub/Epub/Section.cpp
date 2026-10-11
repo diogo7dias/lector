@@ -892,22 +892,26 @@ std::unique_ptr<Page> Section::loadPageAt(const int page) const {
     return nullptr;
   }
 
-  f.seek(PAGE_LUT_FIELD);
-  uint32_t lutOffset;
-  serialization::readPod(f, lutOffset);
-  f.seek(lutOffset + sizeof(uint32_t) * page);
-  uint32_t pagePos;
-  serialization::readPod(f, pagePos);
+  // A torn or damaged cache must yield no page, not a page decoded from a garbage offset.
+  const size_t fileSize = f.size();
+  uint32_t lutOffset = 0;
+  uint32_t pagePos = 0;
+  if (!f.seek(PAGE_LUT_FIELD) || !serialization::readPod(f, lutOffset) || lutOffset < HEADER_SIZE ||
+      lutOffset > fileSize || lutOffset + sizeof(uint32_t) * (static_cast<size_t>(page) + 1) > fileSize ||
+      !f.seek(lutOffset + sizeof(uint32_t) * page) || !serialization::readPod(f, pagePos) || pagePos < HEADER_SIZE ||
+      pagePos >= fileSize) {
+    LOG_ERR("SCT", "Bad page table entry for page %d in %s", page, filePath.c_str());
+    return nullptr;
+  }
 
   // Read this page's visible-codepoint start offset from the visible-offset LUT (last header slot)
   // in the same open handle, so the reader can persist progress without reopening the section file
   // on every page turn (see Page::visibleTextOffset). A malformed/old file leaves it at 0.
-  f.seek(VISIBLE_LUT_FIELD);
-  uint32_t visibleLutOffset;
-  serialization::readPod(f, visibleLutOffset);
+  uint32_t visibleLutOffset = 0;
+  if (f.seek(VISIBLE_LUT_FIELD)) serialization::readPod(f, visibleLutOffset);
   uint32_t visibleTextOffset = 0;
   const uint32_t visibleEntry = visibleLutOffset + sizeof(uint32_t) * page;
-  if (visibleLutOffset >= HEADER_SIZE && visibleEntry + sizeof(uint32_t) <= f.size()) {
+  if (visibleLutOffset >= HEADER_SIZE && visibleEntry + sizeof(uint32_t) <= fileSize) {
     f.seek(visibleEntry);
     serialization::readPod(f, visibleTextOffset);
   }
@@ -1198,9 +1202,8 @@ std::optional<uint32_t> Section::getVisibleTextOffsetForPage(const uint16_t page
     return std::nullopt;
   }
 
-  f.seek(VISIBLE_LUT_FIELD);
-  uint32_t visibleLutOffset;
-  serialization::readPod(f, visibleLutOffset);
+  uint32_t visibleLutOffset = 0;
+  if (f.seek(VISIBLE_LUT_FIELD)) serialization::readPod(f, visibleLutOffset);
   const uint32_t entryOffset = visibleLutOffset + static_cast<uint32_t>(page) * sizeof(uint32_t);
   if (visibleLutOffset < HEADER_SIZE || entryOffset + sizeof(uint32_t) > f.size()) {
     return std::nullopt;
@@ -1261,9 +1264,8 @@ std::optional<uint16_t> Section::getPageForVisibleTextOffset(const uint32_t offs
     return std::nullopt;
   }
 
-  f.seek(VISIBLE_LUT_FIELD);
-  uint32_t visibleLutOffset;
-  serialization::readPod(f, visibleLutOffset);
+  uint32_t visibleLutOffset = 0;
+  if (f.seek(VISIBLE_LUT_FIELD)) serialization::readPod(f, visibleLutOffset);
   if (visibleLutOffset < HEADER_SIZE || visibleLutOffset + static_cast<uint32_t>(count) * sizeof(uint32_t) > f.size()) {
     return std::nullopt;
   }
