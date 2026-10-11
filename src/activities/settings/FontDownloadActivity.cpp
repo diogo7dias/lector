@@ -368,6 +368,16 @@ bool FontDownloadActivity::fetchAndParseManifest() {
 void FontDownloadActivity::stampDiskState(void* context, ManifestFamily& family, const ManifestFile* files,
                                           const size_t count) {
   auto* self = static_cast<FontDownloadActivity*>(context);
+  // Only this pass sees every file name, so a family with one unsafe name is marked here
+  // (empty name) for parseManifest to drop with the rest.
+  for (size_t i = 0; i < count; i++) {
+    if (!FontInstaller::isValidCpfontFilename(files[i].name)) {
+      LOG_ERR("FONT", "Manifest family %s lists unsafe file name, skipped", family.name);
+      family.name[0] = '\0';
+      return;
+    }
+  }
+  if (!FontInstaller::isValidFamilyName(family.name)) return;
   family.installed = self->fontInstaller_.isFamilyInstalled(family.name);
   family.hasUpdate = false;
   if (!family.installed) return;
@@ -479,6 +489,13 @@ bool FontDownloadActivity::parseManifest(const FontManifestParser::FileRetention
 
   baseUrl_ = parser.baseUrl();
   out = std::move(parser.families());
+  // The manifest is remote input and its names become SD paths: a family whose name or
+  // file names could step outside its font folder is dropped, not downloaded.
+  std::erase_if(out, [](const ManifestFamily& family) {
+    return !FontInstaller::isValidFamilyName(family.name) ||
+           std::any_of(family.files.begin(), family.files.end(),
+                       [](const ManifestFile& file) { return !FontInstaller::isValidCpfontFilename(file.name); });
+  });
   return true;
 }
 
