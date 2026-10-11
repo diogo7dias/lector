@@ -741,23 +741,29 @@ bool Epub::generateCoverBmp(bool cropped) const {
   coverImage.close();
 
   if (!Storage.openFileForRead("EBP", coverTempPath, coverImage)) {
+    Storage.remove(coverTempPath.c_str());
     return false;
   }
 
+  // Written under .part and renamed when whole: a reset mid-decode must not leave a
+  // truncated cover.bmp that the exists() check above would trust forever.
+  const std::string bmpPath = getCoverBmpPath(cropped);
+  const std::string partPath = FsHelpers::partialPathFor(bmpPath);
   HalFile coverBmp;
-  if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped), coverBmp)) {
-    return false;
+  bool success = Storage.openFileForWrite("EBP", partPath, coverBmp);
+  if (success) {
+    success = png ? PngToBmpConverter::pngFileToBmpStream(coverImage, coverBmp, cropped)
+                  : JpegToBmpConverter::jpegFileToBmpStream(coverImage, coverBmp, cropped);
   }
-  const bool success = png ? PngToBmpConverter::pngFileToBmpStream(coverImage, coverBmp, cropped)
-                           : JpegToBmpConverter::jpegFileToBmpStream(coverImage, coverBmp, cropped);
-  // Explicitly close() files before calling Storage.remove()
+  // Explicitly close() files before calling Storage.remove()/rename()
   coverImage.close();
   coverBmp.close();
   Storage.remove(coverTempPath.c_str());
+  success = success && Storage.rename(partPath.c_str(), bmpPath.c_str());
 
   if (!success) {
     LOG_ERR("EBP", "Failed to generate BMP from %s cover image", format);
-    Storage.remove(getCoverBmpPath(cropped).c_str());
+    Storage.remove(partPath.c_str());
   }
   LOG_DBG("EBP", "Generated BMP from %s cover image, success: %s", format, success ? "yes" : "no");
   return success;

@@ -113,6 +113,11 @@ bool Txt::generateCoverBmp() const {
   // Setup cache directory
   setupCacheDir();
 
+  // Written under .part and renamed when whole: a reset mid-write must not leave a
+  // truncated cover.bmp that the exists() check above would trust forever.
+  const std::string bmpPath = getCoverBmpPath();
+  const std::string partPath = FsHelpers::partialPathFor(bmpPath);
+  bool success = false;
   if (FsHelpers::hasBmpExtension(coverImagePath)) {
     // Copy BMP file to cache
     LOG_DBG("TXT", "Copying BMP cover image to cache");
@@ -120,38 +125,39 @@ bool Txt::generateCoverBmp() const {
     if (!Storage.openFileForRead("TXT", coverImagePath, src)) {
       return false;
     }
-    if (!Storage.openFileForWrite("TXT", getCoverBmpPath(), dst)) {
+    if (!Storage.openFileForWrite("TXT", partPath, dst)) {
       return false;
     }
     uint8_t buffer[1024];
-    while (src.available()) {
-      size_t bytesRead = src.read(buffer, sizeof(buffer));
-      dst.write(buffer, bytesRead);
+    success = true;
+    while (success && src.available()) {
+      const size_t bytesRead = src.read(buffer, sizeof(buffer));
+      success = dst.write(buffer, bytesRead) == bytesRead;
     }
-    LOG_DBG("TXT", "Copied BMP cover to cache");
-    return true;
+    dst.close();
+  } else {
+    // JPG/JPEG or PNG: convert to BMP with the same converters Epub uses.
+    const bool isJpg = FsHelpers::hasJpgExtension(coverImagePath);
+    if (!isJpg && !FsHelpers::hasPngExtension(coverImagePath)) {
+      LOG_ERR("TXT", "Cover image format not supported (only BMP/JPG/JPEG/PNG)");
+      return false;
+    }
+    LOG_DBG("TXT", "Generating BMP from %s cover image", isJpg ? "JPG" : "PNG");
+    HalFile coverSrc, coverBmp;
+    if (!Storage.openFileForRead("TXT", coverImagePath, coverSrc)) {
+      return false;
+    }
+    if (!Storage.openFileForWrite("TXT", partPath, coverBmp)) {
+      return false;
+    }
+    success = isJpg ? JpegToBmpConverter::jpegFileToBmpStream(coverSrc, coverBmp)
+                    : PngToBmpConverter::pngFileToBmpStream(coverSrc, coverBmp);
+    coverBmp.close();  // the handle must be released before the path is renamed or removed
   }
-
-  // JPG/JPEG or PNG: convert to BMP with the same converters Epub uses.
-  const bool isJpg = FsHelpers::hasJpgExtension(coverImagePath);
-  if (!isJpg && !FsHelpers::hasPngExtension(coverImagePath)) {
-    LOG_ERR("TXT", "Cover image format not supported (only BMP/JPG/JPEG/PNG)");
-    return false;
-  }
-  LOG_DBG("TXT", "Generating BMP from %s cover image", isJpg ? "JPG" : "PNG");
-  HalFile coverSrc, coverBmp;
-  if (!Storage.openFileForRead("TXT", coverImagePath, coverSrc)) {
-    return false;
-  }
-  if (!Storage.openFileForWrite("TXT", getCoverBmpPath(), coverBmp)) {
-    return false;
-  }
-  const bool success = isJpg ? JpegToBmpConverter::jpegFileToBmpStream(coverSrc, coverBmp)
-                             : PngToBmpConverter::pngFileToBmpStream(coverSrc, coverBmp);
+  success = success && Storage.rename(partPath.c_str(), bmpPath.c_str());
   if (!success) {
     LOG_ERR("TXT", "Failed to generate BMP from cover image");
-    coverBmp.close();  // the handle must be released before the path is removed
-    Storage.remove(getCoverBmpPath().c_str());
+    Storage.remove(partPath.c_str());
   }
   return success;
 }

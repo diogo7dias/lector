@@ -8,6 +8,7 @@
 #include "Xtc.h"
 
 #include <BmpWriter.h>
+#include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -181,8 +182,12 @@ bool Xtc::generateCoverBmp() const {
   }
 
   // Create BMP file
+  // Written under .part and renamed when whole: a reset mid-write must not leave a
+  // truncated cover.bmp that the exists() check would trust forever.
+  const std::string bmpPath = getCoverBmpPath();
+  const std::string partPath = FsHelpers::partialPathFor(bmpPath);
   HalFile coverBmp;
-  if (!Storage.openFileForWrite("XTC", getCoverBmpPath(), coverBmp)) {
+  if (!Storage.openFileForWrite("XTC", partPath, coverBmp)) {
     LOG_DBG("XTC", "Failed to create cover BMP file");
     free(pageBuffer);
     return false;
@@ -208,6 +213,8 @@ bool Xtc::generateCoverBmp() const {
     uint8_t* rowBuffer = static_cast<uint8_t*>(malloc(rowSize));
     if (!rowBuffer) {
       free(pageBuffer);
+      coverBmp.close();
+      Storage.remove(partPath.c_str());
       return false;
     }
 
@@ -258,8 +265,14 @@ bool Xtc::generateCoverBmp() const {
   }
 
   free(pageBuffer);
+  coverBmp.close();
+  if (!Storage.rename(partPath.c_str(), bmpPath.c_str())) {
+    LOG_ERR("XTC", "Failed to commit cover BMP");
+    Storage.remove(partPath.c_str());
+    return false;
+  }
 
-  LOG_DBG("XTC", "Generated cover BMP: %s", getCoverBmpPath().c_str());
+  LOG_DBG("XTC", "Generated cover BMP: %s", bmpPath.c_str());
   return true;
 }
 
