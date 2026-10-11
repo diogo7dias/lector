@@ -963,7 +963,41 @@ int Epub::resolveHrefToSpineIndex(const std::string& href, const int fromSpineIn
   const std::string_view targetFilename = SpineFileNameIndex::fileNameOf(target);
   int nameMatch = -1;
   int nameMatches = 0;
-  for (int i = 0; i < getSpineItemsCount(); i++) {
+
+  const int count = getSpineItemsCount();
+  if (spineHrefHashOwner != bookMetadataCache.get() || spineHrefHashCount != count) {
+    spineHrefHashes = makeUniqueNoThrow<SpineHrefHash[]>(count);
+    spineHrefHashCount = spineHrefHashes ? count : 0;
+    spineHrefHashOwner = spineHrefHashes ? bookMetadataCache.get() : nullptr;
+    for (int i = 0; i < spineHrefHashCount; i++) {
+      const std::string spineHref = getSpineItem(i).href;
+      spineHrefHashes[i] = {SpineFileNameIndex::hashOf(spineHref),
+                            SpineFileNameIndex::hashOf(SpineFileNameIndex::fileNameOf(spineHref))};
+    }
+  }
+  if (spineHrefHashes) {
+    const uint64_t targetHash = SpineFileNameIndex::hashOf(target);
+    const uint64_t relativeHash = relative.empty() ? 0 : SpineFileNameIndex::hashOf(relative);
+    const uint64_t nameHash = SpineFileNameIndex::hashOf(targetFilename);
+    for (int i = 0; i < count; i++) {
+      const SpineHrefHash& h = spineHrefHashes[i];
+      if (h.href == targetHash || (!relative.empty() && h.href == relativeHash)) {
+        const std::string spineHref = getSpineItem(i).href;
+        if (spineHref == target || (!relative.empty() && spineHref == relative)) return i;
+      }
+      if (h.fileName == nameHash) {
+        nameMatch = i;
+        nameMatches++;
+      }
+    }
+    if (nameMatches == 1 && SpineFileNameIndex::fileNameOf(getSpineItem(nameMatch).href) == targetFilename) {
+      return nameMatch;
+    }
+    return -1;
+  }
+
+  // No room for the table: the original one-pass scan off the card.
+  for (int i = 0; i < count; i++) {
     const auto& spineHref = getSpineItem(i).href;
     if (spineHref == target || (!relative.empty() && spineHref == relative)) return i;
     if (SpineFileNameIndex::fileNameOf(spineHref) == targetFilename) {
