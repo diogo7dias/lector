@@ -10,6 +10,11 @@
 #include "esp_private/esp_system_attr.h"
 #include "esp_private/panic_internal.h"
 
+#if !__riscv
+#include "esp_cpu_utils.h"
+#include "xtensa_context.h"
+#endif
+
 #define MAX_PANIC_STACK_DEPTH 32
 #define PANIC_CAPTURE_MAGIC 0x50414E49u
 
@@ -44,13 +49,35 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
     return;
   }
 
-#if !__riscv
-  __real_panic_print_backtrace(frame, core);
-  return;
-#else
   for (size_t i = 0; i < MAX_PANIC_STACK_DEPTH; i++) {
     panicStack[i].sp = 0;
   }
+
+#if !__riscv
+  // Xtensa (X4 Pro): the windowed ABI lets IDF walk real frames, so each row holds the
+  // caller PCs (8 per row, row sp = first frame's sp), ready for xtensa addr2line.
+  const XtExcFrame* xt = static_cast<const XtExcFrame*>(frame);
+  esp_backtrace_frame_t bt = {static_cast<uint32_t>(xt->pc), static_cast<uint32_t>(xt->a1),
+                              static_cast<uint32_t>(xt->a0), xt};
+  int row = 0;
+  int slot = 0;
+  panicStack[0].sp = bt.sp;
+  for (int y = 0; y < 8; y++) panicStack[0].spp[y] = 0;
+  while (true) {
+    panicStack[row].spp[slot] = esp_cpu_process_stack_pc(bt.pc);
+    if (!bt.next_pc || !esp_backtrace_get_next_frame(&bt)) break;
+    if (++slot == 8) {
+      slot = 0;
+      if (++row >= MAX_PANIC_STACK_DEPTH) break;
+      panicStack[row].sp = bt.sp;
+      for (int y = 0; y < 8; y++) panicStack[row].spp[y] = 0;
+    }
+  }
+
+  panicCaptureMarker = PANIC_CAPTURE_MAGIC;
+
+  __real_panic_print_backtrace(frame, core);
+#else
 
   // Copied from components/esp_system/port/arch/riscv/panic_arch.c
   uint32_t sp = (uint32_t)((RvExcFrame*)frame)->sp;
