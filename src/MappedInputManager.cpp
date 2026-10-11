@@ -414,17 +414,42 @@ bool MappedInputManager::wasScreenTouchReleased() const {
 bool MappedInputManager::wasReaderMenuSwipeUp() const { return gpio.hasHomeKey() && wasBottomEdgeUpSwipe(); }
 
 list_swipe::Scroll MappedInputManager::wasListScrollSwipe() const {
+  if (listScrollPolled_) return listScrollThisPass_;
+  listScrollPolled_ = true;
   int sx = 0;
   int sy = 0;
   int ex = 0;
   int ey = 0;
-  if (!decodeSwipe(sx, sy, ex, ey)) return list_swipe::Scroll::None;
-  const auto scroll = list_swipe::scrollFrom(renderer.getScreenWidth(), renderer.getScreenHeight(), sx, sy, ex, ey);
+  auto scroll = list_swipe::Scroll::None;
+  // The SDK swipe is a flick (under 700 ms), so a slow drag was dropped. Tracked here pass
+  // by pass as wasMenuGesture does; firing suppresses the rest of the contact, so the lift
+  // neither taps a row nor pages a second time as a flick.
+  int tx = 0;
+  int ty = 0;
+  if (isScreenTouchHeld(tx, ty)) {
+    if (!listDragTracking_) {
+      listDragTracking_ = true;
+      listDragStartX_ = tx;
+      listDragStartY_ = ty;
+    }
+    // 60 px: the SDK flick's own floor (TOUCH_SWIPE_MIN_PX), so a wobbly tap stays a tap.
+    if (std::abs(ty - listDragStartY_) >= 60) {
+      scroll = list_swipe::scrollFrom(renderer.getScreenWidth(), renderer.getScreenHeight(), listDragStartX_,
+                                      listDragStartY_, tx, ty);
+      if (scroll != list_swipe::Scroll::None) gpio.suppressTouchContact();
+    }
+  } else {
+    listDragTracking_ = false;
+    if (decodeSwipe(sx, sy, ex, ey)) {
+      scroll = list_swipe::scrollFrom(renderer.getScreenWidth(), renderer.getScreenHeight(), sx, sy, ex, ey);
+    }
+  }
   if (scroll != list_swipe::Scroll::None) {
     rememberTouchHeldTime();
     // Scrolling ends the arm: the row it named may not even be on screen now.
     clearRowTapArm();
   }
+  listScrollThisPass_ = scroll;
   return scroll;
 }
 

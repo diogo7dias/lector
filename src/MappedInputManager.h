@@ -33,6 +33,7 @@ class MappedInputManager {
     // After the poll and before anything queries the buttons: the gate has to see this
     // pass's edges to decide whether the release it is waiting for has gone by.
     releaseGate.tick(buttonMask(&HalGPIO::isPressed), buttonMask(&HalGPIO::wasReleased));
+    listScrollPolled_ = false;
   }
 
   // Swallow the release of whatever button is held right now. A screen that acted on the
@@ -221,6 +222,16 @@ class MappedInputManager {
   // query (wasScreenTouchDown) is false for anything past tap slop, so a swipe never
   // reports a "down" at all.
   mutable bool menuDragTracking_ = false;
+
+  // List scroll drag (see wasListScrollSwipe): the same per-pass tracking, so a slow drag
+  // pages a list the way a flick does. One page per contact.
+  mutable int listDragStartX_ = 0;
+  mutable int listDragStartY_ = 0;
+  mutable bool listDragTracking_ = false;
+  // A list asks once per direction each pass, and the drag suppresses the contact when it
+  // fires, so the pass's answer is latched for every later ask.
+  mutable bool listScrollPolled_ = false;
+  mutable list_swipe::Scroll listScrollThisPass_ = list_swipe::Scroll::None;
 
   bool powerReleaseSuppressed = false;
   bool powerReleaseInjected = false;
