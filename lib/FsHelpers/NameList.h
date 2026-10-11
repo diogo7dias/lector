@@ -25,9 +25,16 @@ class NameList {
  public:
   // Whichever budget trips first stops the listing. 48 KB of names plus a 4000-entry
   // offset table (16 KB) is ~64 KB worst case, which fits beside the framebuffer with
-  // room to spare, and 4000 entries is far past what is navigable by button anyway.
+  // room to spare. At 48 KB a folder of long titles stopped near 1,000 names, so a
+  // PSRAM board (where allocations over 4 KB land in PSRAM) gets 8000 names of up to
+  // 64 bytes each.
+#if defined(BOARD_HAS_PSRAM)
+  static constexpr uint32_t MAX_BLOB_BYTES = 512u * 1024u;
+  static constexpr uint32_t MAX_ENTRIES = 8000u;
+#else
   static constexpr uint32_t MAX_BLOB_BYTES = 48u * 1024u;
   static constexpr uint32_t MAX_ENTRIES = 4000u;
+#endif
 
   bool push(std::string_view name) {
     if (offsets_.size() >= MAX_ENTRIES) {
