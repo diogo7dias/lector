@@ -408,6 +408,8 @@ void ActivityManager::goToReader(std::string path, const bool allowFastInitialRe
 }
 
 void ActivityManager::goToSleep(bool fromTimeout) {
+  // An open panel eats every loop() pass, so the sleep screen would never be applied.
+  if (lightPanel.isActive()) lightPanel.close([] {});
   replaceActivity(std::make_unique<SleepActivity>(renderer, mappedInput, fromTimeout));
   loop();  // Important: sleep screen must be rendered immediately, the caller will go to sleep right after this returns
 }

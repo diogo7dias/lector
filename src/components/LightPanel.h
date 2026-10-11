@@ -83,6 +83,20 @@ class LightPanel {
 
   bool isActive() const { return active_; }
 
+  void close(const std::function<void()>& requestUpdate) {
+    active_ = false;
+    const uint8_t on = on_ ? 1 : 0;
+    // A panel opened and closed unchanged costs no settings write (write throttling).
+    if (SETTINGS.frontlightOn != on || SETTINGS.frontlightBrightness != brightness_ ||
+        SETTINGS.frontlightWarmth != warmth_) {
+      SETTINGS.frontlightOn = on;
+      SETTINGS.frontlightBrightness = brightness_;
+      SETTINGS.frontlightWarmth = warmth_;
+      SETTINGS.saveToFile();
+    }
+    requestUpdate();
+  }
+
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
     if (!active_) return false;
 
@@ -372,20 +386,6 @@ class LightPanel {
     }
     const int width = renderer.getTextWidth(UI_10_FONT_ID, right);
     renderer.drawText(UI_10_FONT_ID, rect.x + rect.width - width, y, right, true);
-  }
-
-  void close(const std::function<void()>& requestUpdate) {
-    active_ = false;
-    const uint8_t on = on_ ? 1 : 0;
-    // A panel opened and closed unchanged costs no settings write (write throttling).
-    if (SETTINGS.frontlightOn != on || SETTINGS.frontlightBrightness != brightness_ ||
-        SETTINGS.frontlightWarmth != warmth_) {
-      SETTINGS.frontlightOn = on;
-      SETTINGS.frontlightBrightness = brightness_;
-      SETTINGS.frontlightWarmth = warmth_;
-      SETTINGS.saveToFile();
-    }
-    requestUpdate();
   }
 
   void applyLight() {
