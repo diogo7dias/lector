@@ -402,7 +402,12 @@ void SettingsActivity::onEnter() {
   requestUpdate();
 }
 
-void SettingsActivity::onExit() { Activity::onExit(); }
+// Saved on every way out (Back, Home gesture, sleep), not only Back: toggles and cycles
+// change SETTINGS in place. An unchanged file is skipped by writeDocToFile.
+void SettingsActivity::onExit() {
+  SETTINGS.saveToFile();
+  Activity::onExit();
+}
 
 void SettingsActivity::startDownloadActivity(std::unique_ptr<Activity> activity) {
   if (!activity) {
@@ -473,7 +478,6 @@ void SettingsActivity::onBackButton() {
     setSelected(selectedCategory);
     return;
   }
-  SETTINGS.saveToFile();
   onGoHome();
 }
 
