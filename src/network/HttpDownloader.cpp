@@ -10,6 +10,7 @@
 
 #include "HttpRangePolicy.h"
 #include "WifiFullPower.h"
+#include "util/UrlUtils.h"
 
 #if defined(FREEINK_NET_WOLFSSL)
 #include <SecureHttpClient.h>
@@ -105,7 +106,10 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
     // append a second User-Agent header, which strict servers reject (aiohttp
     // answers 400 "Duplicate 'User-Agent' header found").
     http.setUserAgent("CrossPoint-ESP32-" CROSSPOINT_VERSION);
-    if (!username.empty() && !password.empty()) {
+    // Credentials go only to the origin they were given for: a redirect to another
+    // host or scheme (a CDN, a downgrade to http) must not receive the password.
+    if (!username.empty() && !password.empty() &&
+        strcasecmp(UrlUtils::extractHost(url).c_str(), UrlUtils::extractHost(startUrl).c_str()) == 0) {
       http.addHeader("Authorization", basicAuthHeader(username, password));
     }
 
