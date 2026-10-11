@@ -1008,3 +1008,9 @@ struct PageLine {
 ---
 
 Philosophy: We are building a dedicated e-reader, not a Swiss Army knife. If a feature adds RAM pressure without significantly improving the reading experience, it is Out of Scope.
+
+## UI lint
+
+- Run lintapple before calling UI work done. The browser UI here is the simulator page; the device pages in `src/network/html` are served by the firmware and are not covered.
+- Serve and lint: `./sim/build-qemu.sh` (once), then `LECTOR_BOARD=x4pro python3 sim/server.py 18080 &`, then `npx -y lintapple http://127.0.0.1:18080/`.
+- No root `package.json`, so no `lint:ui` script; the policy lives in `ui-policy.json` (none yet, so defaults apply).
