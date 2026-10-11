@@ -59,6 +59,22 @@ find src -name "*.cpp" -o -name "*.h" | xargs clang-format -i
   * Framebuffer: 48,000 bytes (800 × 480 ÷ 8)
 * Storage: SD Card (Used for books and aggressive caching)
 
+### X4 Pro (ESP32-S3) — the main device
+* env `x4pro`, board esp32-s3-devkitc1-n16r8: 16 MB flash, 8 MB OCT PSRAM, `-DBOARD_HAS_PSRAM`.
+* `sdkconfig.x4pro` sets `CONFIG_SPIRAM_USE_MALLOC=y` and `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096`: any malloc/new over 4 KB lands in PSRAM. A budget sized for the C3 can be raised under `#if defined(BOARD_HAS_PSRAM)` (see `NameList.h`).
+* `ESP.getFreeHeap()` / `getMaxAllocHeap()` report INTERNAL memory only, so heap gates never see PSRAM.
+* Xtensa, not RISC-V: `#if __riscv` code needs an Xtensa arm (crash capture in `lib/hal/HalSystem.cpp` walks frames with `esp_backtrace_get_next_frame`; decode with `xtensa-esp32s3-elf-addr2line`).
+* Hardware: SSD1677 panel, SDMMC 1-bit card, GT911 touch (Home key), CW2017 gauge, PCF8563 clock, warm/cold frontlight.
+
+### Files the firmware generates
+* Write under `FsHelpers::partialPathFor(final)` (`.part`) and `Storage.rename` into place when whole; remove the part on failure. Anything guarded by an `exists()` check (covers, caches) is otherwise trusted forever after a reset mid-write. FAT rename never overwrites: remove the old final first.
+* Names from the network (manifests, OPDS) are untrusted paths: validate with `FontInstaller::isValid*` / `FsHelpers::isSafePathComponent` before building a path.
+
+### Touch gestures across loop passes
+* SDK swipes are flicks (under 700 ms, over 60 px). A slow drag must be tracked pass by pass with `isScreenTouchHeld` (see `wasMenuGesture`, `wasListScrollSwipe`) and call `gpio.suppressTouchContact()` when it fires.
+* A query asked more than once per pass that suppresses the contact must latch its answer for the pass (reset in `MappedInputManager::update()`), or the second caller sees nothing.
+* The light panel consumes every `ActivityManager::loop()` pass while open: code that queues an activity and runs `loop()` itself (goToSleep) must close the panel first.
+
 ### The Resource Protocol
 1. Stack Safety: Limit local function variables to < 256 bytes. The ESP32-C3 default stack is small; use std::unique_ptr or static pools for larger buffers.
 2. Heap Fragmentation: Avoid repeated new/delete in loops. Allocate buffers once during onEnter() and reuse them.
