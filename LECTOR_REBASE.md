@@ -534,7 +534,7 @@ banner look (`src/components/BannerStyle.h` — UI_10, 10px pad, 2px bottom rule
 nothing white shows above it) with `drawOptionPopup` / `ValueBarPopup` reverted to a white panel, since
 black is for the banner only.
 
-**RELEASE RULE (Diogo, 2026-07-24):** NEVER publish to the flasher site (`lector-xteink-firmware`) without
+**RELEASE RULE (Diogo, 2026-07-24):** NEVER publish to the flasher site (`lector-web`) without
 Diogo's explicit OK — the site push itself can auto-deploy Pages. Never flash the device without asking.
 
 **Publish path (manual — this branch inherited upstream's `release.yml`, which has no publish robot):**

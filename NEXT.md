@@ -36,12 +36,12 @@ off-device; #3364 does not apply, Lector's settings UI no longer has those table
 
 ## 1. Run kit 44 on the X4 Pro (blocking, needs the device)
 
-Prerelease `x4pro-testkit-2026-08-31a` on `diogo7dias/lector-xteink-firmware`, titled "X4 Pro test kit 2026-08-31a".
+Prerelease `x4pro-testkit-2026-08-31a` on `diogo7dias/lector-web`, titled "X4 Pro test kit 2026-08-31a".
 
 One paste-and-run command:
 
 ```
-cd ~/Downloads && curl -fL -o kit44.zip https://github.com/diogo7dias/lector-xteink-firmware/releases/download/x4pro-testkit-2026-08-31a/lector-testkit-x4pro-lector-0.29.5-adcd398fc-20260831-123015.zip && rm -rf kit44 && unzip -q kit44.zip -d kit44 && bash "$(find kit44 -name run.command | head -1)"
+cd ~/Downloads && curl -fL -o kit44.zip https://github.com/diogo7dias/lector-web/releases/download/x4pro-testkit-2026-08-31a/lector-testkit-x4pro-lector-0.29.5-adcd398fc-20260831-123015.zip && rm -rf kit44 && unzip -q kit44.zip -d kit44 && bash "$(find kit44 -name run.command | head -1)"
 ```
 
 The earlier command failed with `zsh: no matches found: kit44/*/run.command` because the zip's directory depth is

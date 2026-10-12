@@ -421,7 +421,7 @@ selected sleep screen.
 ### Wallpaper files
 
 Wallpapers are `.bmp` or `.pxc` files. The `.pxc` format is the packed 2-bit format the
-[Lector converter](https://diogo7dias.github.io/lector-xteink-firmware/) writes.
+[Lector converter](https://diogo7dias.github.io/lector-web/) writes.
 
 - **A folder of wallpapers (recommended):** put files in `/sleep`. One is chosen each time
   the device sleeps. A hidden `/.sleep` folder is also read.
@@ -1088,7 +1088,7 @@ Three routes:
   cable.
 - **From the SD card:** put a firmware `.bin` on the card and use **Settings > System > SD
   Card Firmware Update**, or open the `.bin` from the file browser.
-- **Over USB:** the [Lector flasher](https://diogo7dias.github.io/lector-xteink-firmware/)
+- **Over USB:** the [Lector flasher](https://diogo7dias.github.io/lector-web/)
   installs over Web Serial from a browser.
 
 A firmware written from the SD card is read back off the flash and compared against the file

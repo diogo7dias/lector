@@ -2,7 +2,7 @@
 
 E-reader firmware for the Xteink X3 and X4.
 
-**Install:** [browser flasher](https://diogo7dias.github.io/lector-xteink-firmware/#flash), or download `firmware.bin` from [Releases](https://github.com/diogo7dias/lector/releases), copy it to the SD card, and use Settings → SD Card Firmware Update.
+**Install:** [browser flasher](https://diogo7dias.github.io/lector-web/#flash), or download `firmware.bin` from [Releases](https://github.com/diogo7dias/lector/releases), copy it to the SD card, and use Settings → SD Card Firmware Update.
 
 ### Reading
 
@@ -42,7 +42,7 @@ E-reader firmware for the Xteink X3 and X4.
 - Browse, favourite, pause and triage sleep wallpapers on the device.
 - Hold the current wallpaper instead of rotating it.
 - `.pxc` wallpapers accepted.
-- [Wallpaper Converter](https://diogo7dias.github.io/lector-xteink-firmware/): turn any image into an X3/X4 wallpaper in your browser, or pick one from the gallery there.
+- [Wallpaper Converter](https://diogo7dias.github.io/lector-web/): turn any image into an X3/X4 wallpaper in your browser, or pick one from the gallery there.
 
 ### Elsewhere
 
