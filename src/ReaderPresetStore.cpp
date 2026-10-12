@@ -21,45 +21,47 @@ struct PresetField {
   uint8_t ReaderPrefs::* member;
 };
 
-constexpr PresetField FIELDS[] = {
-    {"fontFamily", &ReaderPrefs::fontFamily},
-    {"fontSize", &ReaderPrefs::fontPointSize},
-    {"lineSpacingPercent", &ReaderPrefs::lineSpacingPercent},
-    {"paragraphAlignment", &ReaderPrefs::paragraphAlignment},
-    {"extraParagraphSpacing", &ReaderPrefs::extraParagraphSpacing},
-    {"paragraphSpacing", &ReaderPrefs::paragraphSpacing},
-    {"wordSpacing", &ReaderPrefs::wordSpacing},
-    {"kerning", &ReaderPrefs::kerning},
-    {"ligatures", &ReaderPrefs::ligatures},
-    {"linkUnderline", &ReaderPrefs::linkUnderline},
-    {"screenMargin", &ReaderPrefs::screenMargin},
-    {"screenMarginTop", &ReaderPrefs::screenMarginTop},
-    {"screenMarginBottom", &ReaderPrefs::screenMarginBottom},
-    {"marginLinkMode", &ReaderPrefs::marginLinkMode},
-    {"dynamicMargins", &ReaderPrefs::dynamicMargins},
-    {"focusReadingEnabled", &ReaderPrefs::focusReadingEnabled},
-    {"guideDotsEnabled", &ReaderPrefs::guideDotsEnabled},
-    {"guideDotsHidden", &ReaderPrefs::guideDotsHidden},
-    {"embeddedStyle", &ReaderPrefs::embeddedTextStyle},
-    {"embeddedLayoutStyle", &ReaderPrefs::embeddedLayoutStyle},
-    {"textAntiAliasing", &ReaderPrefs::textAntiAliasing},
-    {"textContrast", &ReaderPrefs::textContrast},
-    {"bookMargins", &ReaderPrefs::bookMargins},
-    {"headingPageBreak", &ReaderPrefs::headingPageBreak},
-    {"wordExpansion", &ReaderPrefs::wordExpansion},
-    {"imageRendering", &ReaderPrefs::imageRendering},
-    {"paragraphNumbering", &ReaderPrefs::paragraphNumbering},
-    {"paragraphNumberSize", &ReaderPrefs::paragraphNumberSize},
-    {"paperbackLookBody", &ReaderPrefs::paperbackLookBody},
-    {"paperbackLookStatus", &ReaderPrefs::paperbackLookStatus},
-    {"firstLineIndentMode", &ReaderPrefs::firstLineIndentMode},
-    {"firstLineIndentPercent", &ReaderPrefs::firstLineIndentPercent},
-};
+#define CP_PRESET_SB_FIELD(prefsName, settingsName, blockName) {#prefsName, &ReaderPrefs::prefsName},
 
-// A preset carries the reader look, not the status bar: the bar block and its on/off
-// switch are deliberately absent. Everything else is the screen rows plus the in-book
-// toggles, so adding a field to either list without deciding about presets fails here.
-static_assert(sizeof(FIELDS) / sizeof(FIELDS[0]) == reader_look::SCREEN_FIELD_COUNT + reader_look::BOOK_FIELD_COUNT,
+constexpr PresetField FIELDS[] = {{"fontFamily", &ReaderPrefs::fontFamily},
+                                  {"fontSize", &ReaderPrefs::fontPointSize},
+                                  {"lineSpacingPercent", &ReaderPrefs::lineSpacingPercent},
+                                  {"paragraphAlignment", &ReaderPrefs::paragraphAlignment},
+                                  {"extraParagraphSpacing", &ReaderPrefs::extraParagraphSpacing},
+                                  {"paragraphSpacing", &ReaderPrefs::paragraphSpacing},
+                                  {"wordSpacing", &ReaderPrefs::wordSpacing},
+                                  {"kerning", &ReaderPrefs::kerning},
+                                  {"ligatures", &ReaderPrefs::ligatures},
+                                  {"linkUnderline", &ReaderPrefs::linkUnderline},
+                                  {"screenMargin", &ReaderPrefs::screenMargin},
+                                  {"screenMarginTop", &ReaderPrefs::screenMarginTop},
+                                  {"screenMarginBottom", &ReaderPrefs::screenMarginBottom},
+                                  {"marginLinkMode", &ReaderPrefs::marginLinkMode},
+                                  {"dynamicMargins", &ReaderPrefs::dynamicMargins},
+                                  {"focusReadingEnabled", &ReaderPrefs::focusReadingEnabled},
+                                  {"guideDotsEnabled", &ReaderPrefs::guideDotsEnabled},
+                                  {"guideDotsHidden", &ReaderPrefs::guideDotsHidden},
+                                  {"embeddedStyle", &ReaderPrefs::embeddedTextStyle},
+                                  {"embeddedLayoutStyle", &ReaderPrefs::embeddedLayoutStyle},
+                                  {"textAntiAliasing", &ReaderPrefs::textAntiAliasing},
+                                  {"textContrast", &ReaderPrefs::textContrast},
+                                  {"bookMargins", &ReaderPrefs::bookMargins},
+                                  {"headingPageBreak", &ReaderPrefs::headingPageBreak},
+                                  {"wordExpansion", &ReaderPrefs::wordExpansion},
+                                  {"imageRendering", &ReaderPrefs::imageRendering},
+                                  {"paragraphNumbering", &ReaderPrefs::paragraphNumbering},
+                                  {"paragraphNumberSize", &ReaderPrefs::paragraphNumberSize},
+                                  {"paperbackLookBody", &ReaderPrefs::paperbackLookBody},
+                                  {"paperbackLookStatus", &ReaderPrefs::paperbackLookStatus},
+                                  {"firstLineIndentMode", &ReaderPrefs::firstLineIndentMode},
+                                  {"firstLineIndentPercent", &ReaderPrefs::firstLineIndentPercent},
+                                  READER_STATUS_BAR_FIELDS(CP_PRESET_SB_FIELD)};
+#undef CP_PRESET_SB_FIELD
+
+// Screen rows, in-book toggles and the status bar block: adding a field to any of the
+// three lists without this table picking it up fails here.
+static_assert(sizeof(FIELDS) / sizeof(FIELDS[0]) ==
+                  reader_look::SCREEN_FIELD_COUNT + reader_look::BOOK_FIELD_COUNT + reader_look::STATUS_BAR_FIELD_COUNT,
               "a reader-look field was added without deciding whether presets carry it");
 
 void writePrefs(JsonObject obj, const ReaderPrefs& p) {
@@ -108,6 +110,7 @@ bool ReaderPresetStore::fromJson(JsonVariantConst doc) {
     preset.name = readerpreset::sanitizeName(obj["name"] | "");
     if (preset.name.empty()) continue;  // a preset with no name cannot be chosen
     preset.prefs = readPrefs(obj);
+    preset.carriesStatusBar = obj["statusBarEnabled"].is<uint8_t>();
     presets.push_back(std::move(preset));
   }
 
@@ -146,6 +149,7 @@ bool ReaderPresetStore::rename(const size_t index, const std::string& name) {
 bool ReaderPresetStore::overwrite(const size_t index, const ReaderPrefs& prefs) {
   if (index >= presets.size()) return false;
   presets[index].prefs = prefs;
+  presets[index].carriesStatusBar = true;
   return saveToFile();
 }
 

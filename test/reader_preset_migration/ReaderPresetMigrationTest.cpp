@@ -150,4 +150,38 @@ TEST(ReaderPresetMigration, MarginLinkReportsWhetherItMigrated) {
   EXPECT_EQ(20, bottom);
 }
 
+// A theme saved with the status bar carries its own bar; applying it puts that bar on
+// the book, and nothing else of the book moves.
+TEST(ReaderPresetMigration, ThemeWithStatusBarAppliesItsOwnBar) {
+  ReaderPrefs current;
+  current.sbClockPos = 3;
+  current.paragraphNumberSize = 1;
+
+  ReaderPrefs saved;
+  saved.sbClockPos = 9;
+  saved.sbTitlePos = 2;
+  saved.statusBarEnabled = 0;
+  saved.paragraphNumberSize = 2;
+
+  reader_preset_migration::keepStatusBarWhenAbsent(true, current, saved);
+
+  EXPECT_EQ(9, saved.sbClockPos);
+  EXPECT_EQ(2, saved.sbTitlePos);
+  EXPECT_EQ(0, saved.statusBarEnabled);
+  EXPECT_EQ(2, saved.paragraphNumberSize);
+}
+
+// A theme saved before it carried the bar keeps the bar the book has now, never zeroes it.
+TEST(ReaderPresetMigration, ThemeWithoutStatusBarKeepsTheBookBar) {
+  ReaderPrefs current;
+  current.sbClockPos = 3;
+  current.statusBarEnabled = 0;
+
+  ReaderPrefs old;  // constructed defaults: what a key-less preset loads as
+  reader_preset_migration::keepStatusBarWhenAbsent(false, current, old);
+
+  EXPECT_EQ(3, old.sbClockPos);
+  EXPECT_EQ(0, old.statusBarEnabled);
+}
+
 }  // namespace
