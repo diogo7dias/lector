@@ -11,6 +11,8 @@
 #   intervals:   Comma-separated Unicode interval presets for fontconvert_sdcard.py
 #   sizes:       Point sizes to generate
 #   force_autohint: (optional) Force FreeType auto-hinter instead of native hinting
+#   prebuilt:    (instead of intervals/sizes/styles) {url, sha256} of a zip holding the
+#                family's own <name>_<size>.cpfont files, shipped unchanged
 #   styles:      Map of style name -> font source
 #                  path: relative to lib/EpdFont (for committed fonts)
 #                  url:  download URL (for fonts not in the repo)
@@ -205,6 +207,15 @@ families:
       bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/newsreader/Newsreader%5Bopsz,wght%5D.ttf", variable: {wght: 700, opsz: 16}}
       italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/newsreader/Newsreader-Italic%5Bopsz,wght%5D.ttf", variable: {wght: 400, opsz: 16}}
       bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/newsreader/Newsreader-Italic%5Bopsz,wght%5D.ttf", variable: {wght: 700, opsz: 16}}
+
+  # Libron is OFL with a Reserved Font Name: a converted file would be a modified version
+  # that may not be called Libron. So the author's own CrossPoint release ships unchanged
+  # (sizes 12/14/16/18 only) instead of being built from the TTFs.
+  - name: Libron
+    description: "Readerly revision tuned for e-ink, softer serifs (Latin)"
+    prebuilt:
+      url: "https://github.com/nicoverbruggen/libron/releases/download/v0.31/Libron_CrossPoint.zip"
+      sha256: "3bfdef4333ebe2e7d9b7521f22041fed133d9abfe246009890ca7d89c3de4df8"
 
   # ── Sans-serif ─────────────────────────────────────────────────────────
 

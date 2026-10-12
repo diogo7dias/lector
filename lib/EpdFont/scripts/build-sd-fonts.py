@@ -185,6 +185,44 @@ def _stream_pipe(pipe, prefix: str, dest: list[str]):
         print(f"  [{prefix}] {line}", end="", flush=True)
 
 
+def unpack_prebuilt(family: dict, output_dir: Path) -> str:
+    """Copy a family's own released .cpfont files, unchanged, into output_dir.
+
+    For fonts whose licence reserves the name for unmodified files (Libron): converting
+    them here would make a modified version that may not carry the name. The zip is
+    pinned by sha256 and only <name>_<size>.cpfont members of the current format are kept.
+    """
+    import hashlib
+    import re
+    import struct
+    import zipfile
+
+    from cpfont_version import CPFONT_VERSION
+
+    spec = family["prebuilt"]
+    name = family["name"]
+    archive = download_font(spec["url"], DOWNLOAD_DIR / name / spec["url"].rsplit("/", 1)[-1])
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+    if digest != spec["sha256"]:
+        raise RuntimeError(f"{name}: sha256 {digest} does not match the pinned {spec['sha256']}")
+    member_name = re.compile(rf"(?:.*/)?({re.escape(name)}_\d+\.cpfont)")
+    copied = 0
+    with zipfile.ZipFile(archive) as z:
+        for member in z.namelist():
+            match = member_name.fullmatch(member)
+            if not match:
+                continue
+            data = z.read(member)
+            magic, version = struct.unpack_from("<8sH", data)
+            if magic != b"CPFONT\x00\x00" or version != CPFONT_VERSION:
+                raise RuntimeError(f"{name}: {member} is not a v{CPFONT_VERSION} .cpfont")
+            (output_dir / match.group(1)).write_bytes(data)
+            copied += 1
+    if copied == 0:
+        raise RuntimeError(f"{name}: no {name}_<size>.cpfont files in {archive.name}")
+    return ""
+
+
 def build_family(
     family: dict, output_base: Path, verbose: bool = False, timeout: int = 600
 ) -> tuple[str, bool, str]:
@@ -192,6 +230,12 @@ def build_family(
     name = family["name"]
     output_dir = output_base / name
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    if "prebuilt" in family:
+        try:
+            return name, True, unpack_prebuilt(family, output_dir)
+        except Exception as e:
+            return name, False, str(e)
 
     styles = family.get("styles", {})
     intervals = family["intervals"]
