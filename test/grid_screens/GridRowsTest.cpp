@@ -27,6 +27,7 @@ class Grid : public UiGridActivity {
     uiTarget.fills.clear();
     uiTarget.strokes.clear();
     uiTarget.texts.clear();
+    uiTarget.textRects.clear();
     render(RenderLock(*this));
   }
 };
@@ -249,6 +250,21 @@ TEST(GridRows, KeysOnlySelectionKeepsItsFilledBandAndGateStaysOff) {
   EXPECT_EQ(grid.uiTarget.fills[0].paint.color, fui::Color::Black);
   EXPECT_TRUE(grid.uiTarget.texts[0].inverted);
   EXPECT_TRUE(grid.uiTarget.strokes.empty());
+}
+
+TEST(GridRows, KeysOnlyRowTextKeepsTheListSidePadding) {
+  GfxRenderer renderer;
+  MappedInputManager input;
+  input.touch = false;
+  Grid grid(renderer, input);
+  grid.onEnter();
+  grid.paint();
+  const int pad = UITheme::getInstance().getMetrics().listSidePadding;
+  ASSERT_FALSE(grid.uiTarget.textRects.empty());
+  for (const auto& rect : grid.uiTarget.textRects) {
+    EXPECT_EQ(rect.x, pad);
+    EXPECT_EQ(rect.x + rect.width, 480 - pad);
+  }
 }
 
 TEST(GridRows, OtherTouchBoardsKeepTheirGridAndArmedTextLegible) {

@@ -96,7 +96,7 @@ int UiGridActivity::rowHeightFor(const int index) const {
   if (theme == nullptr) return metrics.listRowHeight;
   const fui::TextStyle style = wrappingStyle(*theme);
   const int lineHeight = uiTarget.lineHeight(style.font);
-  const int avail = gridPane().width - theme->spaceSm * 2;
+  const int avail = gridPane().width - metrics.listSidePadding * 2;
   const char* name = cellName(index);
   const char* value = cellValue(index);
   const int nameW = name ? uiTarget.measureText(style.font, name, style).width : 0;
@@ -281,7 +281,8 @@ void UiGridActivity::buildRow(UiScreen& screen, const int index, const fui::Rect
   // The same measure rowHeightFor() sized the box from, so what is drawn is what was
   // reserved: name and value on one line when they fit, otherwise the name wrapped
   // over the full width and the value right-aligned on its own line(s) under it.
-  const int16_t inset = theme.spaceSm;
+  // Same side inset as every other list, so the text clears the bezel.
+  const int16_t inset = static_cast<int16_t>(UITheme::getInstance().getMetrics().listSidePadding);
   const fui::TextStyle style = wrappingStyle(theme);
   const int16_t lineHeight = target.lineHeight(style.font);
   const int16_t width = static_cast<int16_t>(box.width - inset * 2);
