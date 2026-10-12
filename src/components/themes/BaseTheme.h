@@ -171,7 +171,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .sideButtonHintsWidth = 30,
                                  .progressBarHeight = 16,
                                  .progressBarMarginTop = 1,
-                                 .statusBarHorizontalMargin = 5,
+                                 .statusBarHorizontalMargin = 16,  // + 3 px bezel + 1 = text 20 px in, as lists
                                  .statusBarVerticalMargin = 19,
                                  .keyboardKeyHeight = 48,
                                  .keyboardKeySpacing = 0,
@@ -335,8 +335,9 @@ class BaseTheme {
 
   // Shared constants and helpers for battery drawing
   static constexpr int batteryPercentSpacing = 4;
-  // Gap between the battery icon and the right edge of the header.
-  static constexpr int batteryRightPadding = 12;
+  // Gap between the battery icon and the right edge of the header: the content side
+  // padding, so the battery lines up with the version text and list rows.
+  static constexpr int batteryRightPadding = 20;
   // Font of the battery percentage: UI_10, the one UI size (the button-hint strip's).
   static constexpr int batteryPercentFontId = UI_10_FONT_ID;
 
