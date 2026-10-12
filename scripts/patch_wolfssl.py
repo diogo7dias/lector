@@ -23,6 +23,15 @@ OVERRIDES = f"""
    cross-signed chains, so a chain may end at a trusted root before its last cert. */
 #define NO_ASN_TIME
 #define WOLFSSL_ALT_CERT_CHAINS
+/* Seed the DRBG from the hardware RNG (upstream #3897). user_settings.h undefines
+   WOLFSSL_ESPIDF, so wc_GenerateSeed would otherwise take its ARDUINO branch
+   and read libc random(), which starts from the same value every boot. */
+#include <esp_random.h>
+static inline int crosspoint_wolfssl_seed(unsigned char* output, unsigned int sz) {{
+  esp_fill_random(output, sz);
+  return 0;
+}}
+#define CUSTOM_RAND_GENERATE_SEED crosspoint_wolfssl_seed
 """
 
 

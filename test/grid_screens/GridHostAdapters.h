@@ -56,6 +56,7 @@ class GfxRendererTarget : public DrawTarget {
   std::vector<Fill> fills;
   std::vector<Stroke> strokes;
   std::vector<TextStyle> texts;
+  std::vector<Rect> textRects;
   explicit GfxRendererTarget(const GfxRenderer&) {}
   void setFont(FontId, int) {}
   DeviceContext deviceContext() const {
@@ -72,7 +73,10 @@ class GfxRendererTarget : public DrawTarget {
   void stroke(Rect rect, Paint paint, uint8_t width, uint8_t, uint8_t) override {
     strokes.push_back({rect, paint, width});
   }
-  void text(Rect, const char*, TextStyle style) override { texts.push_back(style); }
+  void text(Rect rect, const char*, TextStyle style) override {
+    texts.push_back(style);
+    textRects.push_back(rect);
+  }
   void line(Point, Point, uint8_t, Paint) override {}
   void triangle(Point, Point, Point, Paint) override {}
   void bitmap(Rect, BitmapRef, BitmapMode, Paint, Rotation) override {}
@@ -119,7 +123,7 @@ struct Activity {
 inline unsigned long millis() { return 1000; }
 
 struct ThemeMetrics {
-  int listRowGap = 4, listRowRadius = 0, listInset = 0, listSidePadding = 0;
+  int listRowGap = 4, listRowRadius = 0, listInset = 0, listSidePadding = 20;
   int listSelectionStyle = 0, listScrollWidth = 0, listScrollSide = 0;
   int headerHeight = 40, headerSidePadding = 0, headerUnderlineSize = 0, headerTitleAlign = 0;
   int controlRadius = 0, sheetRadius = 0, capsuleRadius = 0;
