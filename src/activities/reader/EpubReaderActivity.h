@@ -3,6 +3,7 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
+#include <atomic>
 #include <optional>
 #include <vector>
 
@@ -122,6 +123,10 @@ class EpubReaderActivity final : public Activity {
   int idlePrewarmSpine = -1;
   int idlePrewarmPage = -1;
   unsigned long lastRenderCompleteMs = 0;
+  // Set by the render task once a page is on screen; the loop then remembers the book.
+  std::atomic<bool> pageRendered{false};
+  bool bookRemembered = false;
+  void rememberBookOnceRendered();
   bool bookmarkRemoved = false;  // true when last toggle removed (controls popup text)
   std::vector<BookmarkEntry> cachedBookmarks;
   // Saved quotes keep a thin underline in the text. Only their POSITIONS live in
