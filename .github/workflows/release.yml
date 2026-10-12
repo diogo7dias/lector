@@ -144,7 +144,7 @@ jobs:
             printf '\n---\n\n' >> "$NOTES_FILE"
           fi
           cat >> "$NOTES_FILE" <<'EOF'
-          **Easiest install:** use the [browser flasher](https://diogo7dias.github.io/lector-xteink-firmware/#flash) (Chrome/Edge, USB cable). Pick **X3 / X4** or **X4 Pro** first.
+          **Easiest install:** use the [browser flasher](https://diogo7dias.github.io/lector-web/#flash) (Chrome/Edge, USB cable). Pick **X3 / X4** or **X4 Pro** first.
 
           **Update from the SD card:** download `firmware.bin` (X3/X4) or `firmware-x4pro.bin` (X4 Pro), copy it to the SD card, then on the device open Settings and choose SD Card Firmware Update.
 
@@ -182,7 +182,7 @@ jobs:
       # nothing links to, which is what this skip prevents. An experimental tag still
       # gets its GitHub prerelease with every asset attached, above.
       #
-      # Needs a fine-grained PAT with Contents:write on lector-xteink-firmware,
+      # Needs a fine-grained PAT with Contents:write on lector-web,
       # stored as WALLPAPER_REPO_TOKEN.
       - name: Publish firmware to flasher site
         if: ${{ !contains(github.ref_name, 'rc') && !contains(github.ref_name, 'RC') && !startsWith(github.ref_name, 'lector.exp.') }}
@@ -227,7 +227,7 @@ jobs:
             test -f "$X4PRO_DIR/$f" || { echo "missing $X4PRO_DIR/$f; the X4 Pro would have no USB image" >&2; exit 1; }
           done
           git clone --depth 1 \
-            "https://x-access-token:${WALLPAPER_TOKEN}@github.com/diogo7dias/lector-xteink-firmware.git" site
+            "https://x-access-token:${WALLPAPER_TOKEN}@github.com/diogo7dias/lector-web.git" site
           DEST="site/flash/firmware/${FW_DIR}"
           mkdir -p "$DEST"
           cp "$BUILD_DIR/firmware.bin" "$BUILD_DIR/bootloader.bin" "$BUILD_DIR/partitions.bin" "$DEST/"
@@ -312,7 +312,7 @@ jobs:
                       "version": num,
                       "released_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                       "notes": f"https://github.com/diogo7dias/lector/releases/tag/lector-{num}",
-                      "firmware_url": "https://diogo7dias.github.io/lector-xteink-firmware/flash/firmware/latest/firmware.bin",
+                      "firmware_url": "https://diogo7dias.github.io/lector-web/flash/firmware/latest/firmware.bin",
                       "firmware_sha256": hashlib.sha256(data).hexdigest(),
                       "size": len(data),
                       "supported_devices": ["x3", "x4"],
