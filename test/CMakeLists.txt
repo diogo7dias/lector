@@ -165,6 +165,7 @@ add_subdirectory(activity_busy_label)
 add_subdirectory(list_hold_nav)
 add_subdirectory(firmware_retry_flow)
 add_subdirectory(keys_only_look)
+add_subdirectory(inflate_reader)
 
 add_subdirectory(serialized_value_guard)
 add_subdirectory(button_mapping)

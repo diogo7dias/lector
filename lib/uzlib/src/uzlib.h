@@ -81,54 +81,59 @@ typedef struct {
 } TINF_TREE;
 
 struct uzlib_uncomp {
-  /* Pointer to the next byte in the input buffer */
-  const unsigned char* source;
-  /* Pointer to the next byte past the input buffer (source_limit = source + len) */
-  const unsigned char* source_limit;
-  /* If source_limit == NULL, or source >= source_limit, this function
-     will be used to read next byte from source stream. The function may
-     also return -1 in case of EOF (or irrecoverable error). Note that
-     besides returning the next byte, it may also update source and
-     source_limit fields, thus allowing for buffered operation. */
-  int (*source_read_cb)(struct uzlib_uncomp* uncomp);
+    /* Pointer to the next byte in the input buffer */
+    const unsigned char *source;
+    /* Pointer to the next byte past the input buffer (source_limit = source + len) */
+    const unsigned char *source_limit;
+    /* If source_limit == NULL, or source >= source_limit, this function
+       will be used to read next byte from source stream. The function may
+       also return -1 in case of EOF (or irrecoverable error). Note that
+       besides returning the next byte, it may also update source and
+       source_limit fields, thus allowing for buffered operation. */
+    int (*source_read_cb)(struct uzlib_uncomp *uncomp);
 
-  unsigned int tag;
-  unsigned int bitcount;
+    unsigned int tag;
+    unsigned int bitcount;
 
-  /* Destination (output) buffer start */
-  unsigned char* dest_start;
-  /* Current pointer in dest buffer */
-  unsigned char* dest;
-  /* Pointer past the end of the dest buffer, similar to source_limit */
-  unsigned char* dest_limit;
+    /* Destination (output) buffer start */
+    unsigned char *dest_start;
+    /* Current pointer in dest buffer */
+    unsigned char *dest;
+    /* Pointer past the end of the dest buffer, similar to source_limit */
+    unsigned char *dest_limit;
 
-  /* Accumulating checksum */
-  unsigned int checksum;
-  char checksum_type;
-  bool eof;
+    /* Accumulating checksum */
+    unsigned int checksum;
+    char checksum_type;
+    bool eof;
 
-  int btype;
-  int bfinal;
-  unsigned int curlen;
-  int lzOff;
-  unsigned char* dict_ring;
-  unsigned int dict_size;
-  unsigned int dict_idx;
+    int btype;
+    int bfinal;
+    unsigned int curlen;
+    int lzOff;
+    /* Sliding dictionary as up to UZLIB_DICT_MAX_SEGS equal power-of-two
+       segments, so a streaming decode needs no single dictionary-sized block.
+       Byte i lives at dict_segs[i >> dict_seg_shift][i & mask]. dict_size == 0
+       means no dictionary (one-shot mode). */
+    unsigned char *dict_segs[UZLIB_DICT_MAX_SEGS];
+    unsigned int dict_seg_shift;
+    unsigned int dict_size;
+    unsigned int dict_idx;
 
-  TINF_TREE ltree; /* dynamic length/symbol tree */
-  TINF_TREE dtree; /* dynamic distance tree */
+    TINF_TREE ltree; /* dynamic length/symbol tree */
+    TINF_TREE dtree; /* dynamic distance tree */
 };
 
 #include "tinf_compat.h"
 
-#define TINF_PUT(d, c)                                  \
-  {                                                     \
-    *d->dest++ = c;                                     \
-    if (d->dict_ring) {                                 \
-      d->dict_ring[d->dict_idx++] = c;                  \
-      if (d->dict_idx == d->dict_size) d->dict_idx = 0; \
-    }                                                   \
-  }
+#define TINF_DICT_AT(d, i) \
+    ((d)->dict_segs[(i) >> (d)->dict_seg_shift][(i) & ((1u << (d)->dict_seg_shift) - 1)])
+
+#define TINF_PUT(d, c) \
+    { \
+        *d->dest++ = c; \
+        if (d->dict_size) { TINF_DICT_AT(d, d->dict_idx) = c; if (++d->dict_idx == d->dict_size) d->dict_idx = 0; } \
+    }
 
 unsigned char TINFCC uzlib_get_byte(TINF_DATA* d);
 
@@ -136,6 +141,10 @@ unsigned char TINFCC uzlib_get_byte(TINF_DATA* d);
 
 void TINFCC uzlib_init(void);
 void TINFCC uzlib_uncompress_init(TINF_DATA* d, void* dict, unsigned int dictLen);
+/* Streaming init over segCount separately allocated segments of (1 << segShift)
+   bytes each; segCount <= UZLIB_DICT_MAX_SEGS. */
+void TINFCC uzlib_uncompress_init_segmented(TINF_DATA* d, unsigned char* const* segs, unsigned int segCount,
+                                            unsigned int segShift);
 int TINFCC uzlib_uncompress(TINF_DATA* d);
 int TINFCC uzlib_uncompress_chksum(TINF_DATA* d);
 
