@@ -214,16 +214,23 @@ void EpubReaderActivity::onEnter() {
       return;
     }
     currentSpineIndex = sortes::below(count, esp_random);
-  } else {
-    APP_STATE.openEpubPath = epub->getPath();
-    APP_STATE.saveToFile();
-    RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor());
   }
 
   loadCachedBookmarks();
 
   // Trigger first update
   requestUpdate();
+}
+
+// The book becomes the one wake resumes, and joins Recents, only once a page of it has
+// been drawn (upstream #3724): a book that cannot be laid out was remembered on entry,
+// so every wake reopened it straight into the same error.
+void EpubReaderActivity::rememberBookOnceRendered() {
+  if (sortesMode || bookRemembered || !pageRendered.load(std::memory_order_acquire)) return;
+  bookRemembered = true;
+  APP_STATE.openEpubPath = epub->getPath();
+  APP_STATE.saveToFile();
+  RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor());
 }
 
 void EpubReaderActivity::onExit() {
@@ -709,6 +716,8 @@ void EpubReaderActivity::loop() {
     finish();
     return;
   }
+
+  rememberBookOnceRendered();
 
   // The Quick Menu owns every button while it is up, and it MUST be offered them BEFORE
   // the latches below observe anything.
@@ -2521,6 +2530,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       snprintf(msg, sizeof(msg), "%s (E%d h%uk a%uk)", tr(STR_INDEX_FAILED), static_cast<int>(code), freeHeap / 1024,
                maxAlloc / 1024);
     }
+    // Back is the only way out of this screen, so say so (upstream #3724).
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     GUI.drawPopup(renderer, msg);
     scheduleGhostCleanup();
   };
@@ -3056,6 +3068,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
+    pageRendered.store(true, std::memory_order_release);
     pageLoanCount = renderer.frameBufferLoanCount();  // after any loan taken by this render's build
   }
   // Observe every render so unchanged pages can still reach the time limit.
