@@ -190,6 +190,10 @@ class EpubReaderActivity final : public Activity {
   static constexpr int MAX_FOOTNOTE_DEPTH = 3;
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
   int footnoteDepth = 0;
+  // The back-stack outlives the reader (sleep, home, sync) in links.bin so Back
+  // still returns to where a followed link was tapped.
+  void saveLinkStack() const;
+  void loadLinkStack();
 
   // Viewport of the last render(), captured so loop()'s lazy partial-extension start
   // builds with IDENTICAL layout parameters to the pages already rendered (a mismatch

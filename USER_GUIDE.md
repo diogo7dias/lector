@@ -267,8 +267,8 @@ whether a hold was coming.
 ### Footnotes
 
 In an EPUB with footnotes, open a footnote from its reference and return afterwards to where
-you were. Falling asleep or closing the book while a footnote is open still reopens the book
-at your reading position, not at the footnote.
+you were. Falling asleep or closing the book after following a link reopens the book on the
+page you were viewing, and Back still returns you to where you tapped the link.
 
 **Short Power Button Click > Footnotes** opens the footnotes for the page with a short press;
 when the page holds a single footnote, it opens that one directly.
