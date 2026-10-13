@@ -9,6 +9,7 @@
 #include <string>
 
 #include "MappedInputManager.h"
+#include "ReaderPresetMigration.h"
 #include "ReaderPresetNames.h"
 #include "ReaderPresetStore.h"
 #include "activities/ActivityResult.h"
@@ -32,7 +33,11 @@ int ReaderPresetsActivity::matchingPresetIndex() const {
   for (size_t i = 0; i < presets.size(); i++) {
     // ReaderPrefs is trivially-copyable POD with no padding, so the whole blob compares
     // exactly — the same test the reader uses to decide a book has really changed.
-    if (std::memcmp(&presets[i].prefs, &currentPrefs, sizeof(ReaderPrefs)) == 0) return static_cast<int>(i);
+    // Applied the same way the reader applies it, so a theme saved without a status bar
+    // matches the book whose bar it would leave alone.
+    ReaderPrefs applied = presets[i].prefs;
+    reader_preset_migration::keepStatusBarWhenAbsent(presets[i].carriesStatusBar, currentPrefs, applied);
+    if (std::memcmp(&applied, &currentPrefs, sizeof(ReaderPrefs)) == 0) return static_cast<int>(i);
   }
   return -1;
 }

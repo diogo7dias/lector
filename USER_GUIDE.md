@@ -357,7 +357,7 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 - **Reader Settings** — text settings for this book alone.
 - **Reset Reader Settings** — drop the per-book override, shown only when one exists.
 - **Steal Look** — copy another book's look onto this one, once.
-- **Reading Themes** — apply a saved look. Up to 8 themes are kept.
+- **Reading Themes** — apply a saved look. A theme holds the text, margin and in-book settings, the paragraph numbers and the status bar layout (which items show and where). Up to 8 themes are kept.
 - **Paragraph Numbers**, **Number Size**, **Paperback Look**, **Paperback Status**.
 - **Status Bar** — show or hide it. With the bar hidden, a **Progress Bar** row appears in its
   place.

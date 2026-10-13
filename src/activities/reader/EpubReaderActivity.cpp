@@ -47,6 +47,7 @@
 #include "QuotesViewerActivity.h"
 #include "ReaderFontSizes.h"
 #include "ReaderMargins.h"
+#include "ReaderPresetMigration.h"
 #include "ReaderPresetStore.h"
 #include "ReaderPresetsActivity.h"
 #include "ReaderUtils.h"
@@ -1518,7 +1519,8 @@ void EpubReaderActivity::openReadingThemes() {
                              requestUpdate();
                              return;
                            }
-                           const ReaderPrefs stored = preset->prefs;
+                           ReaderPrefs stored = preset->prefs;
+                           reader_preset_migration::keepStatusBarWhenAbsent(preset->carriesStatusBar, prefs_, stored);
                            const ReaderPrefs adopted = applyReaderPrefsFrom(stored);
                            // A theme naming an SD font that has left the card comes back
                            // corrected. Write the correction to the card so the theme is

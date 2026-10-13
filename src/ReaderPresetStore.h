@@ -15,13 +15,15 @@
 struct ReaderPreset {
   std::string name;
   ReaderPrefs prefs;
+  // false when the file predates the status bar in themes; see keepStatusBarWhenAbsent.
+  bool carriesStatusBar = true;
 };
 
 // Presets live in one file on the card and are applied to the book the user is in.
-// They deliberately do NOT carry the status bar or the screen orientation: both are
-// device settings here, so a preset touching them would have to write the global
-// settings file, and the whole per-book model rests on a custom book never disturbing
-// global state.
+// They do NOT carry the screen orientation: that is a device setting, so a preset touching
+// it would have to write the global settings file, and the per-book model rests on a
+// custom book never disturbing global state. The status bar is per book (ReaderPrefs), so
+// a theme carries it like any other look field.
 class ReaderPresetStore : public PersistableStore<ReaderPresetStore> {
  private:
   std::vector<ReaderPreset> presets;

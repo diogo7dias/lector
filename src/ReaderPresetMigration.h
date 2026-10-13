@@ -60,6 +60,12 @@ inline bool migrateMarginLink(const LegacyKeys& keys, uint8_t& screenMargin, uin
   return true;
 }
 
+// A preset saved before it carried the status bar has no bar of its own. It takes the bar
+// this book has now, the same way a missing key takes the default: the bar is never zeroed.
+inline void keepStatusBarWhenAbsent(const bool presetHasStatusBar, const ReaderPrefs& current, ReaderPrefs& incoming) {
+  if (!presetHasStatusBar) setStatusBarOf(incoming, statusBarOf(current));
+}
+
 // `p` has already been filled from whatever named keys the preset held; every key it
 // did not hold is still at its constructed default. Fix up the splits.
 inline void apply(const LegacyKeys& keys, ReaderPrefs& p) {
