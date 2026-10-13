@@ -16,6 +16,13 @@ class HalClock {
   mutable unsigned long _lastPollMs = 0;
 
   static constexpr unsigned long CLOCK_POLL_MS = 10000;  // 10 seconds
+  // A named zone's offset only moves at a summer-time switch, so it is worked out again
+  // every 10 minutes rather than reading the date from the RTC on every repaint.
+  // ponytail: the shown time can lag a switch by up to 10 minutes.
+  static constexpr unsigned long ZONE_RECHECK_MS = 600000;
+  mutable uint8_t _zoneCached = 0;
+  mutable int _zoneOffsetMin = 0;
+  mutable unsigned long _zoneCheckedMs = 0;
   // 2020-01-01T00:00:00Z. Reject the epoch from an unsynced system clock.
   static constexpr time_t SYSTEM_CLOCK_VALID_FROM = 1577836800;
 
@@ -44,8 +51,10 @@ class HalClock {
   // 24h mode produces "HH:MM" (needs >=6 bytes); 12h mode produces "H:MM AM"/"HH:MM PM" (needs >=9 bytes).
   // utcOffsetQuarterHoursBiased: biased quarter-hour offset (48 = UTC+0, 0 = UTC-12, 104 = UTC+14).
   // use12Hour: when true, format as 12-hour clock with AM/PM suffix.
+  // zone: a clock_zones index; 0 uses the fixed offset, any other follows that zone's summer time.
   // Returns false if RTC is not available.
-  bool formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased = 48, bool use12Hour = false) const;
+  bool formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased = 48, bool use12Hour = false,
+                  uint8_t zone = 0) const;
 
   // Sync from an NTP server. Requires WiFi to be connected. Sets the system clock, and
   // the RTC too on a board that has one.

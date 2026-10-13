@@ -931,7 +931,8 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   // Clock (X3 RTC only). Only read the RTC when the clock is actually placed, so a
   // clock-off config doesn't do an I2C transaction every frame.
   if (sb.clockPos != CrossPointSettings::SB_ANCHOR_OFF && halClock.isAvailable() &&
-      halClock.formatTime(clkBuf, sizeof(clkBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
+      halClock.formatTime(clkBuf, sizeof(clkBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1,
+                          SETTINGS.clockTimeZone)) {
     set(statusbar::Clock, clkBuf);
   }
   // Title (points at the caller's string; truncated at draw time if it overflows).

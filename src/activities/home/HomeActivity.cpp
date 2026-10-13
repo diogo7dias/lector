@@ -223,8 +223,8 @@ void HomeActivity::render(RenderLock&&) {
   // places all three, so a restyle reaches them like everything else.
   char timeBuf[9];
   const bool hasClock =
-      halClock.isAvailable() &&
-      halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1);
+      halClock.isAvailable() && halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ,
+                                                    SETTINGS.clockFormat == 1, SETTINGS.clockTimeZone);
   GUI.drawHomeHeaderExtras(renderer, CROSSPOINT_VERSION, hasClock ? timeBuf : nullptr);
 
   // In-progress books as a list: each book's full title + its author wrapped over
