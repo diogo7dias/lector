@@ -5,6 +5,8 @@
 #include <esp_sntp.h>
 #include <time.h>
 
+#include "ClockZones.h"
+
 HalClock halClock;  // Singleton instance
 
 void HalClock::begin() {
@@ -74,7 +76,8 @@ bool HalClock::getDateTime(uint16_t& year, uint8_t& month, uint8_t& day, uint8_t
   return true;
 }
 
-bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased, bool use12Hour) const {
+bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased, bool use12Hour,
+                          const uint8_t zone) const {
   if (bufSize < (use12Hour ? 9u : 6u)) return false;
   uint8_t h, m;
   if (!getTime(h, m)) return false;
@@ -82,8 +85,24 @@ bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHou
   // Apply UTC offset: convert biased value to signed quarter-hours.
   // Clamp against corrupted persisted values so display time can't drift outside [-12:00, +14:00].
   if (utcOffsetQuarterHoursBiased > 104) utcOffsetQuarterHoursBiased = 104;
-  int offsetQuarterHours = static_cast<int>(utcOffsetQuarterHoursBiased) - 48;
-  int totalMinutes = static_cast<int>(h) * 60 + static_cast<int>(m) + offsetQuarterHours * 15;
+  int offsetMinutes = (static_cast<int>(utcOffsetQuarterHoursBiased) - 48) * 15;
+
+  // A named zone needs the date to know whether summer time is on; without one the
+  // fixed offset stands.
+  if (zone != 0 && zone < clock_zones::COUNT) {
+    const unsigned long now = millis();
+    if (_zoneCached != zone || now - _zoneCheckedMs >= ZONE_RECHECK_MS) {
+      uint16_t year;
+      uint8_t month, day, hour, minute;
+      if (getDateTime(year, month, day, hour, minute)) {
+        _zoneOffsetMin = clock_zones::offsetMinutes(zone, clock_zones::utcSeconds(year, month, day, hour, minute));
+        _zoneCached = zone;
+        _zoneCheckedMs = now;
+      }
+    }
+    if (_zoneCached == zone) offsetMinutes = _zoneOffsetMin;
+  }
+  int totalMinutes = static_cast<int>(h) * 60 + static_cast<int>(m) + offsetMinutes;
 
   // Wrap around 24 hours
   totalMinutes = ((totalMinutes % 1440) + 1440) % 1440;

@@ -997,6 +997,8 @@ Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Al
   picker has three fields, sign, hours and minutes: Confirm moves between them and the direction
   keys change the one being edited, or tap a field to move to it and tap it again to step it. The
   time the offset produces is shown under the fields.
+- **Clock Time Zone** — pick a city and the clock follows its summer time by itself. Left on
+  **Manual (UTC offset)**, the default, the clock uses the offset above.
 
 ### 12.3 Controls
 

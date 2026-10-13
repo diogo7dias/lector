@@ -382,6 +382,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Value 48 = UTC+0, 0 = UTC-12:00, 104 = UTC+14:00.
   // Quarter-hour granularity supports oddball zones like Nepal (+5:45) and Chatham (+12:45).
   uint8_t clockUtcOffsetQ = 48;
+  // Clock time zone, a clock_zones index. 0 = Manual: clockUtcOffsetQ applies. Any other
+  // follows that zone's summer time.
+  uint8_t clockTimeZone = 0;
   // Clock display format: 0 = 24-hour, 1 = 12-hour
   uint8_t clockFormat = 0;
   // Set once an NTP sync succeeds. Used to skip re-syncing on every WiFi connect.

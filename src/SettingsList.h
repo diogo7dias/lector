@@ -770,6 +770,14 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
     v.push_back(SettingInfo::Value(StrId::STR_CLOCK_UTC_OFFSET, &CrossPointSettings::clockUtcOffsetQ, {0, 104, 1},
                                    "clockUtcOffsetQ", StrId::STR_CUSTOMISE_STATUS_BAR));
 
+    // Order matches clock_zones::TZ.
+    v.push_back(
+        SettingInfo::Enum(StrId::STR_CLOCK_TIME_ZONE, &CrossPointSettings::clockTimeZone,
+                          {StrId::STR_TZ_MANUAL, StrId::STR_TZ_LISBON, StrId::STR_TZ_PARIS, StrId::STR_TZ_ATHENS,
+                           StrId::STR_TZ_NEW_YORK, StrId::STR_TZ_CHICAGO, StrId::STR_TZ_DENVER,
+                           StrId::STR_TZ_LOS_ANGELES, StrId::STR_TZ_SYDNEY, StrId::STR_TZ_AUCKLAND},
+                          "clockTimeZone", StrId::STR_CUSTOMISE_STATUS_BAR));
+
     v.push_back(SettingInfo::Enum(StrId::STR_CLOCK_FORMAT, &CrossPointSettings::clockFormat,
                                   {StrId::STR_CLOCK_FORMAT_24H, StrId::STR_CLOCK_FORMAT_12H}, "clockFormat",
                                   StrId::STR_CUSTOMISE_STATUS_BAR));
