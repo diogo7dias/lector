@@ -830,52 +830,56 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   const int tipsLh = renderer.getLineHeight(UI_10_FONT_ID);
   const int underlineBottom = inputStartY + inputHeight + lineHeight + metrics.verticalSpacing + 4;
-  auto drawTip = [&](const char* tip, const int y) { drawCentredSmall(tip, y); };
 
-  // Reserve the Clear Text row even when the entry is empty.
-  const int tipCount = cursorMode ? 1 : urlPanel ? 3 : symbols ? 2 : 3 + (inputType == InputType::Url ? 1 : 0);
-  const int tipsHeight = (tipCount + 1) * tipsLh;
+  // Tips wrap to two lines inside the side padding: most translations of the longer
+  // ones are wider than the screen and were cut off with an ellipsis.
+  fui::TextStyle tipStyle = smallStyle;
+  tipStyle.maxLines = 2;
+  const int tipsWidth = pageWidth - 2 * metrics.contentSidePadding;
+  struct Tip {
+    const char* text;
+    bool shown;
+  };
+  Tip tips[5];
+  int tipCount = 0;
+  const auto addTip = [&](const char* tip, const bool shown = true) { tips[tipCount++] = {tip, shown}; };
+  addTip(tr(STR_KB_TIPS));
+  // Clear Text keeps its rows even while the entry is empty, so nothing moves on the
+  // first keystroke.
+  if (cursorMode) {
+    addTip(tr(STR_KB_HINT_RETURN_KEYBOARD));
+  } else {
+    addTip(tr(STR_KB_HINT_EDIT_ENTRY));
+    if (urlPanel) {
+      addTip(tr(STR_KB_HINT_EXIT_URL_MODE));
+    } else if (!symbols) {
+      if (inputType == InputType::Url) {
+        addTip(tr(STR_KB_HINT_SECONDARY_CHAR));
+        addTip(tr(STR_KB_HINT_URL_SNIPPETS));
+      } else {
+        addTip(shifted ? tr(STR_KB_HINT_LOWER_SECONDARY) : tr(STR_KB_HINT_UPPER_SECONDARY));
+      }
+    }
+    addTip(tr(STR_KB_HINT_CLEAR_TEXT), !text.empty());
+  }
+  int tipHeights[5];
+  int tipsHeight = 0;
+  for (int i = 0; i < tipCount; i++) {
+    tipHeights[i] = fui::measureWrappedText(target, tips[i].text, tipStyle, static_cast<int16_t>(tipsWidth)).height;
+    tipsHeight += tipHeights[i];
+  }
   // Reserve cursor instructions even for an empty field; passwords need a second row.
   const int tipsTop = underlineBottom + (cursorMode ? (inputType == InputType::Password ? 2 : 1) * tipsLh : 0);
 
   if (kbRect.y - tipsTop >= tipsHeight) {
     int y = tipsTop + (kbRect.y - tipsTop - tipsHeight) / 2;
-    drawTip(tr(STR_KB_TIPS), y);
-    y += tipsLh;
-    if (!cursorMode) {
-      drawTip(tr(STR_KB_HINT_EDIT_ENTRY), y);
-      y += tipsLh;
-    }
-    if (cursorMode) {
-      drawTip(tr(STR_KB_HINT_RETURN_KEYBOARD), y);
-    } else if (urlPanel) {
-      drawTip(tr(STR_KB_HINT_EXIT_URL_MODE), y);
-      y += tipsLh;
-      if (!text.empty()) {
-        drawTip(tr(STR_KB_HINT_CLEAR_TEXT), y);
+    for (int i = 0; i < tipCount; i++) {
+      if (tips[i].shown) {
+        target.text(fui::Rect{static_cast<int16_t>(metrics.contentSidePadding), static_cast<int16_t>(y),
+                              static_cast<int16_t>(tipsWidth), static_cast<int16_t>(tipHeights[i])},
+                    tips[i].text, tipStyle);
       }
-    } else if (symbols) {
-      if (!text.empty()) {
-        drawTip(tr(STR_KB_HINT_CLEAR_TEXT), y);
-      }
-    } else {
-      const char* altCharTip;
-      if (inputType == InputType::Url) {
-        altCharTip = tr(STR_KB_HINT_SECONDARY_CHAR);
-      } else if (shifted) {
-        altCharTip = tr(STR_KB_HINT_LOWER_SECONDARY);
-      } else {
-        altCharTip = tr(STR_KB_HINT_UPPER_SECONDARY);
-      }
-      drawTip(altCharTip, y);
-      y += tipsLh;
-      if (inputType == InputType::Url) {
-        drawTip(tr(STR_KB_HINT_URL_SNIPPETS), y);
-        y += tipsLh;
-      }
-      if (!text.empty()) {
-        drawTip(tr(STR_KB_HINT_CLEAR_TEXT), y);
-      }
+      y += tipHeights[i];
     }
   }
 
@@ -906,8 +910,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  GUI.drawSideButtonHints(renderer, ">", "<");
+  // No side-button hints: their fixed boxes land on the number row, and the tips
+  // above already explain Up.
 
   renderer.displayBuffer();
 }
