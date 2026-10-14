@@ -168,6 +168,8 @@ static void holdBatteryLatchForSleep() {
   gpio_hold_en(GPIO_BATTERY_LATCH);
 }
 
+void HalPowerManager::rearmBatteryLatch() const { holdBatteryLatchForSleep(); }
+
 namespace {
 
 // Accumulated power-manager light-sleep time, and how many sleeps it took.
