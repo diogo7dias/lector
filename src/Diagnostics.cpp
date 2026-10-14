@@ -251,6 +251,14 @@ void recordAbnormalBoot() {
   diaglog::markPending();
 }
 
+void recordRestartTrail(const char* stage, const bool rescued) {
+  begin("restart stuck", nullptr);
+  diaglog::note("  last step=%s ended=%s reset=%d", stage, rescued ? "rescue timer" : "other",
+                static_cast<int>(esp_reset_reason()));
+  noteVitals();
+  diaglog::markPending();
+}
+
 void recordSdMountFailure() {
   begin("sd fault", nullptr);
   diaglog::note("  card did not mount at boot");
