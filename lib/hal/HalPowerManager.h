@@ -191,6 +191,11 @@ class HalPowerManager {
   // from the cable state every loop; USB Drive, which skips updateLocks(), pins it.
   void setUsbConsoleUp(bool up) const;
 
+  // Re-arms the Xteink battery-latch pad hold after something released it. On the
+  // X3 GPIO13 is also the SD rail enable, and SDCardManager::begin() drops the hold
+  // to drive it; see HalStorage::begin(). No-op off Xteink boards.
+  void rearmBatteryLatch() const;
+
   // True while a render holds the performance lock. The main loop uses it to pick
   // between its two idle waits — see the comment at idlePoll() in main.cpp.
   bool isPerfLockHeld() const { return perfLockDepth.load(std::memory_order_relaxed) != 0; }

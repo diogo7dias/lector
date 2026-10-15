@@ -66,6 +66,10 @@ void recordBootAfterInstall(uint32_t intendedAddress, uint32_t runningAddress, u
 // records nothing, so an ordinary wake costs no card write. Marks pending.
 void recordAbnormalBoot();
 
+// A heap-defrag restart that never reached its first frame: `stage` is the last
+// step it passed, `rescued` whether the rescue timer rebooted it (otherwise it ended
+// some other way, such as Power held). Marks pending.
+void recordRestartTrail(const char* stage, bool rescued);
 // The card did not mount at boot. Held in RAM; reaches the card only if a later
 // mount succeeds and something flushes.
 void recordSdMountFailure();
