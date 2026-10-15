@@ -760,7 +760,7 @@ bool SdCardFont::load(const char* path) {
     if (s.header.kernLeftEntryCount > 0 && s.header.kernRightEntryCount > 0) {
       // Optional: without it, every mini kern build reads the whole class tables.
       s.kernBlockIndex = new (std::nothrow) uint16_t[kernClassBlocks(s.header.kernLeftEntryCount) + 1 +
-                                                    kernClassBlocks(s.header.kernRightEntryCount) + 1];
+                                                     kernClassBlocks(s.header.kernRightEntryCount) + 1];
       if (!s.kernBlockIndex) LOG_DBG("SDCF", "No kern block index for style %u; reading whole class tables", i);
     }
 

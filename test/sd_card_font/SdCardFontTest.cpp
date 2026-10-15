@@ -1,3 +1,4 @@
+#include <HalStorage.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -8,8 +9,6 @@
 #include <new>
 #include <string>
 #include <vector>
-
-#include <HalStorage.h>
 
 #include "SdCardFont.h"
 

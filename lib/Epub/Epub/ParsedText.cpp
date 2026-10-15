@@ -1531,10 +1531,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   if (!lineHasFocusSplit && !lineHasGuideDot) {
     // TextBlock flattens the vectors into its arena; they stay owned here and die at return.
-    std::unique_ptr<TextBlock> block(new (std::nothrow)
-                                         TextBlock(lineWords, lineXPos, lineWordStyles, std::vector<uint8_t>{},
-                                                   std::vector<uint16_t>{}, std::vector<uint16_t>{}, blockStyle,
-                                                   std::move(lineRubyTexts)));
+    std::unique_ptr<TextBlock> block(new (std::nothrow) TextBlock(
+        lineWords, lineXPos, lineWordStyles, std::vector<uint8_t>{}, std::vector<uint16_t>{}, std::vector<uint16_t>{},
+        blockStyle, std::move(lineRubyTexts)));
     if (!block || !block->valid()) {
       LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
       return;
@@ -1575,9 +1574,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
-  std::unique_ptr<TextBlock> block(new (std::nothrow) TextBlock(lineWords, lineXPos, lineWordStyles, outBoundaries,
-                                                                outSuffixX, outGuideDotXOffset, blockStyle,
-                                                                std::move(lineRubyTexts)));
+  std::unique_ptr<TextBlock> block(new (std::nothrow)
+                                       TextBlock(lineWords, lineXPos, lineWordStyles, outBoundaries, outSuffixX,
+                                                 outGuideDotXOffset, blockStyle, std::move(lineRubyTexts)));
   if (!block || !block->valid()) {
     LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
     return;
