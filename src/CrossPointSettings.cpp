@@ -70,7 +70,9 @@ uint8_t CrossPointSettings::sleepTimeoutEnumToMinutes(const uint8_t legacyValue)
 void CrossPointSettings::toJson(JsonDocument& doc) const {
   const CrossPointSettings& s = *this;
 
-  for (const auto& info : getSettingsList(nullptr, nullptr, /*withAbsentHardware=*/true)) {
+  // The static list itself, not getSettingsList(): that copies ~90 entries, and the
+  // copy failed (bad_alloc) saving after a WiFi join with 17 KB of heap left.
+  for (const auto& info : settingsBaseList()) {
     if (!info.key) continue;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
     if (!info.valuePtr && !info.stringOffset) continue;
@@ -132,7 +134,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
 
   auto clamp = [](uint8_t val, uint8_t maxVal, uint8_t def) -> uint8_t { return val < maxVal ? val : def; };
 
-  for (const auto& info : getSettingsList(nullptr, nullptr, /*withAbsentHardware=*/true)) {
+  for (const auto& info : settingsBaseList()) {
     if (!info.key) continue;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
     if (!info.valuePtr && !info.stringOffset) continue;
