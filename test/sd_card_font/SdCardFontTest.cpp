@@ -1,11 +1,15 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <new>
 #include <string>
 #include <vector>
+
+#include <HalStorage.h>
 
 #include "SdCardFont.h"
 
@@ -306,6 +310,95 @@ TEST(SdCardFontKerning, LigatureRequestsServedFromAKernFreeMiniGetLigatures) {
   ASSERT_EQ(0, font.prewarm("AEF", 1, false, false));               // kern-free prewarm, e.g. a UI string
   ASSERT_EQ(0, font.prewarm("EF", 1, false, true));
   EXPECT_EQ(static_cast<uint32_t>('A'), font.getEpdFont()->getLigature('E', 'F'));
+}
+
+TEST(SdCardFontKerning, LaterPagesReadOnlyTheKernClassBlocksTheyUse) {
+  SdCardFont font;
+  ASSERT_TRUE(font.load(writeKerningFont(300).c_str()));  // five 64-entry blocks per class table
+  sdFontTestReads = 0;
+  ASSERT_EQ(0, font.prewarm("ABCDEF", 1, false, true));
+  const size_t firstReads = sdFontTestReads;
+
+  font.releaseResidentCaches();
+  sdFontTestReads = 0;
+  ASSERT_EQ(0, font.prewarm("ABCDEF", 1, false, true));
+  EXPECT_EQ(firstReads - 8, sdFontTestReads);  // 4 of the 5 blocks skipped in each table
+  const EpdFont* epd = font.getEpdFont();
+  EXPECT_EQ(-3, epd->getKerning('A', 'B'));
+  EXPECT_EQ(4, epd->getKerning('C', 'B'));
+  EXPECT_EQ(-5, epd->getKerning('C', 'D'));
+}
+
+// `glyphs` glyphs from U+0100 (the last one U+FFFD), glyph i advancing 20 + i % 13 px.
+std::string writeAdvanceFont(uint32_t glyphs) {
+  constexpr size_t GLYPH_OFFSET = 64 + 24;
+  std::vector<uint8_t> b(GLYPH_OFFSET + glyphs * sizeof(EpdGlyph), 0);
+  std::memcpy(b.data(), "CPFONT\0\0", 8);
+  putU16(b, 8, CPFONT_VERSION);
+  b[12] = 1;
+  putU32(b, 36, 2);
+  putU32(b, 40, glyphs);
+  b[44] = 32;
+  putU16(b, 45, 32);
+  putU32(b, 56, 64);
+  putU32(b, 64, 0x100);
+  putU32(b, 68, 0x100 + glyphs - 2);
+  putU32(b, 76, 0xFFFD);
+  putU32(b, 80, 0xFFFD);
+  putU32(b, 84, glyphs - 1);
+  for (uint32_t i = 0; i < glyphs; ++i) {
+    EpdGlyph glyph{};
+    glyph.advanceX = (20 + i % 13) << 4;
+    std::memcpy(b.data() + GLYPH_OFFSET + i * sizeof(glyph), &glyph, sizeof(glyph));
+  }
+  const std::string path =
+      ::testing::TempDir() + ::testing::UnitTest::GetInstance()->current_test_info()->name() + ".adv.cpfont";
+  std::FILE* f = std::fopen(path.c_str(), "wb");
+  std::fwrite(b.data(), 1, b.size(), f);
+  std::fclose(f);
+  return path;
+}
+
+uint16_t expectedAdvance(uint32_t cp) { return (20 + (cp - 0x100) % 13) << 4; }
+
+TEST(SdCardFontAdvances, PagesAddingCodepointsOutOfOrderStayCorrect) {
+  SdCardFont font;
+  ASSERT_TRUE(font.load(writeAdvanceFont(600).c_str()));
+  std::vector<uint32_t> added;
+  for (uint32_t block : {3U, 0U, 5U, 1U, 4U, 2U}) {  // each merge lands before, between or after earlier ones
+    ASSERT_EQ(0, font.buildAdvanceTable(latinPage("", 0x100 + block * 80, 80).c_str(), 1));
+    for (uint32_t cp = 0x100 + block * 80; cp < 0x100 + block * 80 + 80; ++cp) added.push_back(cp);
+    for (uint32_t cp : added) ASSERT_EQ(expectedAdvance(cp), font.getAdvance(cp, 0)) << std::hex << cp;
+  }
+}
+
+TEST(SdCardFontAdvances, MergesPastTheCapKeepTheLowestCodepoints) {
+  constexpr uint32_t CACHE_LIMIT = 768;  // SdCardFont::ADVANCE_CACHE_LIMIT
+  SdCardFont font;
+  ASSERT_TRUE(font.load(writeAdvanceFont(1001).c_str()));
+  // Reference: the sorted union of every page, truncated to the cap; a full table takes nothing more.
+  std::vector<uint32_t> expected;
+  for (uint32_t block : {6U, 1U, 9U, 3U, 0U, 7U, 4U, 8U, 2U, 5U}) {
+    ASSERT_GE(font.buildAdvanceTable(latinPage("", 0x100 + block * 100, 100).c_str(), 1), 0);
+    if (expected.size() < CACHE_LIMIT) {
+      for (uint32_t cp = 0x100 + block * 100; cp < 0x100 + block * 100 + 100; ++cp) expected.push_back(cp);
+      std::sort(expected.begin(), expected.end());
+      if (expected.size() > CACHE_LIMIT) expected.resize(CACHE_LIMIT);
+    }
+    for (uint32_t cp = 0x100; cp < 0x100 + 1000; ++cp) {
+      const bool cached = std::binary_search(expected.begin(), expected.end(), cp);
+      ASSERT_EQ(cached ? expectedAdvance(cp) : 0, font.getAdvance(cp, 0)) << block << " " << std::hex << cp;
+    }
+  }
+}
+
+TEST(SdCardFontAdvances, AnEmptyBuildLeavesNoTable) {
+  SdCardFont font;
+  ASSERT_TRUE(font.load(writeAdvanceFont(20).c_str()));
+  font.buildAdvanceTable("", 1);
+  EXPECT_FALSE(font.hasAdvanceTable());
+  ASSERT_EQ(0, font.buildAdvanceTable(latinPage("", 0x100, 10).c_str(), 1));
+  EXPECT_TRUE(font.hasAdvanceTable());
 }
 
 }  // namespace

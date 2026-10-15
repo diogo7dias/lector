@@ -15,8 +15,8 @@ class FontCacheManager {
   void setFontDecompressor(FontDecompressor* d);
 
   void clearCache();
-  // Release every rebuildable SD-font cache (mini glyph/kern arenas, kern/lig
-  // class tables, overflow rings, advance tables) while keeping the fonts
+  // Release every rebuildable SD-font cache (mini glyph/kern arenas, ligature
+  // tables, overflow rings, advance tables) while keeping the fonts
   // loaded. Everything faults back in on demand. For heap-critical transitions
   // (e.g. web-server + WiFi startup); see SdCardFont::releaseResidentCaches().
   void releaseSdFontCaches();

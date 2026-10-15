@@ -6,6 +6,9 @@
 #include <cstdint>
 #include <cstdio>
 
+// Counts read() calls so tests can pin how much a rebuild touches the card.
+inline size_t sdFontTestReads = 0;
+
 class HalFile {
  public:
   HalFile() = default;
@@ -22,6 +25,7 @@ class HalFile {
 
   int read(void* buf, size_t count) {
     if (!fp_) return -1;
+    ++sdFontTestReads;
     return static_cast<int>(std::fread(buf, 1, count, fp_));
   }
 
