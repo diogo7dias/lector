@@ -64,36 +64,40 @@ size_t zipFillCallback(void* vctx, const uint8_t** data) {
 }
 }  // namespace
 
-bool ZipFile::readCentralDirEntry(CentralDirEntry& entry) {
-  uint32_t sig;
-  if (file.read(&sig, 4) != 4 || sig != 0x02014b50) return false;
+bool ZipFile::readCentralDirEntry(CentralDirEntry& entry, const uint16_t onlyNameLen) {
+  // One read for the fixed 46-byte record instead of a dozen small ones: each HalFile call
+  // takes the storage mutex and walks SdFat, and EPUB open scans hundreds of records.
+  constexpr size_t HEADER_BYTES = 46;
+  const uint32_t entryStart = file.position();
+  uint8_t header[HEADER_BYTES];
+  if (file.read(header, HEADER_BYTES) != static_cast<int>(HEADER_BYTES)) return false;
+  const auto le16 = [&](const size_t at) { return static_cast<uint16_t>(header[at] | header[at + 1] << 8); };
+  const auto le32 = [&](const size_t at) { return static_cast<uint32_t>(le16(at) | uint32_t{le16(at + 2)} << 16); };
+  if (le32(0) != 0x02014b50) return false;
 
-  file.seekCur(6);
-  file.read(&entry.stat.method, 2);
-  file.seekCur(4);
-  file.read(&entry.crc32, 4);
-  file.read(&entry.stat.compressedSize, 4);
-  file.read(&entry.stat.uncompressedSize, 4);
-  uint16_t m, k;
-  file.read(&entry.nameLen, 2);
-  file.read(&m, 2);
-  file.read(&k, 2);
-  file.seekCur(8);
-  file.read(&entry.stat.localHeaderOffset, 4);
-
-  if (entry.nameLen < sizeof(entry.name)) {
-    file.read(entry.name, entry.nameLen);
+  entry.stat.method = le16(10);
+  entry.crc32 = le32(16);
+  entry.stat.compressedSize = le32(20);
+  entry.stat.uncompressedSize = le32(24);
+  entry.nameLen = le16(28);
+  entry.stat.localHeaderOffset = le32(42);
+  entry.name[0] = '\0';
+  if (entry.nameLen < sizeof(entry.name) && (onlyNameLen == ANY_NAME_LEN || entry.nameLen == onlyNameLen)) {
+    if (file.read(entry.name, entry.nameLen) != static_cast<int>(entry.nameLen)) return false;
     entry.name[entry.nameLen] = '\0';
-  } else {
-    file.seekCur(entry.nameLen);
   }
-
-  // Skip extra field + comment
-  file.seekCur(m + k);
+  // Skip the rest of the name, the extra field and the comment.
+  file.seek(entryStart + HEADER_BYTES + entry.nameLen + le16(30) + le16(32));
   return true;
 }
 
 bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
+  // Extraction follows a size query for the same entry while the archive stays open.
+  if (lastLookupValid && lastLookupName == filename) {
+    *fileStat = lastLookup;
+    return true;
+  }
+
   const ScopedOpenClose zip{*this};
   if (!zip) return false;
 
@@ -106,11 +110,12 @@ bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
   file.seek(startPos);
 
   CentralDirEntry entry;
+  const size_t targetLen = strlen(filename);
 
   while (true) {
     uint32_t entryStart = file.position();
 
-    if (!readCentralDirEntry(entry)) {
+    if (targetLen >= sizeof(entry.name) || !readCentralDirEntry(entry, static_cast<uint16_t>(targetLen))) {
       // End of central directory
       if (!wrapped && lastCentralDirPosValid && startPos != zipDetails.centralDirOffset) {
         // Wrap around to beginning
@@ -126,11 +131,14 @@ bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
       return false;
     }
 
-    if (entry.nameLen < sizeof(entry.name) && strcmp(entry.name, filename) == 0) {
+    if (entry.nameLen == targetLen && memcmp(entry.name, filename, targetLen) == 0) {
       // Found it! Cursor already sits on the next entry
       *fileStat = entry.stat;
       lastCentralDirPos = file.position();
       lastCentralDirPosValid = true;
+      lastLookupName.assign(filename, targetLen);
+      lastLookup = entry.stat;
+      lastLookupValid = true;
       return true;
     }
   }
@@ -263,6 +271,8 @@ bool ZipFile::close() {
   }
   lastCentralDirPos = 0;
   lastCentralDirPosValid = false;
+  // The archive may change before the next open.
+  lastLookupValid = false;
   return true;
 }
 

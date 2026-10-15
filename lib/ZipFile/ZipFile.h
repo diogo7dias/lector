@@ -45,9 +45,17 @@ class ZipFile {
     char name[256];
   };
 
+  // Reuse the lookup when extraction follows a size query for the same entry
+  // while the archive stays open.
+  std::string lastLookupName;
+  FileStatSlim lastLookup = {};
+  bool lastLookupValid = false;
+
   // Reads the record at the cursor and leaves the cursor on the next one.
-  // Returns false at the end of the central directory.
-  bool readCentralDirEntry(CentralDirEntry& entry);
+  // Returns false at the end of the central directory. With onlyNameLen, a name of
+  // any other length is skipped unread (entry.name is left empty).
+  static constexpr uint16_t ANY_NAME_LEN = 0xFFFF;
+  bool readCentralDirEntry(CentralDirEntry& entry, uint16_t onlyNameLen = ANY_NAME_LEN);
   bool loadFileStatSlim(const char* filename, FileStatSlim* fileStat);
   long getDataOffset(const FileStatSlim& fileStat);
   bool loadZipDetails();
