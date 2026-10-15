@@ -217,6 +217,32 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text, const 
   return allowedOffsets;
 }
 
+// Byte offsets right after each visible hyphen or dash run where a line may break. A run such as
+// "——" stays whole, and a dash that opens the word ("-5") is no break point.
+std::vector<size_t> explicitHyphenBreakByteOffsets(const std::string& text, const bool attachToPrevious) {
+  std::vector<size_t> breakOffsets;
+  const auto* ptr = reinterpret_cast<const unsigned char*>(text.c_str());
+  const auto* const start = ptr;
+  const auto* const end = ptr + text.size();
+  bool hasLeadingContent = attachToPrevious;
+  while (ptr < end) {
+    const uint32_t cp = utf8NextCodepoint(&ptr);
+    if (cp == 0) break;
+    if (TokenBoundary::allowsBreakAfterExplicitHyphen(cp)) {
+      while (ptr < end) {
+        const auto* const nextStart = ptr;
+        if (!TokenBoundary::allowsBreakAfterExplicitHyphen(utf8NextCodepoint(&ptr))) {
+          ptr = nextStart;
+          break;
+        }
+      }
+      if (hasLeadingContent && ptr < end) breakOffsets.push_back(static_cast<size_t>(ptr - start));
+    }
+    hasLeadingContent = true;
+  }
+  return breakOffsets;
+}
+
 // Removes every soft hyphen in-place so rendered glyphs match measured widths.
 void stripSoftHyphensInPlace(std::string& word) {
   size_t pos = 0;
@@ -439,8 +465,11 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style baseStyle,
   // Only a glued token (attachToPrevious == true, i.e. no whitespace separated it from the
   // previous one in the source) may be turned into a gap-less break opportunity. When real
   // whitespace separated the two words, that space is content and must be rendered.
-  if (attachToPrevious && !words.empty() &&
-      hasCjkBreakOpportunityBetween(lastCodepoint(words.back()), firstCodepoint(word))) {
+  if (attachToPrevious && !words.empty() && endsWithBreakableHyphen(words.back())) {
+    // "foo—<i>bar</i>": a breakable attachment, kerned when unbroken (see TokenBoundary).
+    effectiveNoSpaceBefore = true;
+  } else if (attachToPrevious && !words.empty() &&
+             hasCjkBreakOpportunityBetween(lastCodepoint(words.back()), firstCodepoint(word))) {
     effectiveAttachToPrevious = false;
     effectiveNoSpaceBefore = true;
   }
@@ -504,6 +533,25 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style baseStyle,
 
   // Already-bold text should stay fully bold; focus splitting would make its suffix regular later.
   if (!this->focusReadingEnabled || (baseStyle & EpdFontFamily::BOLD) != 0) {
+    // "foo—bar" becomes "foo—" + "bar" joined by a breakable attachment, so a line may end at the dash.
+    if (auto breakOffsets = explicitHyphenBreakByteOffsets(word, effectiveAttachToPrevious); !breakOffsets.empty()) {
+      ensureTokenCapacity(breakOffsets.size() + 1);
+      size_t tokenStart = 0;
+      uint32_t tokenVisibleOffset = visibleTextOffset;
+      breakOffsets.push_back(word.size());
+      for (const size_t breakOffset : breakOffsets) {
+        const std::string_view token(word.data() + tokenStart, breakOffset - tokenStart);
+        const bool first = tokenStart == 0;
+        pushToken(std::string(token), first ? effectiveAttachToPrevious : true, first ? effectiveNoSpaceBefore : true,
+                  /*focusBoundary=*/0, tokenVisibleOffset);
+        tokenVisibleOffset += countCodepoints(token);
+        tokenStart = breakOffset;
+      }
+      if (wordStartsRtl) {
+        hasRtlWord = true;
+      }
+      return;
+    }
     pushToken(std::move(word), effectiveAttachToPrevious, effectiveNoSpaceBefore, /*focusBoundary=*/0,
               visibleTextOffset);
     if (wordStartsRtl) {

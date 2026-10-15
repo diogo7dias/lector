@@ -223,13 +223,18 @@ TEST(WordSpacing, InvalidPercentagesClampBeforeLayout) {
 }
 
 TEST(WordSpacing, WordsStayWholeAndSoftHyphensStayInvisible) {
-  for (const char* text : {"extraordinary", "extra\xC2\xADordinary", "extra-ordinary"}) {
+  for (const char* text : {"extraordinary", "extra\xC2\xADordinary"}) {
     // A word wider than the column must not invoke the old fallback splitter.
     layout(text, 100, 70);
     ASSERT_EQ(1u, lines.size());
     ASSERT_EQ(1u, lines[0].words.size());
-    EXPECT_EQ(std::string(text).find('-') == std::string::npos ? "extraordinary" : "extra-ordinary", lines[0].words[0]);
+    EXPECT_EQ("extraordinary", lines[0].words[0]);
   }
+  // A visible hyphen is a break point (DashBreak), never a place to insert one.
+  layout("extra-ordinary", 100, 70);
+  ASSERT_EQ(2u, lines.size());
+  EXPECT_EQ(std::vector<std::string>{"extra-"}, lines[0].words);
+  EXPECT_EQ(std::vector<std::string>{"ordinary"}, lines[1].words);
 }
 
 TEST(WordSpacing, SoftFlushedParagraphIndentsOnlyItsFirstLine) {
@@ -379,4 +384,51 @@ TEST(WordExpansion, LooseJustifiedLineSpreadsSlackIntoLetters) {
   run(0, spacings);
   EXPECT_EQ(0, spacings[1]);
   EXPECT_EQ(40 + 20, lines[1].x[1] - lines[1].x[0]);  // Off: all 13 px go to the gap
+}
+
+namespace {
+// Every glyph is 10 px (regular) in the stub renderer; the first line is indented 21 px.
+void layoutGlued(const std::vector<std::pair<const char*, bool>>& words, int width) {
+  lines.clear();
+  BlockStyle style;
+  style.alignment = CssTextAlign::Left;
+  style.textAlignDefined = true;
+  style.directionDefined = true;
+  ParsedText parsed(false, GUIDE_DOTS_OFF, style, 0, 0, 100);
+  for (const auto& [word, glued] : words) parsed.addWord(word, EpdFontFamily::REGULAR, glued);
+  parsed.layoutAndExtractLines(renderer, FONT, width, [](void*, std::shared_ptr<TextBlock>, uint32_t) {}, nullptr);
+}
+using Words = std::vector<std::string>;
+}  // namespace
+
+TEST(DashBreak, LineMayEndAtDashInsideWord) {
+  layoutGlued({{"foo—bar", false}}, 70);  // 21 + "foo—" is 61 px; with "bar" 91
+  ASSERT_EQ(2u, lines.size());
+  EXPECT_EQ(Words{"foo—"}, lines[0].words);
+  EXPECT_EQ(Words{"bar"}, lines[1].words);
+}
+
+TEST(DashBreak, UnbrokenDashWordGetsNoGap) {
+  layoutGlued({{"foo—bar", false}}, 100);
+  ASSERT_EQ(1u, lines.size());
+  EXPECT_EQ((Words{"foo—", "bar"}), lines[0].words);
+  EXPECT_EQ((std::vector<int16_t>{21, 61}), lines[0].x);
+}
+
+TEST(DashBreak, DashRunStaysWhole) {
+  layoutGlued({{"foo——bar", false}}, 75);
+  ASSERT_EQ(2u, lines.size());
+  EXPECT_EQ(Words{"foo——"}, lines[0].words);
+}
+
+TEST(DashBreak, LeadingDashIsNoBreak) {
+  layoutGlued({{"-5", false}}, 100);
+  ASSERT_EQ(1u, lines.size());
+  EXPECT_EQ(Words{"-5"}, lines[0].words);
+}
+
+TEST(DashBreak, InlineStyleAfterDashMayWrap) {
+  layoutGlued({{"foo—", false}, {"bar", true}}, 70);  // foo—<i>bar</i>
+  ASSERT_EQ(2u, lines.size());
+  EXPECT_EQ(Words{"bar"}, lines[1].words);
 }

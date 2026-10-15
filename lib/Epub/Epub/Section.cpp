@@ -131,7 +131,8 @@ namespace {
 //      Embedded Layout Style off now drops them too (their values had leaked past the flags).
 // v73: the Break Before Headings switch enters the header; on starts each h1/h2 on a new page.
 // v74: Word Expansion enters the header, and each text line stores its letter spacing.
-constexpr uint8_t SECTION_FILE_VERSION = 74;
+// v75: a line may break after a hyphen or dash inside a word ("foo—bar"; upstream #3883).
+constexpr uint8_t SECTION_FILE_VERSION = 75;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
