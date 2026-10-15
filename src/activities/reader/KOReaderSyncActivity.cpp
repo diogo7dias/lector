@@ -20,6 +20,7 @@
 #include "SilentRestart.h"
 #include "activities/ActivityManager.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "util/DebugTrace.h"
 #include "util/KOReaderSyncMessage.h"
 
 namespace {
@@ -150,6 +151,11 @@ void KOReaderSyncActivity::performSync() {
   LOG_DBG("KOSync", "Primary remote (%s): result=%d http=%d doc=%s local=%.6f remote=%.6f xpath=%s",
           matchMethodName(primaryMethod), result, KOReaderSyncClient::lastHttpCode, documentHash.c_str(),
           localProgress.percentage, remoteProgress.percentage, remoteProgress.progress.c_str());
+  // The card trace, not just serial: a reader whose sync never pulls is on a release
+  // build, and these lines are what tells a hash mismatch from a lost comparison.
+  debug_trace::note("kosync %s %s: result=%d http=%d local=%.4f remote=%.4f", matchMethodName(primaryMethod),
+                    documentHash.c_str(), result, KOReaderSyncClient::lastHttpCode, localProgress.percentage,
+                    remoteProgress.percentage);
 
   KOReaderProgress alternateProgress;
   bool hasAlternateProgress = false;
@@ -162,6 +168,8 @@ void KOReaderSyncActivity::performSync() {
       LOG_DBG("KOSync", "Alternate remote (%s): result=%d http=%d doc=%s local=%.6f remote=%.6f xpath=%s",
               matchMethodName(altMethod), altResult, KOReaderSyncClient::lastHttpCode, altHash.c_str(),
               localProgress.percentage, altProgress.percentage, altProgress.progress.c_str());
+      debug_trace::note("kosync %s %s: result=%d http=%d remote=%.4f", matchMethodName(altMethod), altHash.c_str(),
+                        altResult, KOReaderSyncClient::lastHttpCode, altProgress.percentage);
 
       if (altResult == KOReaderSyncClient::OK) {
         alternateProgress = std::move(altProgress);
@@ -180,6 +188,7 @@ void KOReaderSyncActivity::performSync() {
     if (smartSyncEnabled()) {
       LOG_DBG("KOSync", "Smart sync: no remote progress found for known document hashes; uploading local %.6f",
               localProgress.percentage);
+      debug_trace::note("kosync smart: no remote record, uploading");
       performUpload();
       return;
     }
@@ -253,6 +262,9 @@ void KOReaderSyncActivity::performSync() {
     LOG_DBG("KOSync", "Smart decision: doc=%s result=%d local=%.6f remote=%.6f remoteXpath=%s mapped=%d/%d",
             primaryHash.c_str(), static_cast<int>(comparison), localProgress.percentage, remoteProgress.percentage,
             remoteProgress.progress.c_str(), remotePosition.spineIndex, remotePosition.pageNumber);
+    debug_trace::note("kosync smart: comparison=%d local=%d/%d remote=%d/%d resolved=%d", static_cast<int>(comparison),
+                      localPosition.spineIndex, localPosition.pageNumber, remotePosition.spineIndex,
+                      remotePosition.pageNumber, remotePosition.hasResolvedSpineIndex);
     switch (comparison) {
       case ProgressComparison::Synchronized:
         completeAlreadySynced();
