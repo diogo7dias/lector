@@ -423,15 +423,15 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
   ctx.rawRowBytes = rawRowBytes;
   ctx.paletteSize = 0;
 
-  // Allocate scanline buffers
-  ctx.currentRow = static_cast<uint8_t*>(malloc(rawRowBytes));
-  ctx.previousRow = static_cast<uint8_t*>(calloc(rawRowBytes, 1));
-  if (!ctx.currentRow || !ctx.previousRow) {
-    LOG_ERR("PNG", "Failed to allocate scanline buffers (%u bytes each)", rawRowBytes);
-    free(ctx.currentRow);
-    free(ctx.previousRow);
+  // Both scanlines in one zeroed block (the first row filters against a zero row), so
+  // the decode leaves one hole in the heap rather than several small ones.
+  auto scanlineRows = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(rawRowBytes) * 2);
+  if (!scanlineRows) {
+    LOG_ERR("PNG", "OOM: scanline buffers (%u bytes each)", rawRowBytes);
     return false;
   }
+  ctx.currentRow = scanlineRows.get();
+  ctx.previousRow = ctx.currentRow + rawRowBytes;
 
   // Scan for PLTE chunk (palette) and first IDAT chunk
   // We need to read chunks until we find IDAT, collecting PLTE along the way
@@ -476,16 +476,12 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
 
   if (!foundIdat) {
     LOG_ERR("PNG", "No IDAT chunk found");
-    free(ctx.currentRow);
-    free(ctx.previousRow);
     return false;
   }
 
   // Initialize streaming decompressor with 32KB window for back-reference history
   if (!ctx.reader.init(true)) {
     LOG_ERR("PNG", "Failed to init inflate stream");
-    free(ctx.currentRow);
-    free(ctx.previousRow);
     return false;
   }
   ctx.reader.setFill(pngIdatFillCallback, &ctx);
@@ -515,21 +511,20 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
   bmp_writer::writeHeader2bit(bmpOut, outWidth, outHeight);
   const int bytesPerRow = (outWidth * 2 + 31) / 32 * 4;
 
-  // Allocate BMP row buffer
-  auto* rowBuffer = static_cast<uint8_t*>(malloc(bytesPerRow));
-  if (!rowBuffer) {
-    LOG_ERR("PNG", "Failed to allocate row buffer");
-    free(ctx.currentRow);
-    free(ctx.previousRow);
+  // BMP output row, then the grayscale scanline: batch-converting each scanline avoids
+  // per-pixel getPixelGray() switch overhead in the hot loops.
+  const size_t rowScratchBytes = static_cast<size_t>(bytesPerRow) + width;
+  auto rowScratch = makeUniqueNoThrow<uint8_t[]>(rowScratchBytes);
+  if (!rowScratch) {
+    LOG_ERR("PNG", "OOM: row scratch (%u bytes)", static_cast<unsigned>(rowScratchBytes));
     return false;
   }
+  uint8_t* rowBuffer = rowScratch.get();
+  uint8_t* grayRow = rowBuffer + bytesPerRow;
 
   auto atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth);
   if (!atkinsonDitherer || !atkinsonDitherer->valid()) {
     LOG_ERR("PNG", "OOM: AtkinsonDitherer (%u bytes)", static_cast<unsigned>(sizeof(AtkinsonDitherer)));
-    free(rowBuffer);
-    free(ctx.currentRow);
-    free(ctx.previousRow);
     return false;
   }
 
@@ -545,31 +540,14 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
     rowAccum = makeUniqueNoThrow<uint32_t[]>(outWidth);
     if (!rowAccum) {
       LOG_ERR("PNG", "OOM: rowAccum (%u bytes)", accumBytes);
-      free(rowBuffer);
-      free(ctx.currentRow);
-      free(ctx.previousRow);
       return false;
     }
     rowCount = makeUniqueNoThrow<uint16_t[]>(outWidth);
     if (!rowCount) {
       LOG_ERR("PNG", "OOM: rowCount (%u bytes)", countBytes);
-      free(rowBuffer);
-      free(ctx.currentRow);
-      free(ctx.previousRow);
       return false;
     }
     nextOutY_srcStart = scaleY_fp;
-  }
-
-  // Allocate grayscale row buffer - batch-convert each scanline to avoid
-  // per-pixel getPixelGray() switch overhead in the hot loops
-  auto* grayRow = static_cast<uint8_t*>(malloc(width));
-  if (!grayRow) {
-    LOG_ERR("PNG", "Failed to allocate grayscale row buffer");
-    free(rowBuffer);
-    free(ctx.currentRow);
-    free(ctx.previousRow);
-    return false;
   }
 
   bool success = true;
@@ -629,12 +607,6 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
     ctx.previousRow = ctx.currentRow;
     ctx.currentRow = temp;
   }
-
-  // Clean up
-  free(grayRow);
-  free(rowBuffer);
-  free(ctx.currentRow);
-  free(ctx.previousRow);
 
   if (success) {
     LOG_DBG("PNG", "Successfully converted PNG to BMP");
