@@ -12,7 +12,7 @@
 namespace {
 
 template <typename Predicate>
-void renderFilteredPageElements(const std::vector<std::shared_ptr<PageElement>>& elements, GfxRenderer& renderer,
+void renderFilteredPageElements(const std::vector<std::unique_ptr<PageElement>>& elements, GfxRenderer& renderer,
                                 const int fontId, const int xOffset, const int yOffset, Predicate&& predicate) {
   for (const auto& element : elements) {
     if (predicate(*element)) {
@@ -194,7 +194,7 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
   // Reserve up front so a page load costs one allocation for the element vector
   // instead of a grow-copy-free cycle every doubling. `count` is untrusted (it
   // comes straight off the SD cache), so clamp it: a real page holds a few dozen
-  // elements, while a corrupt header could ask for 65535 * sizeof(shared_ptr) and
+  // elements, while a corrupt header could ask for 65535 * sizeof(unique_ptr) and
   // abort() on the failed allocation (vector's operator new is throwing, and this
   // firmware builds with -fno-exceptions). Under-reserving is harmless -- the
   // push_back path below still grows normally.

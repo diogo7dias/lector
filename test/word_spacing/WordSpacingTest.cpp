@@ -47,7 +47,7 @@ void layout(const std::string& text, int percent, int width, CssTextAlign align 
     }
     parsed.addWord(word.substr(start), fontStyle, start != 0);
   }
-  parsed.layoutAndExtractLines(renderer, FONT, width, [](void*, std::shared_ptr<TextBlock>, uint32_t) {}, nullptr);
+  parsed.layoutAndExtractLines(renderer, FONT, width, [](void*, std::unique_ptr<TextBlock>, uint32_t) {}, nullptr);
 }
 
 int rightEdge(const Line& line) {
@@ -246,7 +246,7 @@ TEST(WordSpacing, SoftFlushedParagraphIndentsOnlyItsFirstLine) {
   style.textAlignDefined = true;
   style.directionDefined = true;
   ParsedText parsed(false, GUIDE_DOTS_OFF, style, 1, 0, 100);
-  const auto sink = [](void*, std::shared_ptr<TextBlock>, uint32_t) {};
+  const auto sink = [](void*, std::unique_ptr<TextBlock>, uint32_t) {};
   for (int pass = 0; pass < 3; ++pass) {
     std::istringstream input(PROSE);
     std::string word;
@@ -315,7 +315,7 @@ TEST(KoreanLayout, SplitWordPiecesKeepTheirReadingOffsets) {
   std::vector<uint32_t> offsets;
   parsed.layoutAndExtractLines(
       renderer, FONT, 103,
-      [](void* ctx, std::shared_ptr<TextBlock>, uint32_t offset) {
+      [](void* ctx, std::unique_ptr<TextBlock>, uint32_t offset) {
         static_cast<std::vector<uint32_t>*>(ctx)->push_back(offset);
       },
       &offsets);
@@ -347,7 +347,7 @@ TEST(KoreanLayout, HangulGluedAcrossInlineStyleStaysOneWord) {
   parsed.addWord("한국", EpdFontFamily::REGULAR);
   parsed.addWord("어", EpdFontFamily::BOLD, true);  // <b>어</b> with no space before it
   // 21 + 20 + 7 + 20 = 68 px fits in 70, but 어 is glued to 한국, so the whole word moves down.
-  parsed.layoutAndExtractLines(renderer, FONT, 70, [](void*, std::shared_ptr<TextBlock>, uint32_t) {}, nullptr);
+  parsed.layoutAndExtractLines(renderer, FONT, 70, [](void*, std::unique_ptr<TextBlock>, uint32_t) {}, nullptr);
   ASSERT_EQ(2u, lines.size());
   EXPECT_EQ(std::vector<std::string>{"가나"}, lines[0].words);
   EXPECT_EQ((std::vector<std::string>{"한국", "어"}), lines[1].words);
@@ -366,7 +366,7 @@ TEST(WordExpansion, LooseJustifiedLineSpreadsSlackIntoLetters) {
     for (const char* w : {"cccc", "dddd", "eeee", "ffff", "gggg", "hhhh"}) parsed.addWord(w, EpdFontFamily::REGULAR);
     parsed.layoutAndExtractLines(
         renderer, FONT, 100,
-        [](void* ctx, std::shared_ptr<TextBlock> block, uint32_t) {
+        [](void* ctx, std::unique_ptr<TextBlock> block, uint32_t) {
           static_cast<std::vector<int>*>(ctx)->push_back(block->getLetterSpacing());
         },
         &spacings);
@@ -396,7 +396,7 @@ void layoutGlued(const std::vector<std::pair<const char*, bool>>& words, int wid
   style.directionDefined = true;
   ParsedText parsed(false, GUIDE_DOTS_OFF, style, 0, 0, 100);
   for (const auto& [word, glued] : words) parsed.addWord(word, EpdFontFamily::REGULAR, glued);
-  parsed.layoutAndExtractLines(renderer, FONT, width, [](void*, std::shared_ptr<TextBlock>, uint32_t) {}, nullptr);
+  parsed.layoutAndExtractLines(renderer, FONT, width, [](void*, std::unique_ptr<TextBlock>, uint32_t) {}, nullptr);
 }
 using Words = std::vector<std::string>;
 }  // namespace

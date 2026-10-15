@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Epub/ReaderRenderSpec.h>
+#include <Epub/blocks/TextBlock.h>
 
 #include <cstdint>
 #include <memory>
@@ -8,7 +9,6 @@
 
 class GfxRenderer;
 struct ReaderPrefs;
-class TextBlock;
 
 namespace textsettings {
 
@@ -28,7 +28,7 @@ struct PreviewKey {
 // One laid-out line plus the gap that precedes it (paragraph gap, heading gap), so the
 // two strips can be drawn from either end of the same list without re-running the parser.
 struct PreviewLine {
-  std::shared_ptr<TextBlock> line;
+  std::unique_ptr<TextBlock> line;
   int gapBefore = 0;
 };
 

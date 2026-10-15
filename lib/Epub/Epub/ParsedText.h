@@ -18,7 +18,7 @@ class GfxRenderer;
 // Where each laid-out line goes. Function pointer plus caller context rather than
 // std::function: layout runs per paragraph on the render path, and a std::function would
 // heap-allocate its closure there.
-using LineSinkFn = void (*)(void* ctx, std::shared_ptr<TextBlock> line, uint32_t visibleOffset);
+using LineSinkFn = void (*)(void* ctx, std::unique_ptr<TextBlock> line, uint32_t visibleOffset);
 
 class ParsedText {
   // words/rubyTexts are std::deque, not std::vector: a paragraph can hold thousands

@@ -151,7 +151,7 @@ void appendParagraph(const ReaderPrefs& look, PreviewLayout& layout, const GfxRe
   } sink{layout, true, gapBefore};
   parsed.layoutAndExtractLines(
       renderer, fontId, static_cast<uint16_t>(textWidth),
-      [](void* const ctx, std::shared_ptr<TextBlock> line, uint32_t) {
+      [](void* const ctx, std::unique_ptr<TextBlock> line, uint32_t) {
         auto& sink = *static_cast<PreviewSink*>(ctx);
         sink.layout.lines.push_back({std::move(line), sink.first ? sink.gapBefore : 0});
         sink.first = false;
