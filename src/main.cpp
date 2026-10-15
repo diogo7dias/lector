@@ -1390,10 +1390,23 @@ void loop() {
     }
   }
 
+  // The hint reads activity state the render task may be replacing (the reader's
+  // section), so ask it under the render lock. A busy lock means a render is running:
+  // spinning on yield() would only steal its CPU (single-core C3), so step aside instead.
+  bool skipLoopDelay = false;
+  {
+    RenderLock lock(RenderLock::TryOnly{});
+    if (!lock.owns()) {
+      idlePoll(HalPowerManager::IDLE_POLL_MS);
+      return;
+    }
+    skipLoopDelay = activityManager.skipLoopDelay();
+  }
+
   // Add delay at the end of the loop to prevent tight spinning
   // When an activity requests skip loop delay (e.g., webserver running), use yield() for faster response
   // Otherwise, use longer delay to save power
-  if (activityManager.skipLoopDelay()) {
+  if (skipLoopDelay) {
     // No delay and no sleep: an activity with a web server up wants the loop back
     // immediately. The clock looks after itself — a running web server means WiFi
     // is up, and updateLocks() holds the WiFi lock at full speed for that.
