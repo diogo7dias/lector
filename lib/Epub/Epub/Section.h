@@ -37,6 +37,7 @@ class Section {
   GfxRenderer& renderer;
   std::string filePath;
   HalFile file;
+  bool openAnchorMap(HalFile& anchorFile, uint16_t& count) const;
 
   void writeSectionFileHeader(const ReaderRenderSpec& spec);
   uint32_t onPageComplete(std::unique_ptr<Page> page);
@@ -168,6 +169,10 @@ class Section {
 
   // Look up the page number for an anchor id from the section cache file.
   std::optional<uint16_t> getPageForAnchor(const std::string& anchor) const;
+
+  // The TOC entry the reader is in at `page`: the last entry of this spine whose anchor
+  // starts on or before it (sub-chapters inside one file), else the spine's own entry.
+  int getTocIndexForPage(int page) const;
 
   // Look up an anchor among the pages built so far by the in-progress build, so an anchor jump
   // (TOC / chapter select, usually the chapter top = page 0) can resolve without laying out the

@@ -1270,7 +1270,7 @@ void EpubReaderActivity::openFootnotes() {
 }
 
 void EpubReaderActivity::openChapterSelection() {
-  const int spineIdx = currentSpineIndex;
+  int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
   // Release the section while the chapter list is up (mirrors the
   // READER_SETTINGS path): picking a chapter resets it anyway, and its
   // tens-of-KB footprint is the difference between the chapter list
@@ -1279,10 +1279,12 @@ void EpubReaderActivity::openChapterSelection() {
   // cached-position rebuild a settings edit uses.
   {
     RenderLock lock(*this);
+    // Highlight the sub-chapter on screen, not just the file's first entry.
+    if (section) tocIndex = section->getTocIndexForPage(section->currentPage);
     cacheSectionPosition();
     section.reset();
   }
-  startActivityForResult(std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, *epub, spineIdx),
+  startActivityForResult(std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, *epub, tocIndex),
                          [this](const ActivityResult& result) {
                            RenderLock lock(*this);
                            if (!result.isCancelled) {

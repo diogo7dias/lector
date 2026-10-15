@@ -27,8 +27,7 @@ void EpubReaderChapterSelectionActivity::onEnter() {
     fcm->clearCache();
   }
 
-  const int selected = epub.getTocIndexForSpineIndex(currentSpineIndex);
-  moveSelectionTo(selected == -1 ? 0 : selected);
+  moveSelectionTo(currentTocIndex < 0 ? 0 : currentTocIndex);
 }
 
 void EpubReaderChapterSelectionActivity::onExit() {

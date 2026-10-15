@@ -10,10 +10,10 @@
 class EpubReaderChapterSelectionActivity final : public UiListActivity {
  public:
   explicit EpubReaderChapterSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Epub& epub,
-                                              const int currentSpineIndex)
+                                              const int currentTocIndex)
       : UiListActivity("EpubReaderChapterSelection", renderer, mappedInput),
         epub(epub),
-        currentSpineIndex(currentSpineIndex) {}
+        currentTocIndex(currentTocIndex) {}
 
   void onEnter() override;
   void onExit() override;
@@ -27,7 +27,7 @@ class EpubReaderChapterSelectionActivity final : public UiListActivity {
 
  private:
   Epub& epub;
-  int currentSpineIndex = 0;
+  int currentTocIndex = 0;
 
   // Visible-row cache. TOC entries are SD-backed (BookMetadataCache LUT reads) and the
   // list redraws every visible row on each repaint, so a CJK table of contents used to

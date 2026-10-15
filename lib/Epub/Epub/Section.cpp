@@ -1,5 +1,6 @@
 #include "Section.h"
 
+#include <BufferedFile.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -988,10 +989,9 @@ std::optional<uint16_t> Section::getCachedPageCount() const {
   return count;
 }
 
-std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) const {
-  HalFile f;
+bool Section::openAnchorMap(HalFile& f, uint16_t& count) const {
   if (!Storage.openFileForRead("SCT", filePath, f)) {
-    return std::nullopt;
+    return false;
   }
 
   const uint32_t fileSize = f.size();
@@ -999,15 +999,22 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
   uint32_t anchorMapOffset;
   serialization::readPod(f, anchorMapOffset);
   if (anchorMapOffset == 0 || anchorMapOffset >= fileSize) {
+    return false;
+  }
+  f.seek(anchorMapOffset);
+  return serialization::readPod(f, count);
+}
+
+std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) const {
+  HalFile f;
+  uint16_t count;
+  if (!openAnchorMap(f, count)) {
     return std::nullopt;
   }
 
   // Fixed-width keys, so the scan allocates nothing per entry — the old string map built
   // and threw away one std::string for every anchor it walked past.
   const uint64_t targetHash = arxHash64(anchor);
-  f.seek(anchorMapOffset);
-  uint16_t count;
-  serialization::readPod(f, count);
   for (uint16_t i = 0; i < count; i++) {
     uint64_t key;
     uint16_t page;
@@ -1019,6 +1026,77 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
   }
 
   return std::nullopt;
+}
+
+int Section::getTocIndexForPage(const int page) const {
+  const int first = epub.getTocIndexForSpineIndex(spineIndex);
+  if (first < 0) return first;
+  int selected = first;
+  int selectedPage = -1;
+  const auto consider = [&](const int index, const int anchorPage) {
+    if (anchorPage <= page && (anchorPage > selectedPage || (anchorPage == selectedPage && index > selected))) {
+      selected = index;
+      selectedPage = anchorPage;
+    }
+  };
+
+  struct Target {
+    uint64_t hash;
+    int index;
+  };
+  // 1 KB of targets per pass over the anchor map, so a spine holding hundreds of stories
+  // costs a few map scans instead of one file open per story.
+  constexpr size_t BATCH_SIZE = 64;
+  auto targets = makeUniqueNoThrow<Target[]>(BATCH_SIZE);
+  if (!targets) {
+    LOG_ERR("SCT", "OOM: TOC anchor lookup");
+    return selected;
+  }
+  HalFile f;
+  uint16_t count = 0;
+  std::optional<serialization::BufferedFileReader> reader;
+  uint32_t mapStart = 0;
+  if (openAnchorMap(f, count)) {
+    mapStart = f.position();
+    reader.emplace(f, 512);
+  }
+  size_t pending = 0;
+  const auto match = [&](const uint64_t key, const int anchorPage) {
+    for (size_t i = 0; i < pending; ++i) {
+      if (targets[i].hash == key) consider(targets[i].index, anchorPage);
+    }
+  };
+  const auto resolveBatch = [&]() {
+    if (build_ && build_->parser) {
+      for (const auto& [key, anchorPage] : build_->parser->getAnchors()) match(key, anchorPage);
+    }
+    if (reader && reader->seek(mapStart)) {
+      for (uint16_t i = 0; i < count; ++i) {
+        uint64_t key;
+        uint16_t anchorPage;
+        if (reader->read(&key, sizeof(key)) != sizeof(key) ||
+            reader->read(&anchorPage, sizeof(anchorPage)) != sizeof(anchorPage)) {
+          break;
+        }
+        match(key, anchorPage);
+      }
+    }
+    pending = 0;
+  };
+
+  // Same contiguous walk as the build's tocAnchors collection above.
+  for (int i = first; i < epub.getTocItemsCount(); ++i) {
+    const auto entry = epub.getTocItem(i);
+    if (entry.spineIndex != spineIndex) break;
+    if (entry.anchor.empty()) {
+      consider(i, 0);
+      continue;
+    }
+    targets[pending++] = {arxHash64(entry.anchor), i};
+    if (pending == BATCH_SIZE) resolveBatch();
+  }
+  if (pending > 0) resolveBatch();
+  return selected;
 }
 
 std::optional<uint16_t> Section::getPageForParagraphIndex(const uint16_t pIndex) const {
