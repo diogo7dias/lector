@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Point git at the repo's tracked hooks in .githooks/ (currently: clang-format pre-commit).
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+git config core.hooksPath .githooks
+echo "Git hooks enabled from .githooks/. Undo with: git config --unset core.hooksPath"

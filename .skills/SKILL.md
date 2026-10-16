@@ -44,6 +44,7 @@ uname -s
 ```bash
 find src -name "*.cpp" -o -name "*.h" | xargs clang-format -i
 ```
+Run `./bin/install-git-hooks` once per clone. The pre-commit hook rejects commits whose staged C/C++ files are not clang-format 21 clean (CI pins 21); fix with `./bin/clang-format-fix -g` and re-stage.
 
 ---
 

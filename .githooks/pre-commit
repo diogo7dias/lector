@@ -1,26 +1,37 @@
 #!/usr/bin/env bash
-
+# Pre-commit hook: fail if staged C/C++ files are not clang-format clean.
+# Checks the staged content only, with the same clang-format 21 and exclusions
+# as bin/clang-format-fix and CI. It never rewrites or re-stages files.
+# Install with ./bin/install-git-hooks. Skip once with `git commit --no-verify`.
 set -euo pipefail
 
-# Run formatter from repository root regardless of current directory.
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-cd "${REPO_ROOT}"
+if command -v clang-format-21 >/dev/null 2>&1; then
+  CF=clang-format-21
+elif command -v clang-format >/dev/null 2>&1; then
+  CF=clang-format
+else
+  echo "pre-commit: clang-format not found; install clang-format-21 (CI uses 21)." >&2
+  exit 1
+fi
+major="$("$CF" --version | grep -oE '[0-9]+' | head -n1)"
+if [[ -z "$major" || "$major" -lt 21 ]]; then
+  echo "pre-commit: $CF is too old ($("$CF" --version)); CI uses clang-format 21." >&2
+  exit 1
+fi
 
-# Capture the files already staged for commit so we only re-stage those
-# paths after formatting.
-staged_files=()
-while IFS= read -r -d '' file; do
-  staged_files+=("${file}")
-done < <(git diff --cached --name-only -z --diff-filter=ACMR)
+bad=()
+while IFS= read -r -d '' f; do
+  case "$f" in
+    lib/EpdFont/builtinFonts/*|lib/uzlib/*|lib/miniz/third_party/*) continue ;;
+  esac
+  if ! git show ":$f" | "$CF" -style=file --assume-filename="$f" --dry-run --Werror >/dev/null 2>&1; then
+    bad+=("$f")
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACMR -z -- '*.c' '*.cpp' '*.h' '*.hpp')
 
-# Intentionally format all currently modified tracked C/C++ files.
-# The helper handles no-op cases and exits 0 when nothing matches.
-echo "Running clang-format fix before commit..."
-./bin/clang-format-fix
-
-# Ensure formatting changes are included in the pending commit without
-# staging unrelated tracked modifications from other files in the
-# working tree.
-if ((${#staged_files[@]})); then
-  git add -- "${staged_files[@]}"
+if (( ${#bad[@]} )); then
+  echo "pre-commit: these staged files need clang-format:" >&2
+  printf '  %s\n' "${bad[@]}" >&2
+  echo "Run ./bin/clang-format-fix -g, re-stage, and commit again." >&2
+  exit 1
 fi
