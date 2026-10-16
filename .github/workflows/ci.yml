@@ -33,6 +33,14 @@ jobs:
           PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix
           git diff --exit-code || (echo "Please run 'bin/clang-format-fix' to fix formatting issues" && exit 1)
 
+  forbidden-calls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check src/ for forbidden calls
+        run: ./bin/check-forbidden-calls
+
   cppcheck:
     runs-on: ubuntu-latest
     steps:
@@ -264,6 +272,7 @@ jobs:
       - build-x4pro
       - sim-e2e
       - clang-format
+      - forbidden-calls
       - cppcheck
       - unit-tests
     if: always()
