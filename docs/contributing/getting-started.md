@@ -56,9 +56,10 @@ git submodule update --init --recursive
 Enable the repository-managed Git hooks (required once per clone):
 
 ```sh
-git config core.hooksPath .githooks
-chmod +x .githooks/pre-commit
+./bin/install-git-hooks
 ```
+
+The pre-commit hook checks staged C/C++ files with clang-format 21 (same as CI) and blocks the commit if they need formatting. It does not modify files: run `./bin/clang-format-fix -g`, re-stage, and commit again.
 
 ## Build
 
