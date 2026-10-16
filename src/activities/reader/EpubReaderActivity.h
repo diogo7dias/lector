@@ -369,7 +369,7 @@ class EpubReaderActivity final : public Activity {
   void deleteCacheAndGoHome();
   // Opens the reader menu for the current position (short-press Confirm)
   void openReaderMenu();
-  void openDictionaryWordSelect();
+  void openDictionaryWordSelect(int anchorX = -1, int anchorY = -1);
   // Opens the Grab Quote word-range picker on the current page.
   void openQuoteGrab();
   // Runs one of the CrossPointSettings::LONG_PRESS_MENU_FUNCTION actions. Shared by all

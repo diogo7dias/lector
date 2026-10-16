@@ -61,7 +61,8 @@ Select buttons along the bottom edge act on the first tap, as the physical butto
 Three things are deliberately left on a single tap, because a confirming tap would get in the
 way: the on-screen keyboard, sliders (brightness, text size and the rest, which are dragged or
 stepped), and the Yes/No pop-ups, which are already a question being answered. Page turns by
-tap while reading are unchanged.
+tap while reading are unchanged. Holding a word on the page for half a second looks it up in
+the dictionary.
 
 **Touch Sleep** (Settings > System, X4 Pro) is Off by default. Set to 15 s, 30 s or 1 min,
 it saves a little battery by putting the touch screen to sleep after that long without
@@ -810,7 +811,8 @@ Lector reads StarDict dictionaries from `/dictionaries/<name>/` on the card. Pic
 **Settings > Reader > Dictionary**; the row only appears once a dictionary folder exists.
 
 Look a word up from the in-book menu's **Look Up** row, or bind a hold to **Dictionary** in
-**Settings > Controls**. Every successful lookup is remembered: **Lookup History**, in the
+**Settings > Controls**. On a touch screen, hold the word itself for half a second: its
+definition opens straight away, and Back returns to the page. Every successful lookup is remembered: **Lookup History**, in the
 same menu, lists the last 100 words newest first and reopens any of them. Setup and usage
 are covered in [docs/dictionary.md](./docs/dictionary.md).
 

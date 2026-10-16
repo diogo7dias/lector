@@ -1,7 +1,7 @@
 import { test, expect } from 'e2e';
 
-// Open a book by touch, turn a page with a swipe (the X4 Pro's default reader control),
-// open the in-book menu, and find the same page again after a power cycle.
+// Open a book by touch, turn a page with a swipe (the X4 Pro's default reader control), hold
+// a word for the dictionary, open the in-book menu, and find the same page again after a power cycle.
 test('opens a book, swipes a page, opens the menu, resumes after a reboot', async ({ app, screen }) => {
   await app.open('/');
   const activity = screen.getByTestId('activity');
@@ -44,6 +44,14 @@ test('opens a book, swipes a page, opens the menu, resumes after a reboot', asyn
     return bands;
   };
   const second = await body();
+
+  // Holding a word opens the dictionary. The sim card has none, so the reader says so in a
+  // message that clears itself, and the page underneath neither turns nor opens the menu.
+  const held = await frames.textContent();
+  await fetch(`${app.baseUrl}/tap/240/300?ms=1200`, { method: 'POST' });
+  await expect(frames).not.toHaveText(held ?? '', { timeout: 30_000 });
+  await expect(activity).toHaveText('EpubReader');
+  await expect.poll(body, { message: 'the message clears off the same page', timeout: 30_000 }).toEqual(second);
 
   await panel.tap({ position: { x: 240, y: 400 } }); // centre of the page
   await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });

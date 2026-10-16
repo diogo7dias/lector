@@ -57,6 +57,12 @@ void DictionaryWordSelectActivity::onEnter() {
   if (!words.empty()) {
     const int initial = closestInRow(rowCount / 2, renderer.getScreenWidth() / 2);
     if (initial >= 0) selected = initial;
+    const int held = anchorX >= 0 ? wordAt(anchorX, anchorY) : -1;
+    if (held >= 0) {
+      selected = held;
+      lookupPending = true;
+      heldLookup = true;
+    }
   }
   requestUpdate();
 }
@@ -192,6 +198,10 @@ void DictionaryWordSelectActivity::performLookup() {
                                                        std::move(definition), dict.definitionsAreHtml()),
         [this, looked = std::move(looked)](const ActivityResult&) {
           DICT_HISTORY.add(looked);
+          if (heldLookup) {
+            finish();
+            return;
+          }
           requestUpdate();
         });
     return;
@@ -211,6 +221,12 @@ void DictionaryWordSelectActivity::loop() {
       popup = Popup::None;
       requestUpdate();
     }
+    return;
+  }
+
+  if (lookupPending) {
+    lookupPending = false;
+    performLookup();
     return;
   }
 

@@ -29,6 +29,7 @@ Two ways to start a lookup while reading:
 
 - Open the reader menu (**Confirm**) and choose **Look Up**.
 - Or set **Settings → Controls → Long-press Menu** to "Dictionary", then hold **Confirm** (~0.4s) on the reading page.
+- Or, on a touch screen (X4 Pro), hold the word on the page (~0.5s). Its definition opens straight away and **Back** returns to the page; a hold that lands on no word opens word selection instead.
 
 One word on the page becomes highlighted:
 

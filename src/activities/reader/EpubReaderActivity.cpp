@@ -464,7 +464,7 @@ void EpubReaderActivity::showBuildPopup() {
   buildPopupPending = false;
 }
 
-void EpubReaderActivity::openDictionaryWordSelect() {
+void EpubReaderActivity::openDictionaryWordSelect(const int anchorX, const int anchorY) {
   if (SETTINGS.dictionaryName[0] == '\0') {
     showDictionaryMessage = true;
     dictionaryMessageTime = millis();
@@ -481,10 +481,10 @@ void EpubReaderActivity::openDictionaryWordSelect() {
                              orientedMarginLeft);
 
   // The page was laid out in this book's font (per-book prefs), so the word boxes must be too.
-  startActivityForResult(
-      std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page), orientedMarginLeft,
-                                                     orientedMarginTop, SETTINGS.getReaderFontId(prefs_)),
-      [this](const ActivityResult&) { requestUpdate(); });
+  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
+                             renderer, mappedInput, std::move(page), orientedMarginLeft, orientedMarginTop,
+                             SETTINGS.getReaderFontId(prefs_), anchorX, anchorY),
+                         [this](const ActivityResult&) { requestUpdate(); });
 }
 
 void EpubReaderActivity::openQuoteGrab() {
@@ -933,6 +933,15 @@ void EpubReaderActivity::loop() {
   // apart until the button comes up, so the menu waits for the release, and a hold that
   // already fired its function sets ignoreNextConfirmRelease to keep that release from
   // also opening the menu.
+
+  // Holding a word looks it up. The long press fires mid-contact and suppresses the rest
+  // of it, so the lift neither turns the page nor taps the picker that opens.
+  int holdX = 0;
+  int holdY = 0;
+  if (mappedInput.wasScreenLongPress(holdX, holdY)) {
+    openDictionaryWordSelect(holdX, holdY);
+    return;
+  }
   // Touch on the open page, read once per loop: a tap or swipe can turn the page or
   // open the menu. Read before the Confirm handling below so the menu opens from
   // either input on the same pass.

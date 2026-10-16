@@ -12,16 +12,20 @@
 // Word selection over the current reader page: Left/Right step through words
 // in reading order, Up/Down jump rows, Confirm looks the word up and opens
 // DictionaryDefinitionActivity, Back returns to the reader. On touch devices a
-// touch-down moves the highlight and a tap on a word looks it up directly.
+// touch-down moves the highlight and a tap on a word looks it up directly. An
+// anchor (the reader's long-press point) on a word selects and looks it up on entry.
 class DictionaryWordSelectActivity final : public Activity {
  public:
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        std::unique_ptr<Page> page, int marginLeft, int marginTop, int fontId)
+                                        std::unique_ptr<Page> page, int marginLeft, int marginTop, int fontId,
+                                        int anchorX = -1, int anchorY = -1)
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         marginLeft(marginLeft),
         marginTop(marginTop),
-        fontId(fontId) {}
+        fontId(fontId),
+        anchorX(anchorX),
+        anchorY(anchorY) {}
 
   void onEnter() override;
   void loop() override;
@@ -56,6 +60,10 @@ class DictionaryWordSelectActivity final : public Activity {
   const int marginLeft;
   const int marginTop;
   const int fontId;
+  const int anchorX;
+  const int anchorY;
+  bool lookupPending = false;  // the anchor hit a word: look it up on the first loop pass
+  bool heldLookup = false;     // opened by that hold: Back from its definition goes to the page
   int lineHeight = 0;
 
   std::vector<WordBox> words;
