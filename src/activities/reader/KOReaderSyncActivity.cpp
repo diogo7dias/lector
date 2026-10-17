@@ -258,9 +258,10 @@ void KOReaderSyncActivity::performSync() {
         completeAlreadySynced();
         return;
       case ProgressComparison::LocalAhead:
-        documentHash = primaryHash;
-        performUpload();
-        return;
+        // Uploading overwrites the server's position, which may be the one the reader
+        // came here to fetch. Never silent: offer both, Upload preselected.
+        LOG_DBG("KOSync", "Smart sync: local ahead; opening manual selection");
+        break;
       case ProgressComparison::RemoteAhead:
         applyRemoteProgress(remotePosition.spineIndex, remotePosition.pageNumber);
         return;
