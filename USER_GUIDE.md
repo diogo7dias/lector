@@ -362,7 +362,8 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 - **Paragraph Numbers**, **Number Size**, **Paperback Look**, **Paperback Status**.
 - **Status Bar** — show or hide it. With the bar hidden, a **Progress Bar** row appears in its
   place.
-- **Customise Status Bar** — everything the bar can show and where, for this book.
+- **Customise Status Bar** — everything the bar can show and where. Changes here become your
+  default bar, so every book opens with it.
 - **Orientation** — rotate the screen.
 
 ### Sleep Screen

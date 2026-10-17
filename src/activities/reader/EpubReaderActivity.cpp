@@ -1554,8 +1554,9 @@ void EpubReaderActivity::openReaderSettings() {
 }
 
 void EpubReaderActivity::openStatusBarSettings() {
-  // The screen edits a copy of THIS BOOK's bar; each change lands on the card through
-  // the sink, and the result callback relays the book out once at the end.
+  // The screen edits a copy of this book's bar; each change lands on the card (the
+  // global bar, and this book's sidecar if it has one) through the sink, and the result
+  // callback relays the book out once at the end.
   statusBarEdit_ = statusBarOf(prefs_);
   startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput, statusBarEdit_,
                                                                      &EpubReaderActivity::statusBarEditSinkThunk, this),
@@ -1982,15 +1983,20 @@ void EpubReaderActivity::persistStatusBarEdit(const StatusBarBlock& edited) {
   statusBarEdit_ = edited;
   if (sortesMode) return;
   // Every change lands on the card straight away, so switching the reader off inside
-  // the screen keeps it. Same rule as the Reader Settings edit: a book that was
-  // following global and has been put back exactly as it was keeps following global.
+  // the screen keeps it. The bar is the reader's own preference, not this book's look:
+  // it becomes the global bar, so the next book opens with it. A book following global
+  // keeps following it and needs no sidecar; a book with its own look takes the bar too.
+  const StatusBarBlock global = SETTINGS.statusBar();
+  if (std::memcmp(&global, &edited, sizeof(StatusBarBlock)) != 0) {
+    SETTINGS.setStatusBar(edited);
+    SETTINGS.saveToFile();
+  }
+  if (!prefsCustom_) return;
+  // Written on every change, not only when it differs from the book on open: a bar
+  // changed and then put back must not leave the middle value on the card.
   ReaderPrefs p = prefs_;
   setStatusBarOf(p, edited);
-  if (std::memcmp(&p, &prefs_, sizeof(ReaderPrefs)) != 0) {
-    writeReaderOverride(p);
-  } else if (!prefsCustom_) {
-    Storage.remove(readerOverridePath().c_str());
-  }
+  writeReaderOverride(p);
 }
 
 void EpubReaderActivity::applyStatusBarEdit() {
@@ -2001,8 +2007,9 @@ void EpubReaderActivity::applyStatusBarEdit() {
     return;
   }
   // Already on the card: persistStatusBarEdit() wrote it with the change that made it.
+  // prefsCustom_ stays as it was: the edit went to the global bar, which a book
+  // following global already reads.
   prefs_ = edited;
-  prefsCustom_ = true;
   // The bar's height and edges decide the reserved bands, so the viewport changed and
   // the chapter has to be laid out again — the same path any margin change takes.
   reloadForReaderPrefsChange();
