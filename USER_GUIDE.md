@@ -635,8 +635,9 @@ Server URL**, **Document Matching** (Filename or Binary), **Send Document Metada
 **Sync Behavior**.
 
 **Sync Behavior** is **Smart sync** for new configurations, which resolves the simple cases on
-its own: upload when the server has nothing, do nothing when both sides agree, upload when
-local is ahead, apply the remote when the remote is ahead. Configurations migrated from older
+its own: upload when the server has nothing, do nothing when both sides agree, apply the remote
+when the remote is ahead. When this device is ahead it shows both positions with **Upload
+Local** selected, so the server's position is never overwritten without asking. Configurations migrated from older
 firmware keep **Ask every time**, which offers **Apply Remote** and **Upload Local** on every
 sync. Either can be changed at any time.
 
