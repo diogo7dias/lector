@@ -23,6 +23,7 @@
 #include "XtcReaderChapterSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/ReadingJournalStore.h"
 #include "util/ReadingPercent.h"
 
 void XtcReaderActivity::onEnter() {
@@ -41,6 +42,7 @@ void XtcReaderActivity::onEnter() {
   APP_STATE.openEpubPath = xtc->getPath();
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor());
+  journal.clock.touch(millis());
 
   // Trigger first update
   requestUpdate();
@@ -70,6 +72,7 @@ void XtcReaderActivity::onExit() {
   if (xtc && progressSaveDebouncer.hasPending()) {
     saveProgress(progressSaveDebouncer.lastObservedPosition());
   }
+  if (xtc) reading_journal::append(journal, millis(), xtc->getTitle().c_str());
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
@@ -180,6 +183,7 @@ void XtcReaderActivity::pageTurn(const bool forward) {
 
   // Page turn buttons carry nothing but the page turn now, so every turn is one page.
   constexpr int skipAmount = 1;
+  journal.turn(millis(), nextTriggered);
 
   if (prevTriggered) {
     if (currentPage >= static_cast<uint32_t>(skipAmount)) {
@@ -192,6 +196,7 @@ void XtcReaderActivity::pageTurn(const bool forward) {
     currentPage += skipAmount;
     if (currentPage >= xtc->getPageCount()) {
       currentPage = xtc->getPageCount();  // Allow showing "End of book"
+      journal.finished = true;
     }
     requestUpdate();
   }

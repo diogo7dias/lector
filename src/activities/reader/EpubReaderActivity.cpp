@@ -71,6 +71,7 @@
 #include "util/BoundMenuLabels.h"
 #include "util/DeferredFavorite.h"
 #include "util/FavoriteImage.h"
+#include "util/ReadingJournalStore.h"
 #include "util/ReadingPercent.h"
 #include "util/ScreenshotUtil.h"
 #include "util/SortesSelection.h"
@@ -217,6 +218,7 @@ void EpubReaderActivity::onEnter() {
     currentSpineIndex = sortes::below(count, esp_random);
   } else {
     loadLinkStack();
+    journal.clock.touch(millis());
   }
 
   loadCachedBookmarks();
@@ -284,6 +286,8 @@ void EpubReaderActivity::onExit() {
   // be deleted: the numbers only have to be ordered, never contiguous.
   const uint32_t readOrder = ++APP_STATE.readOrderCounter;
   APP_STATE.saveToFile();
+
+  if (epub) reading_journal::append(journal, millis(), epub->getTitle().c_str());
 
   // Update this book's home-list progress badge from the current position. One write
   // per reading session (setProgress skips if unchanged), so no page-turn cost.
@@ -881,6 +885,8 @@ void EpubReaderActivity::loop() {
   // /Read/ in onExit(); paging back off the end screen disarms it (book not actually
   // finished). If removeReadBooksFromRecents also fired, RecentBooksStore::updatePath in the
   // move path becomes a safe no-op since the entry was already removed.
+  // Reached by turning pages this sitting, not reopened on the end screen.
+  if (atEndOfBook && journal.pages > 0) journal.finished = true;
   if (atEndOfBook) {
     pendingReadFolderMove = !sortesMode && SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath());
   } else {
@@ -2461,7 +2467,10 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   // when a spine change drops the section.
   RenderLock lock(*this);
   if (!sortesMode && isForwardTurn && sessionPages < std::numeric_limits<int>::max()) ++sessionPages;
-  if (!sortesMode) pageTimer.onTurn(millis(), isForwardTurn);
+  if (!sortesMode) {
+    pageTimer.onTurn(millis(), isForwardTurn);
+    journal.turn(millis(), isForwardTurn);
+  }
   returnHistory.finishReturn(false);
   pendingOffsetJump.reset();
   clearDeferredReposition();

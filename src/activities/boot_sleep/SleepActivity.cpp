@@ -339,7 +339,9 @@ void SleepActivity::onEnter() {
   previousWallpaper = APP_STATE.lastSleepWallpaperPath;
   APP_STATE.lastSleepWallpaperPath.clear();
 
+  prepareSleepReadingLine();
   renderSleepScreen();
+  clearSleepReadingLine();
   SleepTiming::mark("face");
 }
 
@@ -584,8 +586,8 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const sleep_fa
   }
 
   // Drawn after the filter so the label is never inverted along with the image,
-  // and once per pass below for the same reason the bitmap is. No-ops unless a
-  // SleepInfoOverlayScope named a wallpaper, so the cover face draws nothing.
+  // and once per pass below for the same reason the bitmap is. On the cover face only
+  // the reading line draws: the wallpaper badges need a SleepInfoOverlayScope.
   drawSleepInfoOverlay(renderer);
 
   // Everything above this point is card reading and decoding; everything below is the

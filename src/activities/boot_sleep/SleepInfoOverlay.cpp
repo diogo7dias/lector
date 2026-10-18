@@ -1,6 +1,8 @@
 #include "SleepInfoOverlay.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -9,6 +11,7 @@
 #include "CrossPointSettings.h"
 #include "fontIds.h"
 #include "util/FavoriteImage.h"
+#include "util/ReadingJournalStore.h"
 
 namespace {
 
@@ -19,8 +22,11 @@ std::string g_sourcePath;
 // (fixed sleep file, jump-pick fallback), which hides the position badge.
 uint32_t g_position = 0;
 uint32_t g_total = 0;
+char g_readingLine[64] = "";
+// The sleep line needs one week; even a heavy week is a few KB of journal.
+constexpr size_t READING_TAIL_BYTES = 16 * 1024;
 
-enum class Corner { BottomLeft, BottomRight };
+enum class Corner { BottomLeft, BottomRight, TopLeft };
 
 // Filled box + text in a bottom safe corner. White text on a black box so it
 // reads over any wallpaper. Both badges share this so the filename, the "F"
@@ -41,7 +47,7 @@ void drawLabel(const GfxRenderer& renderer, const std::string& text, const Corne
   const int boxWidth = std::min(textWidth + paddingX * 2, maxBoxWidth);
   const int boxHeight = textLineHeight + paddingY * 2;
   const int boxX = corner == Corner::BottomRight ? std::max(safeInset, screenWidth - safeInset - boxWidth) : safeInset;
-  const int boxY = std::max(safeInset, screenHeight - boxHeight - safeInset);
+  const int boxY = corner == Corner::TopLeft ? safeInset : std::max(safeInset, screenHeight - boxHeight - safeInset);
 
   // The black box must be drawn in EVERY pass: in the grayscale plane passes
   // fillRect(true) clears the plane bits over the box area, which is what stops
@@ -71,7 +77,22 @@ SleepInfoOverlayScope::~SleepInfoOverlayScope() {
   g_total = 0;
 }
 
+void prepareSleepReadingLine() {
+  g_readingLine[0] = '\0';
+  reading_journal::Summary summary;
+  if (!reading_journal::summarize(summary, READING_TAIL_BYTES) || summary.week.sessions == 0) return;
+  char duration[16];
+  reading_journal::formatDuration(duration, sizeof(duration), summary.week.seconds);
+  char totals[40];
+  snprintf(totals, sizeof(totals), tr(STR_STATS_TIME_PAGES), duration, static_cast<unsigned long>(summary.week.pages));
+  snprintf(g_readingLine, sizeof(g_readingLine), "%s: %s", tr(STR_STATS_LAST_7_DAYS), totals);
+  LOG_DBG("SLP", "Reading line: %s", g_readingLine);
+}
+
+void clearSleepReadingLine() { g_readingLine[0] = '\0'; }
+
 void drawSleepInfoOverlay(GfxRenderer& renderer) {
+  if (g_readingLine[0]) drawLabel(renderer, g_readingLine, Corner::TopLeft);
   if (g_sourcePath.empty()) return;
 
   if (SETTINGS.showSleepImageFilename) {

@@ -24,6 +24,7 @@
 #include "util/BookCacheUtils.h"
 #include "util/BookFilingNames.h"
 #include "util/BookProgressFile.h"
+#include "util/ReadingJournalStore.h"
 #include "util/ReadingPercent.h"
 
 namespace {
@@ -59,6 +60,7 @@ void TxtReaderActivity::onEnter() {
   APP_STATE.openEpubPath = filePath;
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(filePath, fileName, "");
+  journal.clock.touch(millis());
 
   // Trigger first update
   requestUpdate();
@@ -75,6 +77,7 @@ void TxtReaderActivity::onExit() {
   if (txt && progressSaveDebouncer.hasPending()) {
     saveProgress(progressSaveDebouncer.lastObservedPosition());
   }
+  if (txt) reading_journal::append(journal, millis(), txt->getTitle().c_str());
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -161,12 +164,15 @@ void TxtReaderActivity::loop() {
 void TxtReaderActivity::pageTurn(const bool forward) {
   if (!forward) {
     if (currentPage == 0) return;
+    journal.turn(millis(), false);
     currentPage--;
     requestUpdate();
     return;
   }
   if (currentPage < totalPages - 1) {
+    journal.turn(millis(), true);
     currentPage++;
+    if (currentPage == totalPages - 1) journal.finished = true;
     requestUpdate();
   } else {
     onGoHome();

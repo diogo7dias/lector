@@ -148,6 +148,7 @@ The Home screen is the entry point. It lists the books you have been reading, an
 - **OPDS Browser** — shown once at least one catalog is configured, see
   [section 9](#9-getting-books-onto-the-device).
 - **File Transfer** — Wi-Fi transfers, see [section 9](#9-getting-books-onto-the-device).
+- **Stats** — what you have read, see [Reading stats](#reading-stats).
 - **Settings** — see [section 12](#12-settings-reference).
 
 **Settings > Controls > Home Back Button** decides what **Back** does here: nothing, resume
@@ -165,6 +166,27 @@ shows **Unavailable** instead of choosing from an incomplete scan.
 
 **Settings > Display > Author On Home** switches the author line between initials and the
 full name.
+
+### Reading stats
+
+Every time you close a book (Back, Home, or sleep), Lector adds one line to
+`/stats/journal.txt` on the card: when, how long, how many pages you turned forward, whether
+you reached the end, and the title. Sittings under a minute are not kept. A page left open
+for more than five minutes stops the clock for that page, so a book left on the table does
+not count as reading.
+
+**Stats** on Home shows the last 7 days, this year and all time, the books finished, and this
+month as a calendar with the days you read filled in and today outlined. The sleep screen
+also shows the last 7 days in its top-left corner, on wallpapers and covers alike.
+
+Days need the clock. The X3 and X4 Pro keep one; the X4 has no clock chip, so a Wi-Fi
+connection sets its clock until it next powers off. With the clock set, a sitting is dated. Without it the sitting
+still counts toward the totals, but not toward any day, week or year.
+
+The journal is plain text, one tab-separated line per sitting, so you can open it in a
+spreadsheet, edit it, or delete it to start over. With File Transfer running, the **Stats**
+page in the browser shows the same totals, the last 12 months day by day, and recent
+sessions.
 
 ---
 
