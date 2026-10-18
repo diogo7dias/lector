@@ -20,6 +20,7 @@
 #include "SilentRestart.h"
 #include "activities/ActivityManager.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "activities/util/TrustCertificatePrompt.h"
 #include "util/KOReaderSyncMessage.h"
 
 namespace {
@@ -191,6 +192,23 @@ void KOReaderSyncActivity::performSync() {
       hasRemoteProgress = false;
     }
     requestUpdate(true);
+    return;
+  }
+
+  if (result == KOReaderSyncClient::CERT_UNTRUSTED &&
+      askToTrustRejectedCertificate(*this, renderer, mappedInput, [this](const bool trusted) {
+        if (trusted) {
+          requestUpdate();
+          performSync();
+          return;
+        }
+        {
+          RenderLock lock(*this);
+          state = SYNC_FAILED;
+          statusMessage = tr(STR_CERT_UNTRUSTED);
+        }
+        requestUpdate(true);
+      })) {
     return;
   }
 

@@ -2,13 +2,16 @@
 
 #include <strings.h>
 
+#include <cstdint>
 #include <cstring>
+#include <string_view>
 
-// Root CAs for the hosts whose TLS peer the firmware verifies. The wolfSSL transport
-// has no CA bundle, so every other host is still fetched with verification off
-// (setInsecure): user-configured OPDS and KOSync servers may use any CA or a
-// self-signed certificate. These hosts are the ones that matter most: the firmware
-// update (GitHub API and release assets) and the default KOSync server.
+// Root CAs for TLS peers. The wolfSSL transport has no CA bundle, so these are the
+// whole trust store: the firmware update (GitHub API and release assets) and the
+// default KOSync server are verified against their own sets, and every other HTTPS
+// host (user OPDS and KOSync servers) against PUBLIC, the common public CAs. A
+// server those cannot vouch for (self-signed, a private CA) connects only once the
+// user has trusted its certificate (TrustedPins.h).
 //
 // Several roots per host on purpose: a CA change on GitHub's side must not strand
 // devices on a firmware that can no longer update itself. Dates are not checked
@@ -189,6 +192,10 @@ MrY=
 -----END CERTIFICATE-----
 )PEM";
 
+// The public CAs a user's own server is checked against. GitHub's set already spans the
+// common ones: Sectigo/USERTrust (ZeroSSL), Let's Encrypt (ISRG) and DigiCert.
+inline constexpr const char* PUBLIC = GITHUB;
+
 inline constexpr char CROSSPOINT_SYNC[] = R"PEM(
 // ISRG Root X1
 -----BEGIN CERTIFICATE-----
@@ -246,24 +253,35 @@ inline bool hostIs(const char* host, size_t hostLen, const char* domain) {
   return hostLen == len || host[hostLen - len - 1] == '.';
 }
 
-// PEM roots to verify `url` against, or nullptr for a host that is fetched unverified.
-inline const char* forUrl(const char* url) {
+// The host of `url` (no port), or empty for a URL that is not https.
+inline std::string_view httpsHost(const char* url) {
   const char* host = strstr(url, "://");
-  if (!host || strncasecmp(url, "https", 5) != 0) return nullptr;
+  if (!host || strncasecmp(url, "https", 5) != 0 || host - url != 5) return {};
   host += 3;
-  const size_t hostLen = strcspn(host, ":/?#");
-  if (hostIs(host, hostLen, "github.com") || hostIs(host, hostLen, "githubusercontent.com")) return GITHUB;
-  if (hostIs(host, hostLen, "sync.crosspointreader.com")) return CROSSPOINT_SYNC;
+  return {host, strcspn(host, ":/?#")};
+}
+
+// The roots dedicated to `url`'s host, or nullptr for a host verified against PUBLIC.
+inline const char* forUrl(const char* url) {
+  const std::string_view host = httpsHost(url);
+  if (host.empty()) return nullptr;
+  if (hostIs(host.data(), host.size(), "github.com") || hostIs(host.data(), host.size(), "githubusercontent.com")) {
+    return GITHUB;
+  }
+  if (hostIs(host.data(), host.size(), "sync.crosspointreader.com")) return CROSSPOINT_SYNC;
   return nullptr;
 }
 
-// Verify `url`'s peer when its host is pinned above; otherwise keep it unverified.
+// Verify `url`'s peer: chain and host name against its roots, or, for a host with
+// none of its own, against PUBLIC with `pin` (the user's trusted certificate for that
+// host, TrustedPins.h) as the fallback. Plain http has nothing to verify.
 template <class HttpClient>
-void apply(HttpClient& http, const char* url) {
+void apply(HttpClient& http, const char* url, const uint8_t* pin = nullptr) {
   if (const char* roots = forUrl(url)) {
     http.setCACert(roots);
-  } else {
-    http.setInsecure();
+  } else if (!httpsHost(url).empty()) {
+    http.setCACert(PUBLIC);
+    http.setPinnedCert(pin);
   }
 }
 

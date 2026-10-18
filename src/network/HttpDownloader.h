@@ -36,6 +36,9 @@ class HttpDownloader {
     SERVER_ERROR,
     // The body started and then stopped short of what was promised.
     INCOMPLETE,
+    // TLS reached the server, but nothing vouches for its certificate: not the roots,
+    // not a pin. trusted_pins::takeRejected has its fingerprint for the user.
+    CERT_UNTRUSTED,
   };
 
   static constexpr uint32_t DEFAULT_TIMEOUT_MS = 60000;

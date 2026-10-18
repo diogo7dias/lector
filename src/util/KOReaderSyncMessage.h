@@ -28,6 +28,8 @@ inline const char* koSyncErrorText(const KOReaderSyncClient::Error error) {
       return tr(STR_UPDATE_LOW_MEMORY);
     case KOReaderSyncClient::USER_EXISTS:
       return tr(STR_USERNAME_TAKEN);
+    case KOReaderSyncClient::CERT_UNTRUSTED:
+      return tr(STR_CERT_UNTRUSTED);
   }
   return tr(STR_SYNC_FAILED_MSG);
 }

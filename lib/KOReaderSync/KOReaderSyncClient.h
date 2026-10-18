@@ -68,7 +68,10 @@ class KOReaderSyncClient {
     JSON_ERROR,
     NOT_FOUND,
     LOW_MEMORY,
-    USER_EXISTS
+    USER_EXISTS,
+    // The server answered TLS with a certificate nothing vouches for; the user can
+    // trust it (trusted_pins::takeRejected) and retry.
+    CERT_UNTRUSTED
   };
 
   /**

@@ -4,7 +4,7 @@
 #include <Logging.h>
 #include <ObfuscationUtils.h>
 #include <SecureHttpClient.h>
-#include <TrustedRoots.h>
+#include <TrustedPins.h>
 
 #include <string>
 
@@ -81,7 +81,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
   if (insufficientHeap()) return LOW_MEMORY;
 
   freeink::SecureHttpClient http;
-  trusted_roots::apply(http, url.c_str());
+  trusted_pins::applyWithPin(http, url.c_str());
   if (!http.begin(url)) {
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
@@ -93,7 +93,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
 
   LOG_DBG("KOSync", "Auth response: %d", httpCode);
 
-  if (httpCode <= 0) return NETWORK_ERROR;
+  if (httpCode <= 0) return trusted_pins::noteIfRejected(http, url.c_str()) ? CERT_UNTRUSTED : NETWORK_ERROR;
   // Any 2xx is success. The reference kosync server answers 200, but
   // KOSync-compatible implementations differ (BookLore/grimmory is a Spring
   // service and uses the idiomatic codes) — see upstream issue #2876.
@@ -120,7 +120,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::createUser() {
   serializeJson(doc, body);
 
   freeink::SecureHttpClient http;
-  trusted_roots::apply(http, url.c_str());
+  trusted_pins::applyWithPin(http, url.c_str());
   if (!http.begin(url)) {
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
@@ -133,7 +133,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::createUser() {
 
   LOG_DBG("KOSync", "Create user response: %d", httpCode);
 
-  if (httpCode <= 0) return NETWORK_ERROR;
+  if (httpCode <= 0) return trusted_pins::noteIfRejected(http, url.c_str()) ? CERT_UNTRUSTED : NETWORK_ERROR;
   if (httpCode >= 200 && httpCode < 300) return OK;  // 2xx: created (see upstream #2876)
   if (httpCode == 402) return USER_EXISTS;
   return SERVER_ERROR;
@@ -152,7 +152,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
   if (insufficientHeap()) return LOW_MEMORY;
 
   freeink::SecureHttpClient http;
-  trusted_roots::apply(http, url.c_str());
+  trusted_pins::applyWithPin(http, url.c_str());
   if (!http.begin(url)) {
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
@@ -165,7 +165,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
 
   if (httpCode <= 0) {
     http.end();
-    return NETWORK_ERROR;
+    return trusted_pins::noteIfRejected(http, url.c_str()) ? CERT_UNTRUSTED : NETWORK_ERROR;
   }
 
   // 204 = success with no stored progress for this document (Spring-style
@@ -266,7 +266,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   LOG_DBG("KOSync", "Request body: %s", body.c_str());
 
   freeink::SecureHttpClient http;
-  trusted_roots::apply(http, url.c_str());
+  trusted_pins::applyWithPin(http, url.c_str());
   if (!http.begin(url)) {
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
@@ -279,7 +279,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
 
   LOG_DBG("KOSync", "Update progress response: %d", httpCode);
 
-  if (httpCode <= 0) return NETWORK_ERROR;
+  if (httpCode <= 0) return trusted_pins::noteIfRejected(http, url.c_str()) ? CERT_UNTRUSTED : NETWORK_ERROR;
   // Any 2xx accepts the progress. The reference kosync server answers 200, but
   // Spring-based KOSync implementations (BookLore/grimmory) answer a PUT with
   // the idiomatic 201/204, which used to land in SERVER_ERROR and made every

@@ -23,6 +23,8 @@ enum class ClientStatus {
   PARSE_FAILED,
   EMPTY,
   BAD_CREDENTIALS,
+  // TLS reached a server whose certificate nothing vouches for; the user can trust it.
+  CERT_UNTRUSTED,
   ABORTED
 };
 
