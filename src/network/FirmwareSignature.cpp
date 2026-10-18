@@ -1,7 +1,6 @@
 #include "FirmwareSignature.h"
 
 #include <Memory.h>
-
 #include <wolfssl/wolfcrypt/ecc.h>
 
 namespace firmware_signature {
