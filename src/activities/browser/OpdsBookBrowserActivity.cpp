@@ -15,6 +15,7 @@
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "activities/util/TrustCertificatePrompt.h"
 #include "components/UITheme.h"
 #include "components/icons/search24.h"
 #include "fontIds.h"
@@ -171,6 +172,19 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     return;
   }
 
+  if (status == opds::ClientStatus::CERT_UNTRUSTED &&
+      askToTrustRejectedCertificate(*this, renderer, mappedInput, [this, path](const bool trusted) {
+        if (trusted) {
+          fetchFeed(path);
+          return;
+        }
+        state = BrowserState::ERROR;
+        errorMessage = tr(STR_CERT_UNTRUSTED);
+        requestUpdate();
+      })) {
+    return;
+  }
+
   if (const char* error = feedErrorMessage(status)) {
     state = BrowserState::ERROR;
     errorMessage = error;
@@ -285,6 +299,19 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   const auto result = client.downloadBook(server, feedUrl, book, finalPath, progressCb, &cancelRequested, onReconnect,
                                           opds_retry::DEFAULT_TIMEOUT_MS, opds_retry::MAX_ATTEMPTS, beforeAttempt,
                                           afterAttempt, pollCancel);
+
+  if (result == HttpDownloader::CERT_UNTRUSTED &&
+      askToTrustRejectedCertificate(*this, renderer, mappedInput, [this, retry = book](const bool trusted) {
+        if (trusted) {
+          downloadBook(retry);
+          return;
+        }
+        state = BrowserState::ERROR;
+        errorMessage = tr(STR_CERT_UNTRUSTED);
+        requestUpdate();
+      })) {
+    return;
+  }
 
   if (result == HttpDownloader::OK) {
     state = BrowserState::BROWSING;

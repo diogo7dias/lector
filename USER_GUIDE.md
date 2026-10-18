@@ -601,6 +601,23 @@ from the OPDS screens and the web interface, not from the on-device Settings men
 
 Catalogs can also be managed from the web interface at `http://<device-ip>/settings`.
 
+### HTTPS servers and their certificates
+
+An `https://` OPDS catalog or KOReader sync server is checked before your password is sent.
+A server with a certificate from a public authority (Let's Encrypt, ZeroSSL, DigiCert and the
+like) just connects, including after its certificate renews.
+
+A server those cannot vouch for, such as a self-signed home server, asks **Trust this
+server's certificate?** the first time, showing the start of the certificate's SHA-256
+fingerprint and the server's name. Compare it with the fingerprint your server shows (for
+example `openssl x509 -in cert.pem -noout -fingerprint -sha256`) and choose **Confirm** to
+trust it. Lector remembers it for that server and asks again only when the certificate changes.
+Trusted certificates are kept in `/.crosspoint/trusted_certs.txt` on the SD card, one server
+per line; delete a line to forget one.
+
+Plain `http://` servers are not checked, and anything typed into them, passwords included,
+crosses the network readable by anyone on it.
+
 ---
 
 ## 10. Syncing reading position

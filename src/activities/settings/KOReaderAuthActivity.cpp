@@ -10,6 +10,7 @@
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "activities/util/TrustCertificatePrompt.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/KOReaderSyncMessage.h"
@@ -40,6 +41,22 @@ void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
 
 void KOReaderAuthActivity::performAuthentication() {
   const auto result = mode == Mode::SIGN_UP ? KOReaderSyncClient::createUser() : KOReaderSyncClient::authenticate();
+  if (result == KOReaderSyncClient::CERT_UNTRUSTED &&
+      askToTrustRejectedCertificate(*this, renderer, mappedInput, [this](const bool trusted) {
+        if (trusted) {
+          requestUpdate();
+          performAuthentication();
+          return;
+        }
+        {
+          RenderLock lock(*this);
+          state = FAILED;
+          errorMessage = tr(STR_CERT_UNTRUSTED);
+        }
+        requestUpdate();
+      })) {
+    return;
+  }
 
   {
     RenderLock lock(*this);
