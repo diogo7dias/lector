@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Point git at the repo's tracked hooks in .githooks/ (currently: clang-format pre-commit).
+# Point git at the repo's tracked hooks in .githooks/ (clang-format and token-limit pre-commit).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 git config core.hooksPath .githooks
