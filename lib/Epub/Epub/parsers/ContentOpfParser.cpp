@@ -6,6 +6,7 @@
 #include <Serialization.h>
 #include <XmlParserUtils.h>
 
+#include <algorithm>
 #include <cctype>
 
 #include "Epub/BookMetadataCache.h"
@@ -19,6 +20,18 @@ constexpr char itemCacheFile[] = "/.items.bin";
 // nobody reads on a 6-inch panel, and it would cost heap during the parse and
 // bytes in every book.bin.
 constexpr size_t kMaxDescriptionBytes = 1500;
+// Title, author list and language come from the book too; a hostile OPF must not size them.
+constexpr size_t kMaxTitleBytes = 512;
+constexpr size_t kMaxAuthorBytes = 512;
+constexpr size_t kMaxLanguageBytes = 32;
+
+// Appending stops at the cap rather than trimming afterwards, so an oversized field is never
+// allocated in the first place. A cut may land inside a UTF-8 sequence; the cache writer
+// already trims to a code-point boundary.
+void appendCapped(std::string& dst, const XML_Char* s, const int len, const size_t cap) {
+  if (len <= 0 || dst.size() >= cap) return;
+  dst.append(s, std::min(static_cast<size_t>(len), cap - dst.size()));
+}
 
 bool startsWithImageMediaType(const std::string& mediaType) {
   constexpr size_t prefixLen = sizeof(MEDIA_TYPE_IMAGE_PREFIX) - 1;
@@ -90,6 +103,9 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   }
 
   if (self->state == IN_METADATA && xmlLocalNameEquals(name, "creator")) {
+    // Separator per creator element, not per text chunk: expat splits one name at entity
+    // references ("Smith &amp; Jones"), and a per-chunk comma broke it apart.
+    if (!self->author.empty()) appendCapped(self->author, ", ", 2, kMaxAuthorBytes);
     self->state = IN_BOOK_AUTHOR;
     return;
   }
@@ -324,32 +340,25 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
   auto* self = static_cast<ContentOpfParser*>(userData);
 
   if (self->state == IN_BOOK_TITLE) {
-    self->title.append(s, len);
+    appendCapped(self->title, s, len, kMaxTitleBytes);
     return;
   }
 
   if (self->state == IN_BOOK_AUTHOR) {
-    if (!self->author.empty()) {
-      self->author.append(", ");  // Add separator for multiple authors
-    }
-    self->author.append(s, len);
+    appendCapped(self->author, s, len, kMaxAuthorBytes);
     return;
   }
 
   if (self->state == IN_BOOK_LANGUAGE) {
-    self->language.append(s, len);
+    appendCapped(self->language, s, len, kMaxLanguageBytes);
     return;
   }
 
   if (self->state == IN_BOOK_DESCRIPTION) {
     // Publishers routinely put escaped HTML inside dc:description; expat hands it
     // back here already unescaped, so the markup arrives as literal text and is
-    // stripped later. Appending stops at the cap rather than trimming afterwards,
-    // so a book with a huge synopsis never allocates it in the first place.
-    if (self->description.size() < kMaxDescriptionBytes) {
-      const size_t room = kMaxDescriptionBytes - self->description.size();
-      self->description.append(s, len < static_cast<int>(room) ? static_cast<size_t>(len) : room);
-    }
+    // stripped later.
+    appendCapped(self->description, s, len, kMaxDescriptionBytes);
     return;
   }
 }

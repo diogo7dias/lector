@@ -11,6 +11,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <algorithm>
 #include <cstring>
 
 namespace xtc {
@@ -299,7 +300,11 @@ XtcError XtcParser::readChapters() {
 
   constexpr size_t chapterSize = 96;
   const uint64_t available = maxOffset - chapterOffset;
-  const size_t chapterCount = static_cast<size_t>(available / chapterSize);
+  // A chapter starts on a page, so pageCount bounds the table; the fixed cap keeps a corrupt
+  // header from sizing a reserve() the C3 heap cannot satisfy (a failed reserve aborts).
+  constexpr size_t MAX_CHAPTERS = 1024;
+  const size_t chapterCount =
+      std::min({static_cast<size_t>(available / chapterSize), static_cast<size_t>(m_header.pageCount), MAX_CHAPTERS});
   if (chapterCount == 0) {
     return XtcError::OK;
   }

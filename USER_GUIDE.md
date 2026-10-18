@@ -1118,6 +1118,13 @@ A firmware written from the SD card is read back off the flash and compared agai
 before the device is told to boot it, so a bad write is reported as **Firmware check failed,
 nothing changed** instead of restarting into the old firmware as though it had worked.
 
+Every Lector release is signed. **Check for updates** installs only a signed release and
+refuses anything else with **Update not signed by lector**, so a tampered download can never
+become the firmware you boot. The SD card still takes any firmware, since other firmwares
+are not signed by Lector: an unsigned file asks **Not signed by lector. Install?** before it
+installs. A file that carries a Lector signature that does not match is refused as
+**Invalid firmware file**.
+
 If the device will not boot far enough to reach Settings, hold **Volume Up** together with
 **Power** at boot (**Volume Down** on the X4 Pro, whose Volume Up pin doubles as the chip's
 boot-strap pin). That goes straight to the SD card firmware update screen. If no card is

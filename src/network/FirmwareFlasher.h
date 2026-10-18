@@ -36,7 +36,9 @@ enum class Result {
   ERASE_FAIL,
   WRITE_FAIL,
   OTADATA_FAIL,
-  VERIFY_FAIL,  // flash readback does not match the source image
+  VERIFY_FAIL,    // flash readback does not match the source image
+  BAD_SIGNATURE,  // carries a lector signature block that does not verify: tampered
+  UNSIGNED,       // no lector signature, where one is required (StreamingInstall::commit)
 };
 
 // Progress callback: called after every chunk write. `written`/`total` are bytes.
@@ -104,7 +106,9 @@ class StreamingInstall {
   // ignored a Range request and replayed the body.
   void restart();
   // Validate what is in flash, then hand the device to it on the next boot.
-  Result commit();
+  // `requireSignature` refuses an image without lector's release signature
+  // (UNSIGNED) before otadata is touched: a lector self-update must be one of ours.
+  Result commit(bool requireSignature);
 
   size_t written() const;
   size_t capacity() const;
@@ -126,5 +130,10 @@ uint16_t runningPartitionChipId();
 // stream header inspect, or 0xFFFF if none.
 uint16_t lastImageChipId();
 void setLastImageChipId(uint16_t chipId);
+
+// True when the most recent validation found a valid lector release signature
+// (FirmwareSignature.h). A file from the SD card may be any firmware; the caller
+// warns before installing one without it.
+bool lastImageSigned();
 
 }  // namespace firmware_flash

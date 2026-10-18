@@ -2457,17 +2457,17 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
 
   // A page turn is authoritative: do not let a resume/reflow position captured
   // at session start snap the reader back after the incremental build completes.
-  {
-    RenderLock lock(*this);
-    if (!sortesMode && isForwardTurn && sessionPages < std::numeric_limits<int>::max()) ++sessionPages;
-    if (!sortesMode) pageTimer.onTurn(millis(), isForwardTurn);
-    returnHistory.finishReturn(false);
-    pendingOffsetJump.reset();
-    clearDeferredReposition();
-    // The relayout's paragraph anchor too: kept, it would snap the reader back to that
-    // paragraph when the background build finishes, undoing these turns.
-    pendingOrdinalAnchor_.reset();
-  }
+  // One lock for the whole turn: the render task reads currentPage and may be mid-render
+  // when a spine change drops the section.
+  RenderLock lock(*this);
+  if (!sortesMode && isForwardTurn && sessionPages < std::numeric_limits<int>::max()) ++sessionPages;
+  if (!sortesMode) pageTimer.onTurn(millis(), isForwardTurn);
+  returnHistory.finishReturn(false);
+  pendingOffsetJump.reset();
+  clearDeferredReposition();
+  // The relayout's paragraph anchor too: kept, it would snap the reader back to that
+  // paragraph when the background build finishes, undoing these turns.
+  pendingOrdinalAnchor_.reset();
 
   if (isForwardTurn) {
     // Advance within the section while there are (or may still be) more pages: either a built
@@ -2480,28 +2480,21 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
     if (section->currentPage < section->pageCount - 1 || section->isBuilding() || section->isPartial()) {
       section->currentPage++;
     } else {
-      // We don't want to delete the section mid-render, so grab the semaphore
-      {
-        RenderLock lock(*this);
-        nextPageNumber = 0;
-        currentSpineIndex++;
-        section.reset();
-      }
+      nextPageNumber = 0;
+      currentSpineIndex++;
+      section.reset();
     }
   } else {
     if (section->currentPage > 0) {
       section->currentPage--;
     } else if (currentSpineIndex > 0) {
-      // We don't want to delete the section mid-render, so grab the semaphore
-      {
-        RenderLock lock(*this);
-        nextPageNumber = 0;
-        pendingPageJump = std::numeric_limits<uint16_t>::max();
-        currentSpineIndex--;
-        section.reset();
-      }
+      nextPageNumber = 0;
+      pendingPageJump = std::numeric_limits<uint16_t>::max();
+      currentSpineIndex--;
+      section.reset();
     }
   }
+  lock.unlock();
   requestUpdate();
 }
 

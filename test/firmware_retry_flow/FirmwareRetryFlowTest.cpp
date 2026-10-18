@@ -89,7 +89,7 @@ TEST(FirmwareRetryFlow, OtadataIsOnlySwitchedAfterTheFlashedImageValidates) {
   // boot pointer moves only after the bytes in flash have been checked where
   // they landed.
   const std::string source = readSource(FLASHER_SOURCE);
-  const std::size_t commit = source.find("Result StreamingInstall::commit()");
+  const std::size_t commit = source.find("Result StreamingInstall::commit(");
   ASSERT_NE(commit, std::string::npos);
   const std::string body = source.substr(commit);
   const std::size_t validate = body.find("validateFlashedImage");

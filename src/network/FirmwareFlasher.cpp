@@ -12,6 +12,7 @@
 #include <memory>
 
 #include "Diagnostics.h"
+#include "FirmwareSignature.h"
 #include "FirmwareSwitchAudit.h"
 #include "FlashWriteVerify.h"
 #include "OtaBootSwitch.h"
@@ -65,6 +66,10 @@ const char* resultName(Result r) {
       return "OTADATA_FAIL";
     case Result::VERIFY_FAIL:
       return "VERIFY_FAIL";
+    case Result::BAD_SIGNATURE:
+      return "BAD_SIGNATURE";
+    case Result::UNSIGNED:
+      return "UNSIGNED";
   }
   return "?";
 }
@@ -87,11 +92,14 @@ uint16_t runningPartitionChipId() {
 
 namespace {
 uint16_t g_lastImageChip = 0xFFFF;
+bool g_lastImageSigned = false;
 }  // namespace
 
 uint16_t lastImageChipId() { return g_lastImageChip; }
 
 void setLastImageChipId(uint16_t chipId) { g_lastImageChip = chipId; }
+
+bool lastImageSigned() { return g_lastImageSigned; }
 
 namespace {
 // Stream `length` bytes from `file` starting at the current read offset, feeding them through
@@ -184,6 +192,7 @@ class PartitionTarget : public FlashTarget {
 }  // namespace
 
 Result validateImageStream(ByteSource& file, size_t partitionSize) {
+  g_lastImageSigned = false;
   if (!file.rewind()) return Result::READ_FAIL;
   const size_t fileSize = file.size();
   if (fileSize < MIN_FIRMWARE_SIZE) {
@@ -312,7 +321,24 @@ Result validateImageStream(ByteSource& file, size_t partitionSize) {
       mbedtls_sha256_free(&shaCtx);
       return Result::BAD_SHA;
     }
+    // The release signature signs the trailer just checked, so it covers every byte above.
+    if (fileSize - expectedTotal >= firmware_signature::BLOCK_SIZE) {
+      uint8_t block[firmware_signature::BLOCK_SIZE];
+      if (file.read(block, sizeof(block)) != static_cast<int>(sizeof(block))) {
+        mbedtls_sha256_free(&shaCtx);
+        return Result::READ_FAIL;
+      }
+      if (std::memcmp(block, firmware_signature::MAGIC, sizeof(firmware_signature::MAGIC)) == 0) {
+        if (!firmware_signature::verifyRelease(stored, block + sizeof(firmware_signature::MAGIC))) {
+          LOG_ERR("FLASH", "validate: lector signature does not verify");
+          mbedtls_sha256_free(&shaCtx);
+          return Result::BAD_SIGNATURE;
+        }
+        g_lastImageSigned = true;
+      }
+    }
   }
+  LOG_INF("FLASH", "validate: %s", g_lastImageSigned ? "signed by lector" : "not signed by lector");
 
   mbedtls_sha256_free(&shaCtx);
   return Result::OK;
@@ -470,9 +496,10 @@ size_t StreamingInstall::written() const { return impl_ ? impl_->writer.written(
 
 size_t StreamingInstall::capacity() const { return impl_ ? impl_->dest->size : 0; }
 
-Result StreamingInstall::commit() {
+Result StreamingInstall::commit(const bool requireSignature) {
   const size_t imageSize = impl_->writer.written();
-  const Result validateRes = validateFlashedImage(impl_->dest, imageSize);
+  Result validateRes = validateFlashedImage(impl_->dest, imageSize);
+  if (validateRes == Result::OK && requireSignature && !lastImageSigned()) validateRes = Result::UNSIGNED;
   if (validateRes != Result::OK) {
     LOG_ERR("FLASH", "flashed image invalid: %s", resultName(validateRes));
     diag::note("  readback validate: %s over %u bytes in flash", resultName(validateRes),
