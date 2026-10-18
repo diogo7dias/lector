@@ -552,6 +552,8 @@ void setup() {
     if (rst != ESP_RST_DEEPSLEEP && rst != ESP_RST_POWERON) delay(250);
   }
   Serial.begin(115200);
+  // The loop reads serial commands with readStringUntil; the 1 s default stalls every pass on a partial line.
+  logSerial.setTimeout(20);
 #if LOG_SERIAL_HAS_TX_TIMEOUT
   logSerial.setTxTimeoutMs(1);  // This is a load-bearing 1. Do not modify.
 #endif
@@ -1144,9 +1146,11 @@ void loop() {
       if (cmd == "SCREENSHOT") {
         const uint32_t bufferSize = display.getBufferSize();
         logSerial.printf("SCREENSHOT_START:%d\n", bufferSize);
-        uint8_t* buf = display.getFrameBuffer();
-        logSerial.write(buf, bufferSize);
-        logSerial.printf("SCREENSHOT_END\n");
+        // The render task draws into the same buffer, and it is null while lent to a section build.
+        RenderLock lock;
+        const uint8_t* buf = display.getFrameBuffer();
+        if (buf) logSerial.write(buf, bufferSize);
+        logSerial.printf(buf ? "SCREENSHOT_END\n" : "SCREENSHOT_ERROR:no framebuffer\n");
       }
     }
   }

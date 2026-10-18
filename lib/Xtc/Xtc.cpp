@@ -175,7 +175,8 @@ bool Xtc::generateCoverBmp() const {
 
   // Load first page (cover)
   size_t bytesRead = const_cast<xtc::XtcParser*>(parser.get())->loadPage(0, pageBuffer, bitmapSize);
-  if (bytesRead == 0) {
+  // Short of bitmapSize means the page header declared smaller dimensions: the tail is uninitialized.
+  if (bytesRead < bitmapSize) {
     LOG_ERR("XTC", "Failed to load cover page");
     free(pageBuffer);
     return false;
