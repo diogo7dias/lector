@@ -212,7 +212,7 @@ void QuoteSelectActivity::moveVertical(const int direction) {
 std::string QuoteSelectActivity::chapterTitle() const {
   const int tocIndex = epub.getTocIndexForSpineIndex(spineIndex);
   if (tocIndex >= 0) return epub.getTocItem(tocIndex).title;
-  return "Chapter " + std::to_string(spineIndex + 1);
+  return std::string(tr(STR_CHAPTER)) + " " + std::to_string(spineIndex + 1);
 }
 
 void QuoteSelectActivity::saveSelectedQuote() {
