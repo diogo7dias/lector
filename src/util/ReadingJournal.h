@@ -1,11 +1,11 @@
 #pragma once
 
+#include <ClockZones.h>
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string_view>
-
-#include <ClockZones.h>
 
 // Reading journal: /stats/journal.txt, one tab-separated line per reading session,
 // appended when a book closes. Plain text so the card can be read, edited or graphed
@@ -89,8 +89,8 @@ inline Civil localTime(const int64_t utcSeconds, const int offsetMinutes) {
 // One journal line, newline included. `when` nullptr writes an undated session. Tabs and
 // line breaks in the title become spaces so the line stays one record. Returns the
 // length, or 0 when the buffer is too small for even an empty title.
-inline size_t formatLine(char* buf, const size_t size, const Civil* when, const uint32_t seconds,
-                         const uint32_t pages, const bool done, const char* title) {
+inline size_t formatLine(char* buf, const size_t size, const Civil* when, const uint32_t seconds, const uint32_t pages,
+                         const bool done, const char* title) {
   char stamp[20] = "-";
   if (when) {
     snprintf(stamp, sizeof(stamp), "%04d-%02d-%02dT%02d:%02d", when->year, when->month, when->day, when->hour,
@@ -232,7 +232,8 @@ inline void formatDuration(char* buf, const size_t size, const uint32_t seconds)
   if (minutes < 60) {
     snprintf(buf, size, "%lum", static_cast<unsigned long>(minutes));
   } else {
-    snprintf(buf, size, "%luh%02lu", static_cast<unsigned long>(minutes / 60), static_cast<unsigned long>(minutes % 60));
+    snprintf(buf, size, "%luh%02lu", static_cast<unsigned long>(minutes / 60),
+             static_cast<unsigned long>(minutes % 60));
   }
 }
 

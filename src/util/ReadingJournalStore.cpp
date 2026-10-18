@@ -18,8 +18,8 @@ bool localNow(Civil& out) {
   // Same offset rule as HalClock::formatTime, so the journal's date matches the clock shown.
   const uint8_t q = SETTINGS.clockUtcOffsetQ > 104 ? 104 : SETTINGS.clockUtcOffsetQ;
   const uint8_t zone = SETTINGS.clockTimeZone;
-  const int offset = zone != 0 && zone < clock_zones::COUNT ? clock_zones::offsetMinutes(zone, utc)
-                                                            : (static_cast<int>(q) - 48) * 15;
+  const int offset =
+      zone != 0 && zone < clock_zones::COUNT ? clock_zones::offsetMinutes(zone, utc) : (static_cast<int>(q) - 48) * 15;
   out = localTime(utc, offset);
   return true;
 }
@@ -32,8 +32,8 @@ void append(Session& session, const uint32_t nowMs, const char* title) {
   Civil now;
   const bool dated = localNow(now);
   char line[MAX_LINE];
-  const size_t len = formatLine(line, sizeof(line), dated ? &now : nullptr, seconds, session.pages,
-                                session.finished, title);
+  const size_t len =
+      formatLine(line, sizeof(line), dated ? &now : nullptr, seconds, session.pages, session.finished, title);
   if (len == 0) return;
 
   // Appended in one write, no .part: a reset mid-write leaves at most one cut line,

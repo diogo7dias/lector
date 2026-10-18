@@ -8,9 +8,9 @@ using namespace reading_journal;
 
 TEST(ReadingJournal, ClockStopsOnAPageLeftOpen) {
   SessionClock c;
-  c.touch(1000);                     // open
-  c.touch(31000);                    // 30 s
-  c.touch(31000 + IDLE_CUT_MS);      // exactly the cut still counts
+  c.touch(1000);                         // open
+  c.touch(31000);                        // 30 s
+  c.touch(31000 + IDLE_CUT_MS);          // exactly the cut still counts
   c.touch(31000 + 2 * IDLE_CUT_MS + 1);  // over it: walked away, adds nothing
   c.touch(31000 + 2 * IDLE_CUT_MS + 10001);
   EXPECT_EQ(30 + IDLE_CUT_MS / 1000 + 10, c.seconds());
@@ -55,7 +55,7 @@ TEST(ReadingJournal, UndatedLineAndLongTitle) {
 TEST(ReadingJournal, BadLinesAreSkipped) {
   Entry e;
   EXPECT_FALSE(parseLine("", e));
-  EXPECT_FALSE(parseLine("2026-10-18T14:05\t12", e));          // cut off mid-append
+  EXPECT_FALSE(parseLine("2026-10-18T14:05\t12", e));           // cut off mid-append
   EXPECT_FALSE(parseLine("2026-10-18T14:05\t12\t3\t1", e));     // no title field
   EXPECT_FALSE(parseLine("2026-13-18T14:05\t12\t3\t1\tx", e));  // month 13
   EXPECT_FALSE(parseLine("2026-10-18 14:05\t12\t3\t1\tx", e));
@@ -68,15 +68,15 @@ TEST(ReadingJournal, SummaryWindows) {
   Summary s;
   s.setToday(Civil{2026, 3, 2, 9, 0});
   const char text[] =
-      "2026-03-02T08:00\t600\t10\t0\ta\n"   // today
-      "2026-02-24T08:00\t60\t1\t1\tb\n"     // 6 days back: in the week (2026 not leap)
-      "2026-02-23T08:00\t120\t2\t0\tc\n"    // 7 days back: out of it
-      "2025-12-31T23:59\t300\t5\t1\td\n"    // last year
-      "-\t30\t1\t0\te\n"                    // undated: totals only
+      "2026-03-02T08:00\t600\t10\t0\ta\n"  // today
+      "2026-02-24T08:00\t60\t1\t1\tb\n"    // 6 days back: in the week (2026 not leap)
+      "2026-02-23T08:00\t120\t2\t0\tc\n"   // 7 days back: out of it
+      "2025-12-31T23:59\t300\t5\t1\td\n"   // last year
+      "-\t30\t1\t0\te\n"                   // undated: totals only
       "garbage line\n"
       "2026-03-02T09:00\t61\t1\t0\tf\n"
-      "2026-03-05T09:00\t60\t1\t0\tg\n"   // after today: a clock set wrong, no square
-      "2026-03-0";                          // partial tail, carried by the caller
+      "2026-03-05T09:00\t60\t1\t0\tg\n"  // after today: a clock set wrong, no square
+      "2026-03-0";                       // partial tail, carried by the caller
   const size_t carry = s.addText(text, sizeof(text) - 1);
   EXPECT_EQ(9u, carry);
   EXPECT_EQ(7u, s.all.sessions);
