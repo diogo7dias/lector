@@ -86,6 +86,16 @@ jobs:
       - name: Build CrossPoint
         run: pio run -e gh_release -e x4pro
 
+      # Every image that leaves this workflow carries lector's release signature: a
+      # device on lector refuses an online update without it (src/network/FirmwareSignature.h).
+      # A missing secret fails the release rather than shipping updates nobody can install.
+      - name: Sign firmware
+        env:
+          FIRMWARE_SIGNING_KEY: ${{ secrets.FIRMWARE_SIGNING_KEY }}
+        run: |
+          uv pip install --system cryptography
+          python3 scripts/sign_firmware.py .pio/build/gh_release/firmware.bin .pio/build/x4pro/firmware.bin
+
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:

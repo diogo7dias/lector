@@ -195,6 +195,8 @@ const char* OtaUpdateActivity::detailFor(const OtaUpdater::OtaUpdaterError error
       return tr(STR_FIRMWARE_WRONG_DEVICE);
     case OtaUpdater::INVALID_IMAGE_ERROR:
       return tr(STR_INVALID_FIRMWARE);
+    case OtaUpdater::UNSIGNED_ERROR:
+      return tr(STR_FIRMWARE_NOT_SIGNED);
     case OtaUpdater::OOM_ERROR:
       return tr(STR_UPDATE_LOW_MEMORY);
     case OtaUpdater::HTTP_ERROR:
