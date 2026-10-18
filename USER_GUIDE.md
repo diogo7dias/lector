@@ -175,9 +175,10 @@ you reached the end, and the title. Sittings under a minute are not kept. A page
 for more than five minutes stops the clock for that page, so a book left on the table does
 not count as reading.
 
-**Stats** on Home shows the last 7 days, this year and all time, the books finished, and this
-month as a calendar with the days you read filled in and today outlined. The sleep screen
-also shows the last 7 days in its top-left corner, on wallpapers and covers alike.
+**Stats** on Home leads with this month as a calendar: each day fills from the bottom by how
+long you read that day, the longest day full, and today has a thick outline. Under it are the
+last 7 days, this year, all time and the books finished. The sleep screen shows the last 7
+days in a thin band along its foot, on wallpapers and covers alike.
 
 Days need the clock. The X3 and X4 Pro keep one; the X4 has no clock chip, so a Wi-Fi
 connection sets its clock until it next powers off. With the clock set, a sitting is dated. Without it the sitting
