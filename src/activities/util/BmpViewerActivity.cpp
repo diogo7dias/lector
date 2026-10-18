@@ -216,12 +216,14 @@ void BmpViewerActivity::doSetSleepCover() {
   bool success = filePath == destination;
   if (!success) {
     HalFile inFile, outFile;
-    // Heap, off the loop task's stack; taken before the destination is truncated.
+    // Heap, off the loop task's stack.
     constexpr size_t COPY_BYTES = 2048;
     const auto bufOwner = makeUniqueNoThrow<char[]>(COPY_BYTES);
     char* const buffer = bufOwner.get();
+    // Copied under .part and renamed when whole: a failed or interrupted copy keeps the old cover.
+    const std::string partPath = FsHelpers::partialPathFor(destination);
     if (buffer && Storage.openFileForRead("BMP", filePath, inFile)) {
-      if (Storage.openFileForWrite("BMP", destination, outFile)) {
+      if (Storage.openFileForWrite("BMP", partPath, outFile)) {
         int bytesRead;
         success = true;
         while ((bytesRead = inFile.read(buffer, COPY_BYTES)) > 0) {
@@ -232,6 +234,11 @@ void BmpViewerActivity::doSetSleepCover() {
         }
         if (bytesRead < 0) success = false;
         outFile.close();
+        // FAT rename never overwrites, so the old cover goes only once the new one is whole.
+        if (success)
+          success = (!Storage.exists(destination) || Storage.remove(destination)) &&
+                    Storage.rename(partPath.c_str(), destination);
+        if (!success) Storage.remove(partPath.c_str());
       }
       inFile.close();
     }
