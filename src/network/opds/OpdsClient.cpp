@@ -85,6 +85,8 @@ ClientStatus OpdsClient::fetchFeed(const OpdsServer& server, const std::string& 
       return outResult.entries.empty() ? ClientStatus::EMPTY : ClientStatus::OK;
     }
 
+    if (fetchError == HttpDownloader::CERT_UNTRUSTED) return ClientStatus::CERT_UNTRUSTED;
+
     if (fetchStatus == 401) {
       LOG_ERR("OPDSCLI", "Server refused credentials (401)");
       return ClientStatus::BAD_CREDENTIALS;
