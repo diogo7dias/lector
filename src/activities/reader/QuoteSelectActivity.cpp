@@ -248,10 +248,13 @@ bool QuoteSelectActivity::saveQuoteToFile(const std::string& quote, const std::s
 
   size_t existingSize = 0;
   if (Storage.exists(path.c_str())) {
+    // Unreadable is not empty: the rewrite below would replace every saved quote with this one.
     HalFile probe;
-    if (Storage.openFileForRead("QUOTE", path, probe)) {
-      existingSize = probe.size();
+    if (!Storage.openFileForRead("QUOTE", path, probe)) {
+      LOG_ERR("QUOTE", "Cannot read existing quotes file, not saving");
+      return false;
     }
+    existingSize = probe.size();
   }
   if (!memory::canGrowWithinLimit(existingSize, entry.size(), quote_text::MAX_QUOTES_FILE_BYTES)) {
     LOG_ERR("QUOTE", "Quotes file full: %u + %u > %u", static_cast<unsigned>(existingSize),
@@ -268,19 +271,32 @@ bool QuoteSelectActivity::saveQuoteToFile(const std::string& quote, const std::s
     }
     if (existingSize > 0) {
       HalFile in;
-      if (Storage.openFileForRead("QUOTE", path, in)) {
-        uint8_t buffer[512];
-        int n;
-        while ((n = in.read(buffer, sizeof(buffer))) > 0) {
-          if (out.write(buffer, static_cast<size_t>(n)) != static_cast<size_t>(n)) {
-            LOG_ERR("QUOTE", "Temp quotes write failed (copy)");
-            in.close();
-            out.close();
-            Storage.remove(tmpPath.c_str());
-            return false;
-          }
+      if (!Storage.openFileForRead("QUOTE", path, in)) {
+        LOG_ERR("QUOTE", "Cannot reopen existing quotes file for copy");
+        out.close();
+        Storage.remove(tmpPath.c_str());
+        return false;
+      }
+      uint8_t buffer[512];
+      size_t copied = 0;
+      int n;
+      while ((n = in.read(buffer, sizeof(buffer))) > 0) {
+        if (out.write(buffer, static_cast<size_t>(n)) != static_cast<size_t>(n)) {
+          LOG_ERR("QUOTE", "Temp quotes write failed (copy)");
+          in.close();
+          out.close();
+          Storage.remove(tmpPath.c_str());
+          return false;
         }
-        in.close();
+        copied += static_cast<size_t>(n);
+      }
+      in.close();
+      if (copied != existingSize) {
+        LOG_ERR("QUOTE", "Short read copying quotes: %u of %u", static_cast<unsigned>(copied),
+                static_cast<unsigned>(existingSize));
+        out.close();
+        Storage.remove(tmpPath.c_str());
+        return false;
       }
     }
     if (out.write(entry.data(), entry.size()) != entry.size()) {
