@@ -343,6 +343,7 @@ class EpubReaderActivity final : public Activity {
   void openFootnotes();
   void openPercentSelection();
   // Whole-book reading percent (util/ReadingPercent.h) for every place that shows one.
+  int cachedTotalPages() const;
   int bookPercent() const;
   void openParagraphEntry();
   void openBookmarks();

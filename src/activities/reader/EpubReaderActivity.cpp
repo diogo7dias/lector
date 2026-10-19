@@ -366,8 +366,10 @@ void EpubReaderActivity::onExit() {
 }
 
 void EpubReaderActivity::openReaderMenu() {
-  const int currentPage = section ? section->currentPage + 1 : 0;
-  const int totalPages = section ? section->estimatedTotalPages() : 0;
+  // Child screens (chapter list, settings) release the section; until the next render
+  // rebuilds it, the menu shows the cached position, the same one bookPercent() uses.
+  const int currentPage = (section ? section->currentPage : nextPageNumber) + 1;
+  const int totalPages = section ? section->estimatedTotalPages() : cachedTotalPages();
   const int bookProgressPercent = bookPercent();
   // Resolve the current chapter name for the menu header, falling back to "Unnamed"
   // when the book has no TOC entry for this spine index.
@@ -1339,12 +1341,18 @@ void EpubReaderActivity::buildChapterMarks() {
   chapterMarkCount_ = count > 0 ? count : 0;
 }
 
+// The cached count describes cachedSpineIndex; after a chapter jump it is the old
+// chapter's, so it reads as unknown (0) until the new section is built.
+int EpubReaderActivity::cachedTotalPages() const {
+  return cachedSpineIndex == currentSpineIndex ? cachedChapterTotalPageCount : 0;
+}
+
 int EpubReaderActivity::bookPercent() const {
   if (!epub) return 0;
   // The whole-book page count is unknown, so the chapter's page share is weighted by its
   // bytes. estimatedTotalPages(), not the live pageCount: mid-build that is a watermark.
   const int page = section ? section->currentPage : nextPageNumber;
-  const int total = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
+  const int total = section ? section->estimatedTotalPages() : cachedTotalPages();
   return reading_percent::toPercent(
       epub->calculateProgress(currentSpineIndex, reading_percent::pageFraction(page, total)));
 }
