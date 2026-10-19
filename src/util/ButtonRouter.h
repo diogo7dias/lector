@@ -34,14 +34,24 @@ struct Native {
   uint8_t hold[2] = {LP_MENU_DISABLED, LP_MENU_DISABLED};
 };
 
-// The two side keys page, held as well as clicked (they repeat while held); the
-// capacitive Home key goes home; the power button sleeps when held and does nothing
-// of its own when clicked.
-constexpr Native NATIVE_SIDE_KEY{{LP_MENU_PAGE_PREV, LP_MENU_PAGE_NEXT}, {LP_MENU_PAGE_PREV, LP_MENU_PAGE_NEXT}};
+// Each side key pages one way, held as well as clicked (they repeat while held): the
+// other way is a remap and must be dispatched, or replaying this key's edge turns the
+// page backwards. The capacitive Home key goes home; the power button sleeps when held
+// and does nothing of its own when clicked.
+constexpr Native NATIVE_LEFT_KEY{{LP_MENU_PAGE_PREV, LP_MENU_DISABLED}, {LP_MENU_PAGE_PREV, LP_MENU_DISABLED}};
+constexpr Native NATIVE_RIGHT_KEY{{LP_MENU_PAGE_NEXT, LP_MENU_DISABLED}, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED}};
 constexpr Native NATIVE_HOME_KEY{{bound_action::LP_MENU_GO_HOME, LP_MENU_DISABLED},
                                  {LP_MENU_DISABLED, LP_MENU_DISABLED}};
 constexpr Native NATIVE_POWER_KEY{{LP_MENU_DISABLED, LP_MENU_DISABLED},
                                   {bound_action::LP_MENU_SLEEP, LP_MENU_DISABLED}};
+
+// What `key` already does. In a book, Side button layout Next/Prev makes the left key page
+// forward and the right key back, so their natives trade places with it.
+constexpr const Native& nativeFor(const int key, const bool sidesSwapped) {
+  if (key == 0) return sidesSwapped ? NATIVE_RIGHT_KEY : NATIVE_LEFT_KEY;
+  if (key == 1) return sidesSwapped ? NATIVE_LEFT_KEY : NATIVE_RIGHT_KEY;
+  return key == 2 ? NATIVE_HOME_KEY : NATIVE_POWER_KEY;
+}
 
 // The three bindings of one key, in gesture order.
 struct Binding {
@@ -68,7 +78,10 @@ class Router {
   // leaving it): the same key can carry a double in one context and not the other. Any
   // gesture still pending on that key is dropped, so a click pressed on the page cannot
   // fire into the screen that replaced it.
-  void configure(const int key, const Binding& binding, const Native& native = NATIVE_SIDE_KEY) {
+  void configure(const int key, const Binding& binding) {
+    configure(key, binding, nativeFor(key, /*sidesSwapped=*/false));
+  }
+  void configure(const int key, const Binding& binding, const Native& native) {
     if (!valid(key)) return;
     bindings_[key] = binding;
     natives_[key] = native;
@@ -180,7 +193,7 @@ class Router {
   }
 
   Binding bindings_[KEY_COUNT]{};
-  Native natives_[KEY_COUNT]{NATIVE_SIDE_KEY, NATIVE_SIDE_KEY, NATIVE_HOME_KEY, NATIVE_POWER_KEY};
+  Native natives_[KEY_COUNT]{NATIVE_LEFT_KEY, NATIVE_RIGHT_KEY, NATIVE_HOME_KEY, NATIVE_POWER_KEY};
   button_gestures::Detector detectors_[KEY_COUNT]{};
 };
 
