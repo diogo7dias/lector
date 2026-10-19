@@ -24,6 +24,7 @@ enum class HomeMenuItem {
   FILE_BROWSER,
   OPDS_BROWSER,
   FILE_TRANSFER,
+  STATS,
   SETTINGS_MENU,
 };
 

@@ -1,6 +1,8 @@
 #include "SleepInfoOverlay.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -9,6 +11,7 @@
 #include "CrossPointSettings.h"
 #include "fontIds.h"
 #include "util/FavoriteImage.h"
+#include "util/ReadingJournalStore.h"
 
 namespace {
 
@@ -19,6 +22,17 @@ std::string g_sourcePath;
 // (fixed sleep file, jump-pick fallback), which hides the position badge.
 uint32_t g_position = 0;
 uint32_t g_total = 0;
+// The reading band's two values ("1h19", "127 pages"); empty means no band.
+char g_readingTime[16] = "";
+char g_readingPages[24] = "";
+// The sleep line needs one week; even a heavy week is a few KB of journal.
+constexpr size_t READING_TAIL_BYTES = 16 * 1024;
+constexpr int BAND_PADDING_Y = 4;
+constexpr int BAND_RULE = 2;
+
+int readingBandHeight(const GfxRenderer& renderer) {
+  return g_readingTime[0] ? renderer.getLineHeight(UI_10_FONT_ID) + 2 * BAND_PADDING_Y + BAND_RULE : 0;
+}
 
 enum class Corner { BottomLeft, BottomRight };
 
@@ -41,7 +55,8 @@ void drawLabel(const GfxRenderer& renderer, const std::string& text, const Corne
   const int boxWidth = std::min(textWidth + paddingX * 2, maxBoxWidth);
   const int boxHeight = textLineHeight + paddingY * 2;
   const int boxX = corner == Corner::BottomRight ? std::max(safeInset, screenWidth - safeInset - boxWidth) : safeInset;
-  const int boxY = std::max(safeInset, screenHeight - boxHeight - safeInset);
+  // Above the reading band, when there is one, rather than over it.
+  const int boxY = std::max(safeInset, screenHeight - readingBandHeight(renderer) - boxHeight - safeInset);
 
   // The black box must be drawn in EVERY pass: in the grayscale plane passes
   // fillRect(true) clears the plane bits over the box area, which is what stops
@@ -71,7 +86,54 @@ SleepInfoOverlayScope::~SleepInfoOverlayScope() {
   g_total = 0;
 }
 
+namespace {
+
+// A thin white band across the foot: "Last 7 days  1h19  127 pages" under a 2 px rule.
+void drawReadingBand(const GfxRenderer& renderer) {
+  const int bandH = readingBandHeight(renderer);
+  if (bandH == 0) return;
+  const int w = renderer.getScreenWidth();
+  const int y = renderer.getScreenHeight() - bandH;
+  // White in the BW pass; in the grayscale plane passes `true` clears the plane bits, so
+  // the wallpaper's grays cannot show through the band (see drawLabel). Rule and text
+  // go in the BW pass only, for the same reason the badges' do.
+  const bool bw = renderer.getRenderMode() == GfxRenderer::BW;
+  renderer.fillRect(0, y, w, bandH, !bw);
+  if (!bw) return;
+  renderer.fillRect(0, y, w, BAND_RULE, true);
+
+  constexpr int gap = 18;
+  const char* label = tr(STR_STATS_LAST_7_DAYS);
+  const int labelW = renderer.getTextWidth(UI_10_FONT_ID, label, EpdFontFamily::BOLD);
+  const int timeW = renderer.getTextWidth(UI_10_FONT_ID, g_readingTime, EpdFontFamily::BOLD);
+  const int pagesW = renderer.getTextWidth(UI_10_FONT_ID, g_readingPages);
+  int x = std::max(0, (w - labelW - timeW - pagesW - 2 * gap) / 2);
+  const int ty = y + BAND_RULE + BAND_PADDING_Y;
+  renderer.drawText(UI_10_FONT_ID, x, ty, label, true, EpdFontFamily::BOLD);
+  x += labelW + gap;
+  renderer.drawText(UI_10_FONT_ID, x, ty, g_readingTime, true, EpdFontFamily::BOLD);
+  x += timeW + gap;
+  renderer.drawText(UI_10_FONT_ID, x, ty, g_readingPages, true);
+}
+
+}  // namespace
+
+void prepareSleepReadingLine() {
+  clearSleepReadingLine();
+  reading_journal::Summary summary;
+  if (!reading_journal::summarize(summary, READING_TAIL_BYTES) || summary.week.sessions == 0) return;
+  reading_journal::formatDuration(g_readingTime, sizeof(g_readingTime), summary.week.seconds);
+  snprintf(g_readingPages, sizeof(g_readingPages), tr(STR_STATS_PAGES), static_cast<unsigned long>(summary.week.pages));
+  LOG_DBG("SLP", "Reading band: %s, %s", g_readingTime, g_readingPages);
+}
+
+void clearSleepReadingLine() {
+  g_readingTime[0] = '\0';
+  g_readingPages[0] = '\0';
+}
+
 void drawSleepInfoOverlay(GfxRenderer& renderer) {
+  drawReadingBand(renderer);
   if (g_sourcePath.empty()) return;
 
   if (SETTINGS.showSleepImageFilename) {

@@ -20,6 +20,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "StatsActivity.h"
 #include "activities/network/NearbyFileTransferActivity.h"
 #include "components/BusyBanner.h"
 #include "components/UITheme.h"
@@ -29,7 +30,7 @@
 #include "util/DeferredFavorite.h"
 
 int HomeActivity::menuRowCount() const {
-  int count = 3;  // File Browser, File transfer, Settings
+  int count = 4;  // File Browser, File transfer, Stats, Settings
   if (hasOpdsServers) {
     count++;
   }
@@ -134,6 +135,9 @@ void HomeActivity::loop() {
       case HomeMenuItem::FILE_TRANSFER:
         onFileTransferOpen();
         break;
+      case HomeMenuItem::STATS:
+        onStatsOpen();
+        break;
       case HomeMenuItem::SETTINGS_MENU:
         onSettingsOpen();
         break;
@@ -233,8 +237,9 @@ void HomeActivity::render(RenderLock&&) {
   // no per-book cover generation, so the home stays fast. A menu selection passes -1
   // so no book row is highlighted.
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_NEARBY_SYNC), tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Transfer, Settings};
+  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_NEARBY_SYNC), tr(STR_STATS),
+                                        tr(STR_SETTINGS_TITLE)};
+  std::vector<UIIcon> menuIcons = {Folder, Transfer, Book, Settings};
 
   if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 1, tr(STR_OPDS_BROWSER));
@@ -314,6 +319,11 @@ void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToR
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
+
+// A child of Home rather than a replacement, so Back lands on the Stats row again.
+void HomeActivity::onStatsOpen() {
+  startActivityForResult(std::make_unique<StatsActivity>(renderer, mappedInput), [](const ActivityResult&) {});
+}
 
 void HomeActivity::onFileTransferOpen() {
   activityManager.replaceActivity(

@@ -10,6 +10,7 @@
 #include "SimpleReaderShortcut.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
+#include "util/ReadingJournal.h"
 
 class TxtReaderActivity final : public Activity {
   std::unique_ptr<Txt> txt;
@@ -47,6 +48,7 @@ class TxtReaderActivity final : public Activity {
   // removed in onExit, after the Txt handle is released, the same ordering the EPUB
   // reader uses for its move-on-exit filing.
   bool pendingDeleteBook = false;
+  reading_journal::Session journal;
 
   void openSettingsPopup();
   void openFontPopup();

@@ -17,12 +17,14 @@
 #include "ReaderUtils.h"
 #include "SimpleReaderShortcut.h"
 #include "activities/Activity.h"
+#include "util/ReadingJournal.h"
 
 class XtcReaderActivity final : public Activity {
   std::unique_ptr<Xtc> xtc;
 
   uint32_t currentPage = 0;
   int pagesUntilFullRefresh = 0;
+  reading_journal::Session journal;
   // Next-book suggestion menu for the End-of-Book screen
   EndOfBookOptions endOfBookOptions;
 

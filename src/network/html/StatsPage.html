@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CrossPoint Reader - Stats</title>
+    <style>
+      /* Same monochrome look as the other device pages. */
+      :root {
+        --ink: #000;
+        --paper: #fff;
+        --muted: #555;
+        color-scheme: light;
+      }
+      * { box-sizing: border-box; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background: var(--paper);
+        color: var(--ink);
+        line-height: 1.4;
+      }
+      h1 {
+        margin: 0 0 15px;
+        padding: 12px 16px;
+        background: var(--ink);
+        color: var(--paper);
+        font-size: 1.3em;
+        text-align: center;
+        letter-spacing: 0.05em;
+      }
+      h2 {
+        margin: 0 0 12px;
+        padding-bottom: 6px;
+        font-size: 1.05em;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border-bottom: 2px solid var(--ink);
+      }
+      .card { border: 2px solid var(--ink); padding: 20px; margin: 15px 0; }
+      .nav-links { margin: 15px 0; display: flex; gap: 8px; flex-wrap: wrap; }
+      .nav-links a {
+        padding: 9px 16px;
+        border: 2px solid var(--ink);
+        color: var(--ink);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .nav-links a.active, .nav-links a:not(.active):hover { background: var(--ink); color: var(--paper); }
+      .totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+      .total { border: 2px solid var(--ink); padding: 10px; }
+      .total b { display: block; font-size: 1.4em; }
+      .total span { color: var(--muted); font-size: 0.9em; }
+      .year { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 12px); gap: 2px; overflow-x: auto; }
+      .day { width: 12px; height: 12px; border: 1px solid var(--ink); }
+      .note { color: var(--muted); font-size: 0.9em; }
+      table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+      td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--ink); }
+      td.n, th.n { text-align: right; white-space: nowrap; }
+      h1, h2, .nav-links a { filter: grayscale(1); }
+      @media (max-width: 600px) {
+        body { padding: 10px; font-size: 14px; }
+        .card { padding: 12px; margin: 10px 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>📚 CrossPoint Reader</h1>
+
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/files">File Manager</a>
+      <a href="/settings">Settings</a>
+      <a href="/fonts">Fonts</a>
+      <a href="/stats" class="active">Stats</a>
+    </div>
+
+    <div class="card">
+      <h2>Reading</h2>
+      <div class="totals" id="totals"><p class="note">Loading...</p></div>
+    </div>
+
+    <div class="card">
+      <h2>Last 12 months</h2>
+      <div class="year" id="year"></div>
+      <p class="note">Darker is more time read that day. Sessions read before the clock was set count in the totals only.</p>
+    </div>
+
+    <div class="card">
+      <h2>Recent sessions</h2>
+      <table id="sessions"></table>
+      <p class="note"><a href="/download?path=/stats/journal.txt">Download journal.txt</a> (one tab-separated line per session).</p>
+    </div>
+
+  <script>
+    // Line format: see src/util/ReadingJournal.h.
+    function parse(text) {
+      const out = [];
+      for (const line of text.split('\n')) {
+        const f = line.replace(/\r$/, '').split('\t');
+        if (f.length < 5 || !/^\d+$/.test(f[1]) || !/^\d+$/.test(f[2]) || !/^[01]$/.test(f[3])) continue;
+        const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(f[0]);
+        if (!m && f[0] !== '-') continue;
+        out.push({
+          date: m ? `${m[1]}-${m[2]}-${m[3]}` : null,
+          time: m ? `${m[4]}:${m[5]}` : '',
+          seconds: +f[1], pages: +f[2], done: f[3] === '1',
+          title: f.slice(4).join('\t'),
+        });
+      }
+      return out;
+    }
+
+    function duration(seconds) {
+      const m = Math.floor(seconds / 60);
+      return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`;
+    }
+
+    const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    function sum(list) {
+      return list.reduce((t, e) => ({ s: t.s + e.seconds, p: t.p + e.pages, f: t.f + (e.done ? 1 : 0) }), { s: 0, p: 0, f: 0 });
+    }
+
+    function render(entries) {
+      const today = new Date();
+      const weekStart = new Date(today); weekStart.setDate(today.getDate() - 6);
+      const week = sum(entries.filter((e) => e.date && e.date >= iso(weekStart) && e.date <= iso(today)));
+      const year = sum(entries.filter((e) => e.date && e.date.startsWith(String(today.getFullYear()))));
+      const all = sum(entries);
+
+      const box = (label, t, extra) => `<div class="total"><b>${duration(t.s)}</b>${t.p} pages${extra}<br><span>${label}</span></div>`;
+      document.getElementById('totals').innerHTML =
+        box('Last 7 days', week, '') +
+        box('This year', year, `, ${year.f} finished`) +
+        box('All time', all, `, ${all.f} finished`);
+
+      const byDay = {};
+      for (const e of entries) if (e.date) byDay[e.date] = (byDay[e.date] || 0) + e.seconds;
+      const max = Math.max(1, ...Object.values(byDay));
+      const start = new Date(today); start.setDate(today.getDate() - 364);
+      start.setDate(start.getDate() - ((start.getDay() + 6) % 7));  // back to a Monday
+      const cells = [];
+      for (const d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
+        const s = byDay[iso(d)] || 0;
+        const shade = s ? 0.25 + 0.75 * (s / max) : 0;
+        cells.push(`<div class="day" title="${iso(d)}: ${duration(s)}" style="background: rgba(0,0,0,${shade.toFixed(2)})"></div>`);
+      }
+      document.getElementById('year').innerHTML = cells.join('');
+
+      const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+      const rows = entries.slice(-30).reverse().map((e) =>
+        `<tr><td>${e.date ? `${e.date} ${e.time}` : '—'}</td><td>${esc(e.title)}${e.done ? ' ✓' : ''}</td>` +
+        `<td class="n">${duration(e.seconds)}</td><td class="n">${e.pages} p</td></tr>`);
+      document.getElementById('sessions').innerHTML = rows.length
+        ? '<tr><th>When</th><th>Book</th><th class="n">Time</th><th class="n">Pages</th></tr>' + rows.join('')
+        : '<tr><td class="note">No sessions yet.</td></tr>';
+    }
+
+    fetch('/download?path=/stats/journal.txt')
+      .then((r) => (r.ok ? r.text() : ''))
+      .then((t) => render(parse(t)))
+      .catch(() => render([]));
+  </script>
+  </body>
+</html>
