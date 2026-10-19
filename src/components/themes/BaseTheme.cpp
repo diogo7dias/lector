@@ -944,6 +944,9 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
     const char* title = (chapterSrc && data.hasChapters) ? data.chapterTitle.c_str() : data.bookTitle.c_str();
     if (title[0] != '\0') set(statusbar::Title, title);
   }
+  // Book title as its own item, so the Title can follow the chapter elsewhere. Unlike the
+  // Title it never wraps or reflows: it keeps one line and is clipped after the reflow.
+  if (!data.bookTitle.empty()) set(statusbar::BookTitle, data.bookTitle.c_str());
   // Page in chapter ("3/40" or "8 left")
   if (sb.pageFormat == CrossPointSettings::SB_PAGE_LEFT) {
     const int remaining = data.chapterPages - data.chapterPage;
@@ -1005,7 +1008,8 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
     if (chapterOnly && !data.hasChapters) return;  // chapter items hide on chapterless books
     const int idx = static_cast<int>(anchor) - 1;  // TL(1)..BR(6) -> 0..5
     if (idx < 0 || idx >= statusbar::kAnchorCount) return;
-    L.buckets[idx][L.counts[idx]++] = Seg{text[item], width[item], item == statusbar::Battery};
+    L.buckets[idx][L.counts[idx]++] =
+        Seg{text[item], width[item], item == statusbar::Battery, item == statusbar::BookTitle};
     if (item == statusbar::Title) {
       titleAnchorIdx = idx;  // reflow pivots on where the greedy title landed
       titleSegIdx = L.counts[idx] - 1;
@@ -1024,6 +1028,21 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
     const int destBase = (titleAnchorIdx < 3) ? 3 : 0;
     const bool destReserved = L.counts[destBase] > 0 || L.counts[destBase + 1] > 0 || L.counts[destBase + 2] > 0;
     statusbar::reflowTitle(L, titleAnchorIdx, titleSegIdx, /*titleTruncate=*/false, bandWidth, sepW, destReserved);
+  }
+
+  // Clip the book title to the room its anchor has left, now that the reflow has settled
+  // where everything sits. Lives until the draw below reads it.
+  std::string clippedBookTitle;
+  for (int a = 0; a < statusbar::kAnchorCount; a++) {
+    for (int i = 0; i < L.counts[a]; i++) {
+      Seg& s = L.buckets[a][i];
+      if (!s.clip) continue;
+      const int over = statusbar::clusterWidth(L, a, sepW) - statusbar::clipRoom(L, a, bandWidth, sepW);
+      if (over <= 0) continue;
+      clippedBookTitle = renderer.truncatedText(f, s.text, s.width - over);
+      s.text = clippedBookTitle.c_str();
+      s.width = renderer.getTextWidth(f, s.text);
+    }
   }
 
   auto clusterW = [&](int idx) { return statusbar::clusterWidth(L, idx, sepW); };

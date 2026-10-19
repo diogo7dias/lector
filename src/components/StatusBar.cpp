@@ -102,6 +102,21 @@ void bumpCluster(BarLayout& layout, int src, bool destBandReserved, int bandWidt
 
 }  // namespace
 
+int clipRoom(const BarLayout& layout, int anchor, int bandWidth, int sepW) {
+  const int base = anchor - anchor % 3;
+  const int col = anchor % 3;
+  if (col == 1) {
+    const int l = clusterWidth(layout, base, sepW);
+    const int r = clusterWidth(layout, base + 2, sepW);
+    const int side = (l > r ? l : r);
+    return side > 0 ? bandWidth - 2 * (side + sepW) : bandWidth;
+  }
+  const int centre = clusterWidth(layout, base + 1, sepW);
+  if (centre > 0) return (bandWidth - centre) / 2 - sepW;
+  const int far = clusterWidth(layout, base + 2 - col, sepW);
+  return far > 0 ? bandWidth - far - sepW : bandWidth;
+}
+
 void reflowTitle(BarLayout& layout, int titleAnchor, int titleSegIndex, bool titleTruncate, int bandWidth, int sepW,
                  bool destBandReserved) {
   if (titleAnchor < 0 || titleAnchor >= kAnchorCount) return;

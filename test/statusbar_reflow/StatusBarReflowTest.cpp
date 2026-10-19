@@ -261,3 +261,14 @@ TEST(ChapterMarks, TooManyChaptersDropsThemAll) {
   EXPECT_EQ(n, -1);
   EXPECT_EQ(statusbar::addChapterMark(marks, n, 999), -1);  // stays dropped
 }
+
+TEST(StatusBarReflow, ClipRoomStopsShortOfTheBandNeighbours) {
+  BarLayout l;
+  EXPECT_EQ(statusbar::clipRoom(l, TL, kBand, kSep), kBand);  // alone in its band
+  put(l, TR, 40);
+  EXPECT_EQ(statusbar::clipRoom(l, TL, kBand, kSep), kBand - 40 - kSep);
+  put(l, TC, 100);
+  EXPECT_EQ(statusbar::clipRoom(l, TL, kBand, kSep), (kBand - 100) / 2 - kSep);
+  EXPECT_EQ(statusbar::clipRoom(l, TC, kBand, kSep), kBand - 2 * (40 + kSep));
+  EXPECT_EQ(statusbar::clipRoom(l, BC, kBand, kSep), kBand);  // the other band is free
+}
