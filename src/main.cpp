@@ -147,6 +147,7 @@ RTC_NOINIT_ATTR uint32_t silentRebootPayload;
 constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
+constexpr uint32_t SILENT_REBOOT_TARGET_SETTINGS = 2;
 constexpr uint32_t SILENT_REBOOT_LIGHT_ON = 1U << 0;
 
 // Breadcrumbs for the heap-defrag reboot, in RTC memory because the card is one of the
@@ -251,7 +252,7 @@ static void silentRestartTo(const uint32_t target) {
   armRestartRescue();
   markRestartStage(STAGE_ENTERED);
   armSilentReboot(target);
-  LOG_DBG("MAIN", "Silent restart (target=%s)", target == SILENT_REBOOT_TARGET_READER ? "reader" : "home");
+  LOG_DBG("MAIN", "Silent restart (target=%lu)", static_cast<unsigned long>(target));
   // E-ink retains the previous frame until Home's first paint lands (~2-3s).
   // Without an overlay, users don't see the reboot and fire input through to
   // Home. Select on the default selectorIndex=0 then opens the most-recent
@@ -269,11 +270,13 @@ void silentRestart() { silentRestartTo(SILENT_REBOOT_TARGET_HOME); }
 
 void silentRestartToReader() { silentRestartTo(SILENT_REBOOT_TARGET_READER); }
 
-void teardownWifiAndRestart() {
+void silentRestartToSettings() { silentRestartTo(SILENT_REBOOT_TARGET_SETTINGS); }
+
+void teardownWifiAndRestart(void (*restart)()) {
   if (WiFi.getMode() == WIFI_MODE_NULL) return;  // WiFi never came up: nothing to defrag
   WiFi.disconnect(false);
   delay(30);
-  silentRestart();
+  restart();
 }
 
 // Defined below setup()'s helpers.
@@ -574,7 +577,7 @@ void setup() {
   // Bound the target range too — RTC_NOINIT memory is uninitialized on cold boot.
   const bool isSilentReboot = (silentRebootMagic == SILENT_REBOOT_MAGIC);
   const uint32_t snapshotTarget =
-      (isSilentReboot && silentRebootTarget <= SILENT_REBOOT_TARGET_READER) ? silentRebootTarget : 0;
+      (isSilentReboot && silentRebootTarget <= SILENT_REBOOT_TARGET_SETTINGS) ? silentRebootTarget : 0;
   const bool litBeforeSilentReboot = isSilentReboot && (silentRebootPayload & SILENT_REBOOT_LIGHT_ON) != 0;
   silentRebootMagic = 0;
   silentRebootTarget = 0;
@@ -904,6 +907,7 @@ void setup() {
   wakeInputs.panic = rebootedFromPanic;
   wakeInputs.silentReboot = resume == BootResume::Silent;
   wakeInputs.silentTargetIsReader = snapshotTarget == SILENT_REBOOT_TARGET_READER;
+  wakeInputs.silentTargetIsSettings = snapshotTarget == SILENT_REBOOT_TARGET_SETTINGS;
   wakeInputs.openEpubPathEmpty = APP_STATE.openEpubPath.empty();
   wakeInputs.lastSleepFromReader = APP_STATE.lastSleepFromReader;
   wakeInputs.backHeld = mappedInputManager.isPressed(MappedInputManager::Button::Back);
@@ -957,6 +961,9 @@ void setup() {
       break;
     case wake_sequence::Target::SilentReader:
       enterReader(APP_STATE.openEpubPath, /*withWakeFlags=*/false);
+      break;
+    case wake_sequence::Target::SilentSettings:
+      activityManager.goToSettings();
       break;
     case wake_sequence::Target::SilentHome:
       // target == home (or reader with no open book): land on home — don't fall

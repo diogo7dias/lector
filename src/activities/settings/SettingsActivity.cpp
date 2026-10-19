@@ -28,6 +28,7 @@
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
+#include "SilentRestart.h"
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
 #include "WifiCredentialStore.h"
@@ -684,7 +685,16 @@ void SettingsActivity::toggleCurrentSetting() {
         shareCredentials();
         break;
       case SettingAction::Network:
-        startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false), resultHandler);
+        startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false),
+                               [](const ActivityResult&) {
+                                 SETTINGS.saveToFile();
+                                 // Every other WiFi screen hands the radio to a session whose onExit()
+                                 // tears it down. This one only saves credentials, yet the scan alone
+                                 // brings the driver up, so release its heap here. Runs from the loop
+                                 // task with no lock held; the restart popup paints to the panel.
+                                 RenderLock lock;
+                                 teardownWifiAndRestart(silentRestartToSettings);
+                               });
         break;
       case SettingAction::ShuffleWallpapers: {
         // Inline, no sub-activity: the reshuffle is a reseed of the rotation
