@@ -5,6 +5,7 @@
 #include <ObfuscationUtils.h>
 #include <SecureHttpClient.h>
 #include <TrustedPins.h>
+#include <esp_heap_caps.h>
 
 #include <string>
 
@@ -56,10 +57,13 @@ void applyAuthHeaders(freeink::SecureHttpClient& http) {
   http.addHeader("Authorization", basicAuthHeader(KOREADER_STORE.getUsername(), KOREADER_STORE.getPassword()));
 }
 
-// True when free heap is too low to risk a TLS handshake.
+// True when free heap is too low to risk a TLS handshake. MALLOC_CAP_DEFAULT, not
+// ESP.getFreeHeap(): that counts internal RAM only, while on PSRAM boards wolfSSL's
+// record buffers (over the 4 KB SPIRAM_MALLOC_ALWAYSINTERNAL cut) land in PSRAM.
+// On boards without PSRAM the two read the same.
 bool insufficientHeap() {
-  const uint32_t freeHeap = ESP.getFreeHeap();
-  const uint32_t maxAllocHeap = ESP.getMaxAllocHeap();
+  const uint32_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
+  const uint32_t maxAllocHeap = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
   if (freeHeap < MIN_FREE_FOR_TLS || maxAllocHeap < MIN_BLOCK_FOR_TLS) {
     LOG_ERR("KOSync", "Insufficient heap for TLS handshake: %u bytes free (need %u), %u max alloc (need %u)", freeHeap,
             MIN_FREE_FOR_TLS, maxAllocHeap, MIN_BLOCK_FOR_TLS);
