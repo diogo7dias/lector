@@ -33,6 +33,10 @@ struct DeviceProfile {
   // anything the firmware did not draw itself, so it is the one controller HalDisplay
   // asks to re-drive every pixel on an ordinary page turn.
   bool controllerIsSsd1677 = false;
+  // False on a panel that refreshes from its OTP only (UC8279 LUT_VER 0x67): the SDK
+  // drops every grayscale plane there, so a face that wants tone must dither to 1 bit
+  // instead of sending planes that never draw.
+  bool panelHasGray = true;
   bool hasTouch = false;
 };
 
