@@ -94,8 +94,9 @@ void recordTransferFailure(const char* via, const char* reason, size_t received,
 // The file transfer screen closing: `cause` a fixed phrase, `rssi` the
 // station's signal (0 in AP mode), `adc1`/`adc2` the raw button-ladder readings
 // at that moment (-1 without a ladder). Back fires on the press edge, so a
-// real press is still held here; an idle reading means a press nobody made. Adds battery and heap. Flushes: the screen's
-// exit reboots, and the RAM buffer would not survive it.
+// real press is still held here; an idle reading means a press nobody made.
+// Adds battery and heap. Flushes: the screen's exit reboots, and the RAM
+// buffer would not survive it.
 void recordTransferExit(const char* cause, int rssi, int adc1, int adc2);
 
 // RAM only. Signed heap delta includes allocator overhead and concurrent heap
