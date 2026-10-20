@@ -298,7 +298,8 @@ bool crc32OfFilePrefix(const String& path, const size_t length, uint32_t& outCrc
 
 }  // namespace
 
-void CrossPointWebServer::abortWsUpload(const char* tag, const bool keepPartial) {
+void CrossPointWebServer::abortWsUpload(const char* tag, const bool keepPartial, const char* reason) {
+  diag::recordTransferFailure("ws", reason, wsUploadReceived, wsUploadSize, WiFi.RSSI());
   // Explicit close() required: file-scope global persists beyond function scope
   wsUploadFile.close();
   if (keepPartial) {
@@ -331,7 +332,7 @@ void CrossPointWebServer::stop() {
   // Close any in-progress WebSocket upload. The partial stays on the card: the
   // radio going away is exactly the interruption resume exists for.
   if (wsUploadInProgress) {
-    abortWsUpload("WEB", true);
+    abortWsUpload("WEB", true, "server stopped");
   }
 
   // Stop WebSocket server
@@ -395,6 +396,9 @@ void CrossPointWebServer::handleClient() {
   if (wsServer) {
     wsServer->loop();
   }
+  // A transfer that failed in the pump above reaches the card here, outside
+  // any render lock; a no-op when nothing was recorded.
+  diag::flushIfPending();
 
   // Respond to discovery broadcasts
   if (udpActive) {
@@ -1164,6 +1168,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     }
     state.error = "Upload aborted";
     LOG_DBG("WEB", "Upload aborted");
+    diag::recordTransferFailure("http", "client aborted", state.size, diag::kUnknownSize, WiFi.RSSI());
   }
 }
 
@@ -1172,6 +1177,10 @@ void CrossPointWebServer::handleUploadPost(UploadState& state) const {
     server->send(200, "text/plain", "File uploaded successfully: " + state.fileName);
   } else {
     const String error = state.error.isEmpty() ? "Unknown error during upload" : state.error;
+    // An abort was recorded where it happened; state.error may name the file.
+    if (state.error != "Upload aborted") {
+      diag::recordTransferFailure("http", "rejected or card error", state.size, diag::kUnknownSize, WiFi.RSSI());
+    }
     server->send(400, "text/plain", error);
   }
 }
@@ -1968,7 +1977,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
       // RESUME offer holds no open handle, and leaving it marked in progress
       // would refuse every upload after it.
       if (num == wsUploadClientNum && wsUploadInProgress) {
-        abortWsUpload("WS", true);
+        abortWsUpload("WS", true, "client disconnected");
       }
       break;
 
@@ -2132,7 +2141,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         const size_t requested = offsetValid ? (size_t)offsetToken.toInt() : 0;
         if (!offsetValid || (requested != 0 && requested != wsUploadResumeOffered)) {
           LOG_DBG("WS", "SEEK rejected: '%s'", offsetToken.c_str());
-          abortWsUpload("WS", true);
+          abortWsUpload("WS", true, "bad resume offset");
           wsServer->sendTXT(num, "ERROR:Invalid resume offset");
           break;
         }
@@ -2150,7 +2159,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             // wrong throughout. The upload ends instead, and the browser can
             // try again from a clean START.
             LOG_ERR("WS", "Could not resume %s at %u bytes", wsUploadPartialPath.c_str(), (unsigned)requested);
-            abortWsUpload("WS", false);
+            abortWsUpload("WS", false, "resume failed");
             wsServer->sendTXT(num, "ERROR:Failed to resume file");
             return;
           }
@@ -2160,7 +2169,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
           wsUploadFile.close();
           if (!Storage.openFileForWrite("WS", wsUploadPartialPath, wsUploadFile)) {
             wsServer->sendTXT(num, "ERROR:Failed to create file");
-            abortWsUpload("WS", false);
+            abortWsUpload("WS", false, "card open failed");
             return;
           }
           wsUploadReceived = 0;
@@ -2183,7 +2192,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
       if (length > remaining) {
         // Nothing of this frame was written, so what is on the card is still a
         // clean prefix and worth keeping.
-        abortWsUpload("WS", true);
+        abortWsUpload("WS", true, "overflow");
         wsServer->sendTXT(num, "ERROR:Upload overflow");
         return;
       }
@@ -2194,7 +2203,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
       if (written != length) {
         // A card with no room left is the usual cause, and keeping the partial
         // would leave it holding space that the retry needs.
-        abortWsUpload("WS", false);
+        abortWsUpload("WS", false, "card write failed");
         wsServer->sendTXT(num, "ERROR:Write failed - disk full?");
         return;
       }

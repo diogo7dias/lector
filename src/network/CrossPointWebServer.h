@@ -123,7 +123,7 @@ class CrossPointWebServer {
    * merely interrupted, so the next attempt resumes from it, and removed when
    * what is on the card cannot be trusted or the card had no room for it.
    */
-  void abortWsUpload(const char* tag, bool keepPartial);
+  void abortWsUpload(const char* tag, bool keepPartial, const char* reason);
 
   // File scanning
   void scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const;

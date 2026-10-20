@@ -276,6 +276,18 @@ void recordOtaFailure(const char* step, const char* error, const char* screenLin
   flush();
 }
 
+void recordTransferFailure(const char* via, const char* reason, const size_t received, const size_t expected,
+                           const int rssi) {
+  char fields[40];
+  snprintf(fields, sizeof(fields), "session=%04x via=%s", session(), via);
+  begin("file transfer failed", fields);
+  char total[16] = "unknown";
+  if (expected != kUnknownSize) snprintf(total, sizeof(total), "%u", static_cast<unsigned>(expected));
+  diaglog::note("  reason=%s received=%u of %s rssi=%d", reason, static_cast<unsigned>(received), total, rssi);
+  noteVitals();
+  diaglog::markPending();
+}
+
 void recordTlsGate(const char* step, const uint32_t freeHeap, const uint32_t largestBlock, const bool framebufferLent,
                    const uint32_t floorFree, const uint32_t floorBlock, const bool allowed, const uint32_t poolFree,
                    const uint32_t poolBlock) {
@@ -303,7 +315,7 @@ void recordHeapReclaim(const char* step, const uint32_t before, const uint32_t a
 void beginWifiCheckpoint() {
   char fields[32];
   snprintf(fields, sizeof(fields), "session=%04x", session());
-  diaglog::beginEntry("wifi connect", fields, now());
+  diaglog::beginEntry(diaglog::kWifiEntryKind, fields, now());
   diaglog::markPending();
 }
 
