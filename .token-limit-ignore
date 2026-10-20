@@ -4,3 +4,12 @@ lib/expat/
 lib/uzlib/
 lib/miniz/third_party/
 lib/picojpeg/
+
+# Mockups, generated tables, vendored code, patches, data
+mockups/*.html
+sim/qemu-patches/*.patch
+lib/MiniBidi/minibidi.c
+lib/Utf8/Utf8ComposeTable.h
+src/components/icons/listIcons.h
+lib/I18n/translations/*.yaml
+test/font_manifest_parser/published_fonts.json
