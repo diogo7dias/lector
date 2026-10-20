@@ -15,11 +15,10 @@ bytesPerRow = (width + 3) // 4, levels 0..3.
 
 Four things decide quality, and this used to get all four wrong:
 
-  1. The levels are not evenly spaced in light. The firmware's display-tuned ladder
-     (lib/GfxRenderer/BitmapHelpers.h, quantizeGray4 DisplayTuned) puts them at roughly
-     sRGB 15/30/80/210: both mid greys are dark and the panel's white is not the
-     image's 255. --levels panel is that ladder, nominal the old even spacing, and four
-     sRGB bytes take a measured one.
+  1. The levels may not be evenly spaced in light. --levels nominal (the default) is
+     the even 0/85/170/255 spacing. --levels panel borrows the BMP display-tuned
+     thresholds (lib/GfxRenderer/BitmapHelpers.h, quantizeGray4), 15/30/80/210, which
+     were never measured on glass. Four sRGB bytes take a measured ladder.
   2. Dithering must average in light along that ladder, or a patch prints darker than
      asked. FS and Atkinson run on the level axis, serpentine.
   3. Tone is perceptual: percentiles, gamma and contrast work on sRGB values, then fit
@@ -376,7 +375,7 @@ def main() -> int:
     parser.add_argument("--fit", choices=("cover", "contain"), default="cover")
     parser.add_argument("--rotate", type=int, default=0, help="degrees, counter-clockwise, before fitting")
     parser.add_argument("--dither", choices=DITHERS, default="fs")
-    parser.add_argument("--levels", default="panel", help="panel, nominal, or four sRGB bytes: 15,30,80,210")
+    parser.add_argument("--levels", default="nominal", help="panel, nominal, or four sRGB bytes: 15,30,80,210")
     parser.add_argument(
         "--auto-levels",
         action=argparse.BooleanOptionalAction,

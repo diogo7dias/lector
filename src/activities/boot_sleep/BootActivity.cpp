@@ -26,5 +26,6 @@ void BootActivity::onEnter() {
   // The same face the sleep screen falls back to: the name, centred, in the one UI face.
   const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   renderer.drawCenteredText(UI_10_FONT_ID, (pageHeight - lineHeight) / 2, tr(STR_LECTOR));
-  renderer.displayBuffer();
+  // HALF for the same reason as the wallpaper: a FAST pass leaves the retained frame under the name.
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }

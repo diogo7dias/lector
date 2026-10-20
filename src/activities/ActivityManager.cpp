@@ -224,7 +224,12 @@ void ActivityManager::loop() {
     // be flushed at all: the panel opened, reported present=1, and was never drawn.
     WakeTiming::reportInput();
     if (lightPanel.isActive()) {
-      if (lightPanel.handleInput(mappedInput, [this] { requestUpdate(/*immediate=*/true); })) return;
+      // close() clears isActive() before this runs: the page under the band gets a clean paint.
+      if (lightPanel.handleInput(mappedInput, [this] {
+            if (!lightPanel.isActive() && currentActivity) currentActivity->onRevealed();
+            requestUpdate(/*immediate=*/true);
+          }))
+        return;
     } else if (Frontlight.present() && mappedInput.wasMenuGesture()) {
       debug_trace::note("top-edge gesture: opening the light panel");
       lightPanel.show();
@@ -292,6 +297,7 @@ void ActivityManager::loop() {
         LOG_DBG("ACT", "Popped from activity stack, new size = %zu", stackActivities.size());
         // Resume bookkeeping runs before the result handler can render or navigate again.
         currentActivity->becameTopmost();
+        currentActivity->onRevealed();
         // Handle result if necessary
         if (currentActivity->resultHandler) {
           LOG_DBG("ACT", "Handling result for popped activity");
@@ -422,7 +428,7 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
   replaceActivity(std::make_unique<FullScreenMessageActivity>(renderer, mappedInput, std::move(message), style));
 }
 
-void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefresh) {
+void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
   if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
     const auto& activityName = currentActivity->name;
     if (activityName == activity_name::kFileBrowser) {
@@ -435,7 +441,7 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
   }
-  replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem, cleanInitialRefresh));
+  replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
 

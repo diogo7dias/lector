@@ -442,7 +442,9 @@ void HalDisplay::displayGrayBuffer(bool turnOffScreen, bool fullTone) {
   const unsigned char* lut = nullptr;
 #if FREEINK_DEVICE_X4PRO
   if (LECTOR_X4PRO_SPLIT_MIDS && fullTone && deviceProfile.controllerIsUc8279 && !deviceProfile.isX3) {
-    lut = (BoardConfig::ACTIVE.displayControllerVariant == 0x02 ? kSplitGray02 : kSplitGray68).data();
+    // 0x03 is the same AA pair as 0x02: match the SDK's bank choice (Uc8279X4Driver.cpp).
+    const uint8_t v = BoardConfig::ACTIVE.displayControllerVariant;
+    lut = (v == 0x02 || v == 0x03 ? kSplitGray02 : kSplitGray68).data();
   }
 #else
   (void)fullTone;

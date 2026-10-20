@@ -303,10 +303,8 @@ void HomeActivity::render(RenderLock&&) {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (cleanInitialRefresh) {
-    // Splashless wake with a custom sleep face and no saved frame: the panel still
-    // physically shows the sleep image, and a FAST_REFRESH would leave it under the menu.
-    // One HALF_REFRESH on this first paint clears it without a second refresh pass
-    // (upstream #3009). One-shot: later Home paints go back to the cheap path.
+    // The panel still shows the previous screen (a page, a sleep image, a list), and a
+    // FAST_REFRESH would leave it under the menu (upstream #3009). One-shot.
     cleanInitialRefresh = false;
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   } else {

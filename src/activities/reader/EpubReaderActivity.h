@@ -484,6 +484,7 @@ class EpubReaderActivity final : public Activity {
   // entry points the pop-up and the long-press bindings already use.
   bool runBoundAction(const uint8_t function) override { return runBoundMenuFunction(function); }
   bool appliesNightMode() const override { return true; }
+  void onRevealed() override { scheduleGhostCleanup(); }
   bool handleForcedRefresh() override {
     {
       RenderLock lock(*this);

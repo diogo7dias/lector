@@ -263,10 +263,8 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
                                     &CrossPointSettings::showSleepWallpaperPosition, "showSleepWallpaperPosition",
                                     StrId::STR_CAT_DISPLAY));
 
-    // "Never" (index 5) was dropped: an X3 left without a periodic cleanup ghosts badly,
-    // and upstream never offered it. A settings file still holding 5 clamps back to the
-    // 15-page default, because load() falls back to the field default for any index past
-    // the option list.
+    // "Never" (index 5) is back, matching upstream: the reader skips its own cadence, and
+    // DisplayRefreshPolicy still forces a clean after its consecutive-FAST cap.
     v.push_back(SettingInfo::Enum(StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
                                   {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
                                    StrId::STR_PAGES_30, StrId::STR_REFRESH_NEVER},
