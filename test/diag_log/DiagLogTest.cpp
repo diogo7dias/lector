@@ -147,6 +147,21 @@ TEST_F(DiagLogTest, ByteCapDropsOldestEntriesFirst) {
   EXPECT_EQ(kept.substr(0, 4), "=== ");
 }
 
+TEST_F(DiagLogTest, ByteCapDropsWifiCheckpointsBeforeAnyOtherEntry) {
+  // One successful connect writes ~30 one-kilobyte checkpoints. They must not
+  // push out the crash a user is sending the file for.
+  const std::string crash = entry("abnormal boot", kSep14, "  reset=PANIC\n");
+  std::string wifi;
+  for (int i = 0; i < 20; ++i) {
+    wifi += entry(("wifi connect n=" + std::to_string(i)).c_str(), kSep14, "  filler filler filler filler\n");
+  }
+  const std::string kept = retained(crash + wifi, kSep14, 300);
+  EXPECT_LE(kept.size(), 300u);
+  EXPECT_EQ(kept.substr(0, crash.size()), crash);
+  EXPECT_EQ(kept.find("n=0 "), std::string::npos);
+  EXPECT_NE(kept.find("n=19 "), std::string::npos);
+}
+
 TEST_F(DiagLogTest, LegacyEntriesWithoutUtcAreKeptUntilTheCapPushesThemOut) {
   // The 0.31.x file: "=== install attempt ===" blocks with no timestamp.
   const std::string legacy = "=== install attempt ===\n  firmware: lector 0.31.4\n  image: /firmware.bin size=0\n";

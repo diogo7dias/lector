@@ -190,6 +190,13 @@ bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
 bool HalGPIO::isDebouncePending() const { return inputMgr.isDebouncePending(); }
 
+void HalGPIO::readButtonAdc(int& raw1, int& raw2) {
+  InputManager::ButtonAdcSample group1, group2;
+  inputMgr.readButtonAdc(group1, group2);
+  raw1 = group1.raw;
+  raw2 = group2.raw;
+}
+
 bool HalGPIO::isPressed(uint8_t buttonIndex) const { return inputMgr.isPressed(buttonIndex); }
 
 bool HalGPIO::wasPressed(uint8_t buttonIndex) const { return inputMgr.wasPressed(buttonIndex); }
