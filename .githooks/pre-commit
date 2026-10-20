@@ -5,6 +5,9 @@
 # Install with ./bin/install-git-hooks. Skip once with `git commit --no-verify`.
 set -euo pipefail
 
+# Block staged files over 5,000 tokens (bytes / 4). See .githooks/check-token-limit.
+"$(dirname "$0")/check-token-limit"
+
 if command -v clang-format-21 >/dev/null 2>&1; then
   CF=clang-format-21
 elif command -v clang-format >/dev/null 2>&1; then
