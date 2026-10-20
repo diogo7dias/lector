@@ -257,6 +257,7 @@ std::string StatusBarSettingsActivity::rowValue(const int id) const {
       return sb.enabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case ITEM_OFF_BAR:
       return I18N.get(offBarNames[sb.offBar < CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT ? sb.offBar : 0]);
+    case ITEM_TITLE_TRUNCATE:
       return sb.titleTruncate ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case ITEM_PAGE_FORMAT:
       return sb.pageFormat == CrossPointSettings::SB_PAGE_LEFT ? tr(STR_PAGE_LEFT) : tr(STR_PAGE_FRACTION);
