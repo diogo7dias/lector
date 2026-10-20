@@ -166,6 +166,7 @@ void TxtReaderActivity::pageTurn(const bool forward) {
     if (currentPage == 0) return;
     journal.turn(millis(), false);
     currentPage--;
+    journal.finished = false;  // left the last page again: not finished after all
     requestUpdate();
     return;
   }
