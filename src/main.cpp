@@ -1283,19 +1283,10 @@ void loop() {
       bindingsApplied = true;
     }
 
-    // Two actions ActivityManager cannot run: only this file can put the device down, and
-    // only this file owns the renderer a forced refresh paints through.
+    // Sleep goes straight down from here: this file owns the device.
     const auto runBoundFunction = [&](const uint8_t function) {
       if (function == CrossPointSettings::LP_MENU_SLEEP) {
         enterDeepSleep();
-      }
-      if (function == CrossPointSettings::LP_MENU_FORCE_REFRESH) {
-        LOG_DBG("MAIN", "Manual screen refresh triggered");
-        if (!activityManager.handleForcedRefresh()) {
-          RenderLock lock;
-          renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-        }
-        return;
       }
       activityManager.runBoundAction(function);
     };

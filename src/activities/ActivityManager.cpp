@@ -492,6 +492,15 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
       if (!onSleep_) return false;
       onSleep_();
       return true;
+    case CrossPointSettings::LP_MENU_FORCE_REFRESH:
+      // Here rather than in main.cpp's key router, so the Confirm long-press and the reader
+      // menu hold reach it too.
+      LOG_DBG("ACT", "Manual screen refresh triggered");
+      if (!handleForcedRefresh()) {
+        RenderLock lock;
+        renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      }
+      return true;
     case CrossPointSettings::LP_MENU_ROTATE: {
       const uint8_t orientation = orientation_cycle::next(SETTINGS.orientation);
       // The reader owns this: it persists the setting and re-indexes the chapter at the
