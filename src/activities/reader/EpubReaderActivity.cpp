@@ -481,10 +481,9 @@ void EpubReaderActivity::openDictionaryWordSelect(const int anchorX, const int a
   auto page = section->loadPage(section->currentPage);
   if (!page) return;
 
-  // Word geometry must match render(): use the same per-book reader margins.
+  // Word geometry must match render(): the same margins and status bar bands.
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
-  ReaderUtils::readerMargins(renderer, prefs_, orientedMarginTop, orientedMarginRight, orientedMarginBottom,
-                             orientedMarginLeft);
+  pageMargins(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
 
   // The page was laid out in this book's font (per-book prefs), so the word boxes must be too.
   startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
@@ -496,10 +495,9 @@ void EpubReaderActivity::openDictionaryWordSelect(const int anchorX, const int a
 void EpubReaderActivity::openQuoteGrab() {
   if (!section) return;
 
-  // Word geometry must match render(): use the same per-book reader margins.
+  // Word geometry must match render(): the same margins and status bar bands.
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
-  ReaderUtils::readerMargins(renderer, prefs_, orientedMarginTop, orientedMarginRight, orientedMarginBottom,
-                             orientedMarginLeft);
+  pageMargins(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
 
   // Lay out the picker with this book's actual reader font (per-book prefs), so
   // the highlight boxes line up with the rendered glyphs.
@@ -2000,11 +1998,20 @@ void EpubReaderActivity::persistStatusBarEdit(const StatusBarBlock& edited) {
   // the screen keeps it. The bar is the reader's own preference, not this book's look:
   // it becomes the global bar, so the next book opens with it. A book following global
   // keeps following it and needs no sidecar; a book with its own look takes the bar too.
+  //
+  // Except the show/hide switch and the hidden-bar progress bar: those are this book's own,
+  // like the quick toggle that sets them (applyStatusBar). Copied to global, a bar hidden
+  // in one book would vanish from every book the moment any other row was touched here.
   const StatusBarBlock global = SETTINGS.statusBar();
-  if (std::memcmp(&global, &edited, sizeof(StatusBarBlock)) != 0) {
-    SETTINGS.setStatusBar(edited);
+  StatusBarBlock toGlobal = edited;
+  toGlobal.enabled = global.enabled;
+  toGlobal.offBar = global.offBar;
+  if (std::memcmp(&global, &toGlobal, sizeof(StatusBarBlock)) != 0) {
+    SETTINGS.setStatusBar(toGlobal);
     SETTINGS.saveToFile();
   }
+  // Changing either own field gives the book its sidecar, as the quick toggle does.
+  if (edited.enabled != prefs_.statusBarEnabled || edited.offBar != prefs_.sbOffBar) prefsCustom_ = true;
   if (!prefsCustom_) return;
   // Written on every change, not only when it differs from the book on open: a bar
   // changed and then put back must not leave the middle value on the card.
@@ -2021,8 +2028,8 @@ void EpubReaderActivity::applyStatusBarEdit() {
     return;
   }
   // Already on the card: persistStatusBarEdit() wrote it with the change that made it.
-  // prefsCustom_ stays as it was: the edit went to the global bar, which a book
-  // following global already reads.
+  // prefsCustom_ is as persistStatusBarEdit() left it: the edit went to the global bar,
+  // which a book following global already reads, unless the book's own switch changed.
   prefs_ = edited;
   // The bar's height and edges decide the reserved bands, so the viewport changed and
   // the chapter has to be laid out again — the same path any margin change takes.
@@ -2515,6 +2522,40 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   requestUpdate();
 }
 
+// Where the page sits on screen: the reading margins plus the status bar bands. render()
+// lays the page out inside these, and every overlay that hit-tests words on it (dictionary
+// pick, quote grab) must use the same, or a hold lands a line off.
+void EpubReaderActivity::pageMargins(int& top, int& right, int& bottom, int& left) {
+  // This book's own bar: everything below measures with the same prefs it lays out with.
+  const StatusBarBlock sb = statusBarOf(prefs_);
+
+  ReaderUtils::readerMargins(renderer, prefs_, top, right, bottom, left);
+
+  // Status bar (v2 per-item): reserve top and/or bottom bands. readerMargins
+  // already folded the reading margins into top/bottom; the band is
+  // ADDED on top of that (a real gap between the bar and the text), matching the
+  // additive left/right margins. Changing the band shifts the viewport, which
+  // re-paginates the section cache like any margin change.
+  // A greedy (truncate-off) title can wrap to several lines; reserve the extra band
+  // height in whichever edge holds the title so the reading text is pushed clear.
+  // Stacked titles (book above chapter) need a line each, whatever Truncate Title says.
+  int sbTitleExtraPx = 0;
+  bool sbTitleTop = false;
+  if (sb.textOn() && sb.titleSlot(true).anchor != CrossPointSettings::SB_ANCHOR_OFF) {
+    std::string chapterTitle;
+    const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+    if (tocIndex != -1) chapterTitle = epub->getTocItem(tocIndex).title;
+    if (chapterTitle.empty()) chapterTitle = tr(STR_UNNAMED);
+    const int lines = UITheme::getStatusBarV2TitleLines(sb, renderer, true, chapterTitle.c_str(),
+                                                        epub->getTitle().c_str(), &sbTitleTop);
+    sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
+  }
+  const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(sb, true, sbTitleTop ? sbTitleExtraPx : 0);
+  const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(sb, true, sbTitleTop ? 0 : sbTitleExtraPx);
+  top += sbTop;
+  bottom += sbBottom;
+}
+
 void EpubReaderActivity::render(RenderLock&& lock) {
   if (!epub) {
     return;
@@ -2617,37 +2658,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     return;
   }
 
-  // This book's own bar: everything below measures with the same prefs it lays out with.
-  const StatusBarBlock sb = statusBarOf(prefs_);
-
-  // Apply screen viewable areas and additional padding
+  // Apply screen viewable areas, reading margins and the status bar bands.
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
-  ReaderUtils::readerMargins(renderer, prefs_, orientedMarginTop, orientedMarginRight, orientedMarginBottom,
-                             orientedMarginLeft);
-
-  // Status bar (v2 per-item): reserve top and/or bottom bands. readerMargins
-  // already folded the reading margins into orientedMarginTop/Bottom; the band is
-  // ADDED on top of that (a real gap between the bar and the text), matching the
-  // additive left/right margins. Changing the band shifts the viewport, which
-  // re-paginates the section cache like any margin change.
-  // A greedy (truncate-off) title can wrap to several lines; reserve the extra band
-  // height in whichever edge holds the title so the reading text is pushed clear.
-  // Stacked titles (book above chapter) need a line each, whatever Truncate Title says.
-  int sbTitleExtraPx = 0;
-  bool sbTitleTop = false;
-  if (sb.textOn() && sb.titleSlot(true).anchor != CrossPointSettings::SB_ANCHOR_OFF) {
-    std::string chapterTitle;
-    const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
-    if (tocIndex != -1) chapterTitle = epub->getTocItem(tocIndex).title;
-    if (chapterTitle.empty()) chapterTitle = tr(STR_UNNAMED);
-    const int lines = UITheme::getStatusBarV2TitleLines(sb, renderer, true, chapterTitle.c_str(),
-                                                        epub->getTitle().c_str(), &sbTitleTop);
-    sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
-  }
-  const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(sb, true, sbTitleTop ? sbTitleExtraPx : 0);
-  const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(sb, true, sbTitleTop ? 0 : sbTitleExtraPx);
-  orientedMarginTop += sbTop;
-  orientedMarginBottom += sbBottom;
+  pageMargins(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
 
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
   const uint16_t viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;

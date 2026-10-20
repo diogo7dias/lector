@@ -453,14 +453,16 @@ struct StatusBarBlock {
     titleSource = 1;  // SB_TITLE_CHAPTER
   }
   // The bar has one title slot that wraps and that its neighbours reflow around. It holds
-  // the chapter title, with the book title on the line above when both share an anchor;
-  // otherwise a placed book title is a one-line item of its own (bookItem). A chapterless
+  // the chapter title, with the book title on the line above when both are on the same
+  // edge (top or bottom), at the chapter title's anchor: side by side, a wrapping chapter
+  // title would push the book title off the bar. On opposite edges a placed book title is
+  // a one-line item of its own (bookItem). A chapterless
   // book (TXT, flat XTC) has no chapter title: the slot then holds the book title, at
   // the Book Title anchor if that is placed, else at the Chapter Title anchor.
   struct TitleSlot {
     uint8_t anchor = 0;      // 0 = no title slot
     bool chapter = false;    // slot holds the chapter title (else the book title)
-    bool bookAbove = false;  // book title stacked on the line above the chapter title
+    bool bookAbove = false;  // book title stacked on the line above the chapter title (same edge)
     uint8_t bookItem = 0;    // anchor of the separate one-line book title, 0 = none
   };
   TitleSlot titleSlot(bool hasChapters) const {
@@ -468,7 +470,7 @@ struct StatusBarBlock {
     if (titlePos != 0 && hasChapters) {
       t.anchor = titlePos;
       t.chapter = true;
-      t.bookAbove = bookTitlePos == titlePos;
+      t.bookAbove = bookTitlePos != 0 && (bookTitlePos <= 3) == (titlePos <= 3);  // 1..3 top, 4..6 bottom
       if (!t.bookAbove) t.bookItem = bookTitlePos;
     } else {
       t.anchor = bookTitlePos != 0 ? bookTitlePos : titlePos;

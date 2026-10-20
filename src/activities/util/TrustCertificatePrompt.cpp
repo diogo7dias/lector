@@ -20,8 +20,15 @@ bool askToTrustRejectedCertificate(Activity& activity, GfxRenderer& renderer, Ma
   trusted_pins::formatFingerprint(rejection.sha, fingerprint, sizeof(fingerprint));
   const std::string body = std::string(fingerprint) + " (" + rejection.host + ")";
 
+  // A host already pinned is not a first meeting: its certificate changed since the user
+  // trusted it. A renewal and an interception look alike from here, so say so rather
+  // than ask the first-contact question that one tap answers.
+  uint8_t oldPin[trusted_pins::SHA256_SIZE];
+  const bool changed = trusted_pins::find(rejection.host, oldPin);
+
   activity.startActivityForResult(
-      std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_TRUST_CERT_PROMPT), body),
+      std::make_unique<ConfirmationActivity>(renderer, mappedInput,
+                                             changed ? tr(STR_TRUST_CERT_CHANGED) : tr(STR_TRUST_CERT_PROMPT), body),
       [rejection, onAnswer = std::move(onAnswer)](const ActivityResult& result) {
         onAnswer(!result.isCancelled && trusted_pins::save(rejection.host, rejection.sha));
       });
