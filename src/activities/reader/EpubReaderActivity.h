@@ -372,6 +372,8 @@ class EpubReaderActivity final : public Activity {
   void deleteCacheAndGoHome();
   // Opens the reader menu for the current position (short-press Confirm)
   void openReaderMenu();
+  // Reading margins plus status bar bands: where render() puts the page.
+  void pageMargins(int& top, int& right, int& bottom, int& left);
   void openDictionaryWordSelect(int anchorX = -1, int anchorY = -1);
   // Opens the Grab Quote word-range picker on the current page.
   void openQuoteGrab();

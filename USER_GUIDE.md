@@ -1024,8 +1024,9 @@ right, bottom left, bottom centre, bottom right) or turns it off: **Battery**, *
 Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Alongside them:
 
 - **Chapter Title** and **Book Title** can go in different slots, for example the book on top
-  and the chapter at the bottom. Put both in the same slot and they stack: the book title on
-  the first line, the chapter title on the line below. A book without chapters (TXT) shows
+  and the chapter at the bottom. Put both on the same edge (both top or both bottom) and they
+  stack in the Chapter Title's slot: the book title on the first line, the chapter title on
+  the line below. A book without chapters (TXT) shows
   its title in the Book Title slot, or in the Chapter Title slot when Book Title is off.
 - **Truncate Title** — off, a title wraps onto as many lines as it needs; on, it is cut short
   with `…`. A Book Title in a slot of its own is always one line.

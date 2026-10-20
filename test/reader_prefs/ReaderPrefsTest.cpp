@@ -1018,7 +1018,13 @@ TEST(ReaderPrefs, TitleSlotStacksTheBookAboveTheChapterOnOneAnchor) {
   EXPECT_TRUE(s.bookAbove);
   EXPECT_EQ(0, s.bookItem);
 
-  b.bookTitlePos = 6;  // BR: its own one-line item
+  b.bookTitlePos = 2;  // TC: same edge, so it stacks at the chapter's anchor
+  s = b.titleSlot(true);
+  EXPECT_EQ(1, s.anchor);
+  EXPECT_TRUE(s.bookAbove);
+  EXPECT_EQ(0, s.bookItem);
+
+  b.bookTitlePos = 6;  // BR: other edge, its own one-line item
   s = b.titleSlot(true);
   EXPECT_FALSE(s.bookAbove);
   EXPECT_EQ(6, s.bookItem);

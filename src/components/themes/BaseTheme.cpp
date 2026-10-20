@@ -1009,13 +1009,18 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
 
   // Place the items in table order (STATUS_BAR_ITEMS), the same list the band heights
   // are reserved from.
+  // Clipped to its room after the reflow: the separate book title always, and a lone title
+  // when Truncate Title is on. drawAnchor only clips a centred title, so a corner one ran
+  // off the edge. A stack cuts its own lines where it draws them.
+  auto clipItem = [&](statusbar::Item item) {
+    return item == statusbar::BookTitle || (item == statusbar::Title && sb.titleTruncate != 0 && !stackedBook);
+  };
   auto push = [&](statusbar::Item item, uint8_t anchor, bool chapterOnly) {
     if (!text[item] || anchor == CrossPointSettings::SB_ANCHOR_OFF) return;
     if (chapterOnly && !data.hasChapters) return;  // chapter items hide on chapterless books
     const int idx = static_cast<int>(anchor) - 1;  // TL(1)..BR(6) -> 0..5
     if (idx < 0 || idx >= statusbar::kAnchorCount) return;
-    L.buckets[idx][L.counts[idx]++] =
-        Seg{text[item], width[item], item == statusbar::Battery, item == statusbar::BookTitle};
+    L.buckets[idx][L.counts[idx]++] = Seg{text[item], width[item], item == statusbar::Battery, clipItem(item)};
     if (item == statusbar::Title) {
       titleAnchorIdx = idx;  // reflow pivots on where the greedy title landed
       titleSegIdx = L.counts[idx] - 1;
@@ -1038,17 +1043,20 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
                            stacked);
   }
 
-  // Clip the book title to the room its anchor has left, now that the reflow has settled
-  // where everything sits. Lives until the draw below reads it.
-  std::string clippedBookTitle;
+  // Clip the titles marked above to the room their anchor has left, now that the reflow
+  // has settled where everything sits. One string per title: they live until the draw.
+  std::string clipped[2];
+  int clippedCount = 0;
   for (int a = 0; a < statusbar::kAnchorCount; a++) {
     for (int i = 0; i < L.counts[a]; i++) {
       Seg& s = L.buckets[a][i];
       if (!s.clip) continue;
       const int over = statusbar::clusterWidth(L, a, sepW) - statusbar::clipRoom(L, a, bandWidth, sepW);
       if (over <= 0) continue;
-      clippedBookTitle = renderer.truncatedText(f, s.text, s.width - over);
-      s.text = clippedBookTitle.c_str();
+      if (clippedCount == 2) continue;  // only the two titles are ever marked
+      std::string& out = clipped[clippedCount++];
+      out = renderer.truncatedText(f, s.text, s.width - over);
+      s.text = out.c_str();
       s.width = renderer.getTextWidth(f, s.text);
     }
   }
