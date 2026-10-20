@@ -70,6 +70,17 @@ TEST(WakeSequence, ASilentRebootTargetingTheReaderWithNoBookLandsOnHome) {
   EXPECT_EQ(plan(in).target, Target::SilentHome);
 }
 
+// Leaving Settings > Wi-Fi networks reboots to free the driver's heap; the user lands
+// back in Settings, even with a book open that a reader target would resume.
+TEST(WakeSequence, ASilentRebootTargetingSettingsLandsOnSettings) {
+  WakeInputs in = resumeWake();
+  in.silentReboot = true;
+  in.silentTargetIsSettings = true;
+  EXPECT_EQ(plan(in).target, Target::SilentSettings);
+  EXPECT_FALSE(plan(in).waitBeforeRoutePaint);
+  EXPECT_FALSE(plan(in).bumpReaderLoadCount);
+}
+
 // The regression this arm was written for: a silent reboot must NOT reach the sleep-wake
 // resume logic, which fires on a stale openEpubPath + lastSleepFromReader left by a prior
 // session. Same inputs that would otherwise resume, plus silentReboot.
