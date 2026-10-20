@@ -159,8 +159,12 @@ int clusterWidth(const BarLayout& layout, int anchor, int sepW);
 // centred cluster with no clipping, which is how a long chapter title beside a page count
 // used to run off both edges. `titleSegIndex` says which segment of that anchor is the
 // title; it is rarely 0, because battery and clock are placed before it.
+//
+// `stacked` is a title slot of more than one line of its own (book above chapter): it
+// keeps its anchor to itself whatever its width or truncation, so the other items at
+// that anchor always move out.
 void reflowTitle(BarLayout& layout, int titleAnchor, int titleSegIndex, bool titleTruncate, int bandWidth, int sepW,
-                 bool destBandReserved);
+                 bool destBandReserved, bool stacked = false);
 
 // Widest an anchor's cluster may be drawn without running into the other clusters of its
 // band: a corner stops `sepW` short of the centre cluster (or the far corner when the

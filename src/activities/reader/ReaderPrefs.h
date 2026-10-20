@@ -441,6 +441,40 @@ struct StatusBarBlock {
   uint8_t offBar = 0;
 
   bool textOn() const { return enabled != 0; }
+
+  // ── Titles ─────────────────────────────────────────────────────────────────
+  // Title Source is retired: Book was the Book Title item before it existed, so an old
+  // block that chose it is folded onto that item. Every reader of the block goes through
+  // statusBar() / statusBarOf(), which fold, so nothing downstream reads titleSource.
+  void foldTitleSource() {
+    if (titleSource != 0) return;  // SB_TITLE_BOOK
+    if (bookTitlePos == 0) bookTitlePos = titlePos;
+    titlePos = 0;
+    titleSource = 1;  // SB_TITLE_CHAPTER
+  }
+  // The bar has one title slot that wraps and that its neighbours reflow around. It holds
+  // the chapter title, with the book title on the line above when both share an anchor;
+  // otherwise a placed book title is a one-line item of its own (bookItem). A chapterless
+  // book (TXT, flat XTC) has no chapter title: the slot then holds the book title, at
+  // the Book Title anchor if that is placed, else at the Chapter Title anchor.
+  struct TitleSlot {
+    uint8_t anchor = 0;      // 0 = no title slot
+    bool chapter = false;    // slot holds the chapter title (else the book title)
+    bool bookAbove = false;  // book title stacked on the line above the chapter title
+    uint8_t bookItem = 0;    // anchor of the separate one-line book title, 0 = none
+  };
+  TitleSlot titleSlot(bool hasChapters) const {
+    TitleSlot t;
+    if (titlePos != 0 && hasChapters) {
+      t.anchor = titlePos;
+      t.chapter = true;
+      t.bookAbove = bookTitlePos == titlePos;
+      if (!t.bookAbove) t.bookItem = bookTitlePos;
+    } else {
+      t.anchor = bookTitlePos != 0 ? bookTitlePos : titlePos;
+    }
+    return t;
+  }
   // ── Progress bars while the status bar is hidden ───────────────────────────
   // The Book Bar / Chapter Bar edges are part of the status bar, so hiding the bar
   // used to hide them as well. offBar keeps them alive on their own: the edges,
@@ -470,6 +504,7 @@ inline StatusBarBlock statusBarOf(const ReaderPrefs& p) {
 #define CP_SB_FROM_PREFS(prefsName, settingsName, blockName) b.blockName = p.prefsName;
   READER_STATUS_BAR_FIELDS(CP_SB_FROM_PREFS)
 #undef CP_SB_FROM_PREFS
+  b.foldTitleSource();
   return b;
 }
 inline void setStatusBarOf(ReaderPrefs& p, const StatusBarBlock& b) {

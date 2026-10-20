@@ -35,10 +35,16 @@ class UITheme {
   // status-bar horizontal margins and the oriented viewable insets). Shared by the
   // renderer and the reader's wrap-line count so both agree.
   static int getStatusBarV2BandWidth(const GfxRenderer& renderer);
-  // Number of lines the title wraps to (>= 1). Returns 1 unless the title is
-  // placed, non-empty, and "Truncate Title" is OFF (greedy), in which case it is
-  // the wrapped line count within the band width, capped for safety.
-  static int getStatusBarV2TitleLines(const StatusBarBlock& sb, const GfxRenderer& renderer, const char* title);
+  // Number of lines the title slot takes (>= 1), and in `onTop` whether that is the
+  // top band. A lone title takes 1 unless "Truncate Title" is OFF (greedy), in which
+  // case it is the wrapped line count within the band width, capped for safety. A
+  // stack (book title above chapter title) adds the book title's lines on top. Takes
+  // the same strings the bar draws, so the reserved height and the draw agree.
+  static int getStatusBarV2TitleLines(const StatusBarBlock& sb, const GfxRenderer& renderer, bool hasChapters,
+                                      const char* chapterTitle, const char* bookTitle, bool* onTop);
+  // Safety ceiling on one title's wrapped lines: real book/chapter titles never
+  // approach it, but it bounds the reserved band (and the render loop).
+  static constexpr int kMaxStatusBarTitleLines = 6;
 
  private:
   const ThemeMetrics* currentMetrics;

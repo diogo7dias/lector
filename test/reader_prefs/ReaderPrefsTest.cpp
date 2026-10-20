@@ -991,3 +991,43 @@ TEST(ReaderPrefs, AV22RecordLeavesTheBookTitleItemOff) {
   EXPECT_TRUE(migrated);
   EXPECT_EQ(0, loaded.sbBookTitlePos);
 }
+
+TEST(ReaderPrefs, ABookTitleSourceFoldsOntoTheBookTitleItem) {
+  ReaderPrefs p;
+  p.sbTitleSource = 0;  // Book, from before Title Source was retired
+  p.sbTitlePos = 2;     // TC
+  p.sbBookTitlePos = 0;
+  const StatusBarBlock b = statusBarOf(p);
+  EXPECT_EQ(0, b.titlePos);
+  EXPECT_EQ(2, b.bookTitlePos);
+  EXPECT_EQ(1, b.titleSource);
+
+  p.sbBookTitlePos = 4;  // already placed: it keeps its own anchor
+  EXPECT_EQ(4, statusBarOf(p).bookTitlePos);
+  EXPECT_EQ(0, statusBarOf(p).titlePos);
+}
+
+TEST(ReaderPrefs, TitleSlotStacksTheBookAboveTheChapterOnOneAnchor) {
+  StatusBarBlock b;
+  b.titleSource = 1;
+  b.titlePos = 1;      // TL
+  b.bookTitlePos = 1;  // TL
+  auto s = b.titleSlot(true);
+  EXPECT_EQ(1, s.anchor);
+  EXPECT_TRUE(s.chapter);
+  EXPECT_TRUE(s.bookAbove);
+  EXPECT_EQ(0, s.bookItem);
+
+  b.bookTitlePos = 6;  // BR: its own one-line item
+  s = b.titleSlot(true);
+  EXPECT_FALSE(s.bookAbove);
+  EXPECT_EQ(6, s.bookItem);
+
+  s = b.titleSlot(false);  // chapterless: the book title takes the slot at its anchor
+  EXPECT_EQ(6, s.anchor);
+  EXPECT_FALSE(s.chapter);
+  EXPECT_EQ(0, s.bookItem);
+
+  b.bookTitlePos = 0;  // chapterless, no Book Title: the chapter anchor shows the book
+  EXPECT_EQ(1, b.titleSlot(false).anchor);
+}

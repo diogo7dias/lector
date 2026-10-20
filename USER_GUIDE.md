@@ -1020,13 +1020,15 @@ other numbers in Settings use the same band.
 
 **Customise Status Bar** places each element in one of six slots (top left, top centre, top
 right, bottom left, bottom centre, bottom right) or turns it off: **Battery**, **Clock**,
-**Title**, **Book Title**, **Page in Chapter**, **Book %**, **Chapter %**, **Chapter Number**, **Pages This
+**Chapter Title**, **Book Title**, **Page in Chapter**, **Book %**, **Chapter %**, **Chapter Number**, **Pages This
 Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Alongside them:
 
-- **Title Source** — Book or Chapter, and **Truncate Title**.
-- **Book Title** always shows the book's title on one line, cut short with `…` when it runs into
-  its neighbours. Set **Title Source** to Chapter and place both to see the book on one edge and
-  the chapter on the other.
+- **Chapter Title** and **Book Title** can go in different slots, for example the book on top
+  and the chapter at the bottom. Put both in the same slot and they stack: the book title on
+  the first line, the chapter title on the line below. A book without chapters (TXT) shows
+  its title in the Book Title slot, or in the Chapter Title slot when Book Title is off.
+- **Truncate Title** — off, a title wraps onto as many lines as it needs; on, it is cut short
+  with `…`. A Book Title in a slot of its own is always one line.
 - **Page Format** — `N/M` or `N left`.
 - **Pages This Session** counts forward page turns in the open EPUB and resets when the book closes.
 - **Pages to Paragraph** shows `>P.0` on most pages: the paragraph you are in ends before the

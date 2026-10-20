@@ -704,12 +704,11 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
     v.push_back(SettingInfo::Enum(StrId::STR_CLOCK, &CrossPointSettings::sbClockPos, anchorPositions, "sbClockPos",
                                   StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_TITLE, &CrossPointSettings::sbTitlePos, anchorPositions, "sbTitlePos",
-                                  StrId::STR_CUSTOMISE_STATUS_BAR));
+    v.push_back(SettingInfo::Enum(StrId::STR_CHAPTER_TITLE, &CrossPointSettings::sbTitlePos, anchorPositions,
+                                  "sbTitlePos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_TITLE_SOURCE, &CrossPointSettings::sbTitleSource,
-                                  {StrId::STR_BOOK, StrId::STR_CHAPTER}, "sbTitleSource",
-                                  StrId::STR_CUSTOMISE_STATUS_BAR));
+    v.push_back(SettingInfo::Enum(StrId::STR_BOOK_TITLE, &CrossPointSettings::sbBookTitlePos, anchorPositions,
+                                  "sbBookTitlePos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
     v.push_back(SettingInfo::Toggle(StrId::STR_TRUNCATE_TITLE, &CrossPointSettings::sbTitleTruncate, "sbTitleTruncate",
                                     StrId::STR_CUSTOMISE_STATUS_BAR));
@@ -741,9 +740,6 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 
     v.push_back(SettingInfo::Enum(StrId::STR_BOOK_TIME_LEFT, &CrossPointSettings::sbBookTimePos, anchorPositions,
                                   "sbBookTimePos", StrId::STR_CUSTOMISE_STATUS_BAR));
-
-    v.push_back(SettingInfo::Enum(StrId::STR_BOOK_TITLE, &CrossPointSettings::sbBookTitlePos, anchorPositions,
-                                  "sbBookTitlePos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
     v.push_back(SettingInfo::Enum(StrId::STR_BOOK_BAR, &CrossPointSettings::sbBookBar,
                                   {StrId::STR_STATE_OFF, StrId::STR_TOP, StrId::STR_BOTTOM}, "sbBookBar",

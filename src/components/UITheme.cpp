@@ -7,6 +7,7 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <utility>
 
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
@@ -154,16 +155,24 @@ int UITheme::getStatusBarV2BandWidth(const GfxRenderer& renderer) {
   return rightEdge - leftEdge;
 }
 
-int UITheme::getStatusBarV2TitleLines(const StatusBarBlock& sb, const GfxRenderer& renderer, const char* title) {
-  if (!sb.textOn() || sb.titlePos == CrossPointSettings::SB_ANCHOR_OFF) return 1;
-  if (sb.titleTruncate != 0) return 1;  // a clipping title stays one line
-  if (!title || title[0] == '\0') return 1;
+int UITheme::getStatusBarV2TitleLines(const StatusBarBlock& sb, const GfxRenderer& renderer, const bool hasChapters,
+                                      const char* chapterTitle, const char* bookTitle, bool* onTop) {
+  const StatusBarBlock::TitleSlot slot = sb.titleSlot(hasChapters);
+  if (onTop) *onTop = sbAnchorTop(slot.anchor);
+  if (!sb.textOn() || slot.anchor == CrossPointSettings::SB_ANCHOR_OFF) return 1;
+  // The same pick drawStatusBarV2 makes: the slot's own title, the book title above it
+  // when stacked, and the book title alone when the chapter has no title.
+  const char* title = slot.chapter ? chapterTitle : bookTitle;
+  const char* above = slot.bookAbove ? bookTitle : nullptr;
+  if ((!title || title[0] == '\0') && above) std::swap(title, above);
   const int bandWidth = getStatusBarV2BandWidth(renderer);
-  if (bandWidth <= 0) return 1;
-  // Safety ceiling: real book/chapter titles never approach this many UI_10 lines,
-  // but it bounds the reserved band (and the render loop) for a pathological title.
-  constexpr int kMaxTitleLines = 6;
-  const int lines = static_cast<int>(renderer.wrappedText(UI_10_FONT_ID, title, bandWidth, kMaxTitleLines).size());
+  auto linesOf = [&](const char* t) {
+    if (!t || t[0] == '\0') return 0;
+    if (sb.titleTruncate != 0 || bandWidth <= 0) return 1;  // a clipping title stays one line
+    const int n = static_cast<int>(renderer.wrappedText(UI_10_FONT_ID, t, bandWidth, kMaxStatusBarTitleLines).size());
+    return n < 1 ? 1 : n;
+  };
+  const int lines = linesOf(title) + linesOf(above);
   return lines < 1 ? 1 : lines;
 }
 

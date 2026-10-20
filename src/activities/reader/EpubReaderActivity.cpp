@@ -2624,21 +2624,18 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // re-paginates the section cache like any margin change.
   // A greedy (truncate-off) title can wrap to several lines; reserve the extra band
   // height in whichever edge holds the title so the reading text is pushed clear.
+  // Stacked titles (book above chapter) need a line each, whatever Truncate Title says.
   int sbTitleExtraPx = 0;
-  if (sb.textOn() && sb.titlePos != CrossPointSettings::SB_ANCHOR_OFF && sb.titleTruncate == 0) {
-    std::string sbTitle;
-    if (sb.titleSource == CrossPointSettings::SB_TITLE_CHAPTER) {
-      const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
-      if (tocIndex != -1) sbTitle = epub->getTocItem(tocIndex).title;
-      if (sbTitle.empty()) sbTitle = tr(STR_UNNAMED);
-    } else {
-      sbTitle = epub->getTitle();
-    }
-    const int lines = UITheme::getStatusBarV2TitleLines(sb, renderer, sbTitle.c_str());
+  bool sbTitleTop = false;
+  if (sb.textOn() && sb.titleSlot(true).anchor != CrossPointSettings::SB_ANCHOR_OFF) {
+    std::string chapterTitle;
+    const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+    if (tocIndex != -1) chapterTitle = epub->getTocItem(tocIndex).title;
+    if (chapterTitle.empty()) chapterTitle = tr(STR_UNNAMED);
+    const int lines = UITheme::getStatusBarV2TitleLines(sb, renderer, true, chapterTitle.c_str(),
+                                                        epub->getTitle().c_str(), &sbTitleTop);
     sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
   }
-  const bool sbTitleTop =
-      sb.titlePos >= CrossPointSettings::SB_ANCHOR_TL && sb.titlePos <= CrossPointSettings::SB_ANCHOR_TR;
   const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(sb, true, sbTitleTop ? sbTitleExtraPx : 0);
   const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(sb, true, sbTitleTop ? 0 : sbTitleExtraPx);
   orientedMarginTop += sbTop;

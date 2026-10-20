@@ -272,3 +272,14 @@ TEST(StatusBarReflow, ClipRoomStopsShortOfTheBandNeighbours) {
   EXPECT_EQ(statusbar::clipRoom(l, TC, kBand, kSep), kBand - 2 * (40 + kSep));
   EXPECT_EQ(statusbar::clipRoom(l, BC, kBand, kSep), kBand);  // the other band is free
 }
+
+TEST(StatusBarReflow, AStackedTitleKeepsItsAnchorToItselfEvenWhenClipping) {
+  BarLayout l;
+  put(l, TL, 40);  // page count
+  put(l, TL, 80);  // the stacked titles, narrow enough to share
+  put(l, BL, 30);
+  reflowTitle(l, TL, /*titleSegIndex=*/1, /*truncate=*/true, kBand, kSep, /*destReserved=*/true, /*stacked=*/true);
+  EXPECT_EQ(l.counts[TL], 1);
+  EXPECT_EQ(l.buckets[TL][0].width, 80);
+  EXPECT_EQ(total(l), 3);  // the page count moved to the bottom band, not dropped
+}

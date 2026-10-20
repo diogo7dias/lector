@@ -205,14 +205,11 @@ void TxtReaderActivity::initializeReader() {
   // TXT has no chapters, so chapter-only items are hidden. A greedy (truncate-off)
   // book-source title wraps, needing extra band height.
   const StatusBarBlock sb = SETTINGS.statusBar();
-  int sbTitleExtraPx = 0;
-  if (sb.textOn() && sb.titlePos != CrossPointSettings::SB_ANCHOR_OFF && sb.titleTruncate == 0) {
-    // TXT resolves any title source to the book title (no chapters to fall back from).
-    const int lines = UITheme::getStatusBarV2TitleLines(sb, renderer, txt->getTitle().c_str());
-    sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
-  }
-  const bool sbTitleTop =
-      sb.titlePos >= CrossPointSettings::SB_ANCHOR_TL && sb.titlePos <= CrossPointSettings::SB_ANCHOR_TR;
+  // TXT has no chapter title: the slot holds the book title (see TitleSlot).
+  bool sbTitleTop = false;
+  const int sbTitleLines =
+      UITheme::getStatusBarV2TitleLines(sb, renderer, false, "", txt->getTitle().c_str(), &sbTitleTop);
+  const int sbTitleExtraPx = (sbTitleLines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
   const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(sb, false, sbTitleTop ? sbTitleExtraPx : 0);
   const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(sb, false, sbTitleTop ? 0 : sbTitleExtraPx);
   cachedOrientedMarginTop += std::max<int>(topMargin, sbTop);

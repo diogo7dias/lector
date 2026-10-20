@@ -935,18 +935,24 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
                           SETTINGS.clockTimeZone)) {
     set(statusbar::Clock, clkBuf);
   }
-  // Title (points at the caller's string; truncated at draw time if it overflows).
-  // Chapter source falls back to the book title on a chapterless book (TXT, flat
-  // XTC) so the title never silently vanishes there; hence the item is not
-  // chapter-only.
+  // Titles (pointing at the caller's strings). The title slot is the one that wraps and
+  // that neighbours reflow around; `pos` is the block with the two title anchors moved to
+  // where the slot and the separate one-line book title actually sit. See TitleSlot.
+  const StatusBarBlock::TitleSlot slot = sb.titleSlot(data.hasChapters);
+  StatusBarBlock pos = sb;
+  pos.titlePos = slot.anchor;
+  pos.bookTitlePos = slot.bookItem;
+  const char* stackedBook = slot.bookAbove && !data.bookTitle.empty() ? data.bookTitle.c_str() : nullptr;
   {
-    const bool chapterSrc = sb.titleSource == CrossPointSettings::SB_TITLE_CHAPTER;
-    const char* title = (chapterSrc && data.hasChapters) ? data.chapterTitle.c_str() : data.bookTitle.c_str();
+    const char* title = slot.chapter ? data.chapterTitle.c_str() : data.bookTitle.c_str();
+    if (title[0] == '\0' && stackedBook) std::swap(title, stackedBook);  // no chapter title: book alone
     if (title[0] != '\0') set(statusbar::Title, title);
+    // A stack is as wide as its wider line; the reflow and the clip both measure that.
+    if (stackedBook && text[statusbar::Title]) {
+      width[statusbar::Title] = std::max(width[statusbar::Title], renderer.getTextWidth(f, stackedBook));
+    }
   }
-  // Book title as its own item, so the Title can follow the chapter elsewhere. Unlike the
-  // Title it never wraps or reflows: it keeps one line and is clipped after the reflow.
-  if (!data.bookTitle.empty()) set(statusbar::BookTitle, data.bookTitle.c_str());
+  if (slot.bookItem != 0 && !data.bookTitle.empty()) set(statusbar::BookTitle, data.bookTitle.c_str());
   // Page in chapter ("3/40" or "8 left")
   if (sb.pageFormat == CrossPointSettings::SB_PAGE_LEFT) {
     const int remaining = data.chapterPages - data.chapterPage;
@@ -1015,7 +1021,7 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
       titleSegIdx = L.counts[idx] - 1;
     }
   };
-#define SB_PUSH(id, field, chapterOnly) push(statusbar::id, sb.field, chapterOnly);
+#define SB_PUSH(id, field, chapterOnly) push(statusbar::id, pos.field, chapterOnly);
   STATUS_BAR_ITEMS(SB_PUSH)
 #undef SB_PUSH
 
@@ -1024,10 +1030,12 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   // The opposite band may only *receive* bumped items when it already reserves
   // height (has native text) — the band heights are computed pre-reflow from native
   // anchors, so a bump into an unreserved band would draw over the reading text.
-  if (titleAnchorIdx >= 0 && sb.titleTruncate == 0) {
+  const bool stacked = titleAnchorIdx >= 0 && stackedBook != nullptr;
+  if (titleAnchorIdx >= 0 && (sb.titleTruncate == 0 || stacked)) {
     const int destBase = (titleAnchorIdx < 3) ? 3 : 0;
     const bool destReserved = L.counts[destBase] > 0 || L.counts[destBase + 1] > 0 || L.counts[destBase + 2] > 0;
-    statusbar::reflowTitle(L, titleAnchorIdx, titleSegIdx, /*titleTruncate=*/false, bandWidth, sepW, destReserved);
+    statusbar::reflowTitle(L, titleAnchorIdx, titleSegIdx, sb.titleTruncate != 0, bandWidth, sepW, destReserved,
+                           stacked);
   }
 
   // Clip the book title to the room its anchor has left, now that the reflow has settled
@@ -1088,14 +1096,28 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   };
 
   // A greedy (truncate-off) lone title wraps across as many lines as it needs and
-  // is drawn here, aligned to its anchor column (left/centre/right). The band's
-  // extra height was reserved by getStatusBarV2TitleLines at inset time. We empty
-  // its bucket so the generic pass below skips it. A truncate-ON title (or one
-  // sharing its anchor) falls through to drawAnchor's single-line ellipsis clip.
-  if (titleAnchorIdx >= 0 && sb.titleTruncate == 0 && L.counts[titleAnchorIdx] == 1) {
+  // is drawn here, aligned to its anchor column (left/centre/right). A stack (book title
+  // above chapter title) is drawn here too, each title wrapped, or cut to one line when
+  // Truncate Title is on. The band's extra height was reserved by
+  // getStatusBarV2TitleLines at inset time. We empty its bucket so the generic pass
+  // below skips it. A truncate-ON lone title (or a greedy one sharing its anchor) falls
+  // through to drawAnchor's single-line ellipsis clip.
+  if (titleAnchorIdx >= 0 && L.counts[titleAnchorIdx] == 1 && (sb.titleTruncate == 0 || stacked)) {
     const int col = titleAnchorIdx % 3;
     const bool top = titleAnchorIdx < 3;
-    const auto lines = renderer.wrappedText(f, L.buckets[titleAnchorIdx][0].text, bandWidth, 6);
+    std::vector<std::string> lines;
+    lines.reserve(2 * UITheme::kMaxStatusBarTitleLines);
+    auto addTitle = [&](const char* t) {
+      if (sb.titleTruncate != 0) {
+        lines.push_back(renderer.truncatedText(f, t, statusbar::clipRoom(L, titleAnchorIdx, bandWidth, sepW)));
+        return;
+      }
+      for (auto& l : renderer.wrappedText(f, t, bandWidth, UITheme::kMaxStatusBarTitleLines)) {
+        lines.push_back(std::move(l));
+      }
+    };
+    if (stacked) addTitle(stackedBook);
+    addTitle(L.buckets[titleAnchorIdx][0].text);
     const int n = static_cast<int>(lines.size());
     for (int i = 0; i < n; i++) {
       const int lw = renderer.getTextWidth(f, lines[i].c_str());
