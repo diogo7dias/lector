@@ -715,6 +715,10 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 }
 
 Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message) const {
+  // Painted over the screen rather than as part of it: whatever is underneath
+  // has to clean the band once this is gone (UITheme::consumeOverlayPainted).
+  // Both the popup and the busy banner come through here.
+  UITheme::noteOverlayPainted();
   const int w = renderer.getScreenWidth();
   const int lineHeight = renderer.getLineHeight(banner::FONT_ID);
   // The message wraps rather than being cut, and the band grows a line per line.
@@ -1246,6 +1250,8 @@ void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int 
 
 void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
                                 int selectedIndex, bool leftAlign) const {
+  // An overlay like the banner strip: the row it covered is owed a clean paint.
+  UITheme::noteOverlayPainted();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   // One size and one weight for the whole popup, the same the menu rows behind it use.

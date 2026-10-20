@@ -19,6 +19,18 @@ class UITheme {
 
   const ThemeMetrics& getMetrics() const;
   const BaseTheme& getTheme() const { return theme; }
+
+  // A popup or busy banner was painted on top of the screen (a message strip or an
+  // option list). The panel keeps that band after the popup goes, so the next
+  // full-screen paint of the screen underneath owes a clean pass: the list, grid
+  // and status bases promote that single paint from FAST, then consume this. Only
+  // the first paint after the popup leaves, never every later one.
+  static void noteOverlayPainted() { overlayPainted = true; }
+  static bool consumeOverlayPainted() {
+    const bool painted = overlayPainted;
+    overlayPainted = false;
+    return painted;
+  }
   Rect getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints = false,
                          bool hasSideButtonHints = false);
   static void drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text,
@@ -47,6 +59,8 @@ class UITheme {
   static constexpr int kMaxStatusBarTitleLines = 6;
 
  private:
+  // Written and read only under the render lock, like the framebuffer it describes.
+  static bool overlayPainted;
   const ThemeMetrics* currentMetrics;
   BaseTheme theme;
   mutable ThemeMetrics adjustedMetrics;

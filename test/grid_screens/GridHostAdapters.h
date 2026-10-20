@@ -139,8 +139,18 @@ struct UITheme {
     static ThemeMetrics metrics;
     return metrics;
   }
+  // The firmware's "a popup is on the panel" flag. The audit tests drive the
+  // production render() bodies, so it has to exist here; no test paints a popup.
+  static void noteOverlayPainted() { overlayPainted = true; }
+  static bool consumeOverlayPainted() {
+    const bool painted = overlayPainted;
+    overlayPainted = false;
+    return painted;
+  }
+  static bool overlayPainted;
   void drawScrollArrows(GfxRenderer&, Rect, list_scrollbar::Arrows) {}
 };
+inline bool UITheme::overlayPainted = false;
 #define GUI UITheme::getInstance()
 namespace BoardConfig {
 inline const struct {

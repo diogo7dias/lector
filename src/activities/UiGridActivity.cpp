@@ -374,6 +374,10 @@ void UiGridActivity::render(RenderLock&&) {
   GUI.drawScrollArrows(renderer, scrollArrowBand_, scrollArrows_);
   drawListChromeBottom(renderer, mappedInput, bands);
   if (drawOverlay()) return;
-  renderer.displayBuffer(cleanPaint_ ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+  // Same contract as UiListActivity: a popup painted over the grid leaves its band
+  // behind, and the first paint after it is the one that cleans it.
+  const bool overlayDirty = UITheme::consumeOverlayPainted();
+  const bool clean = cleanPaint_ || overlayDirty;
+  renderer.displayBuffer(clean ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
   cleanPaint_ = false;
 }

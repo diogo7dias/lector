@@ -915,9 +915,12 @@ void FileBrowserActivity::render(RenderLock&&) {
   // The browser is commonly reached straight from screens that paint only in FAST
   // (the OPDS download fires 20+ full-screen FAST paints of its own), so the panel
   // arrives here already carrying ghosts. Spend one FULL on the first frame after
-  // entry or resume; every later frame stays FAST.
-  if (pendingFullRefresh) {
-    pendingFullRefresh = false;
+  // entry, resume, or a popup painted over the listing (a failed delete, the file
+  // actions), whose band a FAST repaint would leave behind.
+  const bool overlayDirty = UITheme::consumeOverlayPainted();
+  const bool clean = pendingFullRefresh || overlayDirty;
+  pendingFullRefresh = false;
+  if (clean) {
     renderer.displayBuffer(HalDisplay::FULL_REFRESH);
   } else {
     renderer.displayBuffer();
