@@ -92,6 +92,8 @@ static const char* feedErrorMessage(const opds::ClientStatus status) {
       return tr(STR_UPDATE_LOW_MEMORY);
     case opds::ClientStatus::PARSE_FAILED:
       return tr(STR_PARSE_FEED_FAILED);
+    case opds::ClientStatus::UNREACHABLE:
+      return tr(STR_SERVER_UNREACHABLE);
     default:
       return tr(STR_FETCH_FEED_FAILED);
   }

@@ -95,7 +95,8 @@ ClientStatus OpdsClient::fetchFeed(const OpdsServer& server, const std::string& 
     if (!opds_retry::shouldRetry(fetchStatus, attempt, maxAttempts)) {
       LOG_ERR("OPDSCLI", "Fetch failed (attempt %d/%d, status %d, error %d)", attempt, maxAttempts, fetchStatus,
               static_cast<int>(fetchError));
-      return (fetched && !parser) ? ClientStatus::PARSE_FAILED : ClientStatus::FETCH_FAILED;
+      if (fetched && !parser) return ClientStatus::PARSE_FAILED;
+      return fetchError == HttpDownloader::NO_CONNECTION ? ClientStatus::UNREACHABLE : ClientStatus::FETCH_FAILED;
     }
 
     const unsigned long delayMs = opds_retry::backoffMs(attempt);
