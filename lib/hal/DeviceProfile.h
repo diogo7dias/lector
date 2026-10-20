@@ -29,6 +29,10 @@ struct DeviceProfile {
   // enum so this header stays dependency-free and host-includable; UC8279 is the only
   // controller any display rule currently branches on.
   bool controllerIsUc8279 = false;
+  // The SSD1677 (X4, and the early X4 Pro batches). Its differential refresh is blind to
+  // anything the firmware did not draw itself, so it is the one controller HalDisplay
+  // asks to re-drive every pixel on an ordinary page turn.
+  bool controllerIsSsd1677 = false;
   bool hasTouch = false;
 };
 

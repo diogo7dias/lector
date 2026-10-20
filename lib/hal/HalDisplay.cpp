@@ -14,6 +14,12 @@ HalDisplay display;
 
 #define SD_SPI_MISO 7
 
+// 0 puts the SSD1677 page turns back on the plain differential, for a kit build that has to
+// compare the two on the same panel.
+#ifndef LECTOR_SSD1677_DRIVE_ALL
+#define LECTOR_SSD1677_DRIVE_ALL 1
+#endif
+
 HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY) {}
 
 HalDisplay::~HalDisplay() {}
@@ -84,13 +90,42 @@ HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode request
   // Gated on the panel honouring it, not merely on the request: on a driver that ignores
   // FastQuality the request reaches nothing, and recording it would put a 1 in the perf
   // log's turbo column for a pass that ran the ordinary waveform.
+  //
+  // A drive-all pass is never Turbo. Its whole job is to push every pixel to its rail, and
+  // the SSD1677 driver only drops Turbo for inverted content, not for a drive-all: left
+  // alone, an X4 wake painted its lock face out with the ~77 ms incremental waveform
+  // instead of the ~505 ms one the wake design (main.cpp, armsDriveAll) is sized around.
+  // The driver clears its one-shot on every pass, so the flag does the same here.
+  const bool driveAllPass = driveAllArmed;
+  driveAllArmed = false;
   const bool turboPossible = turboWanted && einkDisplay.supportsFastTurbo();
-  lastPassWasTurbo =
-      allowTurbo && policyMode == DisplayRefreshPolicy::Mode::Fast && refreshPolicy.useTurbo(turboPossible);
+  lastPassWasTurbo = allowTurbo && !driveAllPass && policyMode == DisplayRefreshPolicy::Mode::Fast &&
+                     refreshPolicy.useTurbo(turboPossible);
   einkDisplay.setFastQuality(lastPassWasTurbo ? EInkDisplay::FAST_TURBO : EInkDisplay::FAST_STANDARD);
 
   const DisplayRefreshPolicy::Mode chosen = refreshPolicy.choose(policyMode, inkScore, lastPassWasTurbo);
   lastPassWasClean = chosen != DisplayRefreshPolicy::Mode::Fast;
+
+  // SSD1677 differential residue. A plain FAST only drives pixels that differ from the RED
+  // plane, and RED is whatever the firmware last wrote, not what the glass holds: the
+  // gray nudge leaves charge in the anti-aliased edges while cleanupGrayscaleBuffers()
+  // seeds RED with the pure black-and-white frame, and the partial waveform never quite
+  // reaches white, so a pixel that stayed "unchanged" keeps its ghost until the next HALF.
+  // Writing RED as the target's complement (the driver's drive-all, already what night
+  // mode runs on every page) makes every pixel re-pushed to its rail, so each page turn
+  // also erases the residue of the ones before it. The waveform length does not depend on
+  // how many pixels it drives (Ssd1677Driver.cpp displayImpl), so this costs no time.
+  //
+  // Not on the first pass after begin(): the driver's boot promotion to a clean HALF is the
+  // better answer to a panel nobody has painted yet. Not on Turbo (that pass is the cheap
+  // one by design), not on inverted content (already drive-all), not on other controllers.
+#if LECTOR_SSD1677_DRIVE_ALL
+  if (chosen == DisplayRefreshPolicy::Mode::Fast && firstPassDone && !lastPassWasTurbo &&
+      deviceProfile.controllerIsSsd1677 && !einkDisplay.isInverted()) {
+    einkDisplay.requestDriveAllNextFast();
+  }
+#endif
+  firstPassDone = true;
   switch (chosen) {
     case DisplayRefreshPolicy::Mode::Clean:
       return RefreshMode::HALF_REFRESH;
@@ -257,7 +292,11 @@ void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) 
   const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
   // Never the cheap path: this frame is the base a grayscale overlay is about to be
   // driven onto, so it has to land exactly where the planes expect it.
-  fallback = applyRefreshPolicy(fallback, 0, /*allowTurbo=*/false);
+  //
+  // Scored like any other frame. It was charged zero, which made a full-frame image page
+  // (an XTC comic panel, a cover) the cheapest thing the panel ever did to the debt, and
+  // left inkMetrics describing a frame two pushes old for the next page turn's score.
+  fallback = applyRefreshPolicy(fallback, scoreFrame(requested), /*allowTurbo=*/false);
   // X3: a HALF fallback means the caller wants a clean base (e.g. the sleep
   // cover, a full-screen swap from arbitrary prior content). Without this, the
   // X3 grayscale base takes its gentle differential happy path and the prior
@@ -297,7 +336,10 @@ void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) { einkDisplay
 
 void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.cleanupGrayscaleBuffers(bwBuffer); }
 
-void HalDisplay::driveAllPixelsNextFast() { einkDisplay.requestDriveAllNextFast(); }
+void HalDisplay::driveAllPixelsNextFast() {
+  driveAllArmed = true;
+  einkDisplay.requestDriveAllNextFast();
+}
 
 #if FREEINK_DEVICE_X4PRO
 // X4 Pro UC8279: a separate dark and light grey for whole-screen images.
