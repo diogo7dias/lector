@@ -20,6 +20,15 @@ HalDisplay display;
 #define LECTOR_SSD1677_DRIVE_ALL 1
 #endif
 
+// 1 arms drive-all on a Turbo page turn as well, 0 leaves only the standard-waveform pass
+// doing it. Turbo's waveform is a differential update: a pixel that did not change gets no
+// drive at all, so the residue of the previous page stays in it until something re-pushes
+// it. That is the same residue drive-all was introduced to remove from standard page
+// turns; Turbo was the one FAST path still allowed to leave it behind.
+#ifndef LECTOR_SSD1677_DRIVE_ALL_TURBO
+#define LECTOR_SSD1677_DRIVE_ALL_TURBO 1
+#endif
+
 HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY) {}
 
 HalDisplay::~HalDisplay() {}
@@ -114,14 +123,24 @@ HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode request
   // Writing RED as the target's complement (the driver's drive-all, already what night
   // mode runs on every page) makes every pixel re-pushed to its rail, so each page turn
   // also erases the residue of the ones before it. The waveform length does not depend on
-  // how many pixels it drives (Ssd1677Driver.cpp displayImpl), so this costs no time.
+  // how many pixels it drives (Ssd1677Driver.cpp displayImpl), so this costs no waveform time.
   //
   // Not on the first pass after begin(): the driver's boot promotion to a clean HALF is the
-  // better answer to a panel nobody has painted yet. Not on Turbo (that pass is the cheap
-  // one by design), not on inverted content (already drive-all), not on other controllers.
+  // better answer to a panel nobody has painted yet. Not on inverted content (already
+  // drive-all), not on other controllers.
+  //
+  // Turbo is included, and that is the point of LECTOR_SSD1677_DRIVE_ALL_TURBO. Turbo's
+  // incremental waveform only drives pixels whose value changed, and its short drive cannot
+  // push one to its rail, so every cheap pass deposits residue in the pixels that stayed
+  // put (the background, the margins, the text that did not move), and nothing touches it
+  // again until the 1-in-8 standard pass. Writing RED as the target's complement turns each
+  // cheap pass into a re-push of all of them toward their rail, so the residue is spent on
+  // the same pass that earns it. The extra cost is the RED plane over SPI, not waveform
+  // time: 48000 bytes at 40 MHz is 9.6 ms on a ~150 ms turn.
 #if LECTOR_SSD1677_DRIVE_ALL
-  if (chosen == DisplayRefreshPolicy::Mode::Fast && firstPassDone && !lastPassWasTurbo &&
-      deviceProfile.controllerIsSsd1677 && !einkDisplay.isInverted()) {
+  constexpr bool kDriveAllTurbo = LECTOR_SSD1677_DRIVE_ALL_TURBO != 0;
+  if (chosen == DisplayRefreshPolicy::Mode::Fast && firstPassDone && deviceProfile.controllerIsSsd1677 &&
+      !einkDisplay.isInverted() && (kDriveAllTurbo || !lastPassWasTurbo)) {
     einkDisplay.requestDriveAllNextFast();
   }
 #endif
