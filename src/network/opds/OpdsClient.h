@@ -20,6 +20,8 @@ enum class ClientStatus {
   // server's page is bigger than this board can hold.
   FEED_TOO_LARGE,
   FETCH_FAILED,
+  // TCP or TLS never came up on any attempt: wrong host or port, or a firewall.
+  UNREACHABLE,
   PARSE_FAILED,
   EMPTY,
   BAD_CREDENTIALS,
