@@ -53,6 +53,9 @@ class HalGPIO {
   // otherwise appear in a single sample and never commit (dropped press).
   bool isDebouncePending() const;
 
+  // Raw readings of the two button-ladder ADC pins now, -1 on boards without one.
+  void readButtonAdc(int& raw1, int& raw2);
+
   // USB state as sampled by the last update() call.
   // Prefer this in per-loop polling: isUsbConnected() performs a fresh I2C read on X3.
   bool isUsbConnectedCached() const { return lastUsbConnected; }

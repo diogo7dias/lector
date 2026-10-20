@@ -288,6 +288,16 @@ void recordTransferFailure(const char* via, const char* reason, const size_t rec
   diaglog::markPending();
 }
 
+void recordTransferExit(const char* cause, const int rssi, const int adc1, const int adc2) {
+  char fields[40];
+  snprintf(fields, sizeof(fields), "session=%04x", session());
+  begin("file transfer closed", fields);
+  diaglog::note("  cause=%s rssi=%d button_adc=%d,%d (idle>3900, Back 3101..3900)", cause, rssi, adc1, adc2);
+  noteVitals();
+  diaglog::markPending();
+  flush();
+}
+
 void recordTlsGate(const char* step, const uint32_t freeHeap, const uint32_t largestBlock, const bool framebufferLent,
                    const uint32_t floorFree, const uint32_t floorBlock, const bool allowed, const uint32_t poolFree,
                    const uint32_t poolBlock) {

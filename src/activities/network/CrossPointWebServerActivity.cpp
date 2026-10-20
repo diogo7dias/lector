@@ -5,11 +5,13 @@
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
+#include <HalGPIO.h>
 #include <I18n.h>
 #include <WiFi.h>
 
 #include <cstddef>
 
+#include "Diagnostics.h"
 #include "MappedInputManager.h"
 #include "NearbyFileTransferActivity.h"
 #include "NetworkModeSelectionActivity.h"
@@ -230,7 +232,7 @@ void CrossPointWebServerActivity::startAccessPoint() {
 
   if (!apStarted) {
     LOG_ERR("WEBACT", "ERROR: Failed to start Access Point!");
-    onGoHome();
+    closeTransfer("access point failed");
     return;
   }
 
@@ -275,7 +277,7 @@ void CrossPointWebServerActivity::startWebServer() {
   if (!webServer) {
     // Same way out as a server that fails to begin(): staying would leave a hidden
     // screen that swallows Back.
-    onGoHome();
+    closeTransfer("server alloc failed");
     return;
   }
 
@@ -305,8 +307,15 @@ void CrossPointWebServerActivity::startWebServer() {
     LOG_ERR("WEBACT", "ERROR: Failed to start web server!");
     webServer.reset();
     // Go back on error
-    onGoHome();
+    closeTransfer("server start failed");
   }
+}
+
+void CrossPointWebServerActivity::closeTransfer(const char* cause) {
+  int adc1 = -1, adc2 = -1;
+  gpio.readButtonAdc(adc1, adc2);
+  diag::recordTransferExit(cause, isApMode ? 0 : WiFi.RSSI(), adc1, adc2);
+  onGoHome();
 }
 
 bool CrossPointWebServerActivity::handleCustomInput() {
@@ -336,7 +345,7 @@ bool CrossPointWebServerActivity::handleCustomInput() {
           if (millis() - firstDisconnectAt > WIFI_ABANDON_MS) {
             LOG_DBG("WEBACT", "WiFi unavailable for >%lu s; returning to network selection", WIFI_ABANDON_MS / 1000UL);
             state = WebServerActivityState::SHUTTING_DOWN;
-            onGoHome();
+            closeTransfer("wifi lost 5 min");
             return true;
           }
         } else {
@@ -365,13 +374,13 @@ bool CrossPointWebServerActivity::handleCustomInput() {
     // Tight loop for throughput: more iterations = more data per main loop cycle.
     if (webServer && webServer->isRunning() &&
         pumpServer(*webServer, mappedInput, lastHandleClientTime, "WEBACT", 500, 32, 64)) {
-      onGoHome();
+      closeTransfer("back during pump");
       return true;
     }
 
     // Handle exit on Back button (also check outside loop)
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      onGoHome();
+      closeTransfer("back");
       return true;
     }
   }
