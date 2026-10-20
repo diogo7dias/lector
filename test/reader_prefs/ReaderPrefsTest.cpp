@@ -60,6 +60,7 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.bookMargins, b.bookMargins);
   EXPECT_EQ(a.headingPageBreak, b.headingPageBreak);
   EXPECT_EQ(a.wordExpansion, b.wordExpansion);
+  EXPECT_EQ(a.sbBookTitlePos, b.sbBookTitlePos);
   EXPECT_EQ(a.screenMargin, b.screenMargin);
   EXPECT_EQ(a.screenMarginTop, b.screenMarginTop);
   EXPECT_EQ(a.screenMarginBottom, b.screenMarginBottom);
@@ -558,7 +559,9 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V18_SIZE + 1, READER_PREFS_V19_SIZE);
   EXPECT_EQ(READER_PREFS_V19_SIZE + 1, READER_PREFS_V20_SIZE);
   EXPECT_EQ(READER_PREFS_V20_SIZE + 1, READER_PREFS_V21_SIZE);
-  EXPECT_EQ(READER_PREFS_V21_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V21_SIZE + 1, READER_PREFS_V22_SIZE);
+  EXPECT_EQ(READER_PREFS_V22_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V22_SIZE, readerPrefsRecordSize(22));
   EXPECT_EQ(READER_PREFS_V21_SIZE, readerPrefsRecordSize(21));
   EXPECT_EQ(READER_PREFS_V20_SIZE, readerPrefsRecordSize(20));
   EXPECT_EQ(READER_PREFS_V19_SIZE, readerPrefsRecordSize(19));
@@ -572,7 +575,7 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(22, ReaderPrefs::VERSION);
+  EXPECT_EQ(23, ReaderPrefs::VERSION);
 }
 
 TEST(ReaderPrefs, AV12RecordKeepsItsFieldsAndLeavesTheNewItemOff) {
@@ -974,4 +977,57 @@ TEST(ReaderPrefs, WordExpansionFlippedRoundTrips) {
   ASSERT_TRUE(readReaderPrefs(file, loaded));
   expectEqual(original, loaded);
   EXPECT_EQ(1, makeRenderSpec(loaded, 1, 480, 800).wordExpansion);
+}
+
+TEST(ReaderPrefs, AV22RecordLeavesTheBookTitleItemOff) {
+  auto old = makeSample();
+  old.sbBookTitlePos = 1;  // outside the v22 record, must not be read
+  std::stringstream file;
+  file.put(static_cast<char>(22));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(22));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(0, loaded.sbBookTitlePos);
+}
+
+TEST(ReaderPrefs, ABookTitleSourceFoldsOntoTheBookTitleItem) {
+  ReaderPrefs p;
+  p.sbTitleSource = 0;  // Book, from before Title Source was retired
+  p.sbTitlePos = 2;     // TC
+  p.sbBookTitlePos = 0;
+  const StatusBarBlock b = statusBarOf(p);
+  EXPECT_EQ(0, b.titlePos);
+  EXPECT_EQ(2, b.bookTitlePos);
+  EXPECT_EQ(1, b.titleSource);
+
+  p.sbBookTitlePos = 4;  // already placed: it keeps its own anchor
+  EXPECT_EQ(4, statusBarOf(p).bookTitlePos);
+  EXPECT_EQ(0, statusBarOf(p).titlePos);
+}
+
+TEST(ReaderPrefs, TitleSlotStacksTheBookAboveTheChapterOnOneAnchor) {
+  StatusBarBlock b;
+  b.titleSource = 1;
+  b.titlePos = 1;      // TL
+  b.bookTitlePos = 1;  // TL
+  auto s = b.titleSlot(true);
+  EXPECT_EQ(1, s.anchor);
+  EXPECT_TRUE(s.chapter);
+  EXPECT_TRUE(s.bookAbove);
+  EXPECT_EQ(0, s.bookItem);
+
+  b.bookTitlePos = 6;  // BR: its own one-line item
+  s = b.titleSlot(true);
+  EXPECT_FALSE(s.bookAbove);
+  EXPECT_EQ(6, s.bookItem);
+
+  s = b.titleSlot(false);  // chapterless: the book title takes the slot at its anchor
+  EXPECT_EQ(6, s.anchor);
+  EXPECT_FALSE(s.chapter);
+  EXPECT_EQ(0, s.bookItem);
+
+  b.bookTitlePos = 0;  // chapterless, no Book Title: the chapter anchor shows the book
+  EXPECT_EQ(1, b.titleSlot(false).anchor);
 }

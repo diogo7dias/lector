@@ -272,6 +272,14 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
   CrossPointSettings& s = *this;
   bool needsResave = false;
 
+  // Title Source left the settings list (see StatusBarBlock::foldTitleSource): a file that
+  // chose Book moves that title onto the Book Title item, once, and is written back.
+  if ((doc["sbTitleSource"] | (uint8_t)SB_TITLE_CHAPTER) == SB_TITLE_BOOK) {
+    sbTitleSource = SB_TITLE_BOOK;
+    setStatusBar(statusBar());
+    needsResave = true;
+  }
+
   if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {
     const uint8_t legacyValue = doc["sleepTimeout"] | (uint8_t)SLEEP_10_MIN;
     sleepTimeoutMinutes = sleepTimeoutEnumToMinutes(legacyValue);
@@ -545,6 +553,7 @@ StatusBarBlock CrossPointSettings::statusBar() const {
 #define CP_CAPTURE_SB(prefsName, settingsName, blockName) b.blockName = settingsName;
   READER_STATUS_BAR_FIELDS(CP_CAPTURE_SB)
 #undef CP_CAPTURE_SB
+  b.foldTitleSource();
   return b;
 }
 

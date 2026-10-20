@@ -355,8 +355,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sbEnabled = 1;
   uint8_t sbBatteryPos = SB_ANCHOR_OFF;      // battery anchor
   uint8_t sbClockPos = SB_ANCHOR_OFF;        // clock anchor (X3 RTC only)
-  uint8_t sbTitlePos = SB_ANCHOR_TL;         // title anchor
-  uint8_t sbTitleSource = SB_TITLE_CHAPTER;  // book or chapter title
+  uint8_t sbTitlePos = SB_ANCHOR_TL;         // chapter title anchor
+  uint8_t sbTitleSource = SB_TITLE_CHAPTER;  // retired, no longer saved: see StatusBarBlock::foldTitleSource
   uint8_t sbTitleTruncate = 0;               // 0 = greedy, no ellipsis (drives reflow); 1 = clip with ellipsis
   uint8_t sbPagePos = SB_ANCHOR_BL;          // page-in-chapter anchor
   uint8_t sbPageFormat = SB_PAGE_FRACTION;   // "3/40" vs "8 left"
@@ -367,6 +367,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sbParaPagesPos = SB_ANCHOR_BC;     // pages left in this paragraph (>P.N) anchor
   uint8_t sbChapterTimePos = SB_ANCHOR_OFF;  // time left in this chapter (C:12m) anchor
   uint8_t sbBookTimePos = SB_ANCHOR_OFF;     // time left in the book (B:3h05) anchor
+  uint8_t sbBookTitlePos = SB_ANCHOR_OFF;    // book title anchor; on the chapter title's, stacked above it
   uint8_t sbBookBar = SB_EDGE_OFF;           // book progress bar edge (Off/Top/Bottom)
   uint8_t sbChapterBar = SB_EDGE_BOTTOM;     // chapter progress bar edge
   uint8_t sbBarThickness = SB_BAR_MEDIUM;    // progress bar thickness slim/med/fat
