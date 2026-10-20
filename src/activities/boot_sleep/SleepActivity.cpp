@@ -607,8 +607,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const sleep_fa
     // the differential nudge then lands unevenly (blotchy noise in gray areas).
     //
     // Settled for the X4 Pro on hardware: FULL collapsed the wallpaper's mid tones to a
-    // single grey, so it is back on HALF. The C3 X4 (UC8279 non-X3) still takes FULL —
-    // untested there, and the verdict does not transfer across controllers.
+    // single grey, so every device takes HALF (sleepGrayscaleBaseRefresh).
     renderer.displayGrayscaleBase(plan.base);
   } else {
     renderer.displayBuffer(plan.base);

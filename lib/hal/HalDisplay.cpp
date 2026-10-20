@@ -358,22 +358,33 @@ void HalDisplay::driveAllPixelsNextFast() {
 // 49-byte table: [0]=0x01, [1..4]=phases A-D (bits 7:6 level, 0x80 white push, 0x40 black
 // push; bits 5:0 frames), [5],[6],[12],[13]=0x01, the rest 0.
 //
+// The two greys sit either side of the stock one, not below it. Stock pushes both for the
+// phase-B count (3 frames on LUT_VER 0x68, 2 on 0x02), and that count is the one judged best
+// on hardware: the LUT Lab swept it up to 4x and every variant looked worse (0.31.18 notes).
+// A split that leaves light at the stock count and cuts dark to one frame averages darker
+// than that, which reads as crushed shadows and a dim picture; stretching one grey a frame
+// up and the other a frame down keeps the mean where hardware put it.
+//
 // Calibration knobs, per build with -D:
-//   LECTOR_X4PRO_DARK_FRAMES  white-push frames for the dark grey. 0 = stock tables (A/B).
-//   LECTOR_X4PRO_LIGHT_FRAMES white-push frames for the light grey. 0 = the stock phase-B
-//                             count (2 on LUT_VER 0x02, 3 on 0x68).
+//   LECTOR_X4PRO_SPLIT_MIDS   0 = stock tables (A/B against the split).
+//   LECTOR_X4PRO_DARK_LESS    frames the dark push is shorter than the stock count (1).
+//   LECTOR_X4PRO_LIGHT_MORE   frames the light push is longer than the stock count (1).
 //   LECTOR_X4PRO_SWAP_MIDS    1 if the panel shows the two greys the wrong way round.
-#ifndef LECTOR_X4PRO_DARK_FRAMES
-#define LECTOR_X4PRO_DARK_FRAMES 1
+#ifndef LECTOR_X4PRO_SPLIT_MIDS
+#define LECTOR_X4PRO_SPLIT_MIDS 1
 #endif
-#ifndef LECTOR_X4PRO_LIGHT_FRAMES
-#define LECTOR_X4PRO_LIGHT_FRAMES 0
+#ifndef LECTOR_X4PRO_DARK_LESS
+#define LECTOR_X4PRO_DARK_LESS 1
+#endif
+#ifndef LECTOR_X4PRO_LIGHT_MORE
+#define LECTOR_X4PRO_LIGHT_MORE 1
 #endif
 #ifndef LECTOR_X4PRO_SWAP_MIDS
 #define LECTOR_X4PRO_SWAP_MIDS 0
 #endif
-static_assert(LECTOR_X4PRO_DARK_FRAMES >= 0 && LECTOR_X4PRO_DARK_FRAMES < 64, "6-bit frame count");
-static_assert(LECTOR_X4PRO_LIGHT_FRAMES >= 0 && LECTOR_X4PRO_LIGHT_FRAMES < 64, "6-bit frame count");
+// The 0x02 table's stock count is 2, so a dark push may lose at most one frame.
+static_assert(LECTOR_X4PRO_DARK_LESS >= 0 && LECTOR_X4PRO_DARK_LESS < 2, "dark push needs at least one frame");
+static_assert(LECTOR_X4PRO_LIGHT_MORE >= 0 && LECTOR_X4PRO_LIGHT_MORE < 60, "6-bit frame count");
 
 namespace {
 constexpr size_t kAaLen = 49;
@@ -381,8 +392,10 @@ using SplitGrayLut = std::array<uint8_t, 5 * kAaLen>;
 
 // Rows in register order 0x20..0x24: VCOM, then the black, dark, light and white pixels'
 // tables under the driver's inverted absolute planes.
-constexpr SplitGrayLut splitGrayLut(const uint8_t light, const uint8_t dark) {
-  constexpr uint8_t phaseC[5] = {0x01, 0x41, 0x01, 0x01, 0x81};  // stock endpoint pushes
+constexpr SplitGrayLut splitGrayLut(const uint8_t stock) {
+  const uint8_t light = static_cast<uint8_t>(stock + LECTOR_X4PRO_LIGHT_MORE);  // phase B
+  const uint8_t dark = static_cast<uint8_t>(stock - LECTOR_X4PRO_DARK_LESS);    // phase D
+  constexpr uint8_t phaseC[5] = {0x01, 0x41, 0x01, 0x01, 0x81};                 // stock endpoint pushes
   constexpr size_t darkRow = LECTOR_X4PRO_SWAP_MIDS ? 3 : 2;
   constexpr size_t lightRow = LECTOR_X4PRO_SWAP_MIDS ? 2 : 3;
   SplitGrayLut t{};
@@ -398,11 +411,9 @@ constexpr SplitGrayLut splitGrayLut(const uint8_t light, const uint8_t dark) {
   return t;
 }
 
-// Flash-resident, one per LUT_VER stock phase-B count.
-constexpr SplitGrayLut kSplitGray02 =
-    splitGrayLut(LECTOR_X4PRO_LIGHT_FRAMES ? LECTOR_X4PRO_LIGHT_FRAMES : 2, LECTOR_X4PRO_DARK_FRAMES);
-constexpr SplitGrayLut kSplitGray68 =
-    splitGrayLut(LECTOR_X4PRO_LIGHT_FRAMES ? LECTOR_X4PRO_LIGHT_FRAMES : 3, LECTOR_X4PRO_DARK_FRAMES);
+// Flash-resident, one per LUT_VER; the argument is that table's stock phase-B count.
+constexpr SplitGrayLut kSplitGray02 = splitGrayLut(2);
+constexpr SplitGrayLut kSplitGray68 = splitGrayLut(3);
 
 // The load-bearing invariant: each phase runs one frame count on all five tables, and the
 // two mid rows really differ.
@@ -412,7 +423,7 @@ constexpr bool phasesAgree(const SplitGrayLut& t) {
       if ((t[r * kAaLen + p] & 0x3F) != (t[p] & 0x3F)) return false;
   return t[2 * kAaLen + 2] != t[3 * kAaLen + 2] && t[2 * kAaLen + 4] != t[3 * kAaLen + 4];
 }
-static_assert(LECTOR_X4PRO_DARK_FRAMES == 0 || (phasesAgree(kSplitGray02) && phasesAgree(kSplitGray68)),
+static_assert(!LECTOR_X4PRO_SPLIT_MIDS || (phasesAgree(kSplitGray02) && phasesAgree(kSplitGray68)),
               "split grey LUT breaks the shared per-phase frame count");
 }  // namespace
 #endif
@@ -430,7 +441,7 @@ void HalDisplay::displayGrayBuffer(bool turnOffScreen, bool fullTone) {
   // that probes as SSD1677 must never be handed it.
   const unsigned char* lut = nullptr;
 #if FREEINK_DEVICE_X4PRO
-  if (LECTOR_X4PRO_DARK_FRAMES != 0 && fullTone && deviceProfile.controllerIsUc8279 && !deviceProfile.isX3) {
+  if (LECTOR_X4PRO_SPLIT_MIDS && fullTone && deviceProfile.controllerIsUc8279 && !deviceProfile.isX3) {
     lut = (BoardConfig::ACTIVE.displayControllerVariant == 0x02 ? kSplitGray02 : kSplitGray68).data();
   }
 #else
