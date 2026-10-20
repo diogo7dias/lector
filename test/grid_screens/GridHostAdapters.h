@@ -24,7 +24,7 @@ using Rect = list_chrome::Rect;
 // Hardware, chrome, and task scheduling only. The generated includes below keep
 // the production list/grid activities, navigation, host, gate and SDK drawing/routing.
 struct HalDisplay {
-  enum RefreshMode { FAST_REFRESH };
+  enum RefreshMode { FAST_REFRESH, HALF_REFRESH };
   struct Profile {
     bool isX4Pro = true;
   } device;
@@ -117,6 +117,7 @@ struct Activity {
   virtual void onEnter() {}
   virtual void loop() {}
   virtual void render(RenderLock&&) {}
+  virtual void onRevealed() {}
   void requestUpdate() {}
   void finish() {}
 };

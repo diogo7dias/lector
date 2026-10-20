@@ -168,6 +168,9 @@ class EpubReaderActivity final : public Activity {
   bool pendingDeleteBook = false;
   // Next-book suggestion menu for the End-of-Book screen
   EndOfBookOptions endOfBookOptions;
+  // The end-of-book screen swaps out a whole page: its first paint is a HALF, later
+  // cursor moves stay FAST. Reset by any book page paint.
+  bool endOfBookPainted = false;
   // Quick Menu: the pop-up a binding set to Menu Pop-up opens over the page. Owned by the
   // reader rather than being its own activity so the page underneath is never repainted —
   // the pop-up is drawn straight onto the framebuffer the page already occupies.

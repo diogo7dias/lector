@@ -693,6 +693,9 @@ void UiStatusActivity::render(RenderLock&&) {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (drawOverlay()) return;
-  renderer.displayBuffer(view.refresh);
+  const bool clean = cleanPaint_ || view.title != lastTitle_;
+  cleanPaint_ = false;
+  lastTitle_ = view.title;
+  renderer.displayBuffer(clean && view.refresh == HalDisplay::FAST_REFRESH ? HalDisplay::HALF_REFRESH : view.refresh);
   afterRender();
 }

@@ -374,5 +374,6 @@ void UiGridActivity::render(RenderLock&&) {
   GUI.drawScrollArrows(renderer, scrollArrowBand_, scrollArrows_);
   drawListChromeBottom(renderer, mappedInput, bands);
   if (drawOverlay()) return;
-  renderer.displayBuffer();
+  renderer.displayBuffer(cleanPaint_ ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+  cleanPaint_ = false;
 }

@@ -7,10 +7,10 @@
 #include <cstring>
 #include <vector>
 
-#include "Uc8253X3Driver.h"
-#include "Uc8279Driver.h"
 #include "../lut/Uc8253X3Luts.h"
 #include "../lut/Uc8279X3Luts.h"
+#include "Uc8253X3Driver.h"
+#include "Uc8279Driver.h"
 
 namespace freeink {
 
@@ -39,7 +39,9 @@ void EpdBus::waitBusy(const char*) {}
 void EpdBus::waitBusy(BusyPolarity, const char*) {}
 void EpdBus::waitRefreshComplete(const char*) {}
 uint16_t EpdBus::waitIdleStable(unsigned long, unsigned long) { return 0; }
-void EpdBus::sendPlaneFlipped(uint8_t c, const uint8_t* p, uint16_t, uint16_t) { g_ev.push_back({Ev::Flipped, c, p, 0}); }
+void EpdBus::sendPlaneFlipped(uint8_t c, const uint8_t* p, uint16_t, uint16_t) {
+  g_ev.push_back({Ev::Flipped, c, p, 0});
+}
 void EpdBus::sendPlaneFlippedInverted(uint8_t c, const uint8_t* p, uint16_t, uint16_t) {
   g_ev.push_back({Ev::Inverted, c, p, 0});
 }

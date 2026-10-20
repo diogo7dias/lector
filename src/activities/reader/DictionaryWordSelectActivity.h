@@ -93,4 +93,6 @@ class DictionaryWordSelectActivity final : public Activity {
   int16_t snapshotW = 0;
   int16_t snapshotH = 0;
   int snapshotIdx = -1;
+  // A popup was drawn over the page: the repaint that removes it is a HALF.
+  bool cleanAfterPopup = false;
 };

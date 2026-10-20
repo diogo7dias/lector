@@ -226,7 +226,7 @@ void ActivityManager::loop() {
     if (lightPanel.isActive()) {
       // close() clears isActive() before this runs: the page under the band gets a clean paint.
       if (lightPanel.handleInput(mappedInput, [this] {
-            if (!lightPanel.isActive() && currentActivity) currentActivity->onRevealed();
+            if (!lightPanel.isActive()) currentActivity->onRevealed();
             requestUpdate(/*immediate=*/true);
           }))
         return;

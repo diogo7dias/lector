@@ -1695,6 +1695,7 @@ void EpubReaderActivity::returnToLastPage() {
   nextPageNumber = 0;
   // The "last page" sentinel: render() clamps it to the chapter's real last page.
   pendingPageJump = std::numeric_limits<uint16_t>::max();
+  scheduleGhostCleanup();
   requestUpdate();
 }
 
@@ -2653,10 +2654,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     endOfBookOptions.loadOnce(epub->getPath());
     renderer.clearScreen();
     endOfBookOptions.render(renderer, mappedInput);
-    renderer.displayBuffer();
+    renderer.displayBuffer(endOfBookPainted ? HalDisplay::FAST_REFRESH : HalDisplay::HALF_REFRESH);
+    endOfBookPainted = true;
     showPendingSyncSaveError();
     return;
   }
+  endOfBookPainted = false;
 
   // Apply screen viewable areas, reading margins and the status bar bands.
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;

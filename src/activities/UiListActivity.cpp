@@ -197,5 +197,7 @@ void UiListActivity::render(RenderLock&&) {
   drawScrollArrows();
   drawFooter();
   if (drawOverlay()) return;
-  renderer.displayBuffer(refreshMode());
+  const HalDisplay::RefreshMode mode = refreshMode();
+  renderer.displayBuffer(cleanPaint_ && mode == HalDisplay::FAST_REFRESH ? HalDisplay::HALF_REFRESH : mode);
+  cleanPaint_ = false;
 }
