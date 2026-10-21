@@ -378,10 +378,12 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
     // The popup overdraws the page, so the snapshot no longer matches the
     // framebuffer — force the next render onto the full-repaint path.
     snapshotIdx = -1;
+    cleanAfterPopup = true;
     // drawPopup overlays the framebuffer and refreshes the display itself.
     // I18N.get directly: tr() only accepts literal key names.
     GUI.drawPopup(renderer, I18N.get(popupMsg));
     return;
   }
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  renderer.displayBuffer(cleanAfterPopup ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+  cleanAfterPopup = false;
 }

@@ -33,12 +33,10 @@
 
 namespace {
 
-// The value passed for renderPxcSleepScreen's oneBitRefresh on the sleep faces, where
-// grayscale is always true and the argument is therefore never read. Named rather than
-// spelled as a literal so nobody reads it as a waveform this path chooses; it is the
-// parameter's own default. The 1-bit callers that DO read it (BootActivity,
-// PxcViewerActivity) pass their own.
-constexpr HalDisplay::RefreshMode kPxcOneBitRefreshUnused = HalDisplay::HALF_REFRESH;
+// The waveform of a .pxc sleep face drawn in 1 bit, which only happens on a panel without
+// gray (DeviceProfile::panelHasGray). HALF: the same clean pass sleep_face::planFor gives
+// a face flattened to black and white.
+constexpr HalDisplay::RefreshMode kPxcOneBitRefresh = HalDisplay::HALF_REFRESH;
 
 // A FAT directory is a flat array of fixed-size slots, so a random wallpaper can be
 // reached by SEEKING to a random slot rather than walking every entry (the slot
@@ -437,24 +435,22 @@ void SleepActivity::renderCustomSleepScreen() const {
   // sequence powers the panel rails down, and the grayscale refresh that follows then
   // shared one activation with the rail ramp. Fixed at the driver-config level; see
   // src/platform/LectorSsd1677Config.cpp.
-  // Always the 3-pass grayscale, never the 1-bit pass. This used to be a setting, and it
+  // The 3-pass grayscale wherever the panel can draw it. This used to be a setting, and it
   // was the wrong thing to offer: the sleep screen is the picture the device wears while
   // it is off, so tone is the whole point of it, and the second or so the extra two panel
   // refreshes cost is spent after the user has already put the device down.
   //
-  // Because pxcGrayscale is a compile-time true, the oneBitRefresh argument below is NEVER
-  // READ on this path: PxcSleepRenderer.cpp only consumes it when grayscale == false. It
-  // is not deletable from the signature — BootActivity (the unlock-over-wallpaper redraw)
-  // and PxcViewerActivity both call this with grayscale=false and DO read it. Passing the
-  // parameter's own default here rather than a literal says that plainly.
+  // A panel without gray (UC8279 LUT_VER 0x67, DeviceProfile::panelHasGray) gets the
+  // dithered 1-bit pass instead, one HALF refresh: the grayscale path there would drop
+  // both planes in the SDK and leave the two mid levels thresholded to flat black/white.
   //
-  // What the panel actually does on this path is sleep_face::planFor(Face::Wallpaper,
+  // On the grayscale path the panel does sleep_face::planFor(Face::Wallpaper,
   // /*sourceHasGrayscale=*/true, ...): a base at that plan's waveform, then the two
   // grayscale planes. Two submissions on top of the popup.
-  constexpr bool pxcGrayscale = true;
+  const bool pxcGrayscale = display.profile().panelHasGray;
   {
     const SleepInfoOverlayScope overlayScope("/sleep.pxc");
-    if (renderPxcSleepScreen(renderer, "/sleep.pxc", pxcGrayscale, kPxcOneBitRefreshUnused, &drawSleepInfoOverlay,
+    if (renderPxcSleepScreen(renderer, "/sleep.pxc", pxcGrayscale, kPxcOneBitRefresh, &drawSleepInfoOverlay,
                              pxcOptions)) {
       LOG_INF("SLP", "Loaded: /sleep.pxc");
       APP_STATE.lastSleepWallpaperPath = "/sleep.pxc";
@@ -486,7 +482,7 @@ void SleepActivity::renderCustomSleepScreen() const {
       LOG_INF("SLP", "Randomly loading: %s", filename.c_str());
       const SleepInfoOverlayScope overlayScope(filename, linePosition, lineTotal);
       if (hasPxcExtension(name)) {
-        if (renderPxcSleepScreen(renderer, filename, pxcGrayscale, kPxcOneBitRefreshUnused, &drawSleepInfoOverlay,
+        if (renderPxcSleepScreen(renderer, filename, pxcGrayscale, kPxcOneBitRefresh, &drawSleepInfoOverlay,
                                  pxcOptions)) {
           APP_STATE.lastSleepWallpaperPath = filename;
           return true;
@@ -576,7 +572,8 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const sleep_fa
 
   // The cover filter describes how a full-screen image should look: NO_FILTER keeps the
   // tone (grayscale), the others flatten it to black and white.
-  const bool hasGreyscale = bitmap.hasGreyscale() &&
+  // A panel without gray (DeviceProfile::panelHasGray) skips the planes it cannot draw.
+  const bool hasGreyscale = bitmap.hasGreyscale() && display.profile().panelHasGray &&
                             SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
 
   renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
@@ -607,8 +604,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const sleep_fa
     // the differential nudge then lands unevenly (blotchy noise in gray areas).
     //
     // Settled for the X4 Pro on hardware: FULL collapsed the wallpaper's mid tones to a
-    // single grey, so it is back on HALF. The C3 X4 (UC8279 non-X3) still takes FULL —
-    // untested there, and the verdict does not transfer across controllers.
+    // single grey, so every device takes HALF (sleepGrayscaleBaseRefresh).
     renderer.displayGrayscaleBase(plan.base);
   } else {
     renderer.displayBuffer(plan.base);

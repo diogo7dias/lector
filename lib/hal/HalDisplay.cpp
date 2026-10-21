@@ -14,6 +14,21 @@ HalDisplay display;
 
 #define SD_SPI_MISO 7
 
+// 0 puts the SSD1677 page turns back on the plain differential, for a kit build that has to
+// compare the two on the same panel.
+#ifndef LECTOR_SSD1677_DRIVE_ALL
+#define LECTOR_SSD1677_DRIVE_ALL 1
+#endif
+
+// 1 arms drive-all on a Turbo page turn as well, 0 leaves only the standard-waveform pass
+// doing it. Turbo's waveform is a differential update: a pixel that did not change gets no
+// drive at all, so the residue of the previous page stays in it until something re-pushes
+// it. That is the same residue drive-all was introduced to remove from standard page
+// turns; Turbo was the one FAST path still allowed to leave it behind.
+#ifndef LECTOR_SSD1677_DRIVE_ALL_TURBO
+#define LECTOR_SSD1677_DRIVE_ALL_TURBO 1
+#endif
+
 HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY) {}
 
 HalDisplay::~HalDisplay() {}
@@ -84,13 +99,52 @@ HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode request
   // Gated on the panel honouring it, not merely on the request: on a driver that ignores
   // FastQuality the request reaches nothing, and recording it would put a 1 in the perf
   // log's turbo column for a pass that ran the ordinary waveform.
+  //
+  // A drive-all pass is never Turbo. Its whole job is to push every pixel to its rail, and
+  // the SSD1677 driver only drops Turbo for inverted content, not for a drive-all: left
+  // alone, an X4 wake painted its lock face out with the ~77 ms incremental waveform
+  // instead of the ~505 ms one the wake design (main.cpp, armsDriveAll) is sized around.
+  // The driver clears its one-shot on every pass, so the flag does the same here.
+  const bool driveAllPass = driveAllArmed;
+  driveAllArmed = false;
   const bool turboPossible = turboWanted && einkDisplay.supportsFastTurbo();
-  lastPassWasTurbo =
-      allowTurbo && policyMode == DisplayRefreshPolicy::Mode::Fast && refreshPolicy.useTurbo(turboPossible);
+  lastPassWasTurbo = allowTurbo && !driveAllPass && policyMode == DisplayRefreshPolicy::Mode::Fast &&
+                     refreshPolicy.useTurbo(turboPossible);
   einkDisplay.setFastQuality(lastPassWasTurbo ? EInkDisplay::FAST_TURBO : EInkDisplay::FAST_STANDARD);
 
   const DisplayRefreshPolicy::Mode chosen = refreshPolicy.choose(policyMode, inkScore, lastPassWasTurbo);
   lastPassWasClean = chosen != DisplayRefreshPolicy::Mode::Fast;
+
+  // SSD1677 differential residue. A plain FAST only drives pixels that differ from the RED
+  // plane, and RED is whatever the firmware last wrote, not what the glass holds: the
+  // gray nudge leaves charge in the anti-aliased edges while cleanupGrayscaleBuffers()
+  // seeds RED with the pure black-and-white frame, and the partial waveform never quite
+  // reaches white, so a pixel that stayed "unchanged" keeps its ghost until the next HALF.
+  // Writing RED as the target's complement (the driver's drive-all, already what night
+  // mode runs on every page) makes every pixel re-pushed to its rail, so each page turn
+  // also erases the residue of the ones before it. The waveform length does not depend on
+  // how many pixels it drives (Ssd1677Driver.cpp displayImpl), so this costs no waveform time.
+  //
+  // Not on the first pass after begin(): the driver's boot promotion to a clean HALF is the
+  // better answer to a panel nobody has painted yet. Not on inverted content (already
+  // drive-all), not on other controllers.
+  //
+  // Turbo is included, and that is the point of LECTOR_SSD1677_DRIVE_ALL_TURBO. Turbo's
+  // incremental waveform only drives pixels whose value changed, and its short drive cannot
+  // push one to its rail, so every cheap pass deposits residue in the pixels that stayed
+  // put (the background, the margins, the text that did not move), and nothing touches it
+  // again until the 1-in-8 standard pass. Writing RED as the target's complement turns each
+  // cheap pass into a re-push of all of them toward their rail, so the residue is spent on
+  // the same pass that earns it. The extra cost is the RED plane over SPI, not waveform
+  // time: 48000 bytes at 40 MHz is 9.6 ms on a ~150 ms turn.
+#if LECTOR_SSD1677_DRIVE_ALL
+  constexpr bool kDriveAllTurbo = LECTOR_SSD1677_DRIVE_ALL_TURBO != 0;
+  if (chosen == DisplayRefreshPolicy::Mode::Fast && firstPassDone && deviceProfile.controllerIsSsd1677 &&
+      !einkDisplay.isInverted() && (kDriveAllTurbo || !lastPassWasTurbo)) {
+    einkDisplay.requestDriveAllNextFast();
+  }
+#endif
+  firstPassDone = true;
   switch (chosen) {
     case DisplayRefreshPolicy::Mode::Clean:
       return RefreshMode::HALF_REFRESH;
@@ -257,7 +311,11 @@ void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) 
   const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
   // Never the cheap path: this frame is the base a grayscale overlay is about to be
   // driven onto, so it has to land exactly where the planes expect it.
-  fallback = applyRefreshPolicy(fallback, 0, /*allowTurbo=*/false);
+  //
+  // Scored like any other frame. It was charged zero, which made a full-frame image page
+  // (an XTC comic panel, a cover) the cheapest thing the panel ever did to the debt, and
+  // left inkMetrics describing a frame two pushes old for the next page turn's score.
+  fallback = applyRefreshPolicy(fallback, scoreFrame(requested), /*allowTurbo=*/false);
   // X3: a HALF fallback means the caller wants a clean base (e.g. the sleep
   // cover, a full-screen swap from arbitrary prior content). Without this, the
   // X3 grayscale base takes its gentle differential happy path and the prior
@@ -297,7 +355,10 @@ void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) { einkDisplay
 
 void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.cleanupGrayscaleBuffers(bwBuffer); }
 
-void HalDisplay::driveAllPixelsNextFast() { einkDisplay.requestDriveAllNextFast(); }
+void HalDisplay::driveAllPixelsNextFast() {
+  driveAllArmed = true;
+  einkDisplay.requestDriveAllNextFast();
+}
 
 #if FREEINK_DEVICE_X4PRO
 // X4 Pro UC8279: a separate dark and light grey for whole-screen images.
@@ -316,22 +377,33 @@ void HalDisplay::driveAllPixelsNextFast() { einkDisplay.requestDriveAllNextFast(
 // 49-byte table: [0]=0x01, [1..4]=phases A-D (bits 7:6 level, 0x80 white push, 0x40 black
 // push; bits 5:0 frames), [5],[6],[12],[13]=0x01, the rest 0.
 //
+// The two greys sit either side of the stock one, not below it. Stock pushes both for the
+// phase-B count (3 frames on LUT_VER 0x68, 2 on 0x02), and that count is the one judged best
+// on hardware: the LUT Lab swept it up to 4x and every variant looked worse (0.31.18 notes).
+// A split that leaves light at the stock count and cuts dark to one frame averages darker
+// than that, which reads as crushed shadows and a dim picture; stretching one grey a frame
+// up and the other a frame down keeps the mean where hardware put it.
+//
 // Calibration knobs, per build with -D:
-//   LECTOR_X4PRO_DARK_FRAMES  white-push frames for the dark grey. 0 = stock tables (A/B).
-//   LECTOR_X4PRO_LIGHT_FRAMES white-push frames for the light grey. 0 = the stock phase-B
-//                             count (2 on LUT_VER 0x02, 3 on 0x68).
+//   LECTOR_X4PRO_SPLIT_MIDS   0 = stock tables (A/B against the split).
+//   LECTOR_X4PRO_DARK_LESS    frames the dark push is shorter than the stock count (1).
+//   LECTOR_X4PRO_LIGHT_MORE   frames the light push is longer than the stock count (1).
 //   LECTOR_X4PRO_SWAP_MIDS    1 if the panel shows the two greys the wrong way round.
-#ifndef LECTOR_X4PRO_DARK_FRAMES
-#define LECTOR_X4PRO_DARK_FRAMES 1
+#ifndef LECTOR_X4PRO_SPLIT_MIDS
+#define LECTOR_X4PRO_SPLIT_MIDS 1
 #endif
-#ifndef LECTOR_X4PRO_LIGHT_FRAMES
-#define LECTOR_X4PRO_LIGHT_FRAMES 0
+#ifndef LECTOR_X4PRO_DARK_LESS
+#define LECTOR_X4PRO_DARK_LESS 1
+#endif
+#ifndef LECTOR_X4PRO_LIGHT_MORE
+#define LECTOR_X4PRO_LIGHT_MORE 1
 #endif
 #ifndef LECTOR_X4PRO_SWAP_MIDS
 #define LECTOR_X4PRO_SWAP_MIDS 0
 #endif
-static_assert(LECTOR_X4PRO_DARK_FRAMES >= 0 && LECTOR_X4PRO_DARK_FRAMES < 64, "6-bit frame count");
-static_assert(LECTOR_X4PRO_LIGHT_FRAMES >= 0 && LECTOR_X4PRO_LIGHT_FRAMES < 64, "6-bit frame count");
+// The 0x02 table's stock count is 2, so a dark push may lose at most one frame.
+static_assert(LECTOR_X4PRO_DARK_LESS >= 0 && LECTOR_X4PRO_DARK_LESS < 2, "dark push needs at least one frame");
+static_assert(LECTOR_X4PRO_LIGHT_MORE >= 0 && LECTOR_X4PRO_LIGHT_MORE < 60, "6-bit frame count");
 
 namespace {
 constexpr size_t kAaLen = 49;
@@ -339,8 +411,10 @@ using SplitGrayLut = std::array<uint8_t, 5 * kAaLen>;
 
 // Rows in register order 0x20..0x24: VCOM, then the black, dark, light and white pixels'
 // tables under the driver's inverted absolute planes.
-constexpr SplitGrayLut splitGrayLut(const uint8_t light, const uint8_t dark) {
-  constexpr uint8_t phaseC[5] = {0x01, 0x41, 0x01, 0x01, 0x81};  // stock endpoint pushes
+constexpr SplitGrayLut splitGrayLut(const uint8_t stock) {
+  const uint8_t light = static_cast<uint8_t>(stock + LECTOR_X4PRO_LIGHT_MORE);  // phase B
+  const uint8_t dark = static_cast<uint8_t>(stock - LECTOR_X4PRO_DARK_LESS);    // phase D
+  constexpr uint8_t phaseC[5] = {0x01, 0x41, 0x01, 0x01, 0x81};                 // stock endpoint pushes
   constexpr size_t darkRow = LECTOR_X4PRO_SWAP_MIDS ? 3 : 2;
   constexpr size_t lightRow = LECTOR_X4PRO_SWAP_MIDS ? 2 : 3;
   SplitGrayLut t{};
@@ -356,11 +430,9 @@ constexpr SplitGrayLut splitGrayLut(const uint8_t light, const uint8_t dark) {
   return t;
 }
 
-// Flash-resident, one per LUT_VER stock phase-B count.
-constexpr SplitGrayLut kSplitGray02 =
-    splitGrayLut(LECTOR_X4PRO_LIGHT_FRAMES ? LECTOR_X4PRO_LIGHT_FRAMES : 2, LECTOR_X4PRO_DARK_FRAMES);
-constexpr SplitGrayLut kSplitGray68 =
-    splitGrayLut(LECTOR_X4PRO_LIGHT_FRAMES ? LECTOR_X4PRO_LIGHT_FRAMES : 3, LECTOR_X4PRO_DARK_FRAMES);
+// Flash-resident, one per LUT_VER; the argument is that table's stock phase-B count.
+constexpr SplitGrayLut kSplitGray02 = splitGrayLut(2);
+constexpr SplitGrayLut kSplitGray68 = splitGrayLut(3);
 
 // The load-bearing invariant: each phase runs one frame count on all five tables, and the
 // two mid rows really differ.
@@ -370,7 +442,7 @@ constexpr bool phasesAgree(const SplitGrayLut& t) {
       if ((t[r * kAaLen + p] & 0x3F) != (t[p] & 0x3F)) return false;
   return t[2 * kAaLen + 2] != t[3 * kAaLen + 2] && t[2 * kAaLen + 4] != t[3 * kAaLen + 4];
 }
-static_assert(LECTOR_X4PRO_DARK_FRAMES == 0 || (phasesAgree(kSplitGray02) && phasesAgree(kSplitGray68)),
+static_assert(!LECTOR_X4PRO_SPLIT_MIDS || (phasesAgree(kSplitGray02) && phasesAgree(kSplitGray68)),
               "split grey LUT breaks the shared per-phase frame count");
 }  // namespace
 #endif
@@ -388,8 +460,10 @@ void HalDisplay::displayGrayBuffer(bool turnOffScreen, bool fullTone) {
   // that probes as SSD1677 must never be handed it.
   const unsigned char* lut = nullptr;
 #if FREEINK_DEVICE_X4PRO
-  if (LECTOR_X4PRO_DARK_FRAMES != 0 && fullTone && deviceProfile.controllerIsUc8279 && !deviceProfile.isX3) {
-    lut = (BoardConfig::ACTIVE.displayControllerVariant == 0x02 ? kSplitGray02 : kSplitGray68).data();
+  if (LECTOR_X4PRO_SPLIT_MIDS && fullTone && deviceProfile.controllerIsUc8279 && !deviceProfile.isX3) {
+    // 0x03 is the same AA pair as 0x02: match the SDK's bank choice (Uc8279X4Driver.cpp).
+    const uint8_t v = BoardConfig::ACTIVE.displayControllerVariant;
+    lut = (v == 0x02 || v == 0x03 ? kSplitGray02 : kSplitGray68).data();
   }
 #else
   (void)fullTone;

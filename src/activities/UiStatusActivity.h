@@ -24,6 +24,7 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
+  void onRevealed() override { cleanPaint_ = true; }
 
  protected:
   // The on-screen button, when a subclass offers one. Subclass actions start
@@ -219,6 +220,11 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   void buildScreen(UiScreen& screen);
 
  private:
+  // A FAST paint is promoted to HALF on entry, on a reveal and when the title
+  // changes (a new state, a new screen): the old one would ghost under it.
+  bool cleanPaint_ = true;
+  const char* lastTitle_ = nullptr;
+
   // The two body shapes. Centred lines for a screen that reports on itself;
   // left-aligned sections for one that gives instructions.
   void buildCentredLines(UiScreen& screen, const StatusView& view);

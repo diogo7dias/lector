@@ -124,7 +124,8 @@ void BmpViewerActivity::onEnter() {
       // drawHints(), not a private label set: a .png sitting in a sleep folder must
       // offer the same favourite/pause/delete triage a .bmp or .pxc does there.
       drawHints();
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      // HALF: the image replaces the loading popup, the list or the previous image.
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     } else {
       GUI.drawHelpText(renderer, Rect{0, pageHeight / 2, renderer.getScreenWidth(), lineHeightForHelp(renderer)},
                        tr(STR_FILE_OPEN_FAILED));
@@ -172,9 +173,8 @@ void BmpViewerActivity::onEnter() {
 
       // Draw UI hints on the base layer
       drawHints();
-      // Single pass for non-grayscale images
-
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      // Single HALF pass for non-grayscale images, for the same reason as the PNG branch.
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 
     } else {
       // Handle file parsing error

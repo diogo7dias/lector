@@ -693,6 +693,12 @@ void UiStatusActivity::render(RenderLock&&) {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (drawOverlay()) return;
-  renderer.displayBuffer(view.refresh);
+  // Same contract as UiListActivity: a popup painted over this screen (a failure
+  // message, an option list) leaves its band behind, and the next paint cleans it.
+  const bool overlayDirty = UITheme::consumeOverlayPainted();
+  const bool clean = cleanPaint_ || view.title != lastTitle_ || overlayDirty;
+  cleanPaint_ = false;
+  lastTitle_ = view.title;
+  renderer.displayBuffer(clean && view.refresh == HalDisplay::FAST_REFRESH ? HalDisplay::HALF_REFRESH : view.refresh);
   afterRender();
 }

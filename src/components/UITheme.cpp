@@ -16,6 +16,7 @@
 #include "components/themes/TouchMetrics.h"
 
 UITheme UITheme::instance;
+bool UITheme::overlayPainted = false;
 
 UITheme::UITheme() {
   // Lector is the only look. All of it lives in BaseTheme / BaseMetrics.

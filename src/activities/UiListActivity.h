@@ -21,6 +21,7 @@ class UiListActivity : public Activity, protected UiAppHost {
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
+  void onRevealed() override { cleanPaint_ = true; }
 
  protected:
   // Base-owned row action; subclass-registered actions start at ACTION_USER.
@@ -80,9 +81,8 @@ class UiListActivity : public Activity, protected UiAppHost {
   // the overlay refreshed the display itself (GUI.drawPopup does) so the base
   // does not push a second refresh behind it.
   virtual bool drawOverlay() { return false; }
-  // The waveform this pass is pushed with. A screen commonly reached from ones
-  // that only ever paint FAST arrives with the panel already carrying ghosts and
-  // asks for one FULL pass; everything else stays on the default.
+  // The waveform this pass is pushed with. The first paint after entry or a
+  // reveal is promoted from FAST to HALF by the base (cleanPaint_).
   virtual HalDisplay::RefreshMode refreshMode() { return HalDisplay::FAST_REFRESH; }
 
   // --- helpers ---------------------------------------------------------------
@@ -113,6 +113,9 @@ class UiListActivity : public Activity, protected UiAppHost {
   ButtonNavigator buttonNavigator{ButtonNavigator::LIST_REPEAT_INTERVAL_MS, ButtonNavigator::LIST_REPEAT_START_MS};
 
  private:
+  // The panel still shows the previous screen on entry and when a child closes: that
+  // paint is a HALF so it does not stay ghosted under the rows.
+  bool cleanPaint_ = true;
   static void screenTrampoline(UiScreen& screen, void* user);
   static void rowActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
   // Two-tap confirmation armed a row instead of opening it: move the selection

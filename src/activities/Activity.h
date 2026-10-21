@@ -59,6 +59,9 @@ class Activity {
   virtual bool appliesNightMode() const { return false; }
   // Returns true when the activity schedules its own forced refresh.
   virtual bool handleForcedRefresh() { return false; }
+  // A child screen just closed over this one. Readers clean the next paint so the child
+  // (menu, keyboard, popup) does not stay ghosted under the page.
+  virtual void onRevealed() {}
 
   // Turn the screen. False means this screen does not own an orientation, and the host
   // persists the setting instead: only the readers lay out against it, so everywhere else

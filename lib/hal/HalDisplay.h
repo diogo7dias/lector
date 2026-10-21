@@ -175,6 +175,11 @@ class HalDisplay {
   EInkDisplay einkDisplay;
   DisplayRefreshPolicy refreshPolicy;
   bool turboWanted = false;
+  // The wake (or any caller) asked the driver to drive every pixel on the next FAST, and
+  // the driver has not consumed that yet. Read by applyRefreshPolicy().
+  bool driveAllArmed = false;
+  // False until the first pass after begin() has been through applyRefreshPolicy().
+  bool firstPassDone = false;
   // What the last pass actually ran, for the perf log: what was asked for and what the
   // reload cadence allowed are not the same thing.
   bool lastPassWasTurbo = false;

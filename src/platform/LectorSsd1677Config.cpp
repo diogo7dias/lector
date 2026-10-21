@@ -24,6 +24,13 @@
 //
 // Selected with -DFREEINK_SSD1677_CONFIG=lectorSsd1677Config, set only on the X3/X4
 // environments so the Seeed Sticky environment keeps its own SSD1677 config.
+//
+// The X4 Pro ships with either an SSD1677 or a UC8279, and the units with an SSD1677 take
+// the same HALF base, so they need the same power-up. They select lectorSsd1677X4ProConfig:
+// the SDK default plus grayPowerUpFirst and nothing else. Without it those units paint
+// the gray planes while the booster ramps, so the mid greys collapse toward black and
+// white (or the panel stalls until the BUSY ceiling). Turbo stays off there: it has not
+// been validated on the X4 Pro panel.
 
 #include "driver/Ssd1677Driver.h"
 
@@ -48,10 +55,21 @@ Ssd1677Config buildLectorX4Config() {
   return cfg;
 }
 
+Ssd1677Config buildLectorX4ProConfig() {
+  Ssd1677Config cfg = ssd1677DefaultConfig();
+  cfg.grayPowerUpFirst = true;
+  return cfg;
+}
+
 }  // namespace
 
 const Ssd1677Config& lectorSsd1677Config() {
   static const Ssd1677Config cfg = buildLectorX4Config();
+  return cfg;
+}
+
+const Ssd1677Config& lectorSsd1677X4ProConfig() {
+  static const Ssd1677Config cfg = buildLectorX4ProConfig();
   return cfg;
 }
 

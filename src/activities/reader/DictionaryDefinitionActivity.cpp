@@ -279,5 +279,6 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   drawBody(fontId, contentX + SIDE_PADDING, bodyStartY);
 
   drawListChromeBottom(renderer, mappedInput, chrome);
-  renderer.displayBuffer();
+  renderer.displayBuffer(firstPaint ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+  firstPaint = false;
 }

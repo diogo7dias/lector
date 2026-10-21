@@ -92,6 +92,7 @@ class TxtReaderActivity final : public Activity {
   bool isBookContext() const override { return true; }
   bool runBoundAction(uint8_t function) override;
   bool appliesNightMode() const override { return true; }
+  void onRevealed() override { pagesUntilFullRefresh = 0; }
   bool handleForcedRefresh() override {
     {
       RenderLock lock(*this);

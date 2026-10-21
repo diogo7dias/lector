@@ -61,6 +61,8 @@ class DictionaryDefinitionActivity final : public Activity {
   std::vector<std::unique_ptr<Page>> pages;
   std::vector<Line> lines;
   int currentPage = 0;
+  // The definition replaces the reading page: the first paint is a HALF.
+  bool firstPaint = true;
   int totalPages = 1;
   int linesPerPage = 1;
   ButtonNavigator buttonNavigator;

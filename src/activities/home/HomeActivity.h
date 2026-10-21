@@ -24,9 +24,9 @@ class HomeActivity final : public Activity {
   sortes::ScanResult sortesResult = sortes::ScanResult::Empty;
   std::vector<RecentBook> recentBooks;
   const HomeMenuItem initialMenuItem;
-  // Cleared by the first render that consumes it, so only that paint pays for the
-  // full-clear waveform.
-  bool cleanInitialRefresh;
+  // Home is reached from the reader, a sleep face or a list: its first paint cleans
+  // whatever was there. Cleared by that render, so later paints stay FAST.
+  bool cleanInitialRefresh = true;
 
   // Convert HomeMenuItem to menu index (used in onEnter)
   static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl) {
@@ -67,10 +67,8 @@ class HomeActivity final : public Activity {
 
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                        HomeMenuItem initialMenuItemValue = HomeMenuItem::NONE, bool cleanInitialRefresh = false)
-      : Activity(activity_name::kHome, renderer, mappedInput),
-        initialMenuItem(initialMenuItemValue),
-        cleanInitialRefresh(cleanInitialRefresh) {}
+                        HomeMenuItem initialMenuItemValue = HomeMenuItem::NONE)
+      : Activity(activity_name::kHome, renderer, mappedInput), initialMenuItem(initialMenuItemValue) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

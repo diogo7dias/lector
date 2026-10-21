@@ -25,6 +25,7 @@ class UiGridActivity : public Activity, protected UiAppHost {
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
+  void onRevealed() override { cleanPaint_ = true; }
 
  protected:
   // Base-owned actions; subclass-registered ones start at ACTION_USER.
@@ -79,6 +80,8 @@ class UiGridActivity : public Activity, protected UiAppHost {
   ButtonNavigator buttonNavigator{ButtonNavigator::LIST_REPEAT_INTERVAL_MS, ButtonNavigator::LIST_REPEAT_START_MS};
 
  private:
+  // See UiListActivity::cleanPaint_.
+  bool cleanPaint_ = true;
   void buildScreen(UiScreen& screen);
   void buildCell(UiScreen& screen, int index, const settings_grid::Rect& rect);
   void buildRow(UiScreen& screen, int index, const freeink::ui::Rect& box);

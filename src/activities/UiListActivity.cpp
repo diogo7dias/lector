@@ -197,5 +197,12 @@ void UiListActivity::render(RenderLock&&) {
   drawScrollArrows();
   drawFooter();
   if (drawOverlay()) return;
-  renderer.displayBuffer(refreshMode());
+  // A popup or banner painted over this screen leaves its band on the panel, so the
+  // first paint after it leaves is a clean one. drawOverlay() returning above means
+  // this screen painted the overlay itself, and that clean pass is still owed.
+  const bool overlayDirty = UITheme::consumeOverlayPainted();
+  const bool clean = cleanPaint_ || overlayDirty;
+  const HalDisplay::RefreshMode mode = refreshMode();
+  renderer.displayBuffer(clean && mode == HalDisplay::FAST_REFRESH ? HalDisplay::HALF_REFRESH : mode);
+  cleanPaint_ = false;
 }
