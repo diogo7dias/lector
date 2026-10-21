@@ -762,18 +762,42 @@ TEST(ReaderPrefs, SettleSidecarFoldsRetiredWholeBookNumbering) {
   EXPECT_EQ(reader_defaults::PARAGRAPH_NUMBERING, p.paragraphNumbering);
 }
 
-TEST(ReaderPrefs, SettleSidecarSeedsStatusBarOnlyForRecordsWithoutOne) {
+TEST(ReaderPrefs, SettleSidecarSeedsWholeStatusBarForRecordsWithoutOne) {
   ReaderPrefs global;
   global.sbBatteryPos = 3;
+  global.sbOffBar = 2;
   ReaderPrefs old;
   old.sbBatteryPos = 1;
   settleSidecarPrefs(old, FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR - 1, global);
   EXPECT_EQ(3, old.sbBatteryPos);
+  EXPECT_EQ(2, old.sbOffBar);
+}
 
-  ReaderPrefs current;
-  current.sbBatteryPos = 1;
-  settleSidecarPrefs(current, FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR, global);
-  EXPECT_EQ(1, current.sbBatteryPos);
+// The bar layout is the reader's, not the book's: a book with its own look still shows
+// the global layout, so Settings > Customise Status Bar reaches it. Only the show/hide
+// switch and the hidden-bar progress bar stay the book's own.
+TEST(ReaderPrefs, SettleSidecarTakesGlobalBarLayoutKeepingBookSwitches) {
+  ReaderPrefs global;
+  global.sbBatteryPos = 4;
+  global.sbTitlePos = 5;
+  global.sbBookTitlePos = 1;
+  global.sbBookPctPos = 3;
+  global.statusBarEnabled = 1;
+  global.sbOffBar = 0;
+  ReaderPrefs book;
+  book.sbBatteryPos = 0;
+  book.sbTitlePos = 2;
+  book.sbBookTitlePos = 0;
+  book.sbBookPctPos = 6;
+  book.statusBarEnabled = 0;
+  book.sbOffBar = 2;
+  settleSidecarPrefs(book, FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR, global);
+  EXPECT_EQ(4, book.sbBatteryPos);
+  EXPECT_EQ(5, book.sbTitlePos);
+  EXPECT_EQ(1, book.sbBookTitlePos);
+  EXPECT_EQ(3, book.sbBookPctPos);
+  EXPECT_EQ(0, book.statusBarEnabled);
+  EXPECT_EQ(2, book.sbOffBar);
 }
 
 // Every status bar field survives a trip from a book's look to a block and back, so a
