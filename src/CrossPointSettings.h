@@ -336,6 +336,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t showSleepWallpaperPosition = 0;
   // Draw the last 7 days of reading in a band across the foot of the sleep screen.
   uint8_t showSleepReadingStats = 0;
+  // Where that band's text sits: centred, or held to the left or right edge.
+  enum SLEEP_READING_STATS_ALIGN { SLEEP_STATS_CENTER = 0, SLEEP_STATS_LEFT = 1, SLEEP_STATS_RIGHT = 2 };
+  uint8_t sleepReadingStatsAlign = SLEEP_STATS_CENTER;
   // Hold the current wallpaper instead of picking a new one at every sleep.
   // Applies only to the /sleep folder rotation; a fixed /sleep.pxc or /sleep.bmp
   // never rotates in the first place.

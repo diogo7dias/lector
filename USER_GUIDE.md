@@ -179,7 +179,8 @@ not count as reading.
 long you read that day, the longest day full, and today has a thick outline. Under it are the
 last 7 days, this year, all time and the books finished. The sleep screen shows the last 7
 days in a thin black band along its foot, on wallpapers and covers alike, when **Settings >
-Display > Show Reading Stats** is on (off by default).
+Display > Show Reading Stats** is on (off by default). **Reading Stats Position** puts its
+text in the **Center** (default), or on the **Left** or **Right**.
 
 Days need the clock. The X3 and X4 Pro keep one; the X4 has no clock chip, so a Wi-Fi
 connection sets its clock until it next powers off. With the clock set, a sitting is dated. Without it the sitting
@@ -899,6 +900,7 @@ belongs to, so the rows here appear in the same order as on the device.
 - **Sleep Image Quality** — Fast or Pretty.
 - **Show Wallpaper Name**, **Show Favorite Badge**, **Show Wallpaper Position**, **Show
   Reading Stats** — what is drawn over the wallpaper. All off by default.
+- **Reading Stats Position** — Center, Left or Right.
 - **Shuffle Wallpapers** — reshuffle the rotation now.
 
 **Frontlight** (boards with a frontlight)
