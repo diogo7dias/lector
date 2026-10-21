@@ -334,6 +334,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // current loop. Only drawn for index picks — the jump-pick fallback has no
   // position to report.
   uint8_t showSleepWallpaperPosition = 0;
+  // Draw the last 7 days of reading in a band across the foot of the sleep screen.
+  uint8_t showSleepReadingStats = 0;
   // Hold the current wallpaper instead of picking a new one at every sleep.
   // Applies only to the /sleep folder rotation; a fixed /sleep.pxc or /sleep.bmp
   // never rotates in the first place.

@@ -319,7 +319,7 @@ void SettingsActivity::rebuildSettingsList() {
                   {StrId::STR_GRP_WALLPAPER,
                    {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER, StrId::STR_SHOW_SLEEP_IMAGE_FILENAME,
                     StrId::STR_SHOW_SLEEP_FAVORITE_BADGE, StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION,
-                    StrId::STR_SHUFFLE_WALLPAPERS}},
+                    StrId::STR_SHOW_SLEEP_READING_STATS, StrId::STR_SHUFFLE_WALLPAPERS}},
                   {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
               });
 

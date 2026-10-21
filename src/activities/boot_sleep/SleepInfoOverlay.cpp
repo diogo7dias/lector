@@ -122,6 +122,7 @@ void drawReadingBand(const GfxRenderer& renderer) {
 
 void prepareSleepReadingLine() {
   clearSleepReadingLine();
+  if (!SETTINGS.showSleepReadingStats) return;
   reading_journal::Summary summary;
   if (!reading_journal::summarize(summary, READING_TAIL_BYTES) || summary.week.sessions == 0) return;
   reading_journal::formatDuration(g_readingTime, sizeof(g_readingTime), summary.week.seconds);

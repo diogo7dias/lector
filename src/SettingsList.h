@@ -263,6 +263,9 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
                                     &CrossPointSettings::showSleepWallpaperPosition, "showSleepWallpaperPosition",
                                     StrId::STR_CAT_DISPLAY));
 
+    v.push_back(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_READING_STATS, &CrossPointSettings::showSleepReadingStats,
+                                    "showSleepReadingStats", StrId::STR_CAT_DISPLAY));
+
     // "Never" (index 5) is back, matching upstream: the reader skips its own cadence, and
     // DisplayRefreshPolicy still forces a clean after its consecutive-FAST cap.
     v.push_back(SettingInfo::Enum(StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
