@@ -1544,6 +1544,7 @@ void EpubReaderActivity::openReadingThemes() {
                            }
                            ReaderPrefs stored = preset->prefs;
                            reader_preset_migration::keepStatusBarWhenAbsent(preset->carriesStatusBar, prefs_, stored);
+                           if (!sortesMode) setGlobalBarLayout(statusBarOf(stored));
                            const ReaderPrefs adopted = applyReaderPrefsFrom(stored);
                            // A theme naming an SD font that has left the card comes back
                            // corrected. Write the correction to the card so the theme is
@@ -2003,14 +2004,7 @@ void EpubReaderActivity::persistStatusBarEdit(const StatusBarBlock& edited) {
   // Except the show/hide switch and the hidden-bar progress bar: those are this book's own,
   // like the quick toggle that sets them (applyStatusBar). Copied to global, a bar hidden
   // in one book would vanish from every book the moment any other row was touched here.
-  const StatusBarBlock global = SETTINGS.statusBar();
-  StatusBarBlock toGlobal = edited;
-  toGlobal.enabled = global.enabled;
-  toGlobal.offBar = global.offBar;
-  if (std::memcmp(&global, &toGlobal, sizeof(StatusBarBlock)) != 0) {
-    SETTINGS.setStatusBar(toGlobal);
-    SETTINGS.saveToFile();
-  }
+  setGlobalBarLayout(edited);
   // Changing either own field gives the book its sidecar, as the quick toggle does.
   if (edited.enabled != prefs_.statusBarEnabled || edited.offBar != prefs_.sbOffBar) prefsCustom_ = true;
   if (!prefsCustom_) return;
@@ -2019,6 +2013,18 @@ void EpubReaderActivity::persistStatusBarEdit(const StatusBarBlock& edited) {
   ReaderPrefs p = prefs_;
   setStatusBarOf(p, edited);
   writeReaderOverride(p);
+}
+
+void EpubReaderActivity::setGlobalBarLayout(const StatusBarBlock& bar) {
+  // Every book opens with the global layout (settleSidecarPrefs), so a bar chosen in one
+  // book has to land there. The show/hide switch and hidden-bar progress bar stay global's.
+  const StatusBarBlock global = SETTINGS.statusBar();
+  StatusBarBlock toGlobal = bar;
+  toGlobal.enabled = global.enabled;
+  toGlobal.offBar = global.offBar;
+  if (std::memcmp(&global, &toGlobal, sizeof(StatusBarBlock)) == 0) return;
+  SETTINGS.setStatusBar(toGlobal);
+  SETTINGS.saveToFile();
 }
 
 void EpubReaderActivity::applyStatusBarEdit() {

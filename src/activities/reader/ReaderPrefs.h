@@ -524,14 +524,21 @@ inline bool wantsBookCss(const ReaderPrefs& p) { return p.embeddedTextStyle || p
 // Brings a sidecar record read at `fromVersion` in line with this firmware.
 // - A record written before whole-book numbering was removed can still say 2; the
 //   Settings row and the menu cycle can no longer produce it.
-// - A record older than v11 stops before the status bar block, so those fields came
-//   back as this firmware's shipped defaults rather than the layout the user
-//   configured. They are seeded from the global look, the bar every other book shows.
+// - The status bar layout is the reader's, not the book's, so it always comes from the
+//   global look: otherwise Settings > Customise Status Bar never reaches a book with its
+//   own look. The show/hide switch and the hidden-bar progress bar stay the book's own,
+//   like the quick toggle that sets them. A record older than v11 stops before the block
+//   and takes all of it from global.
 inline void settleSidecarPrefs(ReaderPrefs& p, const uint8_t fromVersion, const ReaderPrefs& global) {
   if (p.paragraphNumbering >= reader_defaults::PARAGRAPH_NUMBERING_COUNT) {
     p.paragraphNumbering = reader_defaults::PARAGRAPH_NUMBERING;
   }
-  if (fromVersion < FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR) p.adoptStatusBarFrom(global);
+  const uint8_t enabled = p.statusBarEnabled;
+  const uint8_t offBar = p.sbOffBar;
+  p.adoptStatusBarFrom(global);
+  if (fromVersion < FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR) return;
+  p.statusBarEnabled = enabled;
+  p.sbOffBar = offBar;
 }
 
 // ── Mid-edit override decision ────────────────────────────────────────────────

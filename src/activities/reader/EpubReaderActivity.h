@@ -429,6 +429,8 @@ class EpubReaderActivity final : public Activity {
   StatusBarBlock statusBarEdit_{};
   static void statusBarEditSinkThunk(void* ctx, const StatusBarBlock& edited);
   void persistStatusBarEdit(const StatusBarBlock& edited);
+  // Makes `bar` the global layout, keeping global's show/hide switch and hidden-bar progress bar.
+  void setGlobalBarLayout(const StatusBarBlock& bar);
   // Reads the Customise Status Bar screen's result back into this book's override.
   void applyStatusBarEdit();
   // Delete this book's override and follow the global settings again.
