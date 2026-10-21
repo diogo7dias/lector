@@ -178,7 +178,8 @@ not count as reading.
 **Stats** on Home leads with this month as a calendar: each day fills from the bottom by how
 long you read that day, the longest day full, and today has a thick outline. Under it are the
 last 7 days, this year, all time and the books finished. The sleep screen shows the last 7
-days in a thin black band along its foot, on wallpapers and covers alike.
+days in a thin black band along its foot, on wallpapers and covers alike, when **Settings >
+Display > Show Reading Stats** is on (off by default).
 
 Days need the clock. The X3 and X4 Pro keep one; the X4 has no clock chip, so a Wi-Fi
 connection sets its clock until it next powers off. With the clock set, a sitting is dated. Without it the sitting
@@ -459,9 +460,9 @@ Wallpaper rows in the in-book menu's Sleep Screen tab favourite, pause, hold and
 wallpaper the device just showed. Paused wallpapers move to `/sleep pause` and stop appearing
 in the rotation. **Settings > Display > Shuffle Wallpapers** reshuffles the order.
 
-Four Display settings decide what is drawn over a wallpaper: **Show Wallpaper Name**, **Show
-Favorite Badge**, **Show Wallpaper Position** and **Sleep Footer Text** (your own line of
-text). **Sleep Image Quality** trades rendering time against how the image looks: **Fast** or
+Five Display settings decide what is drawn over a wallpaper: **Show Wallpaper Name**, **Show
+Favorite Badge**, **Show Wallpaper Position**, **Show Reading Stats** (the last 7 days in a
+band along the foot) and **Sleep Footer Text** (your own line of text). **Sleep Image Quality** trades rendering time against how the image looks: **Fast** or
 **Pretty**.
 
 ### Cover settings
@@ -896,8 +897,8 @@ belongs to, so the rows here appear in the same order as on the device.
 - **Sleep Screen Cover Mode** — Fit or Crop.
 - **Sleep Screen Cover Filter** — None, Contrast or Inverted.
 - **Sleep Image Quality** — Fast or Pretty.
-- **Show Wallpaper Name**, **Show Favorite Badge**, **Show Wallpaper Position** — what is
-  drawn over the wallpaper.
+- **Show Wallpaper Name**, **Show Favorite Badge**, **Show Wallpaper Position**, **Show
+  Reading Stats** — what is drawn over the wallpaper. All off by default.
 - **Shuffle Wallpapers** — reshuffle the rotation now.
 
 **Frontlight** (boards with a frontlight)
