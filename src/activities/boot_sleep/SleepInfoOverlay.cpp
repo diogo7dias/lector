@@ -31,7 +31,7 @@ constexpr int BAND_PADDING_Y = 4;
 constexpr int BAND_RULE = 2;
 
 int readingBandHeight(const GfxRenderer& renderer) {
-  return g_readingTime[0] ? renderer.getLineHeight(UI_10_FONT_ID) + 2 * BAND_PADDING_Y + 2 * BAND_RULE : 0;
+  return g_readingTime[0] ? renderer.getLineHeight(UI_10_FONT_ID) + 2 * BAND_PADDING_Y + BAND_RULE : 0;
 }
 
 enum class Corner { BottomLeft, BottomRight };
@@ -92,17 +92,17 @@ SleepInfoOverlayScope::~SleepInfoOverlayScope() {
 
 namespace {
 
-// A thin black band across the foot, white text and 2 px white border, like the badges:
+// A thin black band across the foot, white text under a 2 px white rule:
 // "Last 7 days  1h19  127 pages".
 void drawReadingBand(const GfxRenderer& renderer) {
   const int bandH = readingBandHeight(renderer);
   if (bandH == 0) return;
   const int w = renderer.getScreenWidth();
   const int y = renderer.getScreenHeight() - bandH;
-  // Black in every pass and white border and text in the BW pass only, for the reasons in drawLabel.
+  // Black in every pass and white rule and text in the BW pass only, for the reasons in drawLabel.
   renderer.fillRect(0, y, w, bandH, true);
   if (renderer.getRenderMode() != GfxRenderer::BW) return;
-  renderer.drawRect(0, y, w, bandH, BAND_RULE, false);
+  renderer.fillRect(0, y, w, BAND_RULE, false);
 
   constexpr int gap = 18;
   const char* label = tr(STR_STATS_LAST_7_DAYS);
