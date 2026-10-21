@@ -178,7 +178,7 @@ not count as reading.
 **Stats** on Home leads with this month as a calendar: each day fills from the bottom by how
 long you read that day, the longest day full, and today has a thick outline. Under it are the
 last 7 days, this year, all time and the books finished. The sleep screen shows the last 7
-days in a thin band along its foot, on wallpapers and covers alike.
+days in a thin black band along its foot, on wallpapers and covers alike.
 
 Days need the clock. The X3 and X4 Pro keep one; the X4 has no clock chip, so a Wi-Fi
 connection sets its clock until it next powers off. With the clock set, a sitting is dated. Without it the sitting

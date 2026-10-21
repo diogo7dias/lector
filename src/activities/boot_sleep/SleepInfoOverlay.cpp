@@ -54,9 +54,13 @@ void drawLabel(const GfxRenderer& renderer, const std::string& text, const Corne
   const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, shown.c_str(), EpdFontFamily::REGULAR);
   const int boxWidth = std::min(textWidth + paddingX * 2, maxBoxWidth);
   const int boxHeight = textLineHeight + paddingY * 2;
-  const int boxX = corner == Corner::BottomRight ? std::max(safeInset, screenWidth - safeInset - boxWidth) : safeInset;
+  // The position badge hugs the right edge and the band's top border; the left label keeps the safe inset.
+  constexpr int rightInset = 4;
+  const int inset = corner == Corner::BottomRight ? rightInset : safeInset;
+  const int boxX =
+      corner == Corner::BottomRight ? std::max(rightInset, screenWidth - rightInset - boxWidth) : safeInset;
   // Above the reading band, when there is one, rather than over it.
-  const int boxY = std::max(safeInset, screenHeight - readingBandHeight(renderer) - boxHeight - safeInset);
+  const int boxY = std::max(inset, screenHeight - readingBandHeight(renderer) - boxHeight - inset);
 
   // The black box must be drawn in EVERY pass: in the grayscale plane passes
   // fillRect(true) clears the plane bits over the box area, which is what stops
@@ -88,19 +92,17 @@ SleepInfoOverlayScope::~SleepInfoOverlayScope() {
 
 namespace {
 
-// A thin white band across the foot: "Last 7 days  1h19  127 pages" under a 2 px rule.
+// A thin black band across the foot, white text under a 2 px white rule:
+// "Last 7 days  1h19  127 pages".
 void drawReadingBand(const GfxRenderer& renderer) {
   const int bandH = readingBandHeight(renderer);
   if (bandH == 0) return;
   const int w = renderer.getScreenWidth();
   const int y = renderer.getScreenHeight() - bandH;
-  // White in the BW pass; in the grayscale plane passes `true` clears the plane bits, so
-  // the wallpaper's grays cannot show through the band (see drawLabel). Rule and text
-  // go in the BW pass only, for the same reason the badges' do.
-  const bool bw = renderer.getRenderMode() == GfxRenderer::BW;
-  renderer.fillRect(0, y, w, bandH, !bw);
-  if (!bw) return;
-  renderer.fillRect(0, y, w, BAND_RULE, true);
+  // Black in every pass and white rule and text in the BW pass only, for the reasons in drawLabel.
+  renderer.fillRect(0, y, w, bandH, true);
+  if (renderer.getRenderMode() != GfxRenderer::BW) return;
+  renderer.fillRect(0, y, w, BAND_RULE, false);
 
   constexpr int gap = 18;
   const char* label = tr(STR_STATS_LAST_7_DAYS);
@@ -109,11 +111,11 @@ void drawReadingBand(const GfxRenderer& renderer) {
   const int pagesW = renderer.getTextWidth(UI_10_FONT_ID, g_readingPages);
   int x = std::max(0, (w - labelW - timeW - pagesW - 2 * gap) / 2);
   const int ty = y + BAND_RULE + BAND_PADDING_Y;
-  renderer.drawText(UI_10_FONT_ID, x, ty, label, true, EpdFontFamily::BOLD);
+  renderer.drawText(UI_10_FONT_ID, x, ty, label, false, EpdFontFamily::BOLD);
   x += labelW + gap;
-  renderer.drawText(UI_10_FONT_ID, x, ty, g_readingTime, true, EpdFontFamily::BOLD);
+  renderer.drawText(UI_10_FONT_ID, x, ty, g_readingTime, false, EpdFontFamily::BOLD);
   x += timeW + gap;
-  renderer.drawText(UI_10_FONT_ID, x, ty, g_readingPages, true);
+  renderer.drawText(UI_10_FONT_ID, x, ty, g_readingPages, false);
 }
 
 }  // namespace
