@@ -109,7 +109,13 @@ void drawReadingBand(const GfxRenderer& renderer) {
   const int labelW = renderer.getTextWidth(UI_10_FONT_ID, label, EpdFontFamily::BOLD);
   const int timeW = renderer.getTextWidth(UI_10_FONT_ID, g_readingTime, EpdFontFamily::BOLD);
   const int pagesW = renderer.getTextWidth(UI_10_FONT_ID, g_readingPages);
-  int x = std::max(0, (w - labelW - timeW - pagesW - 2 * gap) / 2);
+  // Left and right keep well clear of the edge: the bezel hides the outer pixels on the device.
+  constexpr int edgeInset = 32;
+  const int textW = labelW + timeW + pagesW + 2 * gap;
+  int x = (w - textW) / 2;
+  if (SETTINGS.sleepReadingStatsAlign == CrossPointSettings::SLEEP_STATS_LEFT) x = edgeInset;
+  if (SETTINGS.sleepReadingStatsAlign == CrossPointSettings::SLEEP_STATS_RIGHT) x = w - edgeInset - textW;
+  x = std::max(0, x);
   const int ty = y + BAND_RULE + BAND_PADDING_Y;
   renderer.drawText(UI_10_FONT_ID, x, ty, label, false, EpdFontFamily::BOLD);
   x += labelW + gap;
