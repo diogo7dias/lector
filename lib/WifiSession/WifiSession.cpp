@@ -83,7 +83,7 @@ void WifiSession::checkTimeouts(const uint32_t nowMs) {
     ++timeouts_;
     diaglog::note("  t=%u timeout fired scan elapsed=%u", nowMs, nowMs - scanStartedMs_);
     networks_.clear();
-    setState(State::NETWORK_LIST);
+    showListOrGiveUp();
     return;
   }
 
@@ -170,6 +170,10 @@ void WifiSession::begin(const Startup& startup, const uint32_t nowMs) {
   joiningSsid_.clear();
 
   const bool canAutoConnect = startup_.allowAutoConnect && !startup_.savedSsids.empty();
+  if (startup_.autoOnly && startup_.savedSsids.empty()) {
+    showListOrGiveUp();
+    return;
+  }
   if (canAutoConnect && isSaved(startup_.lastConnectedSsid.c_str())) {
     setState(State::AUTO_CONNECTING);
     autoAttemptedSsids_.push_back(startup_.lastConnectedSsid);
@@ -264,7 +268,7 @@ void WifiSession::onScanFailed(const uint32_t nowMs) {
   clockMs_ = nowMs;
   diaglog::note("  t=%u scan failed (radio)", nowMs);
   networks_.clear();
-  setState(State::NETWORK_LIST);
+  showListOrGiveUp();
 }
 
 void WifiSession::showNetworkList(const uint32_t nowMs) {
@@ -301,7 +305,18 @@ void WifiSession::dismissFailure(const uint32_t nowMs) {
   // Back to the list, whatever failed. A failure is usually the router, not the
   // password, and offering to delete the credential every time trains the reader
   // to throw away a working password over a passing failure.
-  setState(State::NETWORK_LIST);
+  showListOrGiveUp();
+}
+
+void WifiSession::showListOrGiveUp() {
+  if (!startup_.autoOnly) {
+    setState(State::NETWORK_LIST);
+    return;
+  }
+  // FAILED holds no timer, so nothing queues a second FINISH behind this one.
+  joiningSsid_.clear();
+  setState(State::FAILED);
+  queue(ActionKind::FINISH);
 }
 
 void WifiSession::cancel(const uint32_t nowMs) {
@@ -396,7 +411,7 @@ void WifiSession::onScanResults(const Network* found, const size_t count, const 
     return;
   }
   if (state_ == State::SCANNING || state_ == State::AUTO_CONNECTING) {
-    setState(State::NETWORK_LIST);
+    showListOrGiveUp();
   }
 }
 

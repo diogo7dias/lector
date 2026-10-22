@@ -85,7 +85,7 @@ void KOReaderSyncActivity::applyRemoteProgress(int spineIndex, int page) {
 void KOReaderSyncActivity::returnToReader() { activityManager.goToReader(epubPath); }
 
 bool KOReaderSyncActivity::smartSyncEnabled() const {
-  return KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART;
+  return autoMode || KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART;
 }
 
 void KOReaderSyncActivity::markAutoReturn() { autoReturnAt = millis() + AUTO_RETURN_DELAY_MS; }
@@ -195,7 +195,7 @@ void KOReaderSyncActivity::performSync() {
     return;
   }
 
-  if (result == KOReaderSyncClient::CERT_UNTRUSTED &&
+  if (result == KOReaderSyncClient::CERT_UNTRUSTED && !autoMode &&
       askToTrustRejectedCertificate(*this, renderer, mappedInput, [this](const bool trusted) {
         if (trusted) {
           requestUpdate();
@@ -404,7 +404,7 @@ void KOReaderSyncActivity::onEnter() {
 
   // Launch WiFi selection subactivity
   LOG_DBG("KOSync", "Launching WifiSelectionActivity...");
-  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, autoMode, autoMode),
                          [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
 }
 
@@ -495,6 +495,7 @@ UiStatusActivity::StatusView KOReaderSyncActivity::statusView() const {
 bool KOReaderSyncActivity::handleCustomInput() {
   // A smart sync that finished on its own returns to the book by itself, after
   // long enough for the outcome to be read.
+  if (autoMode && state == SYNC_FAILED && autoReturnAt == 0) markAutoReturn();
   if (autoReturnAt != 0 && millis() >= autoReturnAt) {
     returnToReader();
     return true;

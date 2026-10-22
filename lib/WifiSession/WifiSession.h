@@ -73,6 +73,8 @@ struct Action {
 /** What the activity knows before the screen opens. */
 struct Startup {
   bool allowAutoConnect = true;
+  /** Try saved networks only and never show the list: each fallback to it ends unconnected. */
+  bool autoOnly = false;
   std::vector<std::string> savedSsids;
   std::string lastConnectedSsid;
 };
@@ -169,6 +171,7 @@ class WifiSession {
   void joinOrAskForPassword(const std::string& ssid, bool hasSavedPassword, bool isEncrypted);
   /** Joins the strongest scanned network with a credential we have not tried yet. */
   bool tryNextSavedNetworkFromScan();
+  void showListOrGiveUp();
 
   Startup startup_;
   std::vector<Network> networks_;

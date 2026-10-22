@@ -34,6 +34,7 @@
 #include "EpubReaderSearchActivity.h"
 #include "EpubReaderUtils.h"
 #include "IdlePrewarmNeighbour.h"
+#include "KOReaderAutoSync.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
@@ -219,6 +220,8 @@ void EpubReaderActivity::onEnter() {
   } else {
     loadLinkStack();
     journal.clock.touch(millis());
+    openedSpine = currentSpineIndex;
+    openedPage = nextPageNumber;
   }
 
   loadCachedBookmarks();
@@ -312,6 +315,10 @@ void EpubReaderActivity::onExit() {
   // book reopens on the viewed page and Back still returns to the link origin.
   if (footnoteDepth > 0 && epub) saveLinkStack();
 
+  // Auto Sync pushes only a book whose page moved since it opened.
+  const bool pageMoved =
+      currentSpineIndex != openedSpine || (section ? section->currentPage : nextPageNumber) != openedPage;
+
   section.reset();
   // File the book on the way out: finished books go to /read, anything else that was
   // opened goes to /recents. A finished move wins, so a book never lands in both. The
@@ -338,6 +345,8 @@ void EpubReaderActivity::onExit() {
   } else {
     epub.reset();
   }
+
+  if (pageMoved && !pendingDeleteBook && !finalPath.empty()) ko_auto_sync::markMoved(finalPath);
 
   if (pendingDeleteBook && !finalPath.empty()) {
     if (Storage.remove(finalPath.c_str())) {
@@ -722,6 +731,11 @@ void EpubReaderActivity::loop() {
   }
 
   rememberBookOnceRendered();
+  // Auto Sync pulls once the first page is up, so the book never waits on the radio.
+  if (bookRemembered && !autoPullChecked && !sortesMode) {
+    autoPullChecked = true;
+    if (ko_auto_sync::claimPull(epub->getPath()) && launchKOReaderSync(true)) return;
+  }
 
   // The Quick Menu owns every button while it is up, and it MUST be offered them BEFORE
   // the latches below observe anything.
@@ -1800,7 +1814,7 @@ void EpubReaderActivity::launchNearbyPositionSync() {
                                                    totalPages, std::move(localKoPos), paragraphIndex));
 }
 
-bool EpubReaderActivity::launchKOReaderSync() {
+bool EpubReaderActivity::launchKOReaderSync(const bool autoMode) {
   if (blockSortesAction()) return true;
   if (!KOREADER_STORE.hasCredentials()) return false;  // no-op: nothing to launch
 
@@ -1826,7 +1840,7 @@ bool EpubReaderActivity::launchKOReaderSync() {
   LOG_DBG("KOSync", "Epub released (heap after: %u)", (unsigned)ESP.getFreeHeap());
 
   activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
-      renderer, mappedInput, savedEpubPath, localPos, std::move(localKoPos), std::move(localChapterName)));
+      renderer, mappedInput, savedEpubPath, localPos, std::move(localKoPos), std::move(localChapterName), autoMode));
   return true;  // acted: launched the sync activity
 }
 

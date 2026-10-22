@@ -693,6 +693,15 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
         },
         "koSyncBehavior", StrId::STR_KOREADER_SYNC));
 
+    v.push_back(SettingInfo::DynamicEnum(
+        StrId::STR_AUTO_SYNC, {StrId::STR_STATE_OFF, StrId::STR_STATE_ON},
+        [] { return static_cast<uint8_t>(KOREADER_STORE.getAutoSync()); },
+        [](uint8_t v) {
+          KOREADER_STORE.setAutoSync(v != 0);
+          KOREADER_STORE.saveToFile();
+        },
+        "koAutoSync", StrId::STR_KOREADER_SYNC));
+
     // --- Per-item status bar model (v2). Position enums share the same 7-value
     // list {Off, TL, TC, TR, BL, BC, BR}; the device UI (StatusBarSettingsActivity)
     // renders these as the [XX] position popup. ---

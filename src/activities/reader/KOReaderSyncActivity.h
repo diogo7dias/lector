@@ -23,8 +23,9 @@ class KOReaderSyncActivity final : public UiStatusActivity {
  public:
   explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& epubPath,
                                 CrossPointPosition localPosition, SavedProgressPosition localKoPos,
-                                std::string localChapterName)
+                                std::string localChapterName, bool autoMode = false)
       : UiStatusActivity(activity_name::kKOReaderSync, renderer, mappedInput),
+        autoMode(autoMode),
         epubPath(epubPath),
         localChapterName(std::move(localChapterName)),
         localPosition(localPosition),
@@ -56,6 +57,9 @@ class KOReaderSyncActivity final : public UiStatusActivity {
     NO_CREDENTIALS
   };
 
+  // Auto Sync's pull on open: saved networks only, smart resolution, no certificate
+  // prompt, and a failure returns to the book by itself.
+  const bool autoMode;
   std::unique_ptr<Epub> epub;  // null until lazy-loaded after TLS in performSync()
   std::string epubPath;
   std::string localChapterName;
