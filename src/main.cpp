@@ -29,6 +29,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "Diagnostics.h"
+#include "KOReaderAutoSync.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
@@ -322,6 +323,8 @@ static std::string pickBootBookPath();
   deepSleepInProgress = true;
   activityManager.goToSleep(fromTimeout);
   sleepTPaint = millis();
+  // Behind the sleep face: the reader's onExit above has saved the position it pushes.
+  ko_auto_sync::onSleep();
 
   sleepTFrame = millis();
 

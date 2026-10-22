@@ -674,8 +674,8 @@ Lector syncs progress with KOReader-compatible sync servers, so KOReader apps an
 share a position with it.
 
 Settings live in **Settings > System > KOReader Sync**: **Username**, **Password**, **Sync
-Server URL**, **Document Matching** (Filename or Binary), **Send Document Metadata**, and
-**Sync Behavior**.
+Server URL**, **Document Matching** (Filename or Binary), **Send Document Metadata**,
+**Sync Behavior**, and **Auto Sync**.
 
 **Sync Behavior** is **Smart sync** for new configurations, which resolves the simple cases on
 its own: upload when the server has nothing, do nothing when both sides agree, apply the remote
@@ -686,6 +686,14 @@ sync. Either can be changed at any time.
 
 To sync, open the in-book menu and pick **Sync Progress** from the Device tab, or bind a hold
 to **KOSync** in **Settings > Controls**.
+
+**Auto Sync** (off by default) does it for you. When a book opens, the first time since the
+device last slept, Lector joins a saved Wi-Fi network, fetches the position and moves to it when
+the server is ahead. When the device goes to sleep after you turned pages, it sends the new
+position from behind the sleep screen. It uses saved networks only and never shows the network
+list. If no saved network answers, the book simply opens where you left it. A server whose
+certificate has not been trusted yet is skipped, so run **Sync Progress** once by hand first.
+Each pull costs a few seconds of Wi-Fi and a restart back into the book.
 
 #### Option A: the CrossPoint sync server (default)
 
@@ -702,7 +710,21 @@ the same text.
 
 Accounts are per server. An account on `sync.koreader.rocks` does not exist on this one.
 
-#### Option B: the public KOReader server
+#### Option B: BookOrbit
+
+[BookOrbit](https://bookorbit.app) speaks the KOReader sync protocol and shares the position with
+its web reader and apps, so a book continues where you stopped on either side.
+
+1. In BookOrbit, create a KOReader sync account (its KOReader settings page) and an OPDS
+   account (its OPDS settings page).
+2. Add the OPDS server `https://<your-host>/api/v1/opds` with the OPDS account, and download
+   books through it. A copied file is fine too, as long as it is the same file BookOrbit holds.
+3. Set **Sync Server URL** to `https://<your-host>/api/v1/koreader`, set **Username** and
+   **Password** to the KOReader sync account, and set **Document Matching** to **Binary**.
+   BookOrbit finds the book by its contents, not its name.
+4. Run **Authenticate**, then turn on **Auto Sync** if you want it.
+
+#### Option C: the public KOReader server
 
 1. Set **Sync Server URL** to `https://sync.koreader.rocks`. An empty URL points at the
    CrossPoint server instead, so this one has to be typed in.
@@ -725,7 +747,7 @@ curl -i "https://sync.koreader.rocks/users/create" \
 `HTTP 402` with `{"code":2002,"message":"Username is already registered."}` means that name is
 taken.
 
-#### Option C: your own server
+#### Option D: your own server
 
 1. Start a sync server:
 

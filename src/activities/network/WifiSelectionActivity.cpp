@@ -191,6 +191,7 @@ void WifiSelectionActivity::onEnter() {
   // scanning; both are just actions this activity carries out.
   wifi_session::Startup startup;
   startup.allowAutoConnect = allowAutoConnect;
+  startup.autoOnly = autoOnly;
   for (const WifiCredentialSummary& saved : WIFI_STORE.getCredentialSummaries()) {
     startup.savedSsids.push_back(saved.ssid);
   }

@@ -128,6 +128,10 @@ class EpubReaderActivity final : public Activity {
   // Set by the render task once a page is on screen; the loop then remembers the book.
   std::atomic<bool> pageRendered{false};
   bool bookRemembered = false;
+  bool autoPullChecked = false;
+  // Where this book opened; a different page on exit marks it for Auto Sync's push.
+  int openedSpine = -1;
+  int openedPage = -1;
   void rememberBookOnceRendered();
   bool bookmarkRemoved = false;  // true when last toggle removed (controls popup text)
   std::vector<BookmarkEntry> cachedBookmarks;
@@ -393,7 +397,8 @@ class EpubReaderActivity final : public Activity {
   void openQuickMenu();
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
   // because no KOReader credentials are stored.
-  bool launchKOReaderSync();
+  // autoMode: Auto Sync's pull on open (saved networks only, no prompts).
+  bool launchKOReaderSync(bool autoMode = false);
   // Handoff to a sync/transfer screen that reopens the book on the way out. The first
   // saves the position that reopen lands on (false: error surfaced, abort the handoff);
   // the second frees the Epub and Section for the radio. Neither holds the render lock
