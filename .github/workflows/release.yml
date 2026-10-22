@@ -86,9 +86,10 @@ jobs:
       - name: Build CrossPoint
         run: pio run -e gh_release -e x4pro
 
-      # Every image that leaves this workflow carries lector's release signature: a
-      # device on lector refuses an online update without it (src/network/FirmwareSignature.h).
-      # A missing secret fails the release rather than shipping updates nobody can install.
+      # Bridge for 0.46.0 only: lector 0.44/0.45 refuse an online update without this
+      # signature. Newer firmware ignores it, like CrossPoint. Delete this step (and
+      # scripts/sign_firmware.py) from the release after 0.46.0, so firmware.bin is a
+      # plain image that CrossPoint and CrossInk's SD updaters accept.
       - name: Sign firmware
         env:
           FIRMWARE_SIGNING_KEY: ${{ secrets.FIRMWARE_SIGNING_KEY }}
