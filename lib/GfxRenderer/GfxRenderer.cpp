@@ -812,10 +812,16 @@ void GfxRenderer::drawTextScaled(const int fontId, const int x, const int y, con
   }
   const EpdFontFamily& font = fontIt->second;
   const EpdFontData* fontData = font.getData(EpdFontFamily::REGULAR);
-  // ponytail: one static scratch, as only the render task draws text; glyphs that would
-  // shrink past 64x64 are skipped (the reading sizes stay far below that).
+  // Glyphs that would shrink past 64x64 are skipped (the reading sizes stay far below that).
+  // Allocated on first use and kept (only paragraph numbers draw scaled text), so a
+  // reader who never turns them on keeps the bytes; only the render task draws text.
   static constexpr int kMaxScaledPixels = 64 * 64;
-  static uint8_t scratch[kMaxScaledPixels / 4];
+  static uint8_t* scratch = nullptr;
+  if (!scratch) scratch = new (std::nothrow) uint8_t[kMaxScaledPixels / 4];
+  if (!scratch) {
+    LOG_ERR("GFX", "OOM: %d bytes", kMaxScaledPixels / 4);
+    return;
+  }
   const int baseline = y + getFontAscenderSize(fontId) * percent / 100;
   int32_t penFP = 0;  // 12.4 fixed-point, like drawText's advances
   const char* cursor = text;
