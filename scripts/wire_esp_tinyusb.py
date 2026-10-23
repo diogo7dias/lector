@@ -7,7 +7,7 @@ USB Drive runs on espressif/esp_tinyusb, added with `custom_component_add`.
 pioarduino builds an added component inside the custom_sdkconfig rebuild and
 copies its `.a` into framework-arduinoespressif32-libs, but the Arduino compile
 that follows reads `pioarduino-build.py`, which ships prebuilt and is never
-regenerated (the same gap scripts/patch_tickless_linker.py covers for
+regenerated (the same gap a linker-script patch once covered for
 sections.ld). So that compile has neither esp_tinyusb's headers nor its libs,
 and still carries the prebuilt `arduino_tinyusb` (TinyUSB built against a
 different tusb_config.h).

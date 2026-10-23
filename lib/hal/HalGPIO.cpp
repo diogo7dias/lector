@@ -190,6 +190,15 @@ bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
 bool HalGPIO::isDebouncePending() const { return inputMgr.isDebouncePending(); }
 
+bool HalGPIO::rawInputActive() {
+  if (inputMgr.isPowerButtonPhysicallyPressed()) return true;
+  InputManager::ButtonAdcSample g1{}, g2{};
+  inputMgr.readButtonAdc(g1, g2);
+  // The Xteink ladder idles at the ADC full-scale rail (~4095); every button band sits below 3900.
+  constexpr int kIdleRailMin = 4000;
+  return (g1.raw >= 0 && g1.raw < kIdleRailMin) || (g2.raw >= 0 && g2.raw < kIdleRailMin);
+}
+
 void HalGPIO::readButtonAdc(int& raw1, int& raw2) {
   InputManager::ButtonAdcSample group1, group2;
   inputMgr.readButtonAdc(group1, group2);
