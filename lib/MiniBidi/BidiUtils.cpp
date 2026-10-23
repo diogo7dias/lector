@@ -12,6 +12,7 @@ extern "C" {
 
 #include <cstring>
 #include <mutex>
+#include <new>
 
 // Guards the static bidi_char buffers in applyBidiVisual() and
 // computeVisualWordOrder().  The bidi+shaping pipeline is not reentrant;
@@ -35,10 +36,22 @@ bool isNaturalDirectionClass(const uchar cls) {
 }
 
 // Visual-reorder scratch shared by applyBidiVisual() and
-// computeVisualWordOrder(). Neither function calls the other, and bidiMutex
-// already serialises both, so a single buffer serves both instead of a
-// per-function static — saving ~1.5 KB of always-resident RAM.
-bidi_char sharedBidiLine[BIDI_MAX_LINE];
+// computeVisualWordOrder() (line), plus applyBidiVisual()'s shaping output
+// (shaped). Neither function calls the other, and bidiMutex serialises both.
+// Allocated on the first RTL text and kept: 3 KB a Latin-only reader never pays.
+bidi_char* sharedBidiLine = nullptr;
+bidi_char* sharedBidiShaped = nullptr;
+
+bool ensureBidiScratch() {
+  if (sharedBidiLine) return true;
+  sharedBidiLine = new (std::nothrow) bidi_char[2 * BIDI_MAX_LINE];
+  if (!sharedBidiLine) {
+    LOG_ERR("BIDI", "OOM: %u bytes", static_cast<unsigned>(2 * BIDI_MAX_LINE * sizeof(bidi_char)));
+    return false;
+  }
+  sharedBidiShaped = sharedBidiLine + BIDI_MAX_LINE;
+  return true;
+}
 
 }  // namespace
 
@@ -80,9 +93,10 @@ bool isTransparentMark(const uint32_t cp) {
 bool applyBidiVisual(const char* utf8, std::string& out, const BidiBaseDir baseDir) {
   if (!utf8 || !*utf8) return false;
   const std::lock_guard<std::mutex> lock(bidiMutex);
+  if (!ensureBidiScratch()) return false;
 
   bidi_char* const line = sharedBidiLine;
-  static bidi_char shaped[BIDI_MAX_LINE];
+  bidi_char* const shaped = sharedBidiShaped;
   int count = 0;
   int lastBase = -1;           // last non-formatter character (mintty's ibase)
   uint8_t pendingJoiners = 0;  // ZWJ/ZWNJ seen since lastBase
@@ -167,6 +181,7 @@ bool computeVisualWordOrder(const std::vector<std::string>& words, bool paragrap
   const size_t nWords = words.size();
   if (nWords <= 1 || nWords > BIDI_MAX_LINE) return false;
   const std::lock_guard<std::mutex> lock(bidiMutex);
+  if (!ensureBidiScratch()) return false;
 
   bidi_char* const line = sharedBidiLine;
   int count = 0;

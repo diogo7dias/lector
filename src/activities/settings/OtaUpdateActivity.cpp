@@ -13,6 +13,7 @@
 #include "network/FirmwareFlasher.h"
 #include "network/FirmwareSwitchAudit.h"
 #include "network/OtaUpdater.h"
+#include "network/TlsHeapPolicy.h"
 #include "network/TlsScratchHeap.h"
 #include "util/ReleaseStorage.h"
 
@@ -344,18 +345,18 @@ void OtaUpdateActivity::runUpdateInstall() {
     releaseStatusStorage("install");
   }
   requestUpdateAndWait();
-  // A TLS record buffer needs room the reader does not have with WiFi up, so the
-  // framebuffer's 48 KB are lent to wolfSSL for the transfer (see
-  // TlsScratchHeap.h). Nothing may draw while they are lent, so the progress bar
-  // holds at 0% for a secure download; the OTA Unlocker serves plain HTTP, where
-  // the bar animates as before.
-  const bool secure = updater.isDownloadSecure();
-  drawingSuspended = secure;
+  // Like CrossPoint, the download runs on the heap so the progress bar keeps
+  // moving. Only when the heap alone is under the TLS floor (TlsHeapPolicy.h) are
+  // the framebuffer's 48 KB lent to wolfSSL (TlsScratchHeap.h); nothing may draw
+  // while they are lent, so the bar then holds at 0% instead of refusing.
+  const bool lend =
+      updater.isDownloadSecure() && !tls_heap::canStartTls(ESP.getFreeHeap(), ESP.getMaxAllocHeap(), false, 0, 0);
+  drawingSuspended = lend;
   OtaUpdater::OtaUpdaterError res;
   {
     std::unique_ptr<GfxRenderer::FrameBufferLoan> loan;
     std::unique_ptr<tls_scratch::Session> tlsScratch;
-    if (secure) {
+    if (lend) {
       loan = std::make_unique<GfxRenderer::FrameBufferLoan>(renderer);
       tlsScratch = std::make_unique<tls_scratch::Session>();
       if (!tlsScratch->active()) {
