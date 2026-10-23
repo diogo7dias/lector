@@ -2,10 +2,9 @@
 """Sign lector firmware images in place.
 
 Appends a signature block after the image: b"LSG1" + r || s, the raw ECDSA P-256
-signature over the image's own SHA-256 trailer (hash_appended images only). The
-device checks it in firmware_flash::validateImageStream (src/network/FirmwareSignature.*):
-an online update must carry it, an SD-card install warns without it. The bootloader
-ignores bytes past the image, so a signed file still flashes like any other.
+signature over the image's own SHA-256 trailer (hash_appended images only). Only
+lector 0.44/0.45 check it (they refuse an online update without it); newer firmware
+ignores it. Kept for the 0.46.0 bridge release only, then delete.
 
 Usage: FIRMWARE_SIGNING_KEY="$(cat key.pem)" sign_firmware.py firmware.bin [...]
 Re-signing replaces an existing block rather than stacking a second one.

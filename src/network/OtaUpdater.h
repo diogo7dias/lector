@@ -32,7 +32,6 @@ class OtaUpdater {
     OOM_ERROR,
     WRONG_DEVICE_ERROR,
     INVALID_IMAGE_ERROR,
-    UNSIGNED_ERROR,  // a lector update without a valid release signature: refused
   };
 
   size_t getProcessedSize() const { return processedSize; }
