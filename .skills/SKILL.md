@@ -578,10 +578,9 @@ python3 sim/soak.py x4pro 10 600                  # 10 boots + 600 s idle; exit 
 ```
 
 - QEMU changes live only as patches in `sim/qemu-patches/` (base tag in `build-qemu.sh`).
-- Time is instruction-counted (`-icount`). Light sleep jumps the clock to its next
-  event, never ahead of the wall clock, so idle timeouts (auto-sleep) match the device.
-  Lag from slow emulated work is dropped at each sleep, never caught up: otherwise a
-  short idle looks like 30 s and Touch Sleep eats the next tap.
+- Time is instruction-counted (`-icount`). The QEMU patches still model light sleep
+  (clock jumps to its next event, lag dropped at each sleep), but since 0.46 the
+  firmware never light-sleeps (CrossPoint's downclock instead), so that path is idle.
 - The GT911 holds a frame until the firmware clears 0x814E, like the chip: a lift that
   lands while a press frame is being read is reported next, never dropped. Dropping it
   left a contact that never ended, and the next tap never completed (CI-only, slow hosts).
