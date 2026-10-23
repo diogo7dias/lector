@@ -602,9 +602,6 @@ void ActivityManager::requestUpdateAndWait() {
   assert(!holdingRenderLock && "Cannot call requestUpdateAndWait() while holding RenderLock");
 
   xTaskNotify(renderTaskHandle, 1, eIncrement);
-  // Tell the power manager the loop is parked here: it cannot poll input until the
-  // render finishes, so the BUSY-wait slice hook should not yield to it meanwhile.
-  powerManager.noteRenderWaitBegin();
   while (true) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     taskENTER_CRITICAL(&activityManagerSpinlock);
@@ -616,7 +613,6 @@ void ActivityManager::requestUpdateAndWait() {
     taskEXIT_CRITICAL(&activityManagerSpinlock);
     if (done) break;
   }
-  powerManager.noteRenderWaitEnd();
 }
 
 // RenderLock
