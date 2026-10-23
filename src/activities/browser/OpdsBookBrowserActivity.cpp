@@ -11,6 +11,7 @@
 #include <WiFi.h>
 
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -21,6 +22,7 @@
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 #include "network/TlsScratchHeap.h"
+#include "network/opds/BookOrbitMissing.h"
 #include "util/BookCacheUtils.h"
 #include "util/OpdsFilename.h"
 #include "util/StringUtils.h"
@@ -55,7 +57,8 @@ void OpdsBookBrowserActivity::onEnter() {
   entries.clear();
   navigationHistory.clear();
   searchTemplate = "";
-  currentPath = "";
+  currentPath = startPath;
+  openDownloadedBook = false;
   setListSelection(0);
   consumeConfirm = false;
   cancelRequested = false;
@@ -74,7 +77,7 @@ void OpdsBookBrowserActivity::onExit() {
   entries.clear();
   navigationHistory.clear();
 
-  teardownWifiAndRestart();
+  teardownWifiAndRestart(openDownloadedBook ? silentRestartToReader : silentRestart);
 }
 
 // What the error screen says for a failed fetch; nullptr when the feed arrived (empty
@@ -199,6 +202,10 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   const auto prevUrl = std::move(result.prevPageUrl);
   const bool feedTruncated = result.truncated;
   entries = std::move(result.entries);
+  if (missingOnly) {
+    const size_t missing = bookorbit_missing::keepMissing(entries);
+    if (navigationHistory.empty()) bookorbit_missing::save(static_cast<int>(missing), startPath);
+  }
 
   entries.reserve(entries.size() + (prevUrl.empty() ? 0 : 1) + (nextUrl.empty() ? 0 : 1));
   if (!prevUrl.empty()) {
@@ -315,6 +322,15 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     return;
   }
 
+  if (result == HttpDownloader::OK && missingOnly) {
+    // Open it so Auto Sync pulls its position; it is still listed, hence -1.
+    if (navigationHistory.empty())
+      bookorbit_missing::save(static_cast<int>(bookorbit_missing::countBooks(entries)) - 1, startPath);
+    APP_STATE.openEpubPath = finalPath;
+    openDownloadedBook = true;
+    activityManager.goToReader(finalPath);
+    return;
+  }
   if (result == HttpDownloader::OK) {
     state = BrowserState::BROWSING;
   } else if (result == HttpDownloader::ABORTED) {
@@ -372,8 +388,8 @@ void OpdsBookBrowserActivity::performSearch(const std::string& query) {
   const size_t pos = url.find(placeholder);
   if (pos != std::string::npos) url.replace(pos, placeholder.length(), urlEncode(query));
 
-  navigationHistory.push_back(currentPath);  // <-- add this
-  currentPath = url;                         // <-- add this
+  navigationHistory.push_back(currentPath);
+  currentPath = url;
 
   state = BrowserState::LOADING;
   statusMessage = tr(STR_LOADING);

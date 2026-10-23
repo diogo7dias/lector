@@ -724,6 +724,15 @@ its web reader and apps, so a book continues where you stopped on either side.
    BookOrbit finds the book by its contents, not its name.
 4. Run **Authenticate**, then turn on **Auto Sync** if you want it.
 
+With **Auto Sync** on, Lector also watches for books you are reading in BookOrbit but have not
+put on the device. When it goes to sleep (after you read, or at most once every 6 hours), it
+reads the smart shelf named **Reading** in BookOrbit's OPDS catalogue. A book counts as on the
+device when the file an OPDS download would save exists, or a recent book has the same title.
+When some are missing, Home shows a row such as **2 on BookOrbit, not here**. Select it to see
+only those books. Confirm downloads one and opens it at your BookOrbit position. BookOrbit needs
+a smart shelf called **Reading** (status is Reading) for this to work. Read-along books arrive
+without their audio, so their position does not sync.
+
 #### Option C: the public KOReader server
 
 1. Set **Sync Server URL** to `https://sync.koreader.rocks`. An empty URL points at the
