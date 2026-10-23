@@ -3,8 +3,8 @@
 #include <string>
 
 // Auto Sync (KOReader settings): a book pulls its position once per wake when it
-// opens, and the last book read pushes its position behind the sleep screen. Both
-// run only with Auto Sync on and credentials set.
+// opens, and the last book read pushes its position behind the sleep screen. All of
+// it runs only with Auto Sync on and credentials set.
 namespace ko_auto_sync {
 
 // True the first time `path` opens since the last deep sleep. The claim survives the
@@ -15,7 +15,8 @@ bool claimPull(const std::string& path);
 void markMoved(const std::string& path);
 
 // Deep sleep entry, after the sleep screen is painted. Pushes the moved book over a
-// saved network, blocking for at most a few joins, and arms a pull for the next wake.
+// saved network, blocking for at most a few joins, arms a pull for the next wake,
+// and when due re-counts the BookOrbit Reading books missing from the card.
 void onSleep();
 
 }  // namespace ko_auto_sync

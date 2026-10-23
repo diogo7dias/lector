@@ -21,6 +21,7 @@ class RenderLock;  // forward declaration
 
 enum class HomeMenuItem {
   NONE,
+  BOOKORBIT_MISSING,
   FILE_BROWSER,
   OPDS_BROWSER,
   FILE_TRANSFER,
@@ -89,6 +90,8 @@ class ActivityManager {
   std::atomic<bool> requestedUpdate{false};
 
  public:
+  GfxRenderer& getRenderer() { return renderer; }
+
   explicit ActivityManager(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : renderer(renderer), mappedInput(mappedInput), renderingMutex(xSemaphoreCreateMutex()) {
     assert(renderingMutex != nullptr && "Failed to create rendering mutex");

@@ -1,0 +1,3 @@
+add_executable(BookOrbitMissingFileTest BookOrbitMissingFileTest.cpp)
+target_link_libraries(BookOrbitMissingFileTest PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(BookOrbitMissingFileTest)

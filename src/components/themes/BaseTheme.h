@@ -69,7 +69,6 @@ struct ThemeMetrics {
   int capsuleRadius;
 
   int homeTopPadding;
-  int homeCoverTileHeight;
   int homeMenuTopOffset;
 
   int buttonHintsHeight;
@@ -165,7 +164,6 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .sheetRadius = 0,
                                  .capsuleRadius = 0,
                                  .homeTopPadding = 40,
-                                 .homeCoverTileHeight = 400,
                                  .homeMenuTopOffset = 10,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,

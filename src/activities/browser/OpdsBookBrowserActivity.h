@@ -26,8 +26,14 @@ class OpdsBookBrowserActivity final : public UiStatusActivity {
     SEARCH_INPUT
   };
 
-  explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, OpdsServer server)
-      : UiStatusActivity(activity_name::kOpdsBookBrowser, renderer, mappedInput), server(std::move(server)) {}
+  // missingOnly opens `startPath` (BookOrbit's Reading shelf) and lists only the books
+  // the card lacks; a download there opens the book.
+  explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, OpdsServer server,
+                                   std::string startPath = {}, bool missingOnly = false)
+      : UiStatusActivity(activity_name::kOpdsBookBrowser, renderer, mappedInput),
+        startPath(std::move(startPath)),
+        missingOnly(missingOnly),
+        server(std::move(server)) {}
 
   void onEnter() override;
   void onExit() override;
@@ -66,6 +72,10 @@ class OpdsBookBrowserActivity final : public UiStatusActivity {
   bool cancelRequested = false;
   size_t downloadProgress = 0;
   size_t downloadTotal = 0;
+
+  const std::string startPath;
+  const bool missingOnly;
+  bool openDownloadedBook = false;
 
   opds::OpdsClient client;
   OpdsServer server;  // Copied at construction — safe even if the store changes during browsing

@@ -15,6 +15,7 @@
 #include "ProgressMapper.h"
 #include "WifiCredentialStore.h"
 #include "activities/reader/ProgressFile.h"
+#include "network/opds/BookOrbitMissing.h"
 
 namespace {
 
@@ -105,30 +106,35 @@ bool joinSavedNetwork() {
   return false;
 }
 
-void push(const std::string& path) {
-  // No saved network, no radio: checked before any card or radio work.
+// No saved network, no radio: checked before any card or radio work.
+bool haveSavedNetwork() {
   WIFI_STORE.loadFromFile();
-  if (WIFI_STORE.getCredentialCount() == 0) {
-    LOG_DBG("KOAUTO", "No saved network; push skipped");
-    return;
-  }
+  if (WIFI_STORE.getCredentialCount() > 0) return true;
+  LOG_DBG("KOAUTO", "No saved network");
+  return false;
+}
+
+// True when it left WiFi connected.
+bool push(const std::string& path) {
+  if (!haveSavedNetwork()) return false;
   SavedProgressPosition local;
-  if (!localProgress(path, local)) return;
+  if (!localProgress(path, local)) return false;
   KOReaderProgress progress;
   progress.document = KOReaderDocumentId::calculateFor(path, KOREADER_STORE.getMatchMethod());
   if (progress.document.empty()) {
     LOG_ERR("KOAUTO", "Hash failed for %s", path.c_str());
-    return;
+    return false;
   }
   progress.progress = local.xpath;
   progress.percentage = local.percentage;
   if (!joinSavedNetwork()) {
     LOG_DBG("KOAUTO", "No saved network joined; push skipped");
-    return;
+    return false;
   }
   const auto result = KOReaderSyncClient::updateProgress(progress);
   LOG_INF("KOAUTO", "Pushed %.4f for %s: result=%d http=%d", static_cast<double>(local.percentage), path.c_str(),
           result, KOReaderSyncClient::lastHttpCode);
+  return true;
 }
 
 }  // namespace
@@ -148,10 +154,13 @@ void markMoved(const std::string& path) { movedPath = path; }
 
 void onSleep() {
   pullMagic = 0;
-  if (movedPath.empty()) return;
   const std::string path = std::move(movedPath);
   movedPath.clear();
-  if (enabled()) push(path);
+  if (!enabled()) return;
+  const bool wifiUp = !path.empty() && push(path);
+  if (!bookorbit_missing::findServer() || !bookorbit_missing::due(wifiUp)) return;
+  if (!wifiUp && !(haveSavedNetwork() && joinSavedNetwork())) return;
+  bookorbit_missing::refresh();
 }
 
 }  // namespace ko_auto_sync
