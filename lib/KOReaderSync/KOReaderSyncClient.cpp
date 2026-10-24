@@ -172,10 +172,10 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
     return trusted_pins::noteIfRejected(http, url.c_str()) ? CERT_UNTRUSTED : NETWORK_ERROR;
   }
 
-  // 204 = success with no stored progress for this document (Spring-style
-  // KOSync implementations; the reference server answers 200 with an empty
-  // object instead). Map it to the same graceful no-remote-progress path as
-  // 404 rather than falling through to SERVER_ERROR — see upstream #2876.
+  // 204 (Spring-style KOSync servers) and a 200 empty object (the reference server,
+  // BookOrbit) both mean no stored progress for this document. Map them to the same
+  // graceful path as 404: an empty object read as a real record put the remote at 0%,
+  // so Auto Sync opened the manual choice instead of uploading. See upstream #2876.
   if (httpCode == 204) {
     http.end();
     return NOT_FOUND;
@@ -190,6 +190,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
       LOG_ERR("KOSync", "JSON parse failed: %s", error.c_str());
       return JSON_ERROR;
     }
+    if (doc["progress"].isNull() && doc["percentage"].isNull()) return NOT_FOUND;
 
     outProgress.document = documentHash;
     outProgress.progress = doc["progress"].as<std::string>();
