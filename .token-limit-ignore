@@ -16,3 +16,7 @@ test/font_manifest_parser/published_fonts.json
 
 # One file by design: the Lector site renders it whole into the guide page
 USER_GUIDE.md
+
+# The always-loaded agent guide (AGENTS.md and CLAUDE.md link here): inherited from
+# CrossPoint and read whole by every agent, so it is one file by design
+.skills/SKILL.md
