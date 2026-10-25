@@ -123,14 +123,12 @@ class LightPanel {
       // Cleared either way. A finger that leaves the digitiser without a release event
       // would otherwise leave the press armed, and the next unrelated release would fire
       // a button nobody was touching.
-      const bool wasArmed = actionPressed_ >= 0;
       actionPressed_ = -1;
       dragging_ = light_panel::Row::None;
       if (fired >= 0 && fired < context_.actionCount) {
         runAction(context_.actions[fired], requestUpdate);
         return true;
       }
-      if (wasArmed) requestUpdate();
     }
 
     if (down || held) {
@@ -147,10 +145,7 @@ class LightPanel {
       const auto hit = light_panel::hitTest(layout_, tx, localY);
       if (actionPressed_ >= 0) {
         // Still down: keep the press only while the finger stays on it.
-        if (hit.kind != light_panel::Hit::Kind::Action || hit.action != actionPressed_) {
-          actionPressed_ = -1;
-          requestUpdate();
-        }
+        if (hit.kind != light_panel::Hit::Kind::Action || hit.action != actionPressed_) actionPressed_ = -1;
         return true;
       }
 
@@ -187,8 +182,9 @@ class LightPanel {
           break;
         }
         case light_panel::Hit::Kind::Action:
+          // Armed silently: a pressed-look frame cost a refresh (~400 ms) that the action
+          // then waited behind. The action leaves the panel anyway, straight back to the page.
           actionPressed_ = hit.action;
-          requestUpdate();
           break;
         default:
           break;
@@ -241,8 +237,7 @@ class LightPanel {
     if (layout_.hasAux) drawAuxRow(renderer, layout_.aux, context_.auxText);
 
     for (int i = 0; i < layout_.actionCount; ++i) {
-      drawBox(renderer, layout_.actions[i], I18N.get(boundMenuActionLabel(context_.actions[i])),
-              /*filled=*/i == actionPressed_);
+      drawBox(renderer, layout_.actions[i], I18N.get(boundMenuActionLabel(context_.actions[i])));
     }
     drawReadout(renderer);
   }
@@ -301,15 +296,13 @@ class LightPanel {
                       state, true);
   }
 
-  // A framed box with its label centred. Filled while pressed, and the text is knocked out
-  // of the fill rather than drawn over it.
-  void drawBox(const GfxRenderer& renderer, const light_panel::Rect& rect, const char* label, const bool filled) const {
+  // A framed box with its label centred.
+  void drawBox(const GfxRenderer& renderer, const light_panel::Rect& rect, const char* label) const {
     const int y = rect.y + topInset_;
-    if (filled) renderer.fillRect(rect.x, y, rect.width, rect.height, true);
     renderer.drawRect(rect.x, y, rect.width, rect.height, light_panel::kRule, true);
     const int textWidth = renderer.getTextWidth(banner::FONT_ID, label);
     const int textY = y + (rect.height - renderer.getLineHeight(banner::FONT_ID)) / 2;
-    renderer.drawText(banner::FONT_ID, rect.x + (rect.width - textWidth) / 2, textY, label, !filled);
+    renderer.drawText(banner::FONT_ID, rect.x + (rect.width - textWidth) / 2, textY, label, true);
   }
 
   // Icon, track, number, then the two steppers. The row is named by its icon rather than

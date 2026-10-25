@@ -61,7 +61,6 @@
 #include "activities/settings/TextSettingsActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
-#include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "sleep/SleepPauseToggle.h"
@@ -1957,11 +1956,8 @@ void EpubReaderActivity::reloadForReaderPrefsChange() {
   dropSectionForRelayout();
   // The loader skips a book's stylesheet when its look had both embedded switches off,
   // so a book that has just turned one on may have no CSS cache to lay out with.
-  if (wantsBookCss(prefs_) && !epub->hasCssCache()) {
-    BusyBanner banner(renderer, tr(STR_INDEXING));
-    banner.showNow();
-    epub->ensureCssCache();
-  }
+  // No banner: a setting change goes straight back to the page, without a wait screen.
+  if (wantsBookCss(prefs_) && !epub->hasCssCache()) epub->ensureCssCache();
 }
 
 void EpubReaderActivity::dropSectionForRelayout() {
@@ -1977,6 +1973,8 @@ void EpubReaderActivity::dropSectionForRelayout() {
     captureOrdinalAnchor();
   }
   section.reset();
+  // A settings change goes straight back to the page: no Indexing popup on the rebuild.
+  quietRelayout_ = true;
   // Every glyph on the page is about to move, so the next paint cannot be a differential
   // one: a FAST refresh only drives the pixels it thinks changed and leaves the old font,
   // size or spacing ghosted underneath the new layout. Put the next page on the cleanup
@@ -2861,7 +2859,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           // overrunning the deadline). The parser fires the callback before the
           // first image probe; buildPopupPending gates it to this blocking phase
           // so a background build in loop() can never draw over a displayed page.
-          buildPopupPending = !showPopup;
+          buildPopupPending = !showPopup && !quietRelayout_;
+          quietRelayout_ = false;
           const unsigned long buildStartMs = millis();
           bool started;
           // Lend the framebuffer's 48 KB across the whole blocking build, not just

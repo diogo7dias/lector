@@ -298,6 +298,9 @@ class EpubReaderActivity final : public Activity {
   // drawn. Gates showBuildPopup() so the parser's popup callback (which persists into
   // background buildSomeMore chunks) can never draw over a displayed page.
   bool buildPopupPending = false;
+  // Set by dropSectionForRelayout, spent by the next build: a settings change relays out
+  // without the deadline Indexing popup.
+  bool quietRelayout_ = false;
   // renderer.frameBufferLoanCount() when the framebuffer was last repainted. Differs once a loan
   // (a build step's image probe) has handed the buffer back white under the shown page, so the
   // Quick Menu must not paint straight onto it. Render task only.

@@ -284,7 +284,8 @@ void TxtReaderActivity::buildPageIndex() {
 
   LOG_DBG("TRS", "Building page index for %zu bytes...", fileSize);
 
-  GUI.drawPopup(renderer, tr(STR_INDEXING));
+  if (!quietIndex_) GUI.drawPopup(renderer, tr(STR_INDEXING));
+  quietIndex_ = false;
 
   while (offset < fileSize) {
     std::vector<std::string> tempLines;
@@ -650,6 +651,7 @@ bool TxtReaderActivity::runBoundAction(const uint8_t function) {
     // TXT has no per-book prefs: the global setting is the one it reads.
     SETTINGS.paragraphAlignment = alignment;
     SETTINGS.saveToFile();
+    quietIndex_ = true;       // straight back to the page, no Indexing popup
     relayoutForFontChange();  // re-reads the alignment and keeps the byte on screen
     return true;
   }
