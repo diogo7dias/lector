@@ -20,6 +20,8 @@ struct Section {
   void writeSectionFileHeader(const ReaderRenderSpec& spec);
   bool loadSectionFile(const ReaderRenderSpec& spec);
   bool clearCache() { return cleared = true; }
+  // The keep-one-previous-layout swap touches several files; covered by the sim, not here.
+  bool swapInPreviousLayout(const ReaderRenderSpec&, bool) { return clearCache() && false; }
 };
 #include "SectionHeader.inc"
 

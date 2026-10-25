@@ -113,6 +113,31 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for visible-offset LUT (patched later)
 }
 
+// The render-spec block of a section header, in file order (writeSectionFileHeader).
+static void readSpecFields(HalFile& f, ReaderRenderSpec& out) {
+  serialization::readPod(f, out.fontId);
+  serialization::readPod(f, out.lineCompression);
+  serialization::readPod(f, out.extraParagraphSpacing);
+  serialization::readPod(f, out.paragraphSpacing);
+  serialization::readPod(f, out.wordSpacing);
+  serialization::readPod(f, out.paragraphAlignment);
+  serialization::readPod(f, out.viewportWidth);
+  serialization::readPod(f, out.viewportHeight);
+  serialization::readPod(f, out.embeddedTextStyle);
+  serialization::readPod(f, out.embeddedLayoutStyle);
+  serialization::readPod(f, out.imageRendering);
+  serialization::readPod(f, out.focusReadingEnabled);
+  serialization::readPod(f, out.guideDotsMode);
+  serialization::readPod(f, out.firstLineIndentMode);
+  serialization::readPod(f, out.firstLineIndentPercent);
+  serialization::readPod(f, out.kerning);
+  serialization::readPod(f, out.ligatures);
+  serialization::readPod(f, out.linkUnderline);
+  serialization::readPod(f, out.bookMargins);
+  serialization::readPod(f, out.headingPageBreak);
+  serialization::readPod(f, out.wordExpansion);
+}
+
 bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
   if (!Storage.openFileForRead("SCT", filePath, file)) {
     return false;
@@ -133,32 +158,14 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     filePartial = (version == SECTION_FILE_PARTIAL_VERSION);
 
     ReaderRenderSpec cached;
-    serialization::readPod(file, cached.fontId);
-    serialization::readPod(file, cached.lineCompression);
-    serialization::readPod(file, cached.extraParagraphSpacing);
-    serialization::readPod(file, cached.paragraphSpacing);
-    serialization::readPod(file, cached.wordSpacing);
-    serialization::readPod(file, cached.paragraphAlignment);
-    serialization::readPod(file, cached.viewportWidth);
-    serialization::readPod(file, cached.viewportHeight);
-    serialization::readPod(file, cached.embeddedTextStyle);
-    serialization::readPod(file, cached.embeddedLayoutStyle);
-    serialization::readPod(file, cached.imageRendering);
-    serialization::readPod(file, cached.focusReadingEnabled);
-    serialization::readPod(file, cached.guideDotsMode);
-    serialization::readPod(file, cached.firstLineIndentMode);
-    serialization::readPod(file, cached.firstLineIndentPercent);
-    serialization::readPod(file, cached.kerning);
-    serialization::readPod(file, cached.ligatures);
-    serialization::readPod(file, cached.linkUnderline);
-    serialization::readPod(file, cached.bookMargins);
-    serialization::readPod(file, cached.headingPageBreak);
-    serialization::readPod(file, cached.wordExpansion);
+    readSpecFields(file, cached);
 
     if (!sectionCacheMatches(spec, cached)) {
       file.close();
-      LOG_ERR("SCT", "Deserialization failed: Parameters do not match");
-      clearCache();
+      LOG_DBG("SCT", "Cached layout is for other settings");
+      // Toggling a setting back (Justify, then Left, then Justify) lands on the layout
+      // kept from last time instead of laying the chapter out again.
+      if (swapInPreviousLayout(spec, filePartial)) return loadSectionFile(spec);
       return false;
     }
   }
@@ -214,6 +221,53 @@ bool Section::clearCache() const {
   }
 
   LOG_DBG("SCT", "Cache cleared successfully");
+  return true;
+}
+
+namespace {
+
+// FAT rename never overwrites, so the destination goes first.
+bool replaceFile(const std::string& from, const std::string& to) {
+  if (Storage.exists(to.c_str())) Storage.remove(to.c_str());
+  return Storage.rename(from.c_str(), to.c_str());
+}
+
+}  // namespace
+
+// One layout per chapter is kept beside the live one: the last finished layout made under
+// other settings, at <spine>.bin.prev. On a settings mismatch the live file trades places
+// with it when it matches, otherwise it becomes it. Only finished layouts are kept: a
+// partial is a suspended build, cheap to redo and not worth a slot.
+bool Section::swapInPreviousLayout(const ReaderRenderSpec& spec, const bool currentPartial) const {
+  const std::string prevPath = filePath + ".prev";
+  bool prevMatches = false;
+  {
+    HalFile prev;
+    if (Storage.openFileForRead("SCT", prevPath, prev)) {
+      uint8_t version = 0;
+      serialization::readPod(prev, version);
+      ReaderRenderSpec cached;
+      readSpecFields(prev, cached);
+      prevMatches = version == SECTION_FILE_VERSION && sectionCacheMatches(spec, cached);
+    }
+  }
+
+  if (currentPartial) {
+    clearCache();
+    if (!prevMatches) return false;
+    return replaceFile(prevPath, filePath);
+  }
+  if (!prevMatches) {
+    if (!replaceFile(filePath, prevPath)) clearCache();
+    return false;
+  }
+  const std::string swapPath = filePath + ".swap";
+  if (!replaceFile(filePath, swapPath) || !replaceFile(prevPath, filePath)) {
+    LOG_ERR("SCT", "Layout swap failed");
+    return false;
+  }
+  replaceFile(swapPath, prevPath);
+  LOG_DBG("SCT", "Reusing the layout kept for these settings");
   return true;
 }
 

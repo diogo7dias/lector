@@ -2841,6 +2841,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
             // so gate on spine size alone -- laying out a big spine takes seconds even with cached
             // HTML. Ordinary chapter-top TOC jumps resolve on page 0 and stay popup-free.
             showPopup = !section->findAnchor(pendingAnchor).has_value() && spineBytes > BUILD_POPUP_BYTE_THRESHOLD;
+          } else if (offsetJump.has_value()) {
+            // A relayout after a settings change: a predicted popup costs a refresh before
+            // the build even starts, and most rebuilds to the reader's place are quick. The
+            // deadline backstop below still surfaces it if this one drags.
+            showPopup = false;
           } else {
             const bool targetAvailable = target < static_cast<int>(section->pageCount);
             showPopup = !targetAvailable && ((spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) ||

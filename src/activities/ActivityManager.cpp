@@ -566,6 +566,10 @@ ScreenshotInfo ActivityManager::getScreenshotInfo() const {
 
 void ActivityManager::requestUpdate(bool immediate) {
   if (immediate) {
+    // An immediate pass renders the state as it is by then, so it serves a deferred request
+    // already pending too. Left set, the deferred one painted the same screen again on the
+    // next loop: a whole second refresh after every light panel action.
+    requestedUpdate = false;
     if (renderTaskHandle) {
       xTaskNotify(renderTaskHandle, 1, eIncrement);
     }

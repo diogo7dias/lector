@@ -271,9 +271,12 @@ class LightPanel {
 
   void runAction(const uint8_t function, const std::function<void()>& requestUpdate) {
     // Every action leaves this screen behind, so the panel's own values are written first
-    // and the panel is shut before the host acts.
-    close(requestUpdate);
+    // and the panel is shut before the host acts. The page is repainted once, after the
+    // action: repainting on close painted the old page with a full cleanup refresh (about
+    // 1.7 s) only for a relayout to replace it straight away.
+    close([] {});
     if (runAction_) runAction_(function);
+    requestUpdate();
   }
 
   // One pixel in two, on a checkerboard: dark enough to read as a shade over the page and
