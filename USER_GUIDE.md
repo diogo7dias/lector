@@ -941,7 +941,8 @@ belongs to, so the rows here appear in the same order as on the device.
   panel's brightness track runs from 0 to this, and a brightness above it is brought down.
 
 In a book the light panel also has **Align Left** and **Justify**, which set the book's paragraph
-alignment (for that EPUB alone; in a TXT book, for every TXT book).
+alignment (for that EPUB alone; in a TXT book, for every TXT book), and **Paragraph Spacing**,
+which turns the extra space between an EPUB's paragraphs on or off for that book.
 
 **Screen**
 

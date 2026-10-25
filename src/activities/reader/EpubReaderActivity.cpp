@@ -588,6 +588,7 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
     case CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR:
     case CrossPointSettings::LP_MENU_ALIGN_LEFT:
     case CrossPointSettings::LP_MENU_ALIGN_JUSTIFY:
+    case CrossPointSettings::LP_MENU_TOGGLE_PARAGRAPH_SPACING:
     // Bound to a key that does not already page (the Home key, or a side key whose single
     // was remapped), paging is an action like any other and the reader can always run it.
     case CrossPointSettings::LP_MENU_PAGE_PREV:
@@ -672,6 +673,14 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       requestUpdate();
       return true;
     }
+    case CrossPointSettings::LP_MENU_TOGGLE_PARAGRAPH_SPACING:
+      // Per-book, like alignment beside it.
+      prefs_.extraParagraphSpacing = prefs_.extraParagraphSpacing ? 0 : 1;
+      prefsCustom_ = true;
+      writeReaderOverride(prefs_);
+      reloadForReaderPrefsChange();
+      requestUpdate();
+      return true;
     case CrossPointSettings::LP_MENU_POPUP:
       openQuickMenu();
       return true;

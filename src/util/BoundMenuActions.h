@@ -89,6 +89,8 @@ enum LONG_PRESS_MENU_FUNCTION {
   // set to Center or Book Style has no obvious "other" state to flip to.
   LP_MENU_ALIGN_LEFT = 32,
   LP_MENU_ALIGN_JUSTIFY = 33,
+  // Flips Extra Paragraph Spacing, beside the alignment pair in the light panel.
+  LP_MENU_TOGGLE_PARAGRAPH_SPACING = 34,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 
