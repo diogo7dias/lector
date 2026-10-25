@@ -122,6 +122,12 @@ std::optional<uint16_t> Section::getPageForParagraphIndex(const uint16_t pIndex)
 }
 
 std::optional<uint16_t> Section::getParagraphIndexForPage(const uint16_t page) const {
+  // A building section's pages live in the in-RAM LUT; the file at filePath is absent
+  // (first build) or an older partial, so it cannot answer for them.
+  if (build_ && page < build_->lut.size()) {
+    return build_->lut[page].paragraphIndex;
+  }
+
   HalFile f;
   if (!Storage.openFileForRead("SCT", filePath, f)) {
     return std::nullopt;
@@ -154,6 +160,15 @@ std::optional<uint16_t> Section::getParagraphIndexForPage(const uint16_t page) c
 }
 
 std::optional<uint16_t> Section::pagesUntilNextParagraph(const uint16_t page) const {
+  // Same split as getParagraphIndexForPage. Pages not built yet are not counted, so a
+  // paragraph running past the build front reads short until the build catches up.
+  if (build_ && page < build_->lut.size()) {
+    const auto& lut = build_->lut;
+    uint16_t spanned = 0;
+    for (size_t i = page + 1; i < lut.size() && lut[i].paragraphIndex == lut[page].paragraphIndex; i++) spanned++;
+    return spanned;
+  }
+
   HalFile f;
   if (!Storage.openFileForRead("SCT", filePath, f)) {
     return std::nullopt;
