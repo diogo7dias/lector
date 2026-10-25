@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="lector">
+<path fill="#141311" fill-rule="evenodd" d="M4 8H80V92H4ZM11 15V85H73V15Z"/>
+<path fill="#141311" d="M16 92V60Q16 30 38 22Q53 16 66 24L99 38L66 47Q59 52 57 62V92Z"/>
+<path fill="#f3f1ea" d="M66 36L90 38.2L66 40Z"/>
+<circle fill="#f3f1ea" cx="48" cy="35" r="4.2"/>
+</svg>
