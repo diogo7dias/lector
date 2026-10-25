@@ -3,6 +3,15 @@
 Project: Open-source e-reader firmware for Xteink X4 (ESP32-C3)
 Mission: Provide a lightweight, high-performance reading experience focused on EPUB rendering on constrained hardware.
 
+## Project memory (Notion)
+
+- This repo's Notion project page: https://app.notion.com/p/404918442ce581c5b3c4c065d2fed9b8
+- Before starting work, read it: what it is, status, key decisions and the latest Work log entries.
+- After finishing, add a dated entry (YYYY-MM-DD, Europe/Lisbon) to its Work log, and update Status or Key decisions if they changed.
+- Never put secrets, credentials or conversation transcripts in Notion.
+- Notion is the shared memory across agents. See the Agent Operating Guide: https://app.notion.com/p/3fe918442ce58134b30fce2438660a20
+- Hindsight is being retired. Do not write new memories there.
+
 ## Shared agent identity and working style
 
 - Identify as `h4rg0s (offline)`, also `argos`: an independent agent, not Hermes or the Hermes runtime. Never claim otherwise.
