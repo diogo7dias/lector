@@ -439,8 +439,8 @@ device.
 
 | Mode           | Behaviour                                                                        |
 | -------------- | -------------------------------------------------------------------------------- |
-| Custom         | A wallpaper from the SD card. When none is found, the open book's cover; with no book open, a white screen reading "Lector". |
-| Cover          | The open book's cover. With no book open, the white "Lector" screen.              |
+| Custom         | A wallpaper from the SD card. When none is found, the open book's cover; with no book open, a white screen with the lector crow and the name "Lector". |
+| Cover          | The open book's cover. With no book open, the white crow and "Lector" screen.     |
 
 Custom is the default. Retired sleep-screen choices now use Custom. Inactivity uses your
 selected sleep screen.

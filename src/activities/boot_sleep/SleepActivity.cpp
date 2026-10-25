@@ -13,13 +13,13 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "LectorFace.h"
 #include "SleepFacePaint.h"
 #include "SleepInfoOverlay.h"
 #include "SleepPreClear.h"
 #include "SleepTiming.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
-#include "fontIds.h"
 #include "util/DeferredFavorite.h"
 
 namespace {
@@ -159,7 +159,7 @@ void SleepActivity::renderSleepScreen() const {
   }
 }
 
-// The Lector fallback: a white page with the name centred, in the one UI face. Reached
+// The Lector fallback: a white page with the crow and the name centred. Reached
 // only when no wallpaper and no cover could be shown (no files, no open book, a decode
 // that failed partway). Every face that fails lands here.
 //
@@ -168,8 +168,7 @@ void SleepActivity::renderSleepScreen() const {
 // functions.
 void SleepActivity::renderDefaultSleepScreen() const {
   renderer.clearScreen();
-  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  renderer.drawCenteredText(UI_10_FONT_ID, (renderer.getScreenHeight() - lineHeight) / 2, tr(STR_LECTOR));
+  drawLectorFace(renderer);
   const sleep_face::PaintPlan plan =
       sleep_face::planFor(sleep_face::Face::PlainLector, /*sourceHasGrayscale=*/false, display.profile());
   renderer.displayBuffer(plan.base);
