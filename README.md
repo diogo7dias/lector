@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo/lector-dark.svg">
+  <img src="docs/images/logo/lector.svg" alt="lector crow logo" width="96">
+</picture>
+
 # lector
 
 E-reader firmware for the Xteink X3 and X4.
