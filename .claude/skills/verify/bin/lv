@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# lv: drive one simulated lector (sim/server.py in QEMU) for verification.
+#   lv start [board]           boot a fresh device (x4pro|x3|x3uc8279|x4), print LV_RUN
+#   lv doctor                  is this instance ours, up, and running the current build?
+#   lv state                   /state JSON
+#   lv press <key>             up down home power (x4pro); back confirm left right up down power (C3)
+#   lv tap <x> <y> [ms]        touch the upright 480x800 panel (touch boards)
+#   lv swipe <x1> <y1> <x2> <y2>
+#   lv ink <x> <y> <w> <h>     dark pixels in a box
+#   lv reboot                  power-cycle, flash and card persist
+#   lv shot <name>             save <name>.png + <name>.json (state) as evidence
+#   lv log [regex]             firmware serial log (grep when a regex is given)
+#   lv stop                    kill what start launched, keep evidence, drop scratch
+# The run directory is $LV_RUN, else the one in /tmp/lector-verify/active.
+set -euo pipefail
+HOME_DIR=/tmp/lector-verify
+REPO=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+C='\033[36m'; G='\033[32m'; R='\033[31m'; N='\033[0m'
+say() { echo -e "${C}[lv]${N} $*" >&2; }
+die() { echo -e "${R}[lv] $*${N}" >&2; exit 1; }
+
+run_dir() {
+  local d=${LV_RUN:-$(cat "$HOME_DIR/active" 2>/dev/null || true)}
+  [ -n "$d" ] && [ -f "$d/port" ] || die "no instance: lv start first (or set LV_RUN)"
+  echo "$d"
+}
+post() { curl -sf -X POST "$BASE$1" || die "POST $1 failed"; echo; }
+
+qemu_dir() {
+  [ -n "${LECTOR_QEMU_DIR:-}" ] && { echo "$LECTOR_QEMU_DIR"; return; }
+  [ -x "$REPO/sim/.qemu/build/qemu-system-xtensa" ] && { echo "$REPO/sim/.qemu/build"; return; }
+  # A worktree shares the main checkout's QEMU build.
+  local main; main=$(git -C "$REPO" worktree list --porcelain | sed -n '1s/^worktree //p')
+  [ -x "$main/sim/.qemu/build/qemu-system-xtensa" ] && { echo "$main/sim/.qemu/build"; return; }
+  die "no QEMU build: run ./sim/build-qemu.sh"
+}
+
+env_of() { case $1 in x4pro) echo x4pro ;; x3|x3uc8279|x4) echo default ;; *) die "unknown board $1" ;; esac; }
+
+cmd=${1:-}; shift || true
+# A plain assignment, so a missing instance stops here (die inside $(...) alone would not).
+case $cmd in start|"") ;; *) d=$(run_dir); BASE="http://127.0.0.1:$(cat "$d/port")" ;; esac
+case $cmd in
+start)
+  board=${1:-x4pro}; env=$(env_of "$board")
+  fw="$REPO/.pio/build/$env/firmware.bin"
+  [ -f "$fw" ] || die "no $fw: run pio run -e $env"
+  d="$HOME_DIR/$board-$(date +%Y%m%d-%H%M%S)"; mkdir -p "$d/work" "$d/evidence"
+  port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')
+  echo "$board" > "$d/board"; echo "$port" > "$d/port"; : > "$d/server.log"
+  say "booting ${G}$board${N} on :$port (QEMU $(qemu_dir))"
+  LECTOR_BOARD=$board LECTOR_SIM_DIR="$d/work" LECTOR_QEMU_DIR=$(qemu_dir) \
+    setsid python3 "$REPO/sim/server.py" "$port" > "$d/server.log" 2>&1 &
+  echo $! > "$d/pid"; echo "$d" > "$HOME_DIR/active"
+  # server.py prints its banner only after the firmware booted and went idle on Home.
+  for _ in $(seq 240); do
+    grep -q "lector sim on" "$d/server.log" && break
+    kill -0 "$(cat "$d/pid")" 2>/dev/null || { cat "$d/server.log" >&2; die "server died"; }
+    sleep 1
+  done
+  grep -q "lector sim on" "$d/server.log" || die "not ready after 240 s: $d/server.log"
+  say "${G}ready${N} $(curl -s "http://127.0.0.1:$port/state")"
+  echo "export LV_RUN=$d"
+  ;;
+doctor)
+  board=$(cat "$d/board"); pid=$(cat "$d/pid"); ok=1
+  kill -0 "$pid" 2>/dev/null && say "pid $pid alive" || { say "${R}pid $pid gone${N}"; ok=0; }
+  st=$(curl -sf "$BASE/state") && say "port $(cat "$d/port") answers: $st" || { say "${R}port silent${N}"; ok=0; }
+  echo "$st" | grep -q '"activity": ""' && { say "${R}no activity yet${N}"; ok=0; }
+  fw="$REPO/.pio/build/$(env_of "$board")/firmware.bin"
+  newer=$(find "$REPO/src" "$REPO/lib" -newer "$fw" -type f 2>/dev/null | head -3)
+  [ -z "$newer" ] && say "firmware newer than src/ and lib/" || { say "${R}stale firmware, newer:${N} $newer"; ok=0; }
+  grep -q "Guru Meditation\|abort()\|Backtrace" "$d/work/usb.log" 2>/dev/null && { say "${R}crash in serial log${N}"; ok=0; }
+  [ $ok = 1 ] && say "${G}healthy${N} ($board, $d)" || exit 1
+  ;;
+state) curl -sf "$BASE/state"; echo ;;
+press) post "/press/$1" ;;
+tap) post "/tap/$1/$2?ms=${3:-300}" ;;
+swipe) post "/swipe/$1/$2/$3/$4" ;;
+ink) curl -sf "$BASE/ink/$1/$2/$3/$4"; echo ;;
+reboot) post /reboot ;;
+shot)
+  [ -n "${1:-}" ] || die "lv shot <name>"
+  curl -sf "$BASE/screen.png" -o "$d/evidence/$1.png"; curl -sf "$BASE/state" > "$d/evidence/$1.json"
+  say "saved $d/evidence/$1.png $(cat "$d/evidence/$1.json")"
+  ;;
+log) if [ -n "${1:-}" ]; then grep -aE "$1" "$d/work/usb.log" || true; else cat "$d/work/usb.log"; fi ;;
+stop)
+  pid=$(cat "$d/pid")
+  # setsid made the server a group leader: the group is the server and its QEMU, nothing else.
+  kill -- "-$pid" 2>/dev/null || true
+  for _ in $(seq 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
+  kill -9 -- "-$pid" 2>/dev/null || true
+  cp "$d/work/usb.log" "$d/evidence/serial.log" 2>/dev/null || true
+  rm -rf "$d/work" "$d/port"
+  [ "$(cat "$HOME_DIR/active" 2>/dev/null)" = "$d" ] && rm -f "$HOME_DIR/active"
+  say "${G}stopped${N}; evidence kept in $d/evidence"
+  ;;
+*) sed -n '2,14p' "$0"; exit 2 ;;
+esac
