@@ -29,9 +29,7 @@
 // reading is still there to judge the light against — which is the whole reason to reach
 // for it mid-page.
 //
-// White with black text, unlike the banner style it borrows its metrics from: it is mostly
-// buttons, and a filled button inside a black band inverts twice. A mostly-white band is
-// also the cheaper of the two to paint on e-ink.
+// White with black text, like the message banner it borrows its metrics from.
 //
 // The page below is stippled, one pixel in two, which reads as a shade drawn over the page
 // without erasing a word of it.
@@ -220,7 +218,7 @@ class LightPanel {
     layout_ = light_panel::forScreen(screenWidth, lineHeight, renderer.getLineHeight(UI_10_FONT_ID),
                                      Frontlight.hasColorTemperature(), context_.hasAux(), context_.actionCount);
 
-    // Physical top crop (X4 crops ~9px, X3 none): the black backing reaches the physical
+    // Physical top crop (X4 crops ~9px, X3 none): the backing reaches the physical
     // edge while the rows sit below the crop, matching message popups.
     int viewTop = 0;
     int viewRight = 0;

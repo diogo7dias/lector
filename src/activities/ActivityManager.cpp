@@ -53,10 +53,12 @@ StrId bookOrderLabel(const uint8_t order) {
 // What the panel's action grid holds. Refresh and Rotate work anywhere, so they lead both
 // sets; the rest is what you would want where you are. In a book that is the two things
 // about this book you change most; outside one it is getting back into a book, or finding
-// a different one.
-constexpr uint8_t IN_BOOK_ACTIONS[] = {CrossPointSettings::LP_MENU_FORCE_REFRESH, CrossPointSettings::LP_MENU_ROTATE,
-                                       CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR,
-                                       CrossPointSettings::LP_MENU_READER_SETTINGS};
+// a different one. Alignment closes the in-book set, side by side so the pair reads as one
+// choice.
+constexpr uint8_t IN_BOOK_ACTIONS[] = {
+    CrossPointSettings::LP_MENU_FORCE_REFRESH,     CrossPointSettings::LP_MENU_ROTATE,
+    CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR, CrossPointSettings::LP_MENU_READER_SETTINGS,
+    CrossPointSettings::LP_MENU_ALIGN_LEFT,        CrossPointSettings::LP_MENU_ALIGN_JUSTIFY};
 
 constexpr uint8_t OUT_OF_BOOK_ACTIONS[] = {
     CrossPointSettings::LP_MENU_FORCE_REFRESH,    CrossPointSettings::LP_MENU_ROTATE,

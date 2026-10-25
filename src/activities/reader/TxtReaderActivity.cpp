@@ -643,6 +643,17 @@ bool TxtReaderActivity::runBoundAction(const uint8_t function) {
     return true;
   }
 
+  if (function == CrossPointSettings::LP_MENU_ALIGN_LEFT || function == CrossPointSettings::LP_MENU_ALIGN_JUSTIFY) {
+    const uint8_t alignment = function == CrossPointSettings::LP_MENU_ALIGN_LEFT ? CrossPointSettings::LEFT_ALIGN
+                                                                                 : CrossPointSettings::JUSTIFIED;
+    if (SETTINGS.paragraphAlignment == alignment) return true;
+    // TXT has no per-book prefs: the global setting is the one it reads.
+    SETTINGS.paragraphAlignment = alignment;
+    SETTINGS.saveToFile();
+    relayoutForFontChange();  // re-reads the alignment and keeps the byte on screen
+    return true;
+  }
+
   switch (simple_reader_shortcut::resolve(function, /*supportsStatusBarToggle=*/true)) {
     case simple_reader_shortcut::Action::ToggleStatusBar:
       SETTINGS.sbEnabled = SETTINGS.sbEnabled ? 0 : 1;

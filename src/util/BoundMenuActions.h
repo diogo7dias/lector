@@ -85,6 +85,10 @@ enum LONG_PRESS_MENU_FUNCTION {
   LP_MENU_ROTATE = 30,
   // Retired: migrate to Disabled; keep persisted bindings and bit positions stable.
   LP_MENU_READING_STATS = 31,
+  // The light panel's in-book alignment pair (0.47). Explicit set, not a toggle: a book
+  // set to Center or Book Style has no obvious "other" state to flip to.
+  LP_MENU_ALIGN_LEFT = 32,
+  LP_MENU_ALIGN_JUSTIFY = 33,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 

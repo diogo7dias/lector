@@ -940,6 +940,9 @@ belongs to, so the rows here appear in the same order as on the device.
 - **Max Brightness** — the top of the brightness range, 10 to 100 (default 30). The light
   panel's brightness track runs from 0 to this, and a brightness above it is brought down.
 
+In a book the light panel also has **Align Left** and **Justify**, which set the book's paragraph
+alignment (for that EPUB alone; in a TXT book, for every TXT book).
+
 **Screen**
 
 - **Refresh Frequency** — a full refresh every 1, 5, 10, 15 or 30 pages, or **Never**. Never

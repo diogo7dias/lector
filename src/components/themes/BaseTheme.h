@@ -183,8 +183,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .popupProgressBarHeight = 4,
                                  .popupProgressDrawOutline = false,
                                  .popupProgressClampPercent = false,
-                                 // White on the strip's black backing.
-                                 .popupProgressFillInverted = false,
+                                 // Black on the strip's white backing.
+                                 .popupProgressFillInverted = true,
                                  .popupProgressOutlineInverted = false,
                                  .optionPopupItemSpacing = 6,
                                  .optionPopupInnerPadding = 16,
@@ -290,8 +290,8 @@ class BaseTheme {
   void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                       const std::function<std::string(int index)>& buttonLabel,
                       const std::function<UIIcon(int index)>& rowIcon, int itemIndexBase = 0) const;
-  // The one message surface: a full-width black strip below the top padding, with a
-  // white inset border and white centered text. Paints only — the caller picks the
+  // The one message surface: a full-width white strip across the top, with a black rule
+  // on its page-facing edge and black centered text (components/BannerStyle.h). Paints only — the caller picks the
   // refresh, because the busy banner wants the cheap FAST waveform and popups do not.
   //
   // This is the paint/submit split. Any caller that wants to compose further drawing into

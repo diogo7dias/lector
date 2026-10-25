@@ -728,19 +728,17 @@ Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message
   const int h = banner::PAD * 2 + lineHeight * lineCount;
 
   // Physical top crop (X4 crops ~9px, X3 crops 0) via the renderer's oriented viewable
-  // inset: the black backing starts at row
-  // 0 so nothing white shows above the band, while the text and the rule sit below the
-  // crop where they cannot be clipped. Starting the backing at the theme's topPadding
-  // instead left a white gap along the top edge.
+  // inset: the backing starts at row 0 so no page shows above the band, while the text and the rule sit below the
+  // crop where they cannot be clipped.
   int viewTop = 0, viewRight = 0, viewBottom = 0, viewLeft = 0;
   renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &viewLeft);
   const int y = viewTop;
 
-  renderer.fillRect(0, 0, w, y + h, true);                             // black to the physical edge
-  renderer.fillRect(0, y + h - banner::RULE, w, banner::RULE, false);  // rule on the page-facing edge
+  renderer.fillRect(0, 0, w, y + h, false);                           // white to the physical edge
+  renderer.fillRect(0, y + h - banner::RULE, w, banner::RULE, true);  // rule on the page-facing edge
   int lineY = y + banner::PAD;
   for (const std::string& line : lines) {
-    renderer.drawCenteredText(banner::FONT_ID, lineY, line.c_str(), false, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(banner::FONT_ID, lineY, line.c_str(), true, EpdFontFamily::REGULAR);
     lineY += lineHeight;
   }
   return Rect{0, y, w, h};

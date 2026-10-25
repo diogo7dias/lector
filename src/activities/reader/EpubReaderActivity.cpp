@@ -586,6 +586,8 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
     case CrossPointSettings::LP_MENU_NEARBY_SEND_BOOK:
     case CrossPointSettings::LP_MENU_READER_SETTINGS:
     case CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR:
+    case CrossPointSettings::LP_MENU_ALIGN_LEFT:
+    case CrossPointSettings::LP_MENU_ALIGN_JUSTIFY:
     // Bound to a key that does not already page (the Home key, or a side key whose single
     // was remapped), paging is an action like any other and the reader can always run it.
     case CrossPointSettings::LP_MENU_PAGE_PREV:
@@ -656,6 +658,20 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       // appeared or vanished only at the next page turn, which read as a dead button.
       requestUpdate();
       return true;
+    case CrossPointSettings::LP_MENU_ALIGN_LEFT:
+    case CrossPointSettings::LP_MENU_ALIGN_JUSTIFY: {
+      const uint8_t alignment = function == CrossPointSettings::LP_MENU_ALIGN_LEFT ? CrossPointSettings::LEFT_ALIGN
+                                                                                   : CrossPointSettings::JUSTIFIED;
+      // Already there: still consumed, so the press is not handed on as a dead one.
+      if (prefs_.paragraphAlignment == alignment) return true;
+      // Per-book, like Text Size in the same panel.
+      prefs_.paragraphAlignment = alignment;
+      prefsCustom_ = true;
+      writeReaderOverride(prefs_);
+      reloadForReaderPrefsChange();
+      requestUpdate();
+      return true;
+    }
     case CrossPointSettings::LP_MENU_POPUP:
       openQuickMenu();
       return true;
