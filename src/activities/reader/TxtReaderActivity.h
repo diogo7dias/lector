@@ -7,6 +7,7 @@
 #include "CrossPointSettings.h"
 #include "ReaderProgressSaveDebouncer.h"
 #include "ReaderUtils.h"
+#include "ReadingTime.h"
 #include "SimpleReaderShortcut.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
@@ -51,6 +52,13 @@ class TxtReaderActivity final : public Activity {
   // reader uses for its move-on-exit filing.
   bool pendingDeleteBook = false;
   reading_journal::Session journal;
+  // Status bar only, this sitting: forward turns ("+N") and the pace behind Book Time.
+  int sessionPages = 0;
+  reading_time::PageTimer pageTimer;
+  // Pages-to-paragraph answer for page paraPagesFor (-1 = none), kept so a redraw of
+  // the same page does not re-read the file. Reset whenever the page index changes.
+  mutable int paraPagesFor = -1;
+  mutable int paraPagesLeft = -1;
 
   void openSettingsPopup();
   void openFontPopup();
@@ -65,6 +73,9 @@ class TxtReaderActivity final : public Activity {
   // by the side keys and by a paging action bound to any other button.
   void pageTurn(bool forward);
   void renderStatusBar() const;
+  // Pages after the current one wholly inside the paragraph running off its bottom
+  // (">P.N"), as the EPUB reader counts them. -1 when the file cannot be read.
+  int pagesUntilNextParagraph() const;
 
   void initializeReader();
   bool loadPageAtOffset(size_t offset, std::vector<std::string>& outLines, size_t& nextOffset);
