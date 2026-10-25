@@ -61,7 +61,6 @@
 #include "activities/settings/TextSettingsActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
-#include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "sleep/SleepPauseToggle.h"
@@ -586,6 +585,9 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
     case CrossPointSettings::LP_MENU_NEARBY_SEND_BOOK:
     case CrossPointSettings::LP_MENU_READER_SETTINGS:
     case CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR:
+    case CrossPointSettings::LP_MENU_ALIGN_LEFT:
+    case CrossPointSettings::LP_MENU_ALIGN_JUSTIFY:
+    case CrossPointSettings::LP_MENU_TOGGLE_PARAGRAPH_SPACING:
     // Bound to a key that does not already page (the Home key, or a side key whose single
     // was remapped), paging is an action like any other and the reader can always run it.
     case CrossPointSettings::LP_MENU_PAGE_PREV:
@@ -654,6 +656,28 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       // applyStatusBar only drops the section for relayout; the menu path repaints when
       // the menu closes over it, and a binding has no menu to close. Without this the bar
       // appeared or vanished only at the next page turn, which read as a dead button.
+      requestUpdate();
+      return true;
+    case CrossPointSettings::LP_MENU_ALIGN_LEFT:
+    case CrossPointSettings::LP_MENU_ALIGN_JUSTIFY: {
+      const uint8_t alignment = function == CrossPointSettings::LP_MENU_ALIGN_LEFT ? CrossPointSettings::LEFT_ALIGN
+                                                                                   : CrossPointSettings::JUSTIFIED;
+      // Already there: still consumed, so the press is not handed on as a dead one.
+      if (prefs_.paragraphAlignment == alignment) return true;
+      // Per-book, like Text Size in the same panel.
+      prefs_.paragraphAlignment = alignment;
+      prefsCustom_ = true;
+      writeReaderOverride(prefs_);
+      reloadForReaderPrefsChange();
+      requestUpdate();
+      return true;
+    }
+    case CrossPointSettings::LP_MENU_TOGGLE_PARAGRAPH_SPACING:
+      // Per-book, like alignment beside it.
+      prefs_.extraParagraphSpacing = prefs_.extraParagraphSpacing ? 0 : 1;
+      prefsCustom_ = true;
+      writeReaderOverride(prefs_);
+      reloadForReaderPrefsChange();
       requestUpdate();
       return true;
     case CrossPointSettings::LP_MENU_POPUP:
@@ -1932,11 +1956,8 @@ void EpubReaderActivity::reloadForReaderPrefsChange() {
   dropSectionForRelayout();
   // The loader skips a book's stylesheet when its look had both embedded switches off,
   // so a book that has just turned one on may have no CSS cache to lay out with.
-  if (wantsBookCss(prefs_) && !epub->hasCssCache()) {
-    BusyBanner banner(renderer, tr(STR_INDEXING));
-    banner.showNow();
-    epub->ensureCssCache();
-  }
+  // No banner: a setting change goes straight back to the page, without a wait screen.
+  if (wantsBookCss(prefs_) && !epub->hasCssCache()) epub->ensureCssCache();
 }
 
 void EpubReaderActivity::dropSectionForRelayout() {
@@ -1952,6 +1973,8 @@ void EpubReaderActivity::dropSectionForRelayout() {
     captureOrdinalAnchor();
   }
   section.reset();
+  // A settings change goes straight back to the page: no Indexing popup on the rebuild.
+  quietRelayout_ = true;
   // Every glyph on the page is about to move, so the next paint cannot be a differential
   // one: a FAST refresh only drives the pixels it thinks changed and leaves the old font,
   // size or spacing ghosted underneath the new layout. Put the next page on the cleanup
@@ -2816,6 +2839,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
             // so gate on spine size alone -- laying out a big spine takes seconds even with cached
             // HTML. Ordinary chapter-top TOC jumps resolve on page 0 and stay popup-free.
             showPopup = !section->findAnchor(pendingAnchor).has_value() && spineBytes > BUILD_POPUP_BYTE_THRESHOLD;
+          } else if (offsetJump.has_value()) {
+            // A relayout after a settings change: a predicted popup costs a refresh before
+            // the build even starts, and most rebuilds to the reader's place are quick. The
+            // deadline backstop below still surfaces it if this one drags.
+            showPopup = false;
           } else {
             const bool targetAvailable = target < static_cast<int>(section->pageCount);
             showPopup = !targetAvailable && ((spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) ||
@@ -2831,7 +2859,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           // overrunning the deadline). The parser fires the callback before the
           // first image probe; buildPopupPending gates it to this blocking phase
           // so a background build in loop() can never draw over a displayed page.
-          buildPopupPending = !showPopup;
+          buildPopupPending = !showPopup && !quietRelayout_;
+          quietRelayout_ = false;
           const unsigned long buildStartMs = millis();
           bool started;
           // Lend the framebuffer's 48 KB across the whole blocking build, not just

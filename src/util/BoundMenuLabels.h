@@ -72,6 +72,12 @@ inline StrId boundMenuActionLabel(const uint8_t function) {
       return StrId::STR_SETTINGS_TITLE;
     case CrossPointSettings::LP_MENU_ROTATE:
       return StrId::STR_ROTATE;
+    case CrossPointSettings::LP_MENU_ALIGN_LEFT:
+      return StrId::STR_ALIGN_LEFT_ACTION;
+    case CrossPointSettings::LP_MENU_ALIGN_JUSTIFY:
+      return StrId::STR_JUSTIFY;
+    case CrossPointSettings::LP_MENU_TOGGLE_PARAGRAPH_SPACING:
+      return StrId::STR_PARAGRAPH_SPACING;
     case CrossPointSettings::LP_MENU_READING_STATS:  // Retired, hidden placeholder preserves label alignment.
       return StrId::STR_DISABLED;
     case CrossPointSettings::LP_MENU_WALLPAPER_FAVORITE:

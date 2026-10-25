@@ -60,9 +60,12 @@ constexpr int kMinStepWidth = 28;
 constexpr int kActionGap = 12;
 constexpr int kMinActionHeight = 44;
 constexpr int kActionPadY = 10;
-// Two columns, so an odd count leaves the last cell empty rather than stretching it.
+// Two columns; a button left alone on the last row spans it, so a long label has room. Three
+// on a landscape-wide screen: its 480 px of height cannot take a fourth row of buttons.
 constexpr int kActionColumns = 2;
-constexpr int kMaxActions = 6;
+constexpr int kWideActionColumns = 3;
+constexpr int kWideScreenWidth = 640;
+constexpr int kMaxActions = 7;
 
 struct Rect {
   int x;
@@ -172,15 +175,17 @@ inline Layout forScreen(const int screenWidth, const int lineHeight, const int r
 
   layout.actionCount = std::clamp(actionCount, 0, kMaxActions);
   const int actionHeight = std::max(kMinActionHeight, lineHeight + kActionPadY * 2);
-  const int actionWidth = (screenWidth - kSidePad * 2 - kActionGap) / kActionColumns;
+  const int columns = screenWidth >= kWideScreenWidth ? kWideActionColumns : kActionColumns;
+  const int actionWidth = (screenWidth - kSidePad * 2 - kActionGap * (columns - 1)) / columns;
   for (int i = 0; i < layout.actionCount; ++i) {
-    const int column = i % kActionColumns;
-    const int row = i / kActionColumns;
+    const int column = i % columns;
+    const int row = i / columns;
+    const bool aloneOnLastRow = i == layout.actionCount - 1 && column == 0;
     layout.actions[i] = Rect{kSidePad + column * (actionWidth + kActionGap), y + row * (actionHeight + kActionGap),
-                             actionWidth, actionHeight};
+                             aloneOnLastRow ? screenWidth - kSidePad * 2 : actionWidth, actionHeight};
   }
   if (layout.actionCount > 0) {
-    const int rows = (layout.actionCount + kActionColumns - 1) / kActionColumns;
+    const int rows = (layout.actionCount + columns - 1) / columns;
     y += rows * (actionHeight + kActionGap) - kActionGap + kRowGap;
   }
 

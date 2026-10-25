@@ -284,7 +284,8 @@ void TxtReaderActivity::buildPageIndex() {
 
   LOG_DBG("TRS", "Building page index for %zu bytes...", fileSize);
 
-  GUI.drawPopup(renderer, tr(STR_INDEXING));
+  if (!quietIndex_) GUI.drawPopup(renderer, tr(STR_INDEXING));
+  quietIndex_ = false;
 
   while (offset < fileSize) {
     std::vector<std::string> tempLines;
@@ -640,6 +641,18 @@ bool TxtReaderActivity::runBoundAction(const uint8_t function) {
 
   if (function == CrossPointSettings::LP_MENU_PAGE_PREV || function == CrossPointSettings::LP_MENU_PAGE_NEXT) {
     pageTurn(function == CrossPointSettings::LP_MENU_PAGE_NEXT);
+    return true;
+  }
+
+  if (function == CrossPointSettings::LP_MENU_ALIGN_LEFT || function == CrossPointSettings::LP_MENU_ALIGN_JUSTIFY) {
+    const uint8_t alignment = function == CrossPointSettings::LP_MENU_ALIGN_LEFT ? CrossPointSettings::LEFT_ALIGN
+                                                                                 : CrossPointSettings::JUSTIFIED;
+    if (SETTINGS.paragraphAlignment == alignment) return true;
+    // TXT has no per-book prefs: the global setting is the one it reads.
+    SETTINGS.paragraphAlignment = alignment;
+    SETTINGS.saveToFile();
+    quietIndex_ = true;       // straight back to the page, no Indexing popup
+    relayoutForFontChange();  // re-reads the alignment and keeps the byte on screen
     return true;
   }
 

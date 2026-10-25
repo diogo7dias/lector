@@ -25,6 +25,8 @@ class TxtReaderActivity final : public Activity {
   int linesPerPage = 0;
   int viewportWidth = 0;
   bool initialized = false;
+  // Set before a relayout from the light panel: the next index build skips its Indexing popup.
+  bool quietIndex_ = false;
   bool unsupportedEncoding = false;  // UTF-16 file: nothing indexed, a message instead
   bool legacy8Bit = false;           // Windows-1252 / Latin-1 bytes, decoded to UTF-8 per page
 

@@ -105,6 +105,8 @@ class Section {
   // Builds write here and are swapped over filePath only on commit, so a prior
   // partial/finalized file stays readable while a rebuild is in progress.
   std::string binTmpPath() const { return filePath + ".part"; }
+  // Trades the live layout for the one kept from other settings when that one matches.
+  bool swapInPreviousLayout(const ReaderRenderSpec& spec, bool currentPartial) const;
   std::unique_ptr<Page> loadPageAt(int page) const;
   // Read a page already laid out by the in-progress build (page < build LUT size), from
   // the partially-written tmp .bin without disturbing the build's write cursor.
