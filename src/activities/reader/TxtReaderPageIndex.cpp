@@ -5,6 +5,8 @@
 #include <Serialization.h>
 #include <Utf8.h>
 
+#include <algorithm>
+
 #include "TxtReaderActivity.h"
 #include "components/UITheme.h"
 
@@ -42,6 +44,7 @@ void TxtReaderActivity::detectEncoding() {
 
 void TxtReaderActivity::buildPageIndex() {
   pageOffsets.clear();
+  paraPagesFor = -1;
 
   size_t offset = 0;
   const size_t fileSize = txt->getFileSize();
@@ -363,6 +366,7 @@ bool TxtReaderActivity::loadPageIndexCache() {
 
   // Read page offsets
   pageOffsets.clear();
+  paraPagesFor = -1;
   pageOffsets.reserve(numPages);
 
   for (uint32_t i = 0; i < numPages; i++) {
@@ -405,4 +409,46 @@ void TxtReaderActivity::savePageIndexCache() const {
   }
 
   LOG_DBG("TRS", "Saved page index cache: %d pages", totalPages);
+}
+
+int TxtReaderActivity::pagesUntilNextParagraph() const {
+  if (paraPagesFor == currentPage) return paraPagesLeft;
+  int left = 0;
+  if (currentPage + 1 < totalPages) {
+    // Scan from the last byte of this page for the first paragraph break: a newline, or
+    // the form feed that opens a page. The pages strictly between this one and the page
+    // holding that break lie wholly inside the paragraph, the same count the EPUB reader
+    // gives. ponytail: capped at 20 pages; a hard-wrapped file (a newline every line)
+    // reads as one paragraph per line and so always shows 0.
+    constexpr int MAX_PAGES = 20;
+    const int lastPage = std::min(totalPages - 1, currentPage + 1 + MAX_PAGES);
+    const size_t from = pageOffsets[currentPage + 1] - 1;
+    const size_t to = lastPage + 1 < totalPages ? pageOffsets[lastPage + 1] : txt->getFileSize();
+    size_t breakAt = to - 1;  // no break: the paragraph runs through lastPage
+    HalFile f;
+    if (!Storage.openFileForRead("TRS", txt->getPath(), f) || !f.seek(from)) {
+      left = -1;
+    } else {
+      uint8_t buf[128];
+      bool found = false;
+      for (size_t pos = from; pos < to && !found;) {
+        const int n = f.read(buf, std::min(sizeof(buf), to - pos));
+        if (n <= 0) break;
+        for (int i = 0; i < n && !found; i++) {
+          if (buf[i] == '\n' || buf[i] == '\f') {
+            // A form feed is a page's first byte: the paragraph ended on the page before.
+            breakAt = buf[i] == '\n' ? pos + i : pos + i - 1;
+            found = true;
+          }
+        }
+        pos += n;
+      }
+      const int endPage =
+          static_cast<int>(std::upper_bound(pageOffsets.begin(), pageOffsets.end(), breakAt) - pageOffsets.begin()) - 1;
+      left = std::max(0, endPage - currentPage - 1);
+    }
+  }
+  paraPagesFor = currentPage;
+  paraPagesLeft = left;
+  return left;
 }

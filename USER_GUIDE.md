@@ -1069,13 +1069,16 @@ Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Al
 - **Truncate Title** — off, a title wraps onto as many lines as it needs; on, it is cut short
   with `…`. A Book Title in a slot of its own is always one line.
 - **Page Format** — `N/M` or `N left`.
-- **Pages This Session** counts forward page turns in the open EPUB and resets when the book closes.
+- **Pages This Session** counts forward page turns in the open EPUB or TXT book and resets when
+  the book closes.
 - **Pages to Paragraph** shows `>P.0` on most pages: the paragraph you are in ends before the
-  next one starts. `>P.2` means it runs two more pages.
+  next one starts. `>P.2` means it runs two more pages. In a TXT book each line break starts a
+  paragraph, so a file broken into short lines always shows `>P.0`.
 - **Chapter time left** (`C:12m`) and **Book time left** (`B:3h05`) estimate from how long you
   spend per page this sitting. They appear after three timed pages; turns under 2 seconds or
-  over 10 minutes are not counted. The book estimate scales the rest of the book by the
-  current chapter, so it settles as you read. EPUB only.
+  over 10 minutes are not counted. On EPUB the book estimate scales the rest of the book by the
+  current chapter, so it settles as you read. A TXT book has no chapters, so it shows Book time
+  left only, counted from its exact pages left.
 - **Book Bar** and **Chapter Bar** — Off, Top or Bottom, with **Bar Thickness** (Slim 3 px,
   Medium 6 px, Fat 9 px). On EPUB books the Book Bar has a small notch where each chapter
   starts. A book with more than 64 chapters shows a plain bar.

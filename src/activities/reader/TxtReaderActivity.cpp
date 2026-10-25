@@ -10,6 +10,8 @@
 #include <Serialization.h>
 #include <Utf8.h>
 
+#include <limits>
+
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
@@ -154,12 +156,15 @@ void TxtReaderActivity::pageTurn(const bool forward) {
   if (!forward) {
     if (currentPage == 0) return;
     journal.turn(millis(), false);
+    pageTimer.onTurn(millis(), false);
     currentPage--;
     requestUpdate();
     return;
   }
   if (currentPage < totalPages - 1) {
     journal.turn(millis(), true);
+    pageTimer.onTurn(millis(), true);
+    if (sessionPages < std::numeric_limits<int>::max()) ++sessionPages;
     currentPage++;
     if (currentPage == totalPages - 1) journal.finished = true;
     requestUpdate();
@@ -352,9 +357,16 @@ void TxtReaderActivity::renderStatusBar() const {
   d.chapterPages = static_cast<int>(totalPages);
   d.bookPercent = reading_percent::pagePercent(currentPage, totalPages);
   d.bookTitle = txt->getTitle();
+  d.sessionPages = sessionPages;
+  const StatusBarBlock sb = SETTINGS.statusBar();
+  // Both cost a file read or a division only when the item is on, as in the EPUB reader.
+  if (sb.paraPagesPos != CrossPointSettings::SB_ANCHOR_OFF) d.paragraphPagesLeft = pagesUntilNextParagraph();
+  if (sb.bookTimePos != CrossPointSettings::SB_ANCHOR_OFF) {
+    d.bookMinutesLeft = reading_time::minutesFor(totalPages - currentPage - 1, pageTimer.msPerPage());
+  }
   // Paperback Look (status bar): thicken only status-bar glyphs, then reset.
   renderer.setPaperbackLook(SETTINGS.paperbackLookStatus);
-  GUI.drawStatusBarV2(renderer, d, SETTINGS.statusBar());
+  GUI.drawStatusBarV2(renderer, d, sb);
   renderer.setPaperbackLook(false);
 }
 
