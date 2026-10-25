@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include "ReaderRenderSpec.h"
+#include "SectionFormat.h"
 
 #define LOG_DBG(...) ((void)0)
 #define LOG_ERR(...) ((void)0)
