@@ -24,4 +24,5 @@ Preconditions: baseline, any activity.
 ## Gotchas
 
 - Emulated wake is slower than the device: `power` holds until a frame appears.
+- Wake is a fresh boot: in the proof run it slept from `Settings` and woke into the last book (`EpubReader`). Never assert it returns to the screen held before sleep.
 - The sleep screen is the last frame before deep sleep; take the shot before waking.

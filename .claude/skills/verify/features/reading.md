@@ -36,4 +36,5 @@ Preconditions: baseline; the card holds `test_kerning_ligature.epub`.
 - `EpubReader` is entered before the first page is painted: poll, never read once.
 - The status bar's `+N` counts pages turned this session and resets on reboot: compare
   only y below 740.
+- Page 1 of `test_kerning_ligature.epub` is its cover image (`ink` about 330 000); judge text on page 2.
 - First open of a book builds its section cache on the card and is slower than later opens.

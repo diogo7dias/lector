@@ -13,7 +13,8 @@ HTTP. Every check here is exact: activity name, frame count, panel ink. No model
 
 Default board is `x4pro` (the main device, ESP32-S3, touch). Others: `x4`, `x3`,
 `x3uc8279` (C3 build, button ladder, no touch). All commands go through the shipped
-helper `.claude/skills/verify/bin/lv` (run from the repo root; `lv` below means that path).
+helper `.claude/skills/verify/bin/lv`
+(C3 boards need `pio run -e default`; recipe in `features/buttons-c3.md`) (run from the repo root; `lv` below means that path).
 
 ## Launch
 

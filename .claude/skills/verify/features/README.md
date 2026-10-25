@@ -3,6 +3,8 @@
 The maintained source for verifying what a reader sees and does on lector. Read this index,
 then use the matching feature file as the recipe. Coordinates are x4pro, upright 480x800.
 
+Proven end to end through `lv` on 2026-10-25 (every recipe, every board).
+
 ## Baseline preconditions
 
 - `pio run -e x4pro` built from the checkout under test; `lv doctor` reports healthy.
@@ -30,3 +32,4 @@ then use the matching feature file as the recipe. Coordinates are x4pro, upright
 - [Reading](./reading.md): open a book, page turns, word hold, in-book menu, resume after reboot.
 - [Settings](./settings.md): change a setting by touch, survives reboot.
 - [Sleep and wake](./sleep.md): Power sleeps to the sleep screen and deep sleep, Power wakes.
+- [Buttons on the C3 boards](./buttons-c3.md): x4, x3, x3uc8279 browse and read by key, panel controller check.
