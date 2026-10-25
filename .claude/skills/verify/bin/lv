@@ -68,7 +68,8 @@ doctor)
   st=$(curl -sf "$BASE/state") && say "port $(cat "$d/port") answers: $st" || { say "${R}port silent${N}"; ok=0; }
   echo "$st" | grep -q '"activity": ""' && { say "${R}no activity yet${N}"; ok=0; }
   fw="$REPO/.pio/build/$(env_of "$board")/firmware.bin"
-  newer=$(find "$REPO/src" "$REPO/lib" -newer "$fw" -type f 2>/dev/null | head -3)
+  # Sources only: the build regenerates gitignored headers (*.generated.h, I18n) for each env.
+  newer=$(cd "$REPO" && git ls-files -co --exclude-standard src lib | while read -r f; do if [ "$f" -nt "$fw" ]; then echo "$f"; fi; done | head -3) || true
   [ -z "$newer" ] && say "firmware newer than src/ and lib/" || { say "${R}stale firmware, newer:${N} $newer"; ok=0; }
   grep -q "Guru Meditation\|abort()\|Backtrace" "$d/work/usb.log" 2>/dev/null && { say "${R}crash in serial log${N}"; ok=0; }
   [ $ok = 1 ] && say "${G}healthy${N} ($board, $d)" || exit 1
