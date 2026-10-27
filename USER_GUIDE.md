@@ -455,7 +455,9 @@ Wallpapers are `.bmp` or `.pxc` files. The `.pxc` format is the packed 2-bit for
 - **A single wallpaper:** put `sleep.bmp` or `sleep.pxc` in the root of the card. A root file
   takes priority over the folders.
 
-Size the image to the panel: **480x800** on the X4, **528x792** on the X3.
+Size the image to the panel: **480x800** on the X4, **528x792** on the X3. A larger
+`.bmp` still works: with **Sleep Screen Cover Mode** on Fit, it is shrunk to the panel by
+averaging its pixels, so thin lines and fine detail survive (up to 2048x3072).
 
 Wallpaper rows in the in-book menu's Sleep Screen tab favourite, pause, hold and delete the
 wallpaper the device just showed. Paused wallpapers move to `/sleep pause` and stop appearing

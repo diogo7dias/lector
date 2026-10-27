@@ -29,7 +29,7 @@ class SleepActivity final : public Activity {
   // submission count come from sleep_face::planFor rather than from a literal here. Both
   // faces share this renderer and therefore share those rows; the parameter exists so the
   // call site states its intent and the plan is asked the right question.
-  void renderBitmapSleepScreen(const Bitmap& bitmap, sleep_face::Face face) const;
+  void renderBitmapSleepScreen(Bitmap& bitmap, sleep_face::Face face) const;
 
   bool fromTimeout = false;
   // The wallpaper the previous sleep left on the panel. onEnter clears the shared

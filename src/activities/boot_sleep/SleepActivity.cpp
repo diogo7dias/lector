@@ -174,9 +174,14 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.displayBuffer(plan.base);
 }
 
-void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const sleep_face::Face face) const {
+void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Face face) const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  // Fit shrinks while decoding, so the dither lands on panel pixels; the renderer would
+  // otherwise drop pixels from a source-size dither. CROP still scales in the renderer.
+  if (SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::FIT) {
+    bitmap.ditherToFit(pageWidth, pageHeight);
+  }
   const auto placement = calculateBitmapPlacement(bitmap.getWidth(), bitmap.getHeight(), renderer);
   const int x = placement.x;
   const int y = placement.y;
