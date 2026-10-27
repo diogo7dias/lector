@@ -608,20 +608,27 @@ void FileBrowserActivity::loop() {
         // A folder is not sent anywhere and is not moved from here, so its hold goes
         // straight to the delete confirmation rather than opening a pop-up.
         const bool sendable = nearby_file::isAcceptedFilename(entry);
-        StrId actions[3];
+        StrId actions[4];
         int count = 0;
         if (sendable) actions[count++] = StrId::STR_NEARBY_SEND_FILE;
+        actions[count++] = StrId::STR_RENAME;
         actions[count++] = StrId::STR_MOVE_TO_FOLDER;
         actions[count++] = StrId::STR_DELETE;
-        fileActionPopup.show(StrId::STR_FILE_ACTIONS, actions, count, 0, [this, fullPath, sendable](const int choice) {
-          const int adjusted = sendable ? choice : choice + 1;
-          if (adjusted == 0) {
-            activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
-                renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, fullPath));
-          } else if (adjusted == 1) {
-            promptMoveToFolder(fullPath);
-          } else {
-            confirmDelete(fullPath);
+        fileActionPopup.show(StrId::STR_FILE_ACTIONS, actions, count, 0, [this, fullPath, actions](const int choice) {
+          switch (actions[choice]) {
+            case StrId::STR_NEARBY_SEND_FILE:
+              activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
+                  renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, fullPath));
+              break;
+            case StrId::STR_RENAME:
+              promptRename(fullPath);
+              break;
+            case StrId::STR_MOVE_TO_FOLDER:
+              promptMoveToFolder(fullPath);
+              break;
+            default:
+              confirmDelete(fullPath);
+              break;
           }
         });
         requestUpdate();
@@ -688,6 +695,9 @@ void FileBrowserActivity::loop() {
                              mappedInput.wasReleased(MappedInputManager::Button::Confirm), mappedInput.getHeldTime(),
                              GO_HOME_MS)) {
     case hold_button::Fired::Hold:
+      // The pop-up or screen the hold opens takes the release, so this tracker would
+      // stay fired and swallow the next press here. Nothing of this hold is left to see.
+      confirmHold.reset();
       activateSelected(/*holdAction=*/true);
       return;
     case hold_button::Fired::Short:
@@ -930,6 +940,46 @@ void FileBrowserActivity::render(RenderLock&&) {
 void FileBrowserActivity::promptMoveToFolder(const std::string& fullPath) {
   startActivityForResult(std::make_unique<FileBrowserActivity>(renderer, mappedInput, "/", Mode::PickFolder),
                          [this, fullPath](const ActivityResult& result) { onMoveDestinationResult(fullPath, result); });
+}
+
+void FileBrowserActivity::promptRename(const std::string& fullPath) {
+  const size_t slash = fullPath.find_last_of('/');
+  const std::string folder = fullPath.substr(0, slash + 1);
+  const std::string name = fullPath.substr(slash + 1);
+  // The extension stays out of the field: it decides which reader opens the file, and a
+  // slip there would turn a book into something the browser cannot open.
+  const size_t dot = name.find_last_of('.');
+  const bool hasExtension = dot != std::string::npos && dot > 0;
+  const std::string stem = hasExtension ? name.substr(0, dot) : name;
+  const std::string extension = hasExtension ? name.substr(dot) : "";
+  constexpr size_t kMaxNameLength = 120;
+  startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, std::string(tr(STR_RENAME)),
+                                                                 stem, kMaxNameLength, InputType::Text),
+                         [this, fullPath, folder, stem, extension](const ActivityResult& result) {
+                           pendingFullRefresh = true;
+                           const auto* typed = std::get_if<KeyboardResult>(&result.data);
+                           if (result.isCancelled || !typed || typed->text.empty() || typed->text == stem) {
+                             requestUpdate();
+                             return;
+                           }
+                           const std::string newName = typed->text + extension;
+                           const std::string target = folder + newName;
+                           // Typed text names a file on the card: no separators, no "..", and never an
+                           // existing file, which FAT rename would refuse anyway.
+                           if (!FsHelpers::isSafePathComponent(newName) || Storage.exists(target.c_str())) {
+                             LOG_ERR("FB", "Rename refused: %s", target.c_str());
+                             requestUpdate();
+                             return;
+                           }
+                           {
+                             // Same race as the delete path: the listing changes under the render task.
+                             RenderLock lock(*this);
+                             const std::string landed = bookfiling::moveBookToFolder(fullPath, target);
+                             loadFiles();
+                             selectorIndex = findEntryRow(landed.substr(landed.find_last_of('/') + 1));
+                           }
+                           requestUpdate();
+                         });
 }
 
 void FileBrowserActivity::onMoveDestinationResult(const std::string& fullPath, const ActivityResult& result) {

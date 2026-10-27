@@ -201,13 +201,15 @@ folders in brackets, for example `[folder-name]`.
 - **Move the cursor** — **Left** (or **Volume Up**) and **Right** (or **Volume Down**). Hold
   either one to move a whole page at a time.
 - **Open** — **Confirm** opens the folder, book or image under the cursor.
-- **File actions** — hold **Confirm** on an entry. A file another reader can accept opens a
-  small menu offering **Send to Nearby Reader** and **Delete**; anything else goes straight to
-  the delete confirmation. Nothing is deleted without confirming.
+- **File actions** — hold **Confirm** on a file to open a small menu: **Send to Nearby
+  Reader** (files another reader can accept), **Rename**, **Move to folder** and **Delete**.
+  A folder goes straight to the delete confirmation. Nothing is deleted without confirming.
+- **Rename** — edit the name on the keyboard; the extension stays. Reading position,
+  bookmarks, highlights and saved quotes follow the book, as they do when it is moved.
 - **Search** — search inside the current folder, with the results ranked by how well they
   match.
 
-Renaming and moving files is done from the web interface rather than on the device, see
+Files can also be renamed and moved from the web interface, see
 [section 9](#9-getting-books-onto-the-device).
 
 Each row shows its file type on the right, and a book you have opened before also shows how

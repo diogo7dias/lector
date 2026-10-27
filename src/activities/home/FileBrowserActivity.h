@@ -26,6 +26,8 @@ class FileBrowserActivity final : public Activity {
   bool removeDirFile(const std::string& fullPath);
   /** Opens the folder picker and moves `fullPath` into whatever it comes back with. */
   void promptMoveToFolder(const std::string& fullPath);
+  // New name for a file, keeping its extension; progress, cache and quotes go with it.
+  void promptRename(const std::string& fullPath);
   void onMoveDestinationResult(const std::string& fullPath, const ActivityResult& result);
   // Opens the delete confirmation for one entry.
   void confirmDelete(const std::string& fullPath);
