@@ -143,6 +143,8 @@ void BmpViewerActivity::onEnter() {
 
     // 2. Parse headers to get dimensions
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+      // Shrink while decoding, as the sleep screen does, so a wallpaper previews the way it sleeps.
+      bitmap.ditherToFit(pageWidth, pageHeight);
       int x, y;
 
       if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > pageHeight) {

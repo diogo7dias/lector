@@ -72,8 +72,15 @@ class Bitmap {
   BmpReaderError parseHeaders();
   BmpReaderError readNextRow(uint8_t* data, uint8_t* rowBuffer) const;
   BmpReaderError rewindToData() const;
-  int getWidth() const { return width; }
-  int getHeight() const { return height; }
+  // Shrink a dithered high-color image that is larger than maxWidth x maxHeight to fit
+  // inside it, aspect kept, while decoding: source pixels are area-averaged, then
+  // dithered on the output grid. Dithering at source size and letting the renderer drop
+  // pixels aliases the dot pattern into seams and loses thin lines. False (size
+  // unchanged) when it does not apply or the resampler cannot be allocated.
+  bool ditherToFit(int maxWidth, int maxHeight);
+  // The size rows come out at: the source size unless ditherToFit changed it.
+  int getWidth() const { return outputWidth; }
+  int getHeight() const { return outputHeight; }
   bool isTopDown() const { return topDown; }
   bool hasGreyscale() const { return bpp > 1; }
   int getRowBytes() const { return rowBytes; }
@@ -85,6 +92,8 @@ class Bitmap {
   static uint32_t readLE32(HalFile& f);
   bool analyzeAdaptiveToneMapping();
   uint8_t applyAdaptiveTone(uint8_t luminance) const;
+  uint8_t pixelLuminance(const uint8_t* row, int x) const;
+  BmpReaderError readAveragedRow(uint8_t* rowBuffer) const;
 
   HalFile& file;
   bool dithering = false;
@@ -97,6 +106,9 @@ class Bitmap {
   uint32_t colorsUsed = 0;
   bool nativePalette = false;  // true if all palette entries map to native gray levels
   int rowBytes = 0;
+  int outputWidth = 0;
+  int outputHeight = 0;
+  Gray4QuantizationMode ditherMode = Gray4QuantizationMode::DisplayTuned;
   uint8_t paletteLum[256] = {};
   bool adaptiveToneMapping = false;
   uint8_t adaptiveBlackPoint = 0;
@@ -104,4 +116,8 @@ class Bitmap {
 
   // Dithering state (mutable for const methods)
   mutable std::unique_ptr<AtkinsonDitherer> atkinsonDitherer;
+  // Resampling state, set only by ditherToFit: one sum per output column.
+  std::unique_ptr<uint32_t[]> resampleSums;
+  mutable int sourceRowsRead = 0;
+  mutable int outputRowsRead = 0;
 };
