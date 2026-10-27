@@ -6,6 +6,14 @@ All POD fields are written in the ESP32 little-endian representation used by
 
 ## `book.bin`
 
+### Version 13
+
+The serialized layout is unchanged. Version 13 forces one TOC re-parse so an EPUB 3
+`<nav epub:type="page-list">` is read: its entries are written beside `book.bin` as
+`pages.txt`, one `label<TAB>href` line per printed page (`147\tOEBPS/c3.xhtml#p147`),
+the href already resolved against the nav document's folder. The file exists only when
+the book has a page list; Go to Page scans it for the typed label.
+
 ### Version 12
 
 `book.bin` stores EPUB metadata plus lookup tables for spine and TOC entries.
@@ -103,6 +111,12 @@ if (parsedSize != fileSize) {
 ```
 
 ## `section.bin`
+
+### Version 77
+
+Printed-page markers (`<span epub:type="pagebreak" id=…>` or `role="doc-pagebreak"`)
+enter the anchor map; ids on other spans are still skipped. The binary layout is unchanged;
+the derived partial version changes from 206 to 205.
 
 ### Version 67
 

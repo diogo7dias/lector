@@ -355,6 +355,9 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 - **Go to %** — jump by percentage. The front buttons move it by 1, the side buttons by 10.
   On a touch screen a number pad sits under the slider: type the number (4, 7 for 47%),
   the delete key takes back the last digit, and **OK** jumps.
+- **Go to Page** — jump to a page number of the printed edition: type it as the book prints
+  it (`147`, or `xii` in the front matter) and **OK**. Shown only in EPUB 3 books that carry
+  the printed page numbers (a page list); Return takes you back.
 - **Search** — type a word or phrase and the book is searched chapter by chapter, straight
   from the card; hits appear as they are found, each with a line of context and its chapter.
   Case, curly quotes and line breaks do not matter. Up to 100 hits. Pick one to land on its
@@ -1076,7 +1079,8 @@ Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Al
   its title in the Book Title slot, or in the Chapter Title slot when Book Title is off.
 - **Truncate Title** — off, a title wraps onto as many lines as it needs; on, it is cut short
   with `…`. A Book Title in a slot of its own is always one line.
-- **Page Format** — `N/M` or `N left`.
+- **Page Format** — `N/M` or `N left`. In a book that carries the printed page numbers the
+  printed page follows it, `8/12 p.17`.
 - **Pages This Session** counts forward page turns in the open EPUB or TXT book and resets when
   the book closes.
 - **Pages to Paragraph** shows `>P.0` on most pages: the paragraph you are in ends before the

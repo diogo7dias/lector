@@ -17,10 +17,13 @@
 // hasChapters is true (EPUB, chaptered XTC); otherwise chapter items are hidden.
 struct StatusBarData {
   bool hasChapters = false;
-  int chapterPage = 0;     // 1-based page within the chapter
-  int chapterPages = 0;    // total pages in the chapter
-  int chapterNum = 0;      // 1-based chapter index
-  int chapterTotal = 0;    // total chapters
+  int chapterPage = 0;   // 1-based page within the chapter
+  int chapterPages = 0;  // total pages in the chapter
+  int chapterNum = 0;    // 1-based chapter index
+  int chapterTotal = 0;  // total chapters
+  // The printed edition's page this one belongs to ("147"), appended to the page item.
+  // nullptr when the book has no page list. Points at storage the reader owns.
+  const char* printedPage = nullptr;
   int bookPercent = 0;     // 0..100
   int chapterPercent = 0;  // 0..100
   std::string bookTitle;

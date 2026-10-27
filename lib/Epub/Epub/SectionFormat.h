@@ -125,7 +125,9 @@ namespace {
 // v74: Word Expansion enters the header, and each text line stores its letter spacing.
 // v75: a line may break after a hyphen or dash inside a word ("foo—bar"; upstream #3883).
 // v76: Character Spacing enters the header; tracking changes every word's width.
-constexpr uint8_t SECTION_FILE_VERSION = 76;
+// v77: printed-page markers (<span epub:type="pagebreak" id=...>) enter the anchor map, so
+//      Go to Page lands on the marker's page; spans were skipped before.
+constexpr uint8_t SECTION_FILE_VERSION = 77;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

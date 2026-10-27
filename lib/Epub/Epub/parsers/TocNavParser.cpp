@@ -1,5 +1,6 @@
 #include "TocNavParser.h"
 
+#include <HalStorage.h>
 #include <Logging.h>
 #include <XmlParserUtils.h>
 
@@ -40,12 +41,16 @@ void XMLCALL TocNavParser::startElement(void* userData, const XML_Char* name, co
     return;
   }
 
-  // Look for <nav epub:type="toc"> anywhere in body (or nested elements)
+  // Look for <nav epub:type="toc"> (or "page-list") anywhere in body (or nested elements)
   if (self->state >= IN_BODY && xmlLocalNameEquals(name, "nav")) {
     for (int i = 0; atts[i]; i += 2) {
-      if ((strcmp(atts[i], "epub:type") == 0 || strcmp(atts[i], "type") == 0) && strcmp(atts[i + 1], "toc") == 0) {
+      if (strcmp(atts[i], "epub:type") != 0 && strcmp(atts[i], "type") != 0) continue;
+      const bool toc = strcmp(atts[i + 1], "toc") == 0;
+      const bool pages = self->pageList && strcmp(atts[i + 1], "page-list") == 0;
+      if (toc || pages) {
         self->state = IN_NAV_TOC;
-        LOG_DBG("NAV", "Found nav toc element");
+        self->inPageList = pages;
+        LOG_DBG("NAV", "Found nav %s element", atts[i + 1]);
         return;
       }
     }
@@ -98,7 +103,9 @@ void XMLCALL TocNavParser::endElement(void* userData, const XML_Char* name) {
   if (xmlLocalNameEquals(name, "a") && self->state == IN_ANCHOR) {
     // Create TOC entry when closing anchor tag (we have all data now)
     if (!self->currentLabel.empty() && !self->currentHref.empty()) {
-      if (self->cache) {
+      if (self->inPageList) {
+        self->writePage();
+      } else if (self->cache) {
         // olDepth gives us the nesting level (1-based from the outer ol)
         self->cache->createTocEntry(self->currentLabel, self->baseContentPath + self->currentHref, self->olDepth);
       }
@@ -127,7 +134,19 @@ void XMLCALL TocNavParser::endElement(void* userData, const XML_Char* name) {
 
   if (xmlLocalNameEquals(name, "nav") && self->state >= IN_NAV_TOC) {
     self->state = IN_BODY;
+    self->inPageList = false;
     LOG_DBG("NAV", "Finished parsing nav toc");
     return;
   }
+}
+
+void TocNavParser::writePage() {
+  // Labels are short ("147", "xii"); trim the whitespace pretty-printed navs wrap them in.
+  const size_t first = currentLabel.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos) return;
+  const size_t last = currentLabel.find_last_not_of(" \t\r\n");
+  const std::string label = currentLabel.substr(first, last - first + 1);
+  if (label.size() > 16 || label.find('\t') != std::string::npos) return;
+  const std::string line = label + '\t' + baseContentPath + currentHref + '\n';
+  if (pageList->write(reinterpret_cast<const uint8_t*>(line.data()), line.size()) == line.size()) pageCount++;
 }
