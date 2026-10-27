@@ -350,7 +350,9 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 
 - **Select Chapter** — the table of contents. Chapters the book lists but cannot actually
   open are left out, so every row here goes somewhere.
-- **Go to %** — jump by percentage.
+- **Go to %** — jump by percentage. The front buttons move it by 1, the side buttons by 10.
+  On a touch screen a number pad sits under the slider: type the number (4, 7 for 47%),
+  the delete key takes back the last digit, and **OK** jumps.
 - **Search** — type a word or phrase and the book is searched chapter by chapter, straight
   from the card; hits appear as they are found, each with a line of context and its chapter.
   Case, curly quotes and line breaks do not matter. Up to 100 hits. Pick one to land on its
