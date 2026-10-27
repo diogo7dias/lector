@@ -40,6 +40,7 @@ class SettingsActivity final : public UiGridActivity {
   // static apply callback can reach it and Cancel can put it back. Null when no
   // dialog is up.
   uint8_t CrossPointSettings::* liveValuePtr = nullptr;
+  int liveValueOffset = 0;  // the open dialog's SettingInfo::displayOffset
   void openSleepTimeoutPicker();
   /**
    * Writes this reader's WiFi networks and OPDS servers to a bundle on the card

@@ -74,6 +74,10 @@ struct ReaderRenderSpec {
   // Word Expansion: 0 Off, 1 Some, 2 More. Up to that many px between letters on a justified line whose gaps would
   // pass 1.5 spaces. Moves glyphs, so part of the cache key.
   uint8_t wordExpansion = 0;
+  // Character Spacing: half pixels added between letters, -5..5 (negative tightens). Every
+  // word changes width, so part of the cache key; the renderer applies it
+  // (GfxRenderer::setCharacterSpacing).
+  int8_t characterSpacing = 0;
 
   // Memberwise: padding is ignored and float equality keeps its usual semantics.
   constexpr bool operator==(const ReaderRenderSpec&) const = default;
