@@ -7,6 +7,8 @@
 
 #include "CrossPointState.h"
 #include "RecentBooksStore.h"
+#include "activities/reader/QuoteText.h"
+#include "util/BookmarkUtil.h"
 
 namespace bookfiling {
 
@@ -39,6 +41,17 @@ std::string moveBookToFolder(const std::string& srcPath, const std::string& dstP
       LOG_ERR("FILE", "Failed to rename cache dir %s -> %s (non-fatal)", oldCachePath.c_str(), newCachePath.c_str());
     }
   }
+
+  // Saved quotes ("<book>_QUOTES.txt" beside it) and bookmarks (a JSON named after the
+  // path) are keyed by the book's path, so they follow it or the book loses them on
+  // every filing and rename.
+  const auto follow = [](const std::string& from, const std::string& to) {
+    if (Storage.exists(from.c_str()) && !Storage.rename(from.c_str(), to.c_str())) {
+      LOG_ERR("FILE", "Failed to move %s -> %s (non-fatal)", from.c_str(), to.c_str());
+    }
+  };
+  follow(quote_text::quotesFilePathFor(srcPath), quote_text::quotesFilePathFor(dstPath));
+  follow(BookmarkUtil::getBookmarkPath(srcPath), BookmarkUtil::getBookmarkPath(dstPath));
 
   // Keep the book in recents: repoint the entry instead of dropping it. updatePath
   // persists on success.

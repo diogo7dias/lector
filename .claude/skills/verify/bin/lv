@@ -3,7 +3,7 @@
 #   lv start [board]           boot a fresh device (x4pro|x3|x3uc8279|x4), print LV_RUN
 #   lv doctor                  is this instance ours, up, and running the current build?
 #   lv state                   /state JSON
-#   lv press <key>             up down home power (x4pro); back confirm left right up down power (C3)
+#   lv press <key> [ms]        up down home power (x4pro); back confirm left right up down power (C3)
 #   lv tap <x> <y> [ms]        touch the upright 480x800 panel (touch boards)
 #   lv swipe <x1> <y1> <x2> <y2>
 #   lv ink <x> <y> <w> <h>     dark pixels in a box
@@ -75,7 +75,7 @@ doctor)
   [ $ok = 1 ] && say "${G}healthy${N} ($board, $d)" || exit 1
   ;;
 state) curl -sf "$BASE/state"; echo ;;
-press) post "/press/$1" ;;
+press) post "/press/$1?ms=${2:-150}" ;;
 tap) post "/tap/$1/$2?ms=${3:-300}" ;;
 swipe) post "/swipe/$1/$2/$3/$4" ;;
 ink) curl -sf "$BASE/ink/$1/$2/$3/$4"; echo ;;
