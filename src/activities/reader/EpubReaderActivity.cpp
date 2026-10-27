@@ -175,6 +175,7 @@ void EpubReaderActivity::onEnter() {
   // Where this book's saved quotes sit, so their underlines can be drawn back in.
   loadQuoteAnchors();
   buildChapterMarks();
+  hasPageList_ = epub->hasPageList();
 
   HalFile f;
   if (!sortesMode && ProgressFile::openForRead("ERS", epub->getCachePath(), f)) {
@@ -412,6 +413,7 @@ void EpubReaderActivity::openReaderMenu() {
   menuContext.bookProgressPercent = bookProgressPercent;
   menuContext.currentOrientation = SETTINGS.orientation;
   menuContext.hasFootnotes = !currentPageFootnotes.empty();
+  menuContext.hasPageList = epub->hasPageList();
   menuContext.hasBookmarks = !cachedBookmarks.empty();
   menuContext.hasReaderOverride = prefsCustom_;
   menuContext.paragraphNumbering = prefs_.paragraphNumbering;
@@ -1221,6 +1223,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::FOOTNOTES:
       openFootnotes();
       break;
+    case EpubReaderMenuActivity::MenuAction::GO_TO_PAGE:
+      openPageEntry();
+      break;
     case EpubReaderMenuActivity::MenuAction::GO_TO_PERCENT:
       openPercentSelection();
       break;
@@ -1401,6 +1406,24 @@ void EpubReaderActivity::openPercentSelection() {
                            if (!result.isCancelled) {
                              jumpToPercent(std::get<PercentResult>(result.data).percent);
                            }
+                         });
+}
+
+void EpubReaderActivity::openPageEntry() {
+  // Labels are what the printed book says, "147" or "xii", so the field takes text.
+  startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, std::string(tr(STR_GO_TO_PAGE)),
+                                                                 std::string(), 16, InputType::Text),
+                         [this](const ActivityResult& result) {
+                           const auto* kr = std::get_if<KeyboardResult>(&result.data);
+                           const std::string href =
+                               !result.isCancelled && kr ? epub->findPrintedPage(kr->text) : std::string();
+                           if (href.empty()) {
+                             if (!result.isCancelled) LOG_DBG("ERS", "No printed page: %s", kr ? kr->text.c_str() : "");
+                             requestUpdate();
+                             return;
+                           }
+                           recordJumpOrigin(true);
+                           navigateToHref(href);
                          });
 }
 
@@ -2727,6 +2750,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
     LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);
     section = makeUniqueNoThrow<Section>(*epub, currentSpineIndex, renderer);
+    printedMarksStale_ = true;  // a new layout puts the printed pages elsewhere
     if (!section) {
       LOG_ERR("ERS", "OOM: Section");
       returnHistory.finishReturn(false);
@@ -3620,6 +3644,7 @@ void EpubReaderActivity::renderStatusBar() const {
   d.chapterMarkCount = chapterMarkCount_;
   d.bookTitle = epub->getTitle();
   d.chapterTotal = epub->getTocItemsCount();
+  d.printedPage = printedPageLabel();
 
   const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
   if (tocIndex != -1) {
@@ -3651,6 +3676,46 @@ void EpubReaderActivity::renderStatusBar() const {
   renderer.setPaperbackLook(prefs_.paperbackLookStatus);
   GUI.drawStatusBarV2(renderer, d, sb);
   renderer.setPaperbackLook(false);
+}
+
+const char* EpubReaderActivity::printedPageLabel() const {
+  if (!hasPageList_ || !section) return nullptr;
+  // Resolving anchors opens the section's anchor map, so this runs once per section and once
+  // more when its build settles (anchors past the build watermark are unknown until then).
+  if (printedMarksStale_ || section->isBuilding() != printedMarksBuilding_) {
+    printedMarksStale_ = false;
+    printedMarksBuilding_ = section->isBuilding();
+    printedMarks_.clear();
+    printedMarks_.reserve(32);
+    struct Ctx {
+      const EpubReaderActivity& self;
+    } ctx{*this};
+    epub->forEachPrintedPage(
+        [](void* c, const std::string_view label, const char* href) {
+          const auto& self = static_cast<Ctx*>(c)->self;
+          if (label.size() >= sizeof(PrintedMark::label)) return true;
+          if (self.epub->resolveHrefToSpineIndex(href) != self.currentSpineIndex) return true;
+          const char* hash = strchr(href, '#');
+          std::optional<uint16_t> page = 0;
+          if (hash && hash[1] != '\0') page = self.section->findAnchor(hash + 1);
+          if (!page) return true;
+          PrintedMark mark{*page, {}};
+          memcpy(mark.label, label.data(), label.size());
+          self.printedMarks_.push_back(mark);
+          return true;
+        },
+        &ctx);
+  }
+  // The last marker on or before this page: the printed page this one belongs to.
+  const char* label = nullptr;
+  uint16_t best = 0;
+  for (const auto& mark : printedMarks_) {
+    if (mark.page <= section->currentPage && (!label || mark.page >= best)) {
+      label = mark.label;
+      best = mark.page;
+    }
+  }
+  return label;
 }
 
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {

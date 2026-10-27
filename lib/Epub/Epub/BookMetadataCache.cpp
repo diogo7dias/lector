@@ -15,7 +15,9 @@ namespace {
 // v11 = TOC targets resolve by file name when the exact path is not in the spine; caches
 // built before it hold the -1 that made those chapter rows do nothing. v12 = a TOC entry
 // that still resolves to nothing is left out of the cache entirely.
-constexpr uint8_t BOOK_CACHE_VERSION = 12;
+// v13 = an EPUB 3 page-list is saved beside book.bin as pages.txt (Go to Page); caches
+// built before it never parsed one.
+constexpr uint8_t BOOK_CACHE_VERSION = 13;
 constexpr char bookBinFile[] = "/book.bin";
 // book.bin is built here and renamed into place only when complete: its header is
 // written first, so a build cut by power loss would otherwise pass load()'s checks.

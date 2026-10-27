@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -44,6 +45,7 @@ class Epub {
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true);
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
+  std::string pageListPath() const;
   void discoverCssFilesFromZip();
   bool parseCssFiles() const;  // true when the CSS rules cache was (re)written
 
@@ -91,4 +93,10 @@ class Epub {
   CssParser* getCssParser() const { return cssParser.get(); }
   // fromSpineIndex: the chapter the link sits in, whose folder a relative href is resolved against.
   int resolveHrefToSpineIndex(const std::string& href, int fromSpineIndex = -1) const;
+  // The printed edition's page numbers (EPUB 3 page-list), cached as pages.txt.
+  bool hasPageList() const;
+  // The href of the printed page labelled `label` ("147", "xii"), or "" if the book has none.
+  std::string findPrintedPage(const std::string& label) const;
+  // Every printed page in book order; `fn` returns false to stop.
+  void forEachPrintedPage(bool (*fn)(void* ctx, std::string_view label, const char* href), void* ctx) const;
 };

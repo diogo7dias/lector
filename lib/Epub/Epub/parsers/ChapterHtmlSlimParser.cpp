@@ -746,7 +746,16 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   std::string styleAttr;
   std::string dirAttr;
   bool hasHiddenAttr = false;
+  // A printed-page marker (<span epub:type="pagebreak" id="p147"/>) is what the book's
+  // page list links to, so its id is kept even on a span.
+  bool isPageBreak = false;
   if (atts != nullptr) {
+    for (int i = 0; atts[i]; i += 2) {
+      if ((strcmp(atts[i], "epub:type") == 0 && strstr(atts[i + 1], "pagebreak")) ||
+          (strcmp(atts[i], "role") == 0 && strcmp(atts[i + 1], "doc-pagebreak") == 0)) {
+        isPageBreak = true;
+      }
+    }
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "class") == 0) {
         classAttr = atts[i + 1];
@@ -763,7 +772,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         const uint64_t idHash = arxHash64(atts[i + 1]);
         const bool isTocAnchor =
             std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idHash) != self->tocAnchors.end();
-        if (isTocAnchor || (!isNonNavigableInlineElement(name) && self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER)) {
+        if (isPageBreak && !isTocAnchor && self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER) {
+          // A printed-page marker sits inside running text, so waiting for the next block
+          // would file it a paragraph late. The page being filled now is where its paragraph
+          // lands: at most a paragraph early, which Go to Page reads forward from.
+          self->anchorData.push_back({idHash, static_cast<uint16_t>(self->completedPageCount)});
+        } else if (isTocAnchor ||
+                   (!isNonNavigableInlineElement(name) && self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER)) {
           // Flush a displaced anchor before overwriting. Consecutive non-block elements
           // (e.g. <aside id="fn1">text</aside><aside id="fn2">) with no intervening block
           // never trigger startNewTextBlock, so fn1 gets silently overwritten. That leaves

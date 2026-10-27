@@ -44,6 +44,18 @@ class EpubReaderActivity final : public Activity {
   uint16_t chapterMarks_[statusbar::kMaxChapterMarks] = {};
   int chapterMarkCount_ = 0;
   void buildChapterMarks();
+  // Printed-page labels of the current spine and the page each one starts on (page-list
+  // books only), rebuilt for each new section and once more when its build settles. Read by the status
+  // bar, which appends the label to the page item.
+  struct PrintedMark {
+    uint16_t page;
+    char label[12];
+  };
+  mutable std::vector<PrintedMark> printedMarks_;
+  mutable bool printedMarksStale_ = true;
+  mutable bool printedMarksBuilding_ = false;
+  bool hasPageList_ = false;
+  const char* printedPageLabel() const;
   bool prefsCustom_ = false;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
@@ -352,6 +364,7 @@ class EpubReaderActivity final : public Activity {
   void openChapterSelection();
   void openFootnotes();
   void openPercentSelection();
+  void openPageEntry();
   // Whole-book reading percent (util/ReadingPercent.h) for every place that shows one.
   int cachedTotalPages() const;
   int bookPercent() const;

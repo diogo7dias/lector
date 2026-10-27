@@ -964,6 +964,10 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   }
   // Page item is NOT chapter-only: on a chapterless book (TXT, flat XTC) the
   // reader fills chapterPage/chapterPages with BOOK page/total so it still shows.
+  if (data.printedPage) {
+    const size_t used = strlen(pageBuf);
+    snprintf(pageBuf + used, sizeof(pageBuf) - used, " p.%s", data.printedPage);
+  }
   set(statusbar::Page, pageBuf);
   // Book % ("B:20%"), Chapter % ("C:60%"), Chapter number ("Ch 2/12")
   snprintf(bookPctBuf, sizeof(bookPctBuf), "B:%d%%", data.bookPercent);
