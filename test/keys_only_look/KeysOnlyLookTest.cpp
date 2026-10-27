@@ -103,7 +103,8 @@ TEST(FlatLook, EveryListScreenGetsTheSharedRowStylesWithoutAskingForIt) {
     EXPECT_NE(apply, std::string::npos) << call;
     EXPECT_GT(apply, sync) << call << " must be applied inside syncListViewport, which every list calls";
   }
-  const std::string status = readSource(STATUS_ACTIVITY_SOURCE);
+  // The status screen's list and choice rows live in its choices file.
+  const std::string status = readSource(STATUS_CHOICES_SOURCE);
   EXPECT_TRUE(contains(status, "applyWrappingRowStyle(props, theme)"));
   EXPECT_TRUE(contains(status, "applyInvertedSectionHeaderStyle(props, theme)"));
 }
