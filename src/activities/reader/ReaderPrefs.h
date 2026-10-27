@@ -59,6 +59,10 @@ inline constexpr uint8_t MAX_LINE_SPACING_PERCENT = 150;
 inline constexpr uint8_t MIN_WORD_SPACING = 75;
 inline constexpr uint8_t MAX_WORD_SPACING = 150;
 inline constexpr uint8_t WORD_SPACING = 100;  // percent of the font's natural space advance
+// Character Spacing is stored unsigned: the half pixels between letters plus this, so 5 is
+// the font as designed and 0..10 covers -5..+5.
+inline constexpr uint8_t CHARACTER_SPACING = 5;
+inline constexpr uint8_t MAX_CHARACTER_SPACING = 10;
 }  // namespace reader_defaults
 
 struct ReaderPrefs {
@@ -69,7 +73,7 @@ struct ReaderPrefs {
   // which is far worse than carrying an old one forward. Each of those older layouts is
   // a strict prefix of this struct, so a record is read at its own length and every
   // field appended since keeps its constructed default — see readerPrefsRecordSize().
-  static constexpr uint8_t VERSION = 23;  // v23: Book Title status bar item
+  static constexpr uint8_t VERSION = 24;  // v24: Character Spacing
 
   // Bring a sidecar written before the current version onto the current reading
   // defaults. Only these values are re-seeded, and only for books that predate them.
@@ -218,6 +222,9 @@ struct ReaderPrefs {
   // Book title as its own status bar item, so a chapter Title can sit elsewhere. APPENDED LAST.
   uint8_t sbBookTitlePos = 0;  // SB_ANCHOR_OFF
 
+  // Character Spacing, stored offset by reader_defaults::CHARACTER_SPACING. APPENDED LAST.
+  uint8_t characterSpacing = reader_defaults::CHARACTER_SPACING;
+
   // Copy the status bar block from `source`.
   //
   // A sidecar written before v11 stops before that block, so every field would
@@ -276,6 +283,8 @@ inline ReaderRenderSpec makeRenderSpec(const ReaderPrefs& p, const int fontId, c
   spec.bookMargins = p.bookMargins != 0;
   spec.headingPageBreak = p.headingPageBreak != 0;
   spec.wordExpansion = std::min<uint8_t>(p.wordExpansion, 2);
+  spec.characterSpacing = static_cast<int8_t>(std::min(p.characterSpacing, reader_defaults::MAX_CHARACTER_SPACING) -
+                                              reader_defaults::CHARACTER_SPACING);
   return spec;
 }
 
@@ -296,6 +305,7 @@ inline constexpr size_t READER_PREFS_V19_SIZE = offsetof(ReaderPrefs, bookMargin
 inline constexpr size_t READER_PREFS_V20_SIZE = offsetof(ReaderPrefs, headingPageBreak);
 inline constexpr size_t READER_PREFS_V21_SIZE = offsetof(ReaderPrefs, wordExpansion);
 inline constexpr size_t READER_PREFS_V22_SIZE = offsetof(ReaderPrefs, sbBookTitlePos);
+inline constexpr size_t READER_PREFS_V23_SIZE = offsetof(ReaderPrefs, characterSpacing);
 
 // A record older than v12 carries one "Embedded Style" choice, in what is now the text
 // switch. Someone who turned it off wanted the book's own styling gone, so the layout
@@ -355,6 +365,7 @@ inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
   if (version == 20) return READER_PREFS_V20_SIZE;
   if (version == 21) return READER_PREFS_V21_SIZE;
   if (version == 22) return READER_PREFS_V22_SIZE;
+  if (version == 23) return READER_PREFS_V23_SIZE;
   if (version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
   return 0;
 }
@@ -381,8 +392,9 @@ static_assert(READER_PREFS_V19_SIZE == READER_PREFS_V18_SIZE + 1, "v19 adds text
 static_assert(READER_PREFS_V20_SIZE == READER_PREFS_V19_SIZE + 1, "v20 adds bookMargins");
 static_assert(READER_PREFS_V21_SIZE == READER_PREFS_V20_SIZE + 1, "v21 adds headingPageBreak");
 static_assert(READER_PREFS_V22_SIZE == READER_PREFS_V21_SIZE + 1, "v22 adds wordExpansion");
-static_assert(sizeof(ReaderPrefs) == READER_PREFS_V22_SIZE + 1,
-              "sbBookTitlePos must be the last byte: every new field goes last, or "
+static_assert(READER_PREFS_V23_SIZE == READER_PREFS_V22_SIZE + 1, "v23 adds sbBookTitlePos");
+static_assert(sizeof(ReaderPrefs) == READER_PREFS_V23_SIZE + 1,
+              "characterSpacing must be the last byte: every new field goes last, or "
               "this firmware misreads every sidecar written by the version before it");
 
 // ── The field lists cover the struct ──────────────────────────────────────────

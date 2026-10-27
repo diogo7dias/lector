@@ -147,6 +147,7 @@ void TextSettingsActivity::drawReserved(const Rect& rect) {
   const int previewFontId = SETTINGS.getReaderFontId(look_);
   renderer.setKerning(previewFontId, look_.kerning != 0);
   renderer.setLigatures(previewFontId, look_.ligatures != 0);
+  renderer.setCharacterSpacing(previewFontId, look_.characterSpacing - reader_defaults::CHARACTER_SPACING);
   textsettings::renderPreview(renderer, previewLayout_, look_, rect.y, rect.height - metrics_.verticalSpacing);
 }
 
@@ -168,6 +169,7 @@ constexpr RowSpec ROW_SPECS[] = {
     {&CrossPointSettings::lineSpacingPercent, StrId::STR_NONE_OPT, false},      // LineSpacing
     {&CrossPointSettings::extraParagraphSpacing, StrId::STR_NONE_OPT, false},   // ExtraSpacing
     {&CrossPointSettings::wordSpacing, StrId::STR_NONE_OPT, true},              // WordSpacing
+    {&CrossPointSettings::characterSpacing, StrId::STR_NONE_OPT, false},        // CharacterSpacing
     {&CrossPointSettings::kerning, StrId::STR_NONE_OPT, false},                 // Kerning
     {&CrossPointSettings::ligatures, StrId::STR_NONE_OPT, false},               // Ligatures
     {&CrossPointSettings::paragraphAlignment, StrId::STR_ALIGNMENT, false},     // Alignment
@@ -238,6 +240,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   rows.push_back(Row::LineSpacing);
   rows.push_back(Row::ExtraSpacing);
   rows.push_back(Row::WordSpacing);
+  rows.push_back(Row::CharacterSpacing);
   rows.push_back(Row::Kerning);
   rows.push_back(Row::Ligatures);
 
@@ -385,7 +388,7 @@ std::string TextSettingsActivity::rowValueText(const Row row) const {
     case RowKind::Toggle:
       return onOff(*field);
     case RowKind::Number:
-      return std::to_string(*field);
+      return std::to_string(info->shownValue(*field));
     default:
       break;
   }
@@ -465,16 +468,18 @@ void TextSettingsActivity::activateRow(const Row row) {
       // preview under the band is lost, but the row is only two taps away and
       // the number gets a finger-sized track instead of a header's worth of it.
       auto dialog = makeUniqueNoThrow<IntervalSelectionActivity>(
-          renderer, mappedInput, "TextSettingNumber", rowNameId(row), *field, range.min, range.max,
+          renderer, mappedInput, "TextSettingNumber", rowNameId(row), info->shownValue(*field),
+          info->shownValue(range.min), info->shownValue(range.max),
           /*smallStep=*/ROW_SPECS[static_cast<size_t>(row)].coarseSteps ? range.step : 1, /*largeStep=*/range.step);
       if (!dialog) {
         LOG_ERR("TXTSET", "OOM: IntervalSelectionActivity");
         return;
       }
-      startActivityForResult(std::move(dialog), [this, row](const ActivityResult& result) {
+      const int offset = info->displayOffset;
+      startActivityForResult(std::move(dialog), [this, row, offset](const ActivityResult& result) {
         const auto* chosen = std::get_if<IntervalResult>(&result.data);
         if (!result.isCancelled && chosen != nullptr) {
-          setEditedValue(row, static_cast<int>(chosen->value));
+          setEditedValue(row, static_cast<int>(chosen->value) - offset);
           commitSettings();
         }
         requestUpdate();

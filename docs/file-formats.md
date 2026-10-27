@@ -434,6 +434,7 @@ struct SectionBin {
     bool bookMargins [[comment("Book Margins switch")]];
     bool headingPageBreak [[comment("Break Before Headings switch")]];
     bool wordExpansion [[comment("Word Expansion switch")]];
+    s8 characterSpacing [[comment("Character Spacing, half pixels between letters, -5..5")]];
 
     u16 pageCount;
     u32 pageLutOffset;

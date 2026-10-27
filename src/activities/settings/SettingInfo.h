@@ -91,6 +91,15 @@ struct SettingInfo {
     return *this;
   }
 
+  // VALUE rows stored unsigned but read as signed (Character Spacing keeps 0..10 and means
+  // -5..+5): every place that shows or takes the number adds this first.
+  int8_t displayOffset = 0;
+  int shownValue(const uint8_t stored) const { return stored + displayOffset; }
+  SettingInfo& withDisplayOffset(const int8_t offset) {
+    displayOffset = offset;
+    return *this;
+  }
+
   SettingInfo& withHiddenEnumValues(std::vector<uint8_t> values) {
     hiddenEnumValues = std::move(values);
     return *this;

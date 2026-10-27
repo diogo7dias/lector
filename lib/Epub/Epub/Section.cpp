@@ -78,8 +78,8 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
                          sizeof(spec.imageRendering) + sizeof(spec.focusReadingEnabled) + sizeof(spec.guideDotsMode) +
                          sizeof(spec.firstLineIndentMode) + sizeof(spec.firstLineIndentPercent) + sizeof(spec.kerning) +
                          sizeof(spec.ligatures) + sizeof(spec.linkUnderline) + sizeof(spec.bookMargins) +
-                         sizeof(spec.headingPageBreak) + sizeof(spec.wordExpansion) + sizeof(uint32_t) +
-                         sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
+                         sizeof(spec.headingPageBreak) + sizeof(spec.wordExpansion) + sizeof(spec.characterSpacing) +
+                         sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
       "Header size mismatch");
   // Written as the incomplete sentinel; finalizeBuild() patches it to
   // SECTION_FILE_VERSION as the last step, committing the file.
@@ -105,6 +105,7 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   serialization::writePod(file, spec.bookMargins);
   serialization::writePod(file, spec.headingPageBreak);
   serialization::writePod(file, spec.wordExpansion);
+  serialization::writePod(file, spec.characterSpacing);
   serialization::writePod(file, pageCount);  // Placeholder for page count (will be initially 0, patched later)
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for LUT offset (patched later)
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for anchor map offset (patched later)
@@ -136,6 +137,7 @@ static void readSpecFields(HalFile& f, ReaderRenderSpec& out) {
   serialization::readPod(f, out.bookMargins);
   serialization::readPod(f, out.headingPageBreak);
   serialization::readPod(f, out.wordExpansion);
+  serialization::readPod(f, out.characterSpacing);
 }
 
 bool Section::loadSectionFile(const ReaderRenderSpec& spec) {

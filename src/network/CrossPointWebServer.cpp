@@ -1620,10 +1620,10 @@ void CrossPointWebServer::handleGetSettings() const {
       case SettingType::VALUE: {
         doc["type"] = "value";
         if (s.valuePtr) {
-          doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
+          doc["value"] = s.shownValue(SETTINGS.*(s.valuePtr));
         }
-        doc["min"] = s.valueRange.min;
-        doc["max"] = s.valueRange.max;
+        doc["min"] = s.shownValue(s.valueRange.min);
+        doc["max"] = s.shownValue(s.valueRange.max);
         doc["step"] = s.valueRange.step;
         break;
       }
@@ -1696,7 +1696,7 @@ void CrossPointWebServer::handlePostSettings() {
         break;
       }
       case SettingType::VALUE: {
-        const int val = doc[s.key].as<int>();
+        const int val = doc[s.key].as<int>() - s.displayOffset;
         if (val >= s.valueRange.min && val <= s.valueRange.max) {
           if (s.valuePtr) {
             SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);

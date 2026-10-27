@@ -245,6 +245,7 @@ void EpubReaderActivity::onExit() {
   // The reading font's Kerning and Ligatures switches end with the book.
   renderer.setKerning(0, true);
   renderer.setLigatures(0, true);
+  renderer.setCharacterSpacing(0, 0);
   renderer.setTextContrast(0);
 
   // Keep rebuildable font buffers from pinning the heap between reading sessions.
@@ -2719,6 +2720,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // here; the deferred extension build in loop() reuses it with the same prefs.
   renderer.setKerning(renderSpec.fontId, renderSpec.kerning);
   renderer.setLigatures(renderSpec.fontId, renderSpec.ligatures);
+  renderer.setCharacterSpacing(renderSpec.fontId, renderSpec.characterSpacing);
   renderer.setTextContrast(prefs_.textContrast);
 
   if (!section) {

@@ -560,7 +560,9 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V19_SIZE + 1, READER_PREFS_V20_SIZE);
   EXPECT_EQ(READER_PREFS_V20_SIZE + 1, READER_PREFS_V21_SIZE);
   EXPECT_EQ(READER_PREFS_V21_SIZE + 1, READER_PREFS_V22_SIZE);
-  EXPECT_EQ(READER_PREFS_V22_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V22_SIZE + 1, READER_PREFS_V23_SIZE);
+  EXPECT_EQ(READER_PREFS_V23_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V23_SIZE, readerPrefsRecordSize(23));
   EXPECT_EQ(READER_PREFS_V22_SIZE, readerPrefsRecordSize(22));
   EXPECT_EQ(READER_PREFS_V21_SIZE, readerPrefsRecordSize(21));
   EXPECT_EQ(READER_PREFS_V20_SIZE, readerPrefsRecordSize(20));
@@ -575,7 +577,21 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(23, ReaderPrefs::VERSION);
+  EXPECT_EQ(24, ReaderPrefs::VERSION);
+}
+
+// A v23 record stops before Character Spacing: it reads back as the font as designed,
+// and the spec carries the signed half pixels.
+TEST(ReaderPrefs, CharacterSpacingDefaultsToNormalAndMapsSigned) {
+  ReaderPrefs prefs;
+  EXPECT_EQ(reader_defaults::CHARACTER_SPACING, prefs.characterSpacing);
+  EXPECT_EQ(0, makeRenderSpec(prefs, 0, 480, 800).characterSpacing);
+  prefs.characterSpacing = 0;
+  EXPECT_EQ(-5, makeRenderSpec(prefs, 0, 480, 800).characterSpacing);
+  prefs.characterSpacing = 10;
+  EXPECT_EQ(5, makeRenderSpec(prefs, 0, 480, 800).characterSpacing);
+  prefs.characterSpacing = 200;  // a corrupt byte clamps rather than wrapping
+  EXPECT_EQ(5, makeRenderSpec(prefs, 0, 480, 800).characterSpacing);
 }
 
 TEST(ReaderPrefs, AV12RecordKeepsItsFieldsAndLeavesTheNewItemOff) {

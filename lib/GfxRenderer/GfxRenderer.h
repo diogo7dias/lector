@@ -58,6 +58,15 @@ class GfxRenderer {
   // Same, for the reader's Ligatures switch.
   int ligaturesOffFontId = NO_FONT;
   bool ligates(const int fontId) const { return fontId != ligaturesOffFontId; }
+  // The reader's Character Spacing: extra space between that font's letters, in 12.4
+  // fixed point (16 = one pixel), negative to tighten. Every other font draws as designed.
+  int trackingFontId = NO_FONT;
+  int trackingFP = 0;
+  int trackingFor(const int fontId) const { return fontId == trackingFontId ? trackingFP : 0; }
+  // Pixels the first `steps` letter gaps add at stepFP each. drawText advances by the
+  // difference between consecutive counts, so a fractional step lands as whole pixels
+  // spread along the word, and a word measures exactly what it draws.
+  static int spacingPixels(const int steps, const int stepFP) { return fp4::toPixel(steps * stepFP); }
   // Mutable because ensureSdCardFontReady() is const (called from layout code
   // that holds a const GfxRenderer&) but triggers SD card reads and heap
   // allocation inside the SdCardFont objects. Same pragmatic compromise as
@@ -302,7 +311,7 @@ class GfxRenderer {
   // marks or SD fallback. 100 is drawText(). y is the top of the scaled ascender box.
   void drawTextScaled(int fontId, int x, int y, const char* text, int percent, bool black = true) const;
   // letterSpacing: extra pixels after every glyph but the last (Word Expansion). Each word
-  // gains letterSpacing * (spacedGlyphCount - 1).
+  // gains letterSpacing * (spacedGlyphCount - 1), on top of the font's Character Spacing.
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                 BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO, int letterSpacing = 0) const;
@@ -320,6 +329,12 @@ class GfxRenderer {
   void setKerning(const int fontId, const bool on) { kerningOffFontId = on ? NO_FONT : fontId; }
   /// Same for ligatures (fi, fl, ff ...): off draws and measures the letters one by one.
   void setLigatures(const int fontId, const bool on) { ligaturesOffFontId = on ? NO_FONT : fontId; }
+  /// Character Spacing for one font, in half pixels per letter gap (-5..5); 0 clears it.
+  /// Measuring (getTextAdvanceX, getTextWidth) and drawing both honour it.
+  void setCharacterSpacing(const int fontId, const int halfPixels) {
+    trackingFontId = halfPixels != 0 ? fontId : NO_FONT;
+    trackingFP = halfPixels * 8;
+  }
   int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style) const;
   int getFontAscenderSize(int fontId) const;
   /// Distance in pixels from the baseline up to the top of \p codepoint's ink.

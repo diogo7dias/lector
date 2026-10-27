@@ -136,7 +136,7 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) const
                static_cast<unsigned int>(SETTINGS.*(setting.valuePtr)));
       return valueBuffer;
     }
-    return std::to_string(SETTINGS.*(setting.valuePtr));
+    return std::to_string(setting.shownValue(SETTINGS.*(setting.valuePtr)));
   }
   if (setting.type == SettingType::STRING) {
     if (setting.stringGetter) return setting.stringGetter();
@@ -586,8 +586,9 @@ void SettingsActivity::toggleCurrentSetting() {
     const auto valuePtr = setting.valuePtr;
     constexpr int minLargeStep = 5;
     auto dialog = makeUniqueNoThrow<IntervalSelectionActivity>(
-        renderer, mappedInput, "SettingValue", setting.nameId, SETTINGS.*(setting.valuePtr), setting.valueRange.min,
-        setting.valueRange.max, /*smallStep=*/1, std::max(minLargeStep, static_cast<int>(setting.valueRange.step)));
+        renderer, mappedInput, "SettingValue", setting.nameId, setting.shownValue(SETTINGS.*(setting.valuePtr)),
+        setting.shownValue(setting.valueRange.min), setting.shownValue(setting.valueRange.max), /*smallStep=*/1,
+        std::max(minLargeStep, static_cast<int>(setting.valueRange.step)));
     if (!dialog) {
       LOG_ERR("SET", "OOM: IntervalSelectionActivity");
       return;
@@ -596,10 +597,11 @@ void SettingsActivity::toggleCurrentSetting() {
     // itself is the scratch the dialog writes through, so Cancel restoring the
     // opening value restores the setting too.
     liveValuePtr = valuePtr;
+    liveValueOffset = setting.displayOffset;
     dialog->setLiveApply({[](void* ctx, const int chosen) {
                             auto* self = static_cast<SettingsActivity*>(ctx);
                             if (self->liveValuePtr == nullptr) return;
-                            SETTINGS.*(self->liveValuePtr) = static_cast<uint8_t>(chosen);
+                            SETTINGS.*(self->liveValuePtr) = static_cast<uint8_t>(chosen - self->liveValueOffset);
                             applyFrontlightSetting(self->liveValuePtr);
                           },
                           this});
@@ -608,7 +610,7 @@ void SettingsActivity::toggleCurrentSetting() {
       if (!result.isCancelled) {
         const auto* chosen = std::get_if<IntervalResult>(&result.data);
         if (chosen != nullptr) {
-          SETTINGS.*valuePtr = static_cast<uint8_t>(chosen->value);
+          SETTINGS.*valuePtr = static_cast<uint8_t>(chosen->value - liveValueOffset);
           applyFrontlightSetting(valuePtr);
         }
         // One write when the dialog closes, not one per step: the value moved

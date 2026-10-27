@@ -662,6 +662,8 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
 
   int w = 0, h = 0;
   fontIt->second.getTextDimensions(renderedText, &w, &h, style);
+  const int stepFP = trackingFor(fontId);
+  if (stepFP != 0) w += spacingPixels(std::max(0, spacedGlyphCount(fontId, text, style) - 1), stepFP);
   return w;
 }
 
@@ -725,6 +727,8 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   const char* textCursor = renderedText;
   uint32_t cp;
   uint32_t prevCp = 0;
+  const int stepFP = letterSpacing * 16 + trackingFor(fontId);
+  int steps = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&textCursor)))) {
     // RTL vowel marks (Hebrew niqqud, Arabic harakat) ride the combining-mark
     // path: zero-advance overlays on the preceding base glyph (applyBidiVisual
@@ -752,7 +756,11 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     // where they fall on the line.
     if (prevCp != 0) {
       const auto kernFP = kerns(fontId) ? font.getKerning(prevCp, cp, style) : 0;  // 4.4 fixed-point kern
-      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP) + letterSpacing;  // snap 12.4 fixed-point to nearest pixel
+      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);  // snap 12.4 fixed-point to nearest pixel
+      if (stepFP != 0) {
+        lastBaseX += spacingPixels(steps + 1, stepFP) - spacingPixels(steps, stepFP);
+        ++steps;
+      }
     }
 
     const EpdGlyph* glyph = font.getGlyph(cp, style);
@@ -2005,6 +2013,8 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
   // Advance table fast-path for SD card fonts during layout.
   // No kerning/ligature lookup — consistent with previous metadataOnly behavior
   // where kern/lig data was not loaded.
+  // Letters stepped between, for Character Spacing: counted the way drawText counts them.
+  int glyphs = 0;
   auto sdIt = sdCardFonts_.find(resolvedFontId);
   if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
     int32_t widthFP = 0;
@@ -2027,8 +2037,9 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
         advFP = glyph ? glyph->advanceX : 0;
       }
       widthFP += isSupSub ? (advFP + 1) / 2 : advFP;
+      if (!utf8IsCombiningMark(cp)) ++glyphs;
     }
-    return fp4::toPixel(widthFP);
+    return fp4::toPixel(widthFP) + spacingPixels(std::max(0, glyphs - 1), trackingFor(fontId));
   }
 
   const auto fontIt = fontMap.find(resolvedFontId);
@@ -2065,9 +2076,10 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
       prevAdvanceFP = (prevAdvanceFP + 1) / 2;
     }
     prevCp = cp;
+    ++glyphs;
   }
   widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
-  return widthPx;
+  return widthPx + spacingPixels(std::max(0, glyphs - 1), trackingFor(fontId));
 }
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {

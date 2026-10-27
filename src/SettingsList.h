@@ -452,6 +452,12 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
                     "wordExpansion", StrId::STR_CAT_READER)
                     .withTextSettings());
 
+    v.push_back(SettingInfo::Value(StrId::STR_CHARACTER_SPACING, &CrossPointSettings::characterSpacing,
+                                   {0, reader_defaults::MAX_CHARACTER_SPACING, 1}, "characterSpacing",
+                                   StrId::STR_CAT_READER)
+                    .withTextSettings()
+                    .withDisplayOffset(-static_cast<int8_t>(reader_defaults::CHARACTER_SPACING)));
+
     v.push_back(SettingInfo::Toggle(StrId::STR_FOCUS_READING, &CrossPointSettings::focusReadingEnabled,
                                     "focusReadingEnabled", StrId::STR_CAT_READER)
                     .withTextSettings());

@@ -124,7 +124,8 @@ namespace {
 // v73: the Break Before Headings switch enters the header; on starts each h1/h2 on a new page.
 // v74: Word Expansion enters the header, and each text line stores its letter spacing.
 // v75: a line may break after a hyphen or dash inside a word ("foo—bar"; upstream #3883).
-constexpr uint8_t SECTION_FILE_VERSION = 75;
+// v76: Character Spacing enters the header; tracking changes every word's width.
+constexpr uint8_t SECTION_FILE_VERSION = 76;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -147,7 +148,7 @@ constexpr uint32_t HEADER_SIZE =
     sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) +
     sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(bool) + sizeof(bool) + sizeof(bool) +
     sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint8_t) +
-    sizeof(uint8_t) + sizeof(uint8_t);
+    sizeof(uint8_t) + sizeof(uint8_t) + sizeof(int8_t);
 // The header ends with the patched-later fields, in this order. Named once so a seek
 // never re-derives its offset from the end of the header by hand.
 constexpr uint32_t PAGE_LUT_FIELD = HEADER_SIZE - sizeof(uint32_t) * 5;
