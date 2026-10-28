@@ -130,7 +130,9 @@ namespace {
 // v78: publisher styling (upstream #3891): each TextBlock stores its font id and an optional
 //      per-word font table (CSS font-size, small caps); pages gain drop caps and border boxes;
 //      tables plan their columns; orphan/widow lines move to the next page.
-constexpr uint8_t SECTION_FILE_VERSION = 78;
+// v79: small images (up to two lines tall) sit inside the text line instead of breaking the
+//      paragraph; a line with one grows to the image's height (CrossInk 9e7cf2f09).
+constexpr uint8_t SECTION_FILE_VERSION = 79;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

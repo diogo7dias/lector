@@ -433,3 +433,40 @@ TEST(DashBreak, InlineStyleAfterDashMayWrap) {
   ASSERT_EQ(2u, lines.size());
   EXPECT_EQ(Words{"bar"}, lines[1].words);
 }
+
+// Lays out `parsed`, returning the inline images on its last line.
+std::vector<ParsedText::InlineImagePlacement> layoutImages(ParsedText& parsed, int width) {
+  lines.clear();
+  std::vector<ParsedText::InlineImagePlacement> images;
+  parsed.layoutAndExtractLines(renderer, FONT, width,
+                               [&](std::unique_ptr<TextBlock>, uint32_t) { images = parsed.currentLineImages(); });
+  return images;
+}
+
+TEST(InlineImages, TakeTheirWidthAndLeaveTheLine) {
+  BlockStyle style;
+  style.textAlignDefined = true;
+  ParsedText parsed(false, GUIDE_DOTS_OFF, style, 1, 0, 100);
+  parsed.addWord("a", EpdFontFamily::REGULAR);
+  parsed.addInlineImage(7, 30, 12, /*attachToPrevious=*/false, 1);
+  parsed.addWord("b", EpdFontFamily::REGULAR, /*attachToPrevious=*/true);
+  const auto images = layoutImages(parsed, 200);
+  ASSERT_EQ(1u, lines.size());
+  ASSERT_EQ((std::vector<std::string>{"a", "b"}), lines[0].words);
+  ASSERT_EQ(1u, images.size());
+  EXPECT_EQ(7, images[0].id);
+  EXPECT_EQ(12, images[0].height);
+  EXPECT_EQ(21 + 10 + 6, images[0].x);         // indent, "a", the space before the image
+  EXPECT_EQ(images[0].x + 30, lines[0].x[1]);  // "b" glued to the image's right edge
+}
+
+TEST(InlineImages, ALineOfImagesAloneIsCentred) {
+  ParsedText parsed(false, GUIDE_DOTS_OFF, BlockStyle(), 0, 0, 100);
+  parsed.addInlineImage(1, 40, 20, false, 0);
+  EXPECT_FALSE(parsed.hasLetters());
+  const auto images = layoutImages(parsed, 200);
+  ASSERT_EQ(1u, lines.size());
+  EXPECT_TRUE(lines[0].words.empty());
+  ASSERT_EQ(1u, images.size());
+  EXPECT_EQ(80, images[0].x);
+}

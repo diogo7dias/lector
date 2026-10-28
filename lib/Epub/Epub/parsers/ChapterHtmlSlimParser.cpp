@@ -1785,6 +1785,37 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   LOG_DBG("EHP", "Display size: %dx%d (scale %.2f)", displayWidth, displayHeight, scale);
                 }
 
+                // A small image (an icon, a glyph drawn as a picture) joins the text line instead
+                // of breaking the paragraph. Explicit display:block keeps the centred block.
+                const int textLineHeight = self->renderer.getLineHeight(self->fontId, self->lineCompression);
+                const bool inlineImage = self->currentTextBlock && self->tableDepth == 0 && !self->inRuby &&
+                                         displayWidth > 0 && displayHeight > 0 && displayWidth < containerWidth &&
+                                         displayHeight <= textLineHeight * 2 &&
+                                         !(imgStyle.hasDisplay() && imgStyle.display == CssDisplay::Block);
+                if (inlineImage) {
+                  const bool attachToPrevious = self->partWordBufferIndex > 0 || self->nextWordContinues;
+                  if (self->partWordBufferIndex > 0) self->flushPartWordBuffer();
+                  auto imageBlock =
+                      makeUniqueNoThrow<ImageBlock>(cachedImagePath, resolvedPath, displayWidth, displayHeight);
+                  if (!imageBlock) {
+                    LOG_ERR("EHP", "OOM: inline ImageBlock");
+                  } else {
+                    const uint16_t imageId = self->nextInlineImageId++;
+                    self->pendingInlineImages.push_back({imageId, std::move(imageBlock)});
+                    self->currentTextBlock->addInlineImage(imageId, static_cast<uint16_t>(displayWidth),
+                                                           static_cast<uint16_t>(displayHeight), attachToPrevious,
+                                                           self->visibleTextOffset);
+                    self->nextWordContinues = true;
+                    // A run of icons has no text to trigger the usual soft flush; lay out what
+                    // is complete so the pending blocks stay bounded.
+                    if (self->pendingInlineImages.size() >= MAX_PENDING_INLINE_IMAGES) {
+                      self->makePages(/*includeLastLine=*/false);
+                    }
+                  }
+                  self->depth += 1;
+                  return;
+                }
+
                 // Flush any pending text block so it appears before the image
                 if (self->partWordBufferIndex > 0) {
                   self->flushPartWordBuffer();
@@ -3034,7 +3065,13 @@ void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const
   const int rubyShift = line->getRubyShift(renderer.getFontAscenderSize(lineFontId));
   // Taller inline words push the shared baseline down.
   const int baseLineHeight = renderer.getLineHeight(lineFontId, lineCompression) + line->extraAscent(renderer, fontId);
-  const int lineHeight = baseLineHeight + rubyShift;
+  const int textHeight = baseLineHeight + rubyShift;
+  // Inline images on this line (table cells never carry any) raise it to the tallest one;
+  // text and images share the line's bottom edge.
+  static const std::vector<ParsedText::InlineImagePlacement> noImages;
+  const auto& lineImages = layoutParagraph ? layoutParagraph->currentLineImages() : noImages;
+  int lineHeight = textHeight;
+  for (const auto& image : lineImages) lineHeight = std::max<int>(lineHeight, image.height);
 
   if (!currentPage) {
     currentPage = makeUniqueNoThrow<Page>();
@@ -3054,7 +3091,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const
   setCurrentPageVisibleOffset(visibleOffset);
 
   // Track cumulative words to assign footnotes to the page containing their anchor
-  wordsExtractedInBlock += line->wordCount();
+  wordsExtractedInBlock += line->wordCount() + lineImages.size();
   auto footnoteIt = pendingFootnotes.begin();
   while (footnoteIt != pendingFootnotes.end() && footnoteIt->first <= wordsExtractedInBlock) {
     currentPage->addFootnote(footnoteIt->second.number, footnoteIt->second.href);
@@ -3064,19 +3101,35 @@ void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const
 
   // Apply horizontal left inset (margin + padding) as x position offset
   const int16_t xOffset = line->getBlockStyle().leftInset();
-  auto pageLine = std::unique_ptr<PageLine>(new (std::nothrow) PageLine(std::move(line), xOffset, currentPageNextY));
-  if (!pageLine) {
-    LOG_ERR("EHP", "OOM: PageLine");
-    return;
+  if (line->wordCount() > 0) {
+    auto pageLine = makeUniqueNoThrow<PageLine>(std::move(line), xOffset,
+                                                static_cast<int16_t>(currentPageNextY + lineHeight - textHeight));
+    if (!pageLine) {
+      LOG_ERR("EHP", "OOM: PageLine");
+      return;
+    }
+    // Tag the first emitted line of each block with the next paragraph number. Done
+    // here (not in makePages) so a block that produces no lines consumes no ordinal.
+    if (pendingParagraphFirstLine_) {
+      paragraphOrdinal_++;
+      pageLine->setParagraphOrdinal(paragraphOrdinal_);
+      pendingParagraphFirstLine_ = false;
+    }
+    currentPage->elements.push_back(std::move(pageLine));
   }
-  // Tag the first emitted line of each block with the next paragraph number. Done
-  // here (not in makePages) so a block that produces no lines consumes no ordinal.
-  if (pendingParagraphFirstLine_) {
-    paragraphOrdinal_++;
-    pageLine->setParagraphOrdinal(paragraphOrdinal_);
-    pendingParagraphFirstLine_ = false;
+  for (const auto& image : lineImages) {
+    const auto it = std::find_if(pendingInlineImages.begin(), pendingInlineImages.end(),
+                                 [&image](const PendingInlineImage& pending) { return pending.id == image.id; });
+    if (it == pendingInlineImages.end()) continue;  // its ImageBlock failed to allocate
+    auto pageImage = makeUniqueNoThrow<PageImage>(std::move(it->block), static_cast<int16_t>(xOffset + image.x),
+                                                  static_cast<int16_t>(currentPageNextY + lineHeight - image.height));
+    pendingInlineImages.erase(it);
+    if (!pageImage) {
+      LOG_ERR("EHP", "OOM: inline PageImage");
+      continue;
+    }
+    currentPage->elements.push_back(std::move(pageImage));
   }
-  currentPage->elements.push_back(std::move(pageLine));
   noteContent(currentPageNextY, currentPageNextY + lineHeight);
   currentPageNextY += lineHeight;
   if (layoutParagraph && paragraphLinesOnPage < UINT8_MAX) paragraphLinesOnPage++;

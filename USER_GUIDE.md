@@ -1028,6 +1028,9 @@ other numbers in Settings use the same band.
 
 A paragraph's lone first or last line never sits by itself at a page edge, and a heading moves
 to the next page with the text that follows it. Tables size each column to its content.
+Small pictures in the text (icons, symbols drawn as images, up to two lines tall) stay inside
+the line; larger ones get their own centred block, and a small picture alone in its paragraph
+is centred.
 - **Bionic Reading** — bolds the first part of each word as a fixation point.
 - **Word Spacing %** — sets the baseline gap between words, from 75% to 150% in steps of 5.
   100% keeps the original spacing. Justified lines still stretch to the right margin;
