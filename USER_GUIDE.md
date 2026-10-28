@@ -1013,13 +1013,21 @@ other numbers in Settings use the same band.
   their numbers, and a nested list counts from 1 again.
   An inline passage in another writing direction keeps the enclosing paragraph's base direction.
   Arabic and Persian text is shaped once, preserving Alef and Lam order; Latin ligatures remain supported.
+  It also honours drop caps (a large first letter spanning two to four lines), small caps,
+  text the book keeps as typed (poetry, code) and the book's relative font sizes for
+  headings, paragraphs and words. Sizes need an SD card font that has larger and smaller
+  variants; the built-in font draws every word at your size.
 - **Embedded Layout Style** — honour the book's own CSS for where blocks sit: alignment,
-  first-line indent, margins, padding and image sizes. **Paragraph Alignment: Book's Style**
+  first-line indent, margins, padding and image sizes, the boxes and shading the book draws
+  around passages, and the page breaks it asks for. **Paragraph Alignment: Book's Style**
   and **First Line Indent: Book** both read the book's CSS, so they need this on.
 - **Book Margins** — on by default, shown while Embedded Layout Style is on: the book's own
   margins and padding. Off drops them, so blocks sit flush with your page margins, and keeps the
-  book's alignment, indents and image sizes. The book's fonts, sizes and line height are never
+  book's alignment, indents and image sizes. The book's fonts and line height are never
   used: the reader's own settings always win.
+
+A paragraph's lone first or last line never sits by itself at a page edge, and a heading moves
+to the next page with the text that follows it. Tables size each column to its content.
 - **Bionic Reading** — bolds the first part of each word as a fixation point.
 - **Word Spacing %** — sets the baseline gap between words, from 75% to 150% in steps of 5.
   100% keeps the original spacing. Justified lines still stretch to the right margin;

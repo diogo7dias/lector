@@ -83,6 +83,7 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
                      std::vector<std::string>) {
   lines.push_back({words, xpos, styles, focus, suffix, dots});
 }
+bool TextBlock::setWordFonts(const uint8_t*, const int32_t (&)[MAX_WORD_FONTS]) { return true; }
 
 TEST_P(WordSpacing, MeasurementAndPositioningAgree) {
   const int percent = GetParam();

@@ -9,12 +9,14 @@ parser = root / "lib/Epub/Epub/parsers/ChapterHtmlSlimParser"
 header = parser.with_suffix(".h").read_text()
 source = parser.with_suffix(".cpp").read_text()
 # Use the actual fields and method, not a second implementation of inheritance.
-fields = header[header.index("  struct StyleStackEntry {"):header.index("  static constexpr size_t MAX_GRID_TABLE_COLUMNS")]
+fields = header[header.index("  struct StyleStackEntry {"):header.index("  bool pendingPageBreak = false;")]
 method = source[source.index("void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {"):source.index("void ChapterHtmlSlimParser::flushPendingAnchor() {")]
 program = r'''
 #include <cassert>
+#include <array>
 #include <vector>
 #include "Epub/blocks/BlockStyle.h"
+#include "Epub/css/CssParser.h"
 struct TextBlockStub {
   BlockStyle style;
   bool empty = true;
@@ -66,7 +68,8 @@ with tempfile.TemporaryDirectory() as directory:
     exe = Path(directory) / "direction"
     cpp.write_text(program)
     subprocess.run([sys.argv[1] if len(sys.argv) > 1 else "c++", "-std=c++20",
-                    "-fno-exceptions", "-fno-rtti", "-I", str(root / "lib/Epub"),
+                    "-fno-exceptions", "-fno-rtti", "-I", str(root / "lib/Epub"), "-I", str(root / "test/css_parser/stubs"),
+                    "-I", str(root / "lib/Memory"),
                     str(cpp), "-o", str(exe)], check=True)
     subprocess.run([str(exe)], check=True)
 print("Inline direction regression passed")

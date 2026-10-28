@@ -69,8 +69,9 @@ class SdCardFont {
   // (e.g. shaped Arabic presentation forms the measurement path will look up).
   // Returns number of codepoints not found in font coverage.
   int buildAdvanceTable(const char* utf8Text, uint8_t styleMask = 0x0F, const char* extraText = nullptr);
-  int buildAdvanceTable(const std::deque<std::string>& words, uint8_t styleMask = 0x0F,
-                        const char* extraText = nullptr);
+  // includeSmallCaps also prepares uppercase codepoints for small caps, retaining the originals.
+  int buildAdvanceTable(const std::deque<std::string>& words, uint8_t styleMask = 0x0F, const char* extraText = nullptr,
+                        bool includeSmallCaps = false);
 
   // Look up advanceX for a codepoint from the advance table.
   // Returns the 12.4 fixed-point advance, or 0 if not found.
@@ -330,7 +331,7 @@ class SdCardFont {
   int fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCount, uint8_t styleMask);
   template <typename Iter>
   int buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, uint8_t styleMask,
-                             const char* extraText = nullptr);
+                             const char* extraText = nullptr, bool includeSmallCaps = false);
   int prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly, bool loadKernLig);
 
   // Global helpers

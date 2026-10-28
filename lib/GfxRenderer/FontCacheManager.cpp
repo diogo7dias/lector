@@ -105,8 +105,10 @@ void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::S
   const uint8_t group = fontSlot * 4 + resolvedStyle;
   const unsigned char* cursor = reinterpret_cast<const unsigned char*>(text);
   while (*cursor) {
-    const uint32_t codepoint = utf8NextCodepoint(&cursor);
+    uint32_t codepoint = utf8NextCodepoint(&cursor);
     if (codepoint == 0) break;
+    // Small caps draw lowercase letters with their uppercase glyphs.
+    if (style & EpdFontFamily::SMALL_CAPS) codepoint = utf8SmallCapsUpper(codepoint);
 
     const uint32_t packed = (static_cast<uint32_t>(fontSlot) << SCAN_FONT_SHIFT) |
                             (static_cast<uint32_t>(resolvedStyle) << SCAN_STYLE_SHIFT) | codepoint;

@@ -1,13 +1,9 @@
 #pragma once
 
-// Host-test stub for lib/hal/HalStorage.h, whose real implementation wraps
-// SdFat behind a FreeRTOS mutex and cannot compile on the host. This stub
-// implements the subset of HalFile / HalStorage that CssParser uses, backed
-// by stdio on the local filesystem.
-
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <utility>
 
 class HalFile {
  public:
@@ -19,42 +15,41 @@ class HalFile {
 
   bool open(const char* path, const char* mode) {
     close();
-    fp_ = std::fopen(path, mode);
-    return fp_ != nullptr;
+    file_ = std::fopen(path, mode);
+    return file_ != nullptr;
   }
 
   int available() const {
-    if (!fp_) return 0;
-    const long pos = std::ftell(fp_);
-    std::fseek(fp_, 0, SEEK_END);
-    const long end = std::ftell(fp_);
-    std::fseek(fp_, pos, SEEK_SET);
-    return static_cast<int>(end - pos);
+    if (!file_) return 0;
+    const long position = std::ftell(file_);
+    if (position < 0 || std::fseek(file_, 0, SEEK_END) != 0) return 0;
+    const long end = std::ftell(file_);
+    std::fseek(file_, position, SEEK_SET);
+    return end >= position ? static_cast<int>(end - position) : 0;
   }
 
-  int read(void* buf, size_t count) {
-    if (!fp_) return -1;
-    return static_cast<int>(std::fread(buf, 1, count, fp_));
+  int read(void* buffer, size_t count) {
+    if (!file_) return -1;
+    return static_cast<int>(std::fread(buffer, 1, count, file_));
   }
 
-  size_t write(const void* buf, size_t count) {
-    if (!fp_) return 0;
-    return std::fwrite(buf, 1, count, fp_);
-  }
+  size_t write(const void* buffer, size_t count) { return file_ ? std::fwrite(buffer, 1, count, file_) : 0; }
 
-  size_t write(uint8_t b) { return write(&b, 1); }
+  size_t write(uint8_t byte) { return write(&byte, 1); }
+
+  bool seekCur(size_t count) { return file_ && std::fseek(file_, static_cast<long>(count), SEEK_CUR) == 0; }
 
   bool close() {
-    if (!fp_) return false;
-    std::fclose(fp_);
-    fp_ = nullptr;
-    return true;
+    if (!file_) return false;
+    const bool ok = std::fclose(file_) == 0;
+    file_ = nullptr;
+    return ok;
   }
 
-  operator bool() const { return fp_ != nullptr; }
+  explicit operator bool() const { return file_ != nullptr; }
 
  private:
-  std::FILE* fp_ = nullptr;
+  std::FILE* file_ = nullptr;
 };
 
 class HalStorage {
@@ -64,19 +59,40 @@ class HalStorage {
     return instance;
   }
 
-  bool exists(const char* path) {
-    std::FILE* f = std::fopen(path, "rb");
-    if (!f) return false;
-    std::fclose(f);
+  bool exists(const char* path) const {
+    std::FILE* file = std::fopen(path, "rb");
+    if (!file) return false;
+    std::fclose(file);
     return true;
   }
 
   bool remove(const char* path) { return std::remove(path) == 0; }
+  bool rename(const char* from, const char* to) {
+    if (from == failedRenameFrom_ && to == failedRenameTo_) {
+      clearFailures();
+      return false;
+    }
+    return std::rename(from, to) == 0;
+  }
+
+  void failNextRename(std::string from, std::string to) {
+    failedRenameFrom_ = std::move(from);
+    failedRenameTo_ = std::move(to);
+  }
+
+  void clearFailures() {
+    failedRenameFrom_.clear();
+    failedRenameTo_.clear();
+  }
 
   bool openFileForRead(const char*, const char* path, HalFile& file) { return file.open(path, "rb"); }
   bool openFileForRead(const char*, const std::string& path, HalFile& file) { return file.open(path.c_str(), "rb"); }
   bool openFileForWrite(const char*, const char* path, HalFile& file) { return file.open(path, "wb"); }
   bool openFileForWrite(const char*, const std::string& path, HalFile& file) { return file.open(path.c_str(), "wb"); }
+
+ private:
+  std::string failedRenameFrom_;
+  std::string failedRenameTo_;
 };
 
 #define Storage HalStorage::getInstance()

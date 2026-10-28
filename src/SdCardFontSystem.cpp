@@ -3,6 +3,8 @@
 #include <GfxRenderer.h>
 #include <Logging.h>
 
+#include <algorithm>
+#include <cmath>
 #include <iterator>
 
 #include "CrossPointSettings.h"
@@ -64,6 +66,16 @@ void SdCardFontSystem::ensureFamilyResolved(const char* familyName) const {
 }
 
 void SdCardFontSystem::begin(GfxRenderer& renderer) {
+  renderer_ = &renderer;
+  cpfontVariants_.reserve(MAX_CPFONT_VARIANTS);
+  FontVariantProvider provider;
+  provider.ctx = this;
+  provider.resolve = [](void* ctx, const int fontId, const float scale) {
+    return static_cast<SdCardFontSystem*>(ctx)->resolveVariant(fontId, scale);
+  };
+  provider.load = [](void* ctx, const int fontId) { return static_cast<SdCardFontSystem*>(ctx)->loadVariant(fontId); };
+  renderer.setFontVariantProvider(provider);
+
   // Register this system as the SD font ID resolver in settings.
   // Uses a static trampoline since CrossPointSettings stores a plain function pointer.
   SETTINGS.sdFontIdResolver = [](void* ctx, const char* familyName, uint8_t pointSize) -> int {
@@ -128,7 +140,7 @@ void SdCardFontSystem::ensureLoadedImpl(GfxRenderer& renderer, const char* wante
 
   if (wantedFamily[0] == '\0') {
     if (!currentFamily.empty()) {
-      manager_.unloadAll(renderer);
+      unloadCpfonts(renderer);
     }
     // Back on a built-in family, which exists only at BUILTIN_READER_POINT_SIZES:
     // a size inherited from an SD family has to come back into that set. Only the
@@ -149,7 +161,7 @@ void SdCardFontSystem::ensureLoadedImpl(GfxRenderer& renderer, const char* wante
     const auto* family = registry_.findFamily(wantedFamily);
     if (!family) {
       LOG_DBG("SDFS", "SD font family disappeared: %s", wantedFamily);
-      manager_.unloadAll(renderer);
+      unloadCpfonts(renderer);
       if (ownsGlobalSelection) SETTINGS.clearSdFontFamily();
       return;
     }
@@ -168,7 +180,7 @@ void SdCardFontSystem::ensureLoadedImpl(GfxRenderer& renderer, const char* wante
   }
 
   if (!currentFamily.empty()) {
-    manager_.unloadAll(renderer);
+    unloadCpfonts(renderer);
   }
 
   const auto* family = registry_.findFamily(wantedFamily);
@@ -226,6 +238,100 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
       LOG_DBG("SDFS", "No %u pt SD glyphs for UI fallback in %s", ui.pointSize, familyName.c_str());
     }
   }
+}
+
+int SdCardFontSystem::variantFontId(const int readerFontId, const uint8_t pointSize) {
+  uint32_t hash = 2166136261u;
+  for (int shift = 0; shift < 32; shift += 8) {
+    hash ^= static_cast<uint8_t>(static_cast<uint32_t>(readerFontId) >> shift);
+    hash *= 16777619u;
+  }
+  hash ^= pointSize;
+  hash *= 16777619u;
+  hash ^= 0x56415200u;  // "VAR\0" salt keeps variants apart from reader and UI ids
+  const int id = static_cast<int>(hash);
+  return id != 0 ? id : 1;
+}
+
+void SdCardFontSystem::unloadCpfonts(GfxRenderer& renderer) {
+  cpfontVariants_.clear();  // the manager owns and frees the fonts themselves
+  manager_.unloadAll(renderer);
+}
+
+int SdCardFontSystem::resolveVariant(const int fontId, const float scale) {
+  if (const int builtin = builtinReaderFontVariant(fontId, scale); builtin != 0) {
+    return renderer_->getFontMap().count(builtin) ? builtin : 0;
+  }
+  const std::string& familyName = manager_.currentFamilyName();
+  if (familyName.empty() || fontId != manager_.getFontId(familyName)) return 0;
+  const auto* family = registry_.findFamily(familyName);
+  if (!family) return 0;
+
+  // Pick among the sizes installed for the family: shrinking takes the largest size at or
+  // below the target so small print never rounds back up to body size; growing takes the
+  // nearest.
+  const uint8_t base = manager_.currentPointSize();
+  const float target = base * scale;
+  uint8_t chosen = base;
+  if (scale < 1.0f) {
+    uint8_t atOrBelow = 0;
+    uint8_t smallest = base;
+    for (const auto& file : family->files) {
+      if (file.pointSize <= target && file.pointSize > atOrBelow) atOrBelow = file.pointSize;
+      smallest = std::min(smallest, file.pointSize);
+    }
+    chosen = atOrBelow != 0 ? atOrBelow : smallest;
+  } else {
+    for (const auto& file : family->files) {
+      if (std::fabs(file.pointSize - target) < std::fabs(chosen - target)) chosen = file.pointSize;
+    }
+  }
+  if (chosen == base) return fontId;
+  const int id = variantFontId(fontId, chosen);
+  return loadCpfontVariant(*family, chosen, id) ? id : 0;
+}
+
+bool SdCardFontSystem::loadVariant(const int fontId) {
+  const std::string& familyName = manager_.currentFamilyName();
+  if (familyName.empty()) return false;
+  const auto* family = registry_.findFamily(familyName);
+  if (!family) return false;
+  const int readerFontId = manager_.getFontId(familyName);
+  for (const auto& file : family->files) {
+    if (variantFontId(readerFontId, file.pointSize) == fontId) {
+      return loadCpfontVariant(*family, file.pointSize, fontId);
+    }
+  }
+  return false;
+}
+
+bool SdCardFontSystem::loadCpfontVariant(const SdCardFontFamilyInfo& family, const uint8_t pointSize,
+                                         const int fontId) {
+  for (auto& variant : cpfontVariants_) {
+    if (variant.fontId == fontId) {
+      variant.lastUse = ++variantClock_;
+      return true;
+    }
+  }
+  // Each size keeps its interval tables resident (small for Latin, tens of KB for broad
+  // CJK subsets), so skip it on a tight heap: the text then stays at the reader size.
+  static constexpr size_t MIN_VARIANT_FREE_BLOCK = 48 * 1024;
+  if (ESP.getMaxAllocHeap() < MIN_VARIANT_FREE_BLOCK) {
+    LOG_DBG("SDFS", "Skipping %upt variant: largest free block %u", pointSize,
+            static_cast<unsigned>(ESP.getMaxAllocHeap()));
+    return false;
+  }
+  if (cpfontVariants_.size() >= MAX_CPFONT_VARIANTS) {
+    const auto oldest = std::min_element(cpfontVariants_.begin(), cpfontVariants_.end(),
+                                         [](const auto& a, const auto& b) { return a.lastUse < b.lastUse; });
+    manager_.unloadFont(*renderer_, oldest->fontId);
+    cpfontVariants_.erase(oldest);
+  }
+  if (!manager_.loadFamilyVariant(family, *renderer_, pointSize, fontId)) return false;
+  cpfontVariants_.push_back({fontId, ++variantClock_});
+  LOG_DBG("SDFS", "Loaded %s %upt variant (heap free %u)", family.name.c_str(), pointSize,
+          static_cast<unsigned>(ESP.getFreeHeap()));
+  return true;
 }
 
 int SdCardFontSystem::resolveFontId(const char* familyName, uint8_t /*pointSize*/) const {

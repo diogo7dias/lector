@@ -112,6 +112,21 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 78
+
+Publisher styling (upstream #3891). Each TextBlock writes a signed 32-bit `fontId` after
+`letterSpacing`: the renderer font the line was laid out in, or 0 for the section font. Then
+a `hasWordFonts` byte; when set, three signed 32-bit font ids and one slot byte per word
+follow: 0 draws the word in the block's font, `n` in font `n - 1`; bit 0x80 marks CSS small
+caps (the stored text keeps its case). Mixed-size words share the tallest font's baseline.
+
+Pages gain two element types. `TAG_PageDropCap` (4) is an initial letter scaled up from a
+font glyph: position (`yPos` is the baseline of the last spanned line), font id, scale in
+1/256ths, style and up to 12 bytes of UTF-8. `TAG_PageBorderBox` (5) is a CSS border and/or
+shade around one page's slice of a block: position, size, width and style per edge (a side
+split off by a page break has width 0), and a shade flag. Tables plan their columns, and a
+paragraph's lone first or last line moves to the next page. The partial version is 204.
+
 ### Version 77
 
 Printed-page markers (`<span epub:type="pagebreak" id=…>` or `role="doc-pagebreak"`)
@@ -295,7 +310,9 @@ fn format_string(String s) {
 enum PageElementTag : u8 {
     TAG_PageLine = 1,
     TAG_PageImage = 2,
-    TAG_PageHorizontalRule = 3
+    TAG_PageHorizontalRule = 3,
+    TAG_PageDropCap = 4,
+    TAG_PageBorderBox = 5
 };
 
 enum WordStyle : u8 {
@@ -306,7 +323,8 @@ enum WordStyle : u8 {
     UNDERLINE = 4,
     STRIKETHROUGH = 8,
     SUP = 16,
-    SUB = 32
+    SUB = 32,
+    DISCRETIONARY_HYPHEN = 128  // trailing hyphen inserted by line breaking
 };
 
 enum TextAlign : u8 {
@@ -353,6 +371,11 @@ struct TextBlock {
     }
 
     BlockStyle blockStyle;
+    u8 hasWordFonts;
+    if (hasWordFonts != 0) {
+        s32 wordFonts[3];
+        u8 wordFontSlot[wordCount] [[comment("0 = block font, n = wordFonts[n - 1]; bit 0x80 = small caps")]];
+    }
 };
 
 struct ImageBlock {
@@ -380,6 +403,30 @@ struct PageHorizontalRule {
     u8 thickness;
 };
 
+struct PageDropCap {
+    s16 xPos;
+    s16 yPos;  // baseline of the last spanned line
+    s32 fontId;
+    u16 scale256;
+    WordStyle style;
+    u8 length;
+    char text[length];
+};
+
+struct BorderSide {
+    u8 width;
+    u8 style;  // 0 none, 1 solid, 2 double, 3 dotted, 4 dashed
+};
+
+struct PageBorderBox {
+    s16 xPos;
+    s16 yPos;
+    u16 width;
+    u16 height;
+    BorderSide sides[4];  // top, right, bottom, left
+    bool shaded;
+};
+
 struct PageElement {
     PageElementTag pageElementType;
     if (pageElementType == TAG_PageLine) {
@@ -388,6 +435,10 @@ struct PageElement {
         PageImage pageImage [[inline]];
     } else if (pageElementType == TAG_PageHorizontalRule) {
         PageHorizontalRule horizontalRule [[inline]];
+    } else if (pageElementType == TAG_PageDropCap) {
+        PageDropCap dropCap [[inline]];
+    } else if (pageElementType == TAG_PageBorderBox) {
+        PageBorderBox borderBox [[inline]];
     } else {
         std::error(std::format("Unknown page element type: {}", pageElementType));
     }
