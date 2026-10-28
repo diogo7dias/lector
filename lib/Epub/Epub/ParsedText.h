@@ -3,10 +3,12 @@
 #include <EpdFontFamily.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "ReaderRenderSpec.h"
@@ -43,6 +45,15 @@ class ParsedText {
   // 0 = none. An annotation rather than a token split, so the line breaker still
   // see whole words; TextBlock stores emphasis the same way, so extractLine passes it through.
   std::vector<uint8_t> wordFocusBoundary;
+  // Words sized by an inline font-size span: a slot per word into sizeSlotScales (absolute
+  // multiples of the reader's body size). Slot 0 follows the block's own size; the parser
+  // resolves each slot's font before layout. SMALL_CAPS_SLOT_FLAG marks small caps.
+  std::vector<uint8_t> wordSizeSlots;
+  static constexpr uint8_t MAX_SIZE_SLOTS = TextBlock::MAX_WORD_FONTS + 1;
+  float sizeSlotScales[MAX_SIZE_SLOTS] = {1.0f};
+  int32_t sizeSlotFontIds[MAX_SIZE_SLOTS] = {};
+  uint8_t sizeSlotCount = 1;
+  int wordFontId(size_t wordIndex, int blockFontId) const;
   // Zero-based visible Unicode-codepoint offsets in the spine body, stored as
   // uint16_t deltas from a shared base to keep this layout-only metadata small.
   // Pathological spans wider than uint16_t use sparse rebases; rendered
@@ -75,6 +86,9 @@ class ParsedText {
   // Set once a soft-flush pass (includeLastLine=false) has emitted lines, so later passes
   // over the same paragraph do not indent a mid-paragraph line as a first line.
   bool paragraphContinues = false;
+  // While a line is being handed to the line sink: how many lines of the paragraph follow
+  // it, or -1 when the rest of the paragraph is not laid out yet.
+  int linesAfterCurrent = -1;
   std::vector<std::string> reorderedWordsScratch;
   std::vector<EpdFontFamily::Style> reorderedStylesScratch;
   std::vector<uint16_t> reorderedWidthsScratch;
@@ -129,13 +143,19 @@ class ParsedText {
   ~ParsedText() = default;
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle, bool attachToPrevious = false,
-               uint32_t visibleTextOffset = 0);
+               uint32_t visibleTextOffset = 0, uint8_t sizeSlot = 0, bool noSpaceBefore = false);
   void setRubyForWordAt(size_t index, const std::string& ruby);
   void setRubyGroupAt(size_t startIndex, size_t count, const std::string& ruby);
+  // The word's renderer style: stored flags removed, small caps restored from its size slot.
   EpdFontFamily::Style getWordStyleAt(size_t index) const {
-    return index < wordStyles.size() ? wordStyles[index] : EpdFontFamily::REGULAR;
+    if (index >= wordStyles.size()) return EpdFontFamily::REGULAR;
+    const bool smallCaps = index < wordSizeSlots.size() && (wordSizeSlots[index] & TextBlock::SMALL_CAPS_SLOT_FLAG);
+    return static_cast<EpdFontFamily::Style>(wordStyles[index] | (smallCaps ? EpdFontFamily::SMALL_CAPS : 0));
   }
   std::string getRubyTextAt(size_t index) const { return index < rubyTexts.size() ? rubyTexts[index] : std::string(); }
+  // A drop cap takes the first line's indent; a fresh paragraph gets it back.
+  void suppressFirstLineIndent() { paragraphContinues = true; }
+  void resetFirstLineIndent() { paragraphContinues = false; }
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
@@ -147,6 +167,26 @@ class ParsedText {
   // A heading is a chapter title, not paragraph 1, so it must not consume a paragraph number.
   void setHeading(const bool heading) { isHeading = heading; }
   bool getIsHeading() const { return isHeading; }
+  int linesAfterCurrentLine() const { return linesAfterCurrent; }
+  // Slot for words at an absolute size; reuses a matching slot, or the nearest once all are taken.
+  uint8_t sizeSlotFor(float scale);
+  uint8_t sizeSlotsInUse() const { return sizeSlotCount; }
+  float sizeSlotScale(uint8_t slot) const { return sizeSlotScales[slot]; }
+  void setSizeSlotFontId(uint8_t slot, int32_t fontId) { sizeSlotFontIds[slot] = fontId; }
+  // maxLines stops after that many lines (drop-cap lines are laid out narrower first).
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth, LineSinkFn processLine,
-                             void* processLineCtx, bool includeLastLine = true);
+                             void* processLineCtx, bool includeLastLine = true, size_t maxLines = SIZE_MAX);
+  // Same, with any callable taking (std::unique_ptr<TextBlock>, uint32_t visibleOffset).
+  template <typename Sink,
+            typename = std::enable_if_t<std::is_invocable_v<Sink&, std::unique_ptr<TextBlock>, uint32_t>>>
+  void layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth, Sink&& sink,
+                             const bool includeLastLine = true, const size_t maxLines = SIZE_MAX) {
+    using SinkType = std::remove_reference_t<Sink>;
+    layoutAndExtractLines(
+        renderer, fontId, viewportWidth,
+        [](void* ctx, std::unique_ptr<TextBlock> line, const uint32_t offset) {
+          (*static_cast<SinkType*>(ctx))(std::move(line), offset);
+        },
+        const_cast<void*>(static_cast<const void*>(&sink)), includeLastLine, maxLines);
+  }
 };

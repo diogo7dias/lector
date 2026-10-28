@@ -1,5 +1,6 @@
 #include "CssParser.h"
 
+#include <AsciiText.h>
 #include <Logging.h>
 #include <Memory.h>
 
@@ -7,6 +8,7 @@
 #include <array>
 #include <cctype>
 #include <charconv>
+#include <cmath>
 #include <cstring>
 #include <string_view>
 
@@ -19,10 +21,10 @@ struct StackBuffer {
   char data[CAPACITY];
   size_t len = 0;
 
-  void push_back(char c) {
-    if (len < CAPACITY - 1) {
-      data[len++] = c;
-    }
+  bool push_back(char c) {
+    if (len >= CAPACITY) return false;
+    data[len++] = c;
+    return true;
   }
 
   void clear() { len = 0; }
@@ -37,34 +39,30 @@ struct StackBuffer {
 // Buffer size for reading CSS files
 constexpr size_t READ_BUFFER_SIZE = 512;
 
-// Maximum number of CSS rules to store in the selector index
-// Prevents unbounded memory growth from pathological CSS files.
-// At ~22 bytes per rule (8-byte index entry + pooled selector string) the
-// cap costs ~45KB; the old per-node map spent ~144 bytes per rule.
-constexpr size_t MAX_RULES = 2048;
-
-// Maximum total bytes of pooled selector text
-constexpr size_t STRING_POOL_CAP = 32 * 1024;
-
-// Maximum number of deduplicated style bodies. Per-chapter-converted books
-// re-declare the same few styles under fresh class names, so real books need
-// far fewer unique bodies than rules (issue #2591's book: 1255 rules, 83
-// bodies). SelectorEntry::styleIdx is u16, so this can be raised without a
-// cache format change.
+// Flat rule-store caps. The index is 12KB at MAX_RULES, selector text is
+// bounded to 32KB, and deduplicated style bodies are bounded to about 26KB.
+constexpr size_t MAX_RULES = 1500;
+constexpr size_t SELECTOR_POOL_CAP = 32 * 1024;
 constexpr size_t MAX_UNIQUE_STYLES = 256;
 
 // Maximum length for a single selector string
 // Prevents parsing of extremely long or malformed selectors
 constexpr size_t MAX_SELECTOR_LENGTH = 256;
 
-// Check if character is CSS whitespace
-constexpr bool isCssWhitespace(const char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'; }
+// Separates a stored key's subject compound from its ancestor part. It sorts
+// below every selector character, so all contextual rules for one subject are
+// contiguous directly after the subject's own entry.
+constexpr std::string_view CONTEXT_SEPARATOR{"\x1f", 1};
+constexpr std::string_view ID_MARKER = "#";
+constexpr std::string_view CLASS_MARKER = ".";
+constexpr std::string_view FIRST_LETTER_MARKER = "::first-letter";
+// A stored key is the (reordered) selector plus the context separator.
+constexpr size_t MAX_STORED_KEY_LENGTH = MAX_SELECTOR_LENGTH + 1;
 
-constexpr std::string_view trimCssWhitespace(std::string_view s) {
-  while (!s.empty() && isCssWhitespace(s.front())) s.remove_prefix(1);
-  while (!s.empty() && isCssWhitespace(s.back())) s.remove_suffix(1);
-  return s;
-}
+// Element classes considered per lookup; compound-class subsets use only the first few.
+constexpr size_t MAX_ELEMENT_CLASSES = 8;
+constexpr size_t MAX_COMPOUND_SUBSET_CLASSES = 4;
+constexpr size_t MAX_STYLE_MATCHES = 16;
 
 constexpr char asciiToLower(const char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c; }
 
@@ -73,6 +71,147 @@ constexpr char asciiToLower(const char c) { return (c >= 'A' && c <= 'Z') ? stat
 constexpr bool iequalsAscii(std::string_view value, std::string_view lowercaseKeyword) {
   return std::equal(value.begin(), value.end(), lowercaseKeyword.begin(), lowercaseKeyword.end(),
                     [](char a, char b) { return asciiToLower(a) == b; });
+}
+
+constexpr bool isIdentChar(const char c) {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
+         static_cast<unsigned char>(c) >= 0x80;
+}
+
+bool lessIgnoringAsciiCase(const std::string_view a, const std::string_view b) {
+  return std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end(), [](const char x, const char y) {
+    return static_cast<unsigned char>(asciiToLower(x)) < static_cast<unsigned char>(asciiToLower(y));
+  });
+}
+
+void sortIgnoringAsciiCase(std::string_view* items, const size_t count) {
+  std::sort(items, items + count, lessIgnoringAsciiCase);
+}
+
+// FNV-1a over lowercase ASCII. Never 0, so 0 can mean "absent".
+uint32_t hashIgnoringAsciiCase(const std::string_view s) {
+  uint32_t hash = 2166136261u;
+  for (const char c : s) {
+    hash ^= static_cast<unsigned char>(asciiToLower(c));
+    hash *= 16777619u;
+  }
+  return hash ? hash : 1;
+}
+
+// One compound selector: optional element (empty = any), optional #id, classes.
+struct CompoundSelector {
+  std::string_view tag;
+  std::string_view id;
+  std::string_view classes[CssAncestor::MAX_CLASSES];
+  uint8_t classCount = 0;
+
+  [[nodiscard]] bool empty() const { return tag.empty() && id.empty() && classCount == 0; }
+};
+
+// Parses "p", "*", ".a.b", "p#id.a". Rejects everything else.
+bool parseCompound(const std::string_view text, CompoundSelector& out) {
+  out = CompoundSelector{};
+  if (text.empty()) return false;
+  size_t i = 0;
+  if (text[0] == '*') {
+    i = 1;
+  } else {
+    while (i < text.size() && isIdentChar(text[i])) ++i;
+    out.tag = text.substr(0, i);
+  }
+  while (i < text.size()) {
+    const char marker = text[i++];
+    const size_t start = i;
+    while (i < text.size() && isIdentChar(text[i])) ++i;
+    const std::string_view name = text.substr(start, i - start);
+    if (name.empty()) return false;
+    if (marker == '#' && out.id.empty()) {
+      out.id = name;
+    } else if (marker == '.' && out.classCount < CssAncestor::MAX_CLASSES) {
+      out.classes[out.classCount++] = name;
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Splits the trailing compound off `text`, leaving what precedes it (including the combinator).
+std::string_view popTrailingCompound(std::string_view& text) {
+  size_t start = text.size();
+  while (start > 0 && !isAsciiWhitespace(text[start - 1]) && text[start - 1] != '>') --start;
+  const std::string_view compound = text.substr(start);
+  text = text.substr(0, start);
+  return compound;
+}
+
+// Strips a trailing combinator; returns true when it was a child combinator ('>').
+bool popTrailingCombinator(std::string_view& text) {
+  bool child = false;
+  while (!text.empty() && (isAsciiWhitespace(text.back()) || text.back() == '>')) {
+    child = child || text.back() == '>';
+    text.remove_suffix(1);
+  }
+  return child;
+}
+
+bool compoundMatches(const CompoundSelector& compound, const CssAncestor& ancestor) {
+  if (!compound.tag.empty() && hashIgnoringAsciiCase(compound.tag) != ancestor.tagHash) return false;
+  if (!compound.id.empty() && hashIgnoringAsciiCase(compound.id) != ancestor.idHash) return false;
+  for (uint8_t i = 0; i < compound.classCount; ++i) {
+    const uint32_t hash = hashIgnoringAsciiCase(compound.classes[i]);
+    const uint32_t* end = ancestor.classHashes + ancestor.classCount;
+    if (std::find(ancestor.classHashes, end, hash) == end) return false;
+  }
+  return true;
+}
+
+// Match a contiguous chain of child combinators at one ancestor position.
+// Leave context and candidates at the next descendant step on success.
+bool matchChildChain(std::string_view& context, const CssAncestor* ancestors, size_t& candidates) {
+  do {
+    CompoundSelector compound;
+    if (!parseCompound(popTrailingCompound(context), compound) || candidates == 0 ||
+        !compoundMatches(compound, ancestors[candidates - 1])) {
+      return false;
+    }
+    --candidates;
+  } while (popTrailingCombinator(context) && !context.empty());
+  return true;
+}
+
+// Match right to left, retrying a whole child chain at each descendant candidate.
+bool ancestorsMatch(std::string_view context, const CssAncestor* ancestors, size_t candidates) {
+  bool child = popTrailingCombinator(context);
+  while (!context.empty()) {
+    std::string_view remaining = context;
+    size_t remainingCandidates = candidates;
+    if (matchChildChain(remaining, ancestors, remainingCandidates)) {
+      context = remaining;
+      candidates = remainingCandidates;
+      child = false;
+    } else {
+      if (child || candidates == 0) return false;
+      --candidates;
+    }
+  }
+  return true;
+}
+
+// Specificity packed as ids << 16 | classes << 8 | elements.
+constexpr uint32_t packSpecificity(const uint32_t ids, const uint32_t classes, const uint32_t elements) {
+  return ids << 16 | classes << 8 | elements;
+}
+
+uint32_t contextSpecificity(std::string_view context) {
+  uint32_t specificity = 0;
+  while (true) {
+    popTrailingCombinator(context);
+    if (context.empty()) return specificity;
+    CompoundSelector compound;
+    if (!parseCompound(popTrailingCompound(context), compound)) return specificity;
+    specificity += packSpecificity(compound.id.empty() ? 0 : 1, compound.classCount, compound.tag.empty() ? 0 : 1);
+  }
 }
 
 // Walk s and invoke fn(token) for each non-empty run between delimiters.
@@ -84,7 +223,7 @@ void forEachDelimitedToken(std::string_view s, Pred isDelimiter, F&& fn) {
   size_t start = 0;
   for (size_t i = 0; i <= s.size(); ++i) {
     if (i == s.size() || isDelimiter(s[i])) {
-      const std::string_view trimmed = trimCssWhitespace(s.substr(start, i - start));
+      const std::string_view trimmed = trimAsciiWhitespace(s.substr(start, i - start));
       if (!trimmed.empty()) {
         fn(trimmed);
       }
@@ -92,21 +231,6 @@ void forEachDelimitedToken(std::string_view s, Pred isDelimiter, F&& fn) {
     }
   }
 }
-
-// FNV-1a per Fowler/Noll/Vo, sized to match size_t on the target. The firmware
-// runs on a 32-bit core where size_t is 32 bits, so naively using the 64-bit
-// constants would silently truncate FNV_PRIME to a non-prime and wreck hash
-// distribution. The selection below picks the canonical 32- or 64-bit
-// constants at compile time so the same source works in a 64-bit host
-// simulator. `fnv1aMix` is the per-byte mix step; callers apply any
-// byte-level transform (e.g. asciiToLower) first.
-static_assert(sizeof(size_t) == 4 || sizeof(size_t) == 8, "FNV constants are only defined for 32- or 64-bit size_t");
-constexpr size_t FNV_OFFSET_BASIS =
-    sizeof(size_t) == 8 ? static_cast<size_t>(14695981039346656037ULL) : static_cast<size_t>(2166136261U);
-constexpr size_t FNV_PRIME =
-    sizeof(size_t) == 8 ? static_cast<size_t>(1099511628211ULL) : static_cast<size_t>(16777619U);
-
-constexpr size_t fnv1aMix(size_t hash, unsigned char byte) { return (hash ^ byte) * FNV_PRIME; }
 
 // Parse the entirety of s as a number into `out`. Accepts an optional leading
 // '+' (which std::from_chars rejects by spec) so callers can pass CSS-style
@@ -127,16 +251,155 @@ bool tryParseNumber(std::string_view s, T& out) {
 // fallback rule using the returned count.
 size_t collectEdgeValueTokens(std::string_view s, std::string_view (&out)[4]) {
   size_t count = 0;
-  forEachDelimitedToken(s, isCssWhitespace, [&](std::string_view tok) {
+  forEachDelimitedToken(s, isAsciiWhitespace, [&](std::string_view tok) {
     if (count < 4) out[count++] = tok;
   });
   return count;
 }
 
+// True for the (page-)break-before/after values that force a new page.
+bool interpretForcedBreak(const std::string_view value) {
+  return iequalsAscii(value, "always") || iequalsAscii(value, "page") || iequalsAscii(value, "left") ||
+         iequalsAscii(value, "right") || iequalsAscii(value, "recto") || iequalsAscii(value, "verso");
+}
+
+// CSS pixels for a border width token (thin/medium/thick or a length); false if not a width.
+bool interpretBorderWidth(const std::string_view token, uint8_t& out) {
+  static constexpr std::string_view KEYWORDS[] = {"thin", "medium", "thick"};
+  for (uint8_t i = 0; i < std::size(KEYWORDS); ++i) {
+    if (iequalsAscii(token, KEYWORDS[i])) {
+      out = i + 1;
+      return true;
+    }
+  }
+  size_t unitStart = token.size();
+  for (size_t i = 0; i < token.size(); ++i) {
+    if (!std::isdigit(static_cast<unsigned char>(token[i])) && token[i] != '.') {
+      unitStart = i;
+      break;
+    }
+  }
+  float number = 0;
+  if (unitStart == 0 || !tryParseNumber(token.substr(0, unitStart), number)) return false;
+  const std::string_view unit = token.substr(unitStart);
+  if (iequalsAscii(unit, "pt")) {
+    number = number * 4.0f / 3.0f;
+  } else if (iequalsAscii(unit, "em") || iequalsAscii(unit, "rem")) {
+    number *= 16.0f;
+  } else if (!unit.empty() && !iequalsAscii(unit, "px")) {
+    return false;
+  }
+  // Hairlines stay visible; very thick borders are capped.
+  out = number <= 0 ? 0 : static_cast<uint8_t>(std::clamp(number + 0.5f, 1.0f, 16.0f));
+  return true;
+}
+
+bool interpretBorderStyle(const std::string_view token, CssBorderStyle& out) {
+  if (iequalsAscii(token, "none") || iequalsAscii(token, "hidden")) {
+    out = CssBorderStyle::None;
+  } else if (iequalsAscii(token, "solid") || iequalsAscii(token, "groove") || iequalsAscii(token, "ridge") ||
+             iequalsAscii(token, "inset") || iequalsAscii(token, "outset")) {
+    out = CssBorderStyle::Solid;
+  } else if (iequalsAscii(token, "double")) {
+    out = CssBorderStyle::Double;
+  } else if (iequalsAscii(token, "dotted")) {
+    out = CssBorderStyle::Dotted;
+  } else if (iequalsAscii(token, "dashed")) {
+    out = CssBorderStyle::Dashed;
+  } else {
+    return false;
+  }
+  return true;
+}
+
+// "1px solid #000" -> width and style; colors are ignored (borders draw black).
+CssBorderSide interpretBorderShorthand(const std::string_view value) {
+  CssBorderSide side;
+  bool hasWidth = false;
+  forEachDelimitedToken(value, isAsciiWhitespace, [&](const std::string_view token) {
+    uint8_t width = 0;
+    CssBorderStyle style = CssBorderStyle::None;
+    if (interpretBorderWidth(token, width)) {
+      side.width = width;
+      hasWidth = true;
+    } else if (interpretBorderStyle(token, style)) {
+      side.style = style;
+    }
+  });
+  if (!hasWidth) side.width = 2;  // medium
+  return side;
+}
+
+int hexNibble(const char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  const char lower = asciiToLower(c);
+  return lower >= 'a' && lower <= 'f' ? lower - 'a' + 10 : -1;
+}
+
+// Perceived brightness (0-255) of the first color in a background value, or -1.
+int colorLuminance(const std::string_view value) {
+  const auto luminance = [](const int r, const int g, const int b) { return (r * 299 + g * 587 + b * 114) / 1000; };
+  const size_t rgb = value.find("rgb");
+  if (rgb != std::string_view::npos) {
+    int channels[3] = {};
+    int count = 0;
+    int current = -1;
+    for (size_t i = value.find('(', rgb); i != std::string_view::npos && i < value.size() && count < 3; ++i) {
+      if (std::isdigit(static_cast<unsigned char>(value[i]))) {
+        current = (current < 0 ? 0 : current * 10) + (value[i] - '0');
+      } else if (current >= 0) {
+        channels[count++] = value[i] == '%' ? current * 255 / 100 : std::min(current, 255);
+        current = -1;
+      }
+    }
+    return count == 3 ? luminance(channels[0], channels[1], channels[2]) : -1;
+  }
+
+  int result = -1;
+  forEachDelimitedToken(value, isAsciiWhitespace, [&](const std::string_view token) {
+    if (result >= 0) return;
+    if (token.size() > 1 && token[0] == '#') {
+      const std::string_view hex = token.substr(1);
+      int c[3] = {-1, -1, -1};
+      if (hex.size() == 3 || hex.size() == 4) {
+        for (int i = 0; i < 3; ++i) c[i] = hexNibble(hex[i]) * 17;
+      } else if (hex.size() == 6 || hex.size() == 8) {
+        for (int i = 0; i < 3; ++i) c[i] = hexNibble(hex[2 * i]) * 16 + hexNibble(hex[2 * i + 1]);
+      }
+      if (c[0] >= 0 && c[1] >= 0 && c[2] >= 0) result = luminance(c[0], c[1], c[2]);
+      return;
+    }
+    struct Named {
+      std::string_view name;
+      int luminance;
+    };
+    static constexpr Named NAMED[] = {
+        {"white", 255},   {"whitesmoke", 245}, {"gainsboro", 220},   {"lightgray", 211}, {"lightgrey", 211},
+        {"silver", 192},  {"darkgray", 169},   {"darkgrey", 169},    {"gray", 128},      {"grey", 128},
+        {"dimgray", 105}, {"dimgrey", 105},    {"black", 0},         {"ivory", 254},     {"beige", 243},
+        {"linen", 244},   {"lavender", 235},   {"transparent", 255},
+    };
+    for (const Named& named : NAMED) {
+      if (iequalsAscii(token, named.name)) {
+        result = named.luminance;
+        return;
+      }
+    }
+  });
+  return result;
+}
+
+// Light backgrounds shade the box; white is invisible on paper, and dark ones
+// are skipped because the text inside would stay black.
+bool interpretShade(const std::string_view value) {
+  const int luminance = colorLuminance(value);
+  return luminance >= 128 && luminance < 240;
+}
+
 std::string_view stripTrailingImportant(std::string_view value) {
   constexpr std::string_view IMPORTANT = "!important";
 
-  while (!value.empty() && isCssWhitespace(value.back())) {
+  while (!value.empty() && isAsciiWhitespace(value.back())) {
     value.remove_suffix(1);
   }
 
@@ -150,49 +413,54 @@ std::string_view stripTrailingImportant(std::string_view value) {
   }
 
   value.remove_suffix(IMPORTANT.size());
-  while (!value.empty() && isCssWhitespace(value.back())) {
+  while (!value.empty() && isAsciiWhitespace(value.back())) {
     value.remove_suffix(1);
   }
   return value;
 }
 
-// Canonical fixed-size wire encoding of a CssStyle: 5 enum bytes, 11 CssLength
-// records (float value + unit byte), display, verticalAlign, listStyleType, then the
-// defined-property bits as u32. Shared by the style dedup comparison and the
-// cache format so "same style" and "same cache record" are one definition.
-// CssStyle itself has padding and a bitfield, so raw memcmp of the struct is
-// not a valid equality test — the wire bytes are. Multi-byte fields go through
-// memcpy (RISC-V faults on unaligned access; both targets are little-endian).
-constexpr size_t STYLE_WIRE_BYTES = 5 + 11 * (sizeof(float) + 1) + 3 + sizeof(uint32_t);
+constexpr std::array STYLE_LENGTH_FIELDS = {
+    &CssStyle::textIndent,   &CssStyle::marginTop,   &CssStyle::marginBottom,  &CssStyle::marginLeft,
+    &CssStyle::marginRight,  &CssStyle::paddingTop,  &CssStyle::paddingBottom, &CssStyle::paddingLeft,
+    &CssStyle::paddingRight, &CssStyle::imageHeight, &CssStyle::imageWidth,    &CssStyle::fontSize,
+};
+constexpr size_t STYLE_LENGTH_FIELD_COUNT = STYLE_LENGTH_FIELDS.size();
+constexpr size_t STYLE_WIRE_BYTES =
+    5 + STYLE_LENGTH_FIELD_COUNT * (sizeof(decltype(CssLength::value)) + 1) + 6 + 13 + sizeof(uint32_t);
+constexpr uint32_t CSS_DEFINED_BITS_MASK = (1u << 31) - 1;
+constexpr uint8_t MAX_INITIAL_LETTER = 6;
 
-void encodeStyleWire(const CssStyle& style, uint8_t out[STYLE_WIRE_BYTES]) {
-  size_t o = 0;
-  out[o++] = static_cast<uint8_t>(style.textAlign);
-  out[o++] = static_cast<uint8_t>(style.fontStyle);
-  out[o++] = static_cast<uint8_t>(style.fontWeight);
-  out[o++] = static_cast<uint8_t>(style.textDecoration);
-  out[o++] = static_cast<uint8_t>(style.direction);
+void encodeStyleWire(const CssStyle& style, uint8_t (&out)[STYLE_WIRE_BYTES]) {
+  size_t offset = 0;
+  out[offset++] = static_cast<uint8_t>(style.textAlign);
+  out[offset++] = static_cast<uint8_t>(style.fontStyle);
+  out[offset++] = static_cast<uint8_t>(style.fontWeight);
+  out[offset++] = static_cast<uint8_t>(style.textDecoration);
+  out[offset++] = static_cast<uint8_t>(style.direction);
 
-  auto putLength = [&](const CssLength& len) {
-    memcpy(out + o, &len.value, sizeof(len.value));
-    o += sizeof(len.value);
-    out[o++] = static_cast<uint8_t>(len.unit);
+  const auto putLength = [&out, &offset](const CssLength& length) {
+    memcpy(out + offset, &length.value, sizeof(length.value));
+    offset += sizeof(length.value);
+    out[offset++] = static_cast<uint8_t>(length.unit);
   };
-  putLength(style.textIndent);
-  putLength(style.marginTop);
-  putLength(style.marginBottom);
-  putLength(style.marginLeft);
-  putLength(style.marginRight);
-  putLength(style.paddingTop);
-  putLength(style.paddingBottom);
-  putLength(style.paddingLeft);
-  putLength(style.paddingRight);
-  putLength(style.imageHeight);
-  putLength(style.imageWidth);
-
-  out[o++] = static_cast<uint8_t>(style.display);
-  out[o++] = static_cast<uint8_t>(style.verticalAlign);
-  out[o++] = static_cast<uint8_t>(style.listStyleType);
+  for (const auto field : STYLE_LENGTH_FIELDS) {
+    putLength(style.*field);
+  }
+  out[offset++] = static_cast<uint8_t>(style.display);
+  out[offset++] = static_cast<uint8_t>(style.verticalAlign);
+  out[offset++] = static_cast<uint8_t>(style.listStyleType);
+  out[offset++] = style.smallCaps ? 1 : 0;
+  out[offset++] = style.pageBreakBefore ? 1 : 0;
+  out[offset++] = style.pageBreakAfter ? 1 : 0;
+  for (const CssBorderSide* side : {&style.borderTop, &style.borderRight, &style.borderBottom, &style.borderLeft}) {
+    out[offset++] = side->width;
+    out[offset++] = static_cast<uint8_t>(side->style);
+  }
+  out[offset++] = style.borderWidthsDefined | (style.borderStylesDefined << 4);
+  out[offset++] = style.shaded ? 1 : 0;
+  out[offset++] = style.floatLeft ? 1 : 0;
+  out[offset++] = style.initialLetter;
+  out[offset++] = style.preserveWhitespace ? 1 : 0;
 
   uint32_t definedBits = 0;
   if (style.defined.textAlign) definedBits |= 1 << 0;
@@ -214,40 +482,95 @@ void encodeStyleWire(const CssStyle& style, uint8_t out[STYLE_WIRE_BYTES]) {
   if (style.defined.direction) definedBits |= 1 << 16;
   if (style.defined.verticalAlign) definedBits |= 1 << 17;
   if (style.defined.listStyleType) definedBits |= 1 << 18;
-  memcpy(out + o, &definedBits, sizeof(definedBits));
+  if (style.defined.fontSize) definedBits |= 1 << 19;
+  if (style.defined.smallCaps) definedBits |= 1 << 20;
+  if (style.defined.pageBreakBefore) definedBits |= 1 << 21;
+  if (style.defined.pageBreakAfter) definedBits |= 1 << 22;
+  if (style.defined.borderTop) definedBits |= 1 << 23;
+  if (style.defined.borderRight) definedBits |= 1 << 24;
+  if (style.defined.borderBottom) definedBits |= 1 << 25;
+  if (style.defined.borderLeft) definedBits |= 1 << 26;
+  if (style.defined.shaded) definedBits |= 1 << 27;
+  if (style.defined.floatLeft) definedBits |= 1 << 28;
+  if (style.defined.initialLetter) definedBits |= 1 << 29;
+  if (style.defined.whiteSpace) definedBits |= 1u << 30;
+  memcpy(out + offset, &definedBits, sizeof(definedBits));
 }
 
-void decodeStyleWire(const uint8_t in[STYLE_WIRE_BYTES], CssStyle& style) {
-  size_t o = 0;
-  style.textAlign = static_cast<CssTextAlign>(in[o++]);
-  style.fontStyle = static_cast<CssFontStyle>(in[o++]);
-  style.fontWeight = static_cast<CssFontWeight>(in[o++]);
-  style.textDecoration = static_cast<CssTextDecoration>(in[o++] & CSS_TEXT_DECORATION_MASK);
-  style.direction = static_cast<CssTextDirection>(in[o++]);
+bool decodeStyleWire(const uint8_t (&in)[STYLE_WIRE_BYTES], CssStyle& style) {
+  size_t offset = 0;
+  const uint8_t textAlign = in[offset++];
+  const uint8_t fontStyle = in[offset++];
+  const uint8_t fontWeight = in[offset++];
+  const uint8_t textDecoration = in[offset++];
+  const uint8_t direction = in[offset++];
+  if (textAlign > static_cast<uint8_t>(CssTextAlign::None) || fontStyle > static_cast<uint8_t>(CssFontStyle::Italic) ||
+      fontWeight > static_cast<uint8_t>(CssFontWeight::Bold) || (textDecoration & ~CSS_TEXT_DECORATION_MASK) != 0 ||
+      direction > static_cast<uint8_t>(CssTextDirection::Rtl)) {
+    return false;
+  }
+  style.textAlign = static_cast<CssTextAlign>(textAlign);
+  style.fontStyle = static_cast<CssFontStyle>(fontStyle);
+  style.fontWeight = static_cast<CssFontWeight>(fontWeight);
+  style.textDecoration = static_cast<CssTextDecoration>(textDecoration);
+  style.direction = static_cast<CssTextDirection>(direction);
 
-  auto getLength = [&](CssLength& len) {
-    memcpy(&len.value, in + o, sizeof(len.value));
-    o += sizeof(len.value);
-    len.unit = static_cast<CssUnit>(in[o++]);
+  const auto getLength = [&in, &offset](CssLength& length) {
+    decltype(CssLength::value) value = 0;
+    memcpy(&value, in + offset, sizeof(value));
+    offset += sizeof(length.value);
+    const uint8_t unit = in[offset++];
+    if (!std::isfinite(value) || unit > static_cast<uint8_t>(CssUnit::Percent)) return false;
+    length.value = value;
+    length.unit = static_cast<CssUnit>(unit);
+    return true;
   };
-  getLength(style.textIndent);
-  getLength(style.marginTop);
-  getLength(style.marginBottom);
-  getLength(style.marginLeft);
-  getLength(style.marginRight);
-  getLength(style.paddingTop);
-  getLength(style.paddingBottom);
-  getLength(style.paddingLeft);
-  getLength(style.paddingRight);
-  getLength(style.imageHeight);
-  getLength(style.imageWidth);
+  for (const auto field : STYLE_LENGTH_FIELDS) {
+    if (!getLength(style.*field)) return false;
+  }
 
-  style.display = static_cast<CssDisplay>(in[o++]);
-  style.verticalAlign = static_cast<CssVerticalAlign>(in[o++]);
-  style.listStyleType = static_cast<CssListStyleType>(in[o++]);
+  const uint8_t display = in[offset++];
+  const uint8_t verticalAlign = in[offset++];
+  const uint8_t listStyleType = in[offset++];
+  if (display > static_cast<uint8_t>(CssDisplay::None) || verticalAlign > static_cast<uint8_t>(CssVerticalAlign::Sub) ||
+      listStyleType > static_cast<uint8_t>(CssListStyleType::None)) {
+    return false;
+  }
+  style.display = static_cast<CssDisplay>(display);
+  style.verticalAlign = static_cast<CssVerticalAlign>(verticalAlign);
+  style.listStyleType = static_cast<CssListStyleType>(listStyleType);
+
+  const uint8_t smallCaps = in[offset++];
+  const uint8_t pageBreakBefore = in[offset++];
+  const uint8_t pageBreakAfter = in[offset++];
+  if (smallCaps > 1 || pageBreakBefore > 1 || pageBreakAfter > 1) return false;
+  style.smallCaps = smallCaps != 0;
+  style.pageBreakBefore = pageBreakBefore != 0;
+  style.pageBreakAfter = pageBreakAfter != 0;
+
+  for (CssBorderSide* side : {&style.borderTop, &style.borderRight, &style.borderBottom, &style.borderLeft}) {
+    side->width = in[offset++];
+    const uint8_t borderStyle = in[offset++];
+    if (borderStyle > static_cast<uint8_t>(CssBorderStyle::Dashed)) return false;
+    side->style = static_cast<CssBorderStyle>(borderStyle);
+  }
+  const uint8_t borderComponents = in[offset++];
+  style.borderWidthsDefined = borderComponents & 0x0f;
+  style.borderStylesDefined = borderComponents >> 4;
+  const uint8_t shaded = in[offset++];
+  const uint8_t floatLeft = in[offset++];
+  const uint8_t initialLetter = in[offset++];
+  if (shaded > 1 || floatLeft > 1 || initialLetter > MAX_INITIAL_LETTER) return false;
+  style.shaded = shaded != 0;
+  style.floatLeft = floatLeft != 0;
+  style.initialLetter = initialLetter;
+  const uint8_t preserveWhitespace = in[offset++];
+  if (preserveWhitespace > 1) return false;
+  style.preserveWhitespace = preserveWhitespace != 0;
 
   uint32_t definedBits = 0;
-  memcpy(&definedBits, in + o, sizeof(definedBits));
+  memcpy(&definedBits, in + offset, sizeof(definedBits));
+  if ((definedBits & ~CSS_DEFINED_BITS_MASK) != 0) return false;
   style.defined.textAlign = (definedBits & 1 << 0) != 0;
   style.defined.fontStyle = (definedBits & 1 << 1) != 0;
   style.defined.fontWeight = (definedBits & 1 << 2) != 0;
@@ -267,163 +590,202 @@ void decodeStyleWire(const uint8_t in[STYLE_WIRE_BYTES], CssStyle& style) {
   style.defined.direction = (definedBits & 1 << 16) != 0;
   style.defined.verticalAlign = (definedBits & 1 << 17) != 0;
   style.defined.listStyleType = (definedBits & 1 << 18) != 0;
-}
-
-uint32_t hashStyleWire(const uint8_t (&wire)[STYLE_WIRE_BYTES]) {
-  size_t h = FNV_OFFSET_BASIS;
-  for (const uint8_t b : wire) h = fnv1aMix(h, b);
-  return static_cast<uint32_t>(h);
+  style.defined.fontSize = (definedBits & 1 << 19) != 0;
+  style.defined.smallCaps = (definedBits & 1 << 20) != 0;
+  style.defined.pageBreakBefore = (definedBits & 1 << 21) != 0;
+  style.defined.pageBreakAfter = (definedBits & 1 << 22) != 0;
+  style.defined.borderTop = (definedBits & 1 << 23) != 0;
+  style.defined.borderRight = (definedBits & 1 << 24) != 0;
+  style.defined.borderBottom = (definedBits & 1 << 25) != 0;
+  style.defined.borderLeft = (definedBits & 1 << 26) != 0;
+  style.defined.shaded = (definedBits & 1 << 27) != 0;
+  style.defined.floatLeft = (definedBits & 1 << 28) != 0;
+  style.defined.initialLetter = (definedBits & 1 << 29) != 0;
+  style.defined.whiteSpace = (definedBits & 1u << 30) != 0;
+  return true;
 }
 
 }  // anonymous namespace
 
-// Sorted-index primitives. Stored selectors are case-folded at insert, so a
-// stored-vs-probe comparison folds only the probe side, and stored-vs-stored
-// order (used by the cache sortedness check) is plain unsigned byte order.
-
-int CssParser::compareEntryToPieces(const SelectorEntry& entry, const std::string_view p0, const std::string_view p1,
-                                    const std::string_view p2) const {
-  // Compares the stored folded selector against the case-folded virtual
-  // concatenation p0+p1+p2 without materializing it. Returns <0/0/>0.
+int CssParser::compareEntryToPieces(const SelectorEntry& entry, const KeyPieces& key, const bool prefixOnly) const {
   const char* stored = selectorPool_.get() + entry.offset;
-  const size_t storedLen = entry.length;
-  const std::string_view pieces[3] = {p0, p1, p2};
-  size_t i = 0;
-  for (const std::string_view piece : pieces) {
-    for (const char c : piece) {
-      if (i == storedLen) return -1;  // stored is a proper prefix of the probe
-      const auto a = static_cast<unsigned char>(stored[i]);
-      const auto b = static_cast<unsigned char>(asciiToLower(c));
-      if (a != b) return a < b ? -1 : 1;
-      ++i;
+  size_t index = 0;
+  for (uint8_t p = 0; p < key.count; ++p) {
+    for (const char c : key.piece[p]) {
+      if (index == entry.length) return -1;
+      const auto storedByte = static_cast<unsigned char>(stored[index]);
+      const auto probeByte = static_cast<unsigned char>(asciiToLower(c));
+      if (storedByte != probeByte) return storedByte < probeByte ? -1 : 1;
+      ++index;
     }
   }
-  return i == storedLen ? 0 : 1;  // probe is a proper prefix of stored
+  return prefixOnly || index == entry.length ? 0 : 1;
 }
 
-size_t CssParser::lowerBound(const std::string_view p0, const std::string_view p1, const std::string_view p2,
-                             bool& exact) const {
-  size_t lo = 0;
-  size_t hi = entryCount_;
-  while (lo < hi) {
-    const size_t mid = lo + (hi - lo) / 2;
-    if (compareEntryToPieces(entries_[mid], p0, p1, p2) < 0) {
-      lo = mid + 1;
+size_t CssParser::lowerBound(const KeyPieces& key, bool& exact) const {
+  size_t low = 0;
+  size_t high = entryCount_;
+  while (low < high) {
+    const size_t middle = low + (high - low) / 2;
+    if (compareEntryToPieces(entries_[middle], key) < 0) {
+      low = middle + 1;
     } else {
-      hi = mid;
+      high = middle;
     }
   }
-  exact = lo < entryCount_ && compareEntryToPieces(entries_[lo], p0, p1, p2) == 0;
-  return lo;
+  exact = low < entryCount_ && compareEntryToPieces(entries_[low], key) == 0;
+  return low;
 }
 
-const CssStyle* CssParser::findStyle(const std::string_view p0, const std::string_view p1,
-                                     const std::string_view p2) const {
-  bool exact = false;
-  const size_t pos = lowerBound(p0, p1, p2, exact);
-  return exact ? &stylePool_[entries_[pos].styleIdx] : nullptr;
+std::string_view CssParser::selectorAt(const size_t index) const {
+  const SelectorEntry& entry = entries_[index];
+  return {selectorPool_.get() + entry.offset, entry.length};
 }
 
-// Pool builders. Growth is geometric via nothrow allocation; on OOM or cap the
-// caller skips the rule (styles degrade, firmware never aborts).
+CssParser::PoolResult CssParser::ensureEntryCapacity(const size_t needed) {
+  if (needed <= entryCapacity_) return PoolResult::Ready;
+  if (needed > MAX_RULES) return PoolResult::Limit;
 
-bool CssParser::ensureEntryCapacity(const size_t needed) {
-  if (needed <= entryCapacity_) return true;
-  size_t newCap = entryCapacity_ ? entryCapacity_ * 2u : 256u;
-  while (newCap < needed) newCap *= 2;
-  if (newCap > MAX_RULES) newCap = MAX_RULES;
-  if (needed > newCap) return false;
-  auto grown = makeUniqueNoThrow<SelectorEntry[]>(newCap);
+  size_t capacity = entryCapacity_ ? entryCapacity_ * 2u : 32u;
+  while (capacity < needed) capacity *= 2u;
+  capacity = std::min(capacity, MAX_RULES);
+  auto grown = makeUniqueNoThrow<SelectorEntry[]>(capacity);
   if (!grown) {
-    LOG_ERR("CSS", "OOM: selector index (%zu entries)", newCap);
-    partial_ = true;
-    return false;
+    LOG_ERR("CSS", "OOM: selector index (%zu entries)", capacity);
+    return PoolResult::OutOfMemory;
   }
   if (entryCount_ > 0) memcpy(grown.get(), entries_.get(), entryCount_ * sizeof(SelectorEntry));
   entries_ = std::move(grown);
-  entryCapacity_ = static_cast<uint16_t>(newCap);
-  return true;
+  entryCapacity_ = static_cast<uint16_t>(capacity);
+  return PoolResult::Ready;
 }
 
-bool CssParser::ensurePoolCapacity(const size_t needed) {
-  if (needed <= poolCapacity_) return true;
-  if (needed > STRING_POOL_CAP) {
-    LOG_DBG("CSS", "Selector pool full (%zu > %zu), skipping", needed, STRING_POOL_CAP);
-    return false;
-  }
-  size_t newCap = poolCapacity_ ? poolCapacity_ * 2u : 4096u;
-  while (newCap < needed) newCap *= 2;
-  if (newCap > STRING_POOL_CAP) newCap = STRING_POOL_CAP;
-  auto grown = makeUniqueNoThrow<char[]>(newCap);
+CssParser::PoolResult CssParser::ensureSelectorPoolCapacity(const size_t needed) {
+  if (needed <= selectorPoolCapacity_) return PoolResult::Ready;
+  if (needed > SELECTOR_POOL_CAP) return PoolResult::Limit;
+
+  size_t capacity = selectorPoolCapacity_ ? selectorPoolCapacity_ * 2u : 512u;
+  while (capacity < needed) capacity *= 2u;
+  capacity = std::min(capacity, SELECTOR_POOL_CAP);
+  auto grown = makeUniqueNoThrow<char[]>(capacity);
   if (!grown) {
-    LOG_ERR("CSS", "OOM: selector pool (%zu bytes)", newCap);
-    partial_ = true;
-    return false;
+    LOG_ERR("CSS", "OOM: selector pool (%zu bytes)", capacity);
+    return PoolResult::OutOfMemory;
   }
-  if (poolSize_ > 0) memcpy(grown.get(), selectorPool_.get(), poolSize_);
+  if (selectorPoolSize_ > 0) memcpy(grown.get(), selectorPool_.get(), selectorPoolSize_);
   selectorPool_ = std::move(grown);
-  poolCapacity_ = static_cast<uint32_t>(newCap);
-  return true;
+  selectorPoolCapacity_ = static_cast<uint32_t>(capacity);
+  return PoolResult::Ready;
 }
 
-bool CssParser::ensureStyleCapacity(const size_t needed) {
-  if (needed <= styleCapacity_) return true;
-  if (needed > MAX_UNIQUE_STYLES) {
-    LOG_DBG("CSS", "Unique style limit reached (%zu), skipping", MAX_UNIQUE_STYLES);
-    return false;
-  }
-  size_t newCap = styleCapacity_ ? styleCapacity_ * 2u : 32u;
-  while (newCap < needed) newCap *= 2;
-  if (newCap > MAX_UNIQUE_STYLES) newCap = MAX_UNIQUE_STYLES;
-  auto grownStyles = makeUniqueNoThrow<CssStyle[]>(newCap);
-  auto grownHashes = makeUniqueNoThrow<uint32_t[]>(newCap);
-  if (!grownStyles || !grownHashes) {
-    LOG_ERR("CSS", "OOM: style pool (%zu styles)", newCap);
-    partial_ = true;
-    return false;
+CssParser::PoolResult CssParser::ensureStyleCapacity(const size_t needed) {
+  if (needed <= styleCapacity_) return PoolResult::Ready;
+  if (needed > MAX_UNIQUE_STYLES) return PoolResult::Limit;
+
+  size_t capacity = styleCapacity_ ? styleCapacity_ * 2u : 16u;
+  while (capacity < needed) capacity *= 2u;
+  capacity = std::min(capacity, MAX_UNIQUE_STYLES);
+  auto grownStyles = makeUniqueNoThrow<CssStyle[]>(capacity);
+  if (!grownStyles) {
+    LOG_ERR("CSS", "OOM: style pool (%zu styles)", capacity);
+    return PoolResult::OutOfMemory;
   }
   for (size_t i = 0; i < styleCount_; ++i) grownStyles[i] = stylePool_[i];
-  if (styleCount_ > 0) memcpy(grownHashes.get(), styleHashes_.get(), styleCount_ * sizeof(uint32_t));
   stylePool_ = std::move(grownStyles);
-  styleHashes_ = std::move(grownHashes);
-  styleCapacity_ = static_cast<uint16_t>(newCap);
-  return true;
+  styleCapacity_ = static_cast<uint16_t>(capacity);
+  return PoolResult::Ready;
 }
 
-bool CssParser::internStyle(const CssStyle& style, uint16_t& idxOut) {
+CssParser::PoolResult CssParser::internStyle(const CssStyle& style, uint16_t& indexOut) {
   uint8_t wire[STYLE_WIRE_BYTES];
   encodeStyleWire(style, wire);
-  const uint32_t hash = hashStyleWire(wire);
   for (uint16_t i = 0; i < styleCount_; ++i) {
-    if (styleHashes_[i] != hash) continue;
-    uint8_t existing[STYLE_WIRE_BYTES];
-    encodeStyleWire(stylePool_[i], existing);
-    if (memcmp(existing, wire, STYLE_WIRE_BYTES) == 0) {
-      idxOut = i;
-      return true;
+    uint8_t existingWire[STYLE_WIRE_BYTES];
+    encodeStyleWire(stylePool_[i], existingWire);
+    if (memcmp(existingWire, wire, STYLE_WIRE_BYTES) == 0) {
+      indexOut = i;
+      return PoolResult::Ready;
     }
   }
-  if (!ensureStyleCapacity(static_cast<size_t>(styleCount_) + 1)) return false;
+
+  const PoolResult capacityResult = ensureStyleCapacity(static_cast<size_t>(styleCount_) + 1);
+  if (capacityResult != PoolResult::Ready) return capacityResult;
   stylePool_[styleCount_] = style;
-  styleHashes_[styleCount_] = hash;
-  idxOut = styleCount_;
-  ++styleCount_;
-  return true;
+  indexOut = styleCount_++;
+  return PoolResult::Ready;
 }
 
-bool CssParser::appendSelector(const std::string_view sel, uint32_t& offsetOut) {
-  if (!ensurePoolCapacity(static_cast<size_t>(poolSize_) + sel.size())) return false;
-  offsetOut = poolSize_;
-  char* dst = selectorPool_.get() + poolSize_;
-  for (const char c : sel) *dst++ = asciiToLower(c);
-  poolSize_ += static_cast<uint32_t>(sel.size());
-  return true;
+void CssParser::noteRuleShape(const std::string_view storedKey) {
+  const size_t separator = storedKey.find(CONTEXT_SEPARATOR);
+  hasContextualRules_ = hasContextualRules_ || separator != std::string_view::npos;
+  const std::string_view subject = storedKey.substr(0, separator);
+  hasIdRules_ = hasIdRules_ || subject.find('#') != std::string_view::npos;
+  hasCompoundRules_ = hasCompoundRules_ || std::count(subject.begin(), subject.end(), '.') >= 2;
+  hasFirstLetterRules_ = hasFirstLetterRules_ || subject.find(':') != std::string_view::npos;
+}
+
+CssParser::RuleInsertResult CssParser::insertOrMerge(const KeyPieces& key, const CssStyle& style) {
+  bool exact = false;
+  const size_t position = lowerBound(key, exact);
+  // Only adjacent rules can merge without moving older declarations past other selectors.
+  if (exact && entries_[position].offset + entries_[position].length == selectorPoolSize_) {
+    const uint16_t currentStyleIndex = entries_[position].styleIndex;
+    CssStyle merged = stylePool_[currentStyleIndex];
+    merged.applyOver(style);
+
+    bool styleIsShared = false;
+    for (uint16_t i = 0; i < entryCount_; ++i) {
+      if (i != position && entries_[i].styleIndex == currentStyleIndex) {
+        styleIsShared = true;
+        break;
+      }
+    }
+    if (!styleIsShared) {
+      stylePool_[currentStyleIndex] = merged;
+      return RuleInsertResult::Merged;
+    }
+
+    uint16_t styleIndex = 0;
+    const PoolResult result = internStyle(merged, styleIndex);
+    if (result == PoolResult::Limit) return RuleInsertResult::Limit;
+    if (result == PoolResult::OutOfMemory) return RuleInsertResult::OutOfMemory;
+    entries_[position].styleIndex = styleIndex;
+    return RuleInsertResult::Merged;
+  }
+
+  const PoolResult entryResult = ensureEntryCapacity(static_cast<size_t>(entryCount_) + 1);
+  if (entryResult == PoolResult::Limit) return RuleInsertResult::Limit;
+  if (entryResult == PoolResult::OutOfMemory) return RuleInsertResult::OutOfMemory;
+
+  const size_t requiredSelectorBytes = static_cast<size_t>(selectorPoolSize_) + key.length;
+  const PoolResult selectorResult = ensureSelectorPoolCapacity(requiredSelectorBytes);
+  if (selectorResult == PoolResult::Limit) return RuleInsertResult::Limit;
+  if (selectorResult == PoolResult::OutOfMemory) return RuleInsertResult::OutOfMemory;
+
+  uint16_t styleIndex = 0;
+  const PoolResult styleResult = internStyle(style, styleIndex);
+  if (styleResult == PoolResult::Limit) return RuleInsertResult::Limit;
+  if (styleResult == PoolResult::OutOfMemory) return RuleInsertResult::OutOfMemory;
+
+  const uint32_t selectorOffset = selectorPoolSize_;
+  char* destination = selectorPool_.get() + selectorOffset;
+  for (uint8_t p = 0; p < key.count; ++p) {
+    for (const char c : key.piece[p]) *destination++ = asciiToLower(c);
+  }
+  selectorPoolSize_ = static_cast<uint32_t>(requiredSelectorBytes);
+
+  SelectorEntry* entries = entries_.get();
+  memmove(entries + position + 1, entries + position, (entryCount_ - position) * sizeof(SelectorEntry));
+  entries[position] = {selectorOffset, styleIndex, static_cast<uint16_t>(key.length)};
+  ++entryCount_;
+  noteRuleShape(selectorAt(position));
+  return RuleInsertResult::Inserted;
 }
 
 // Property value interpreters
 
 CssTextAlign CssParser::interpretAlignment(std::string_view val) {
-  val = trimCssWhitespace(val);
+  val = trimAsciiWhitespace(val);
 
   if (iequalsAscii(val, "left") || iequalsAscii(val, "start")) return CssTextAlign::Left;
   if (iequalsAscii(val, "right") || iequalsAscii(val, "end")) return CssTextAlign::Right;
@@ -434,14 +796,14 @@ CssTextAlign CssParser::interpretAlignment(std::string_view val) {
 }
 
 CssFontStyle CssParser::interpretFontStyle(std::string_view val) {
-  val = trimCssWhitespace(val);
+  val = trimAsciiWhitespace(val);
 
   if (iequalsAscii(val, "italic") || iequalsAscii(val, "oblique")) return CssFontStyle::Italic;
   return CssFontStyle::Normal;
 }
 
 CssFontWeight CssParser::interpretFontWeight(std::string_view val) {
-  val = trimCssWhitespace(val);
+  val = trimAsciiWhitespace(val);
 
   // Named values
   if (iequalsAscii(val, "bold") || iequalsAscii(val, "bolder")) return CssFontWeight::Bold;
@@ -462,7 +824,7 @@ CssTextDecoration CssParser::interpretDecoration(std::string_view val) {
   // so malformed values like "notunderline" do not accidentally enable a line.
   CssTextDecoration result = CssTextDecoration::None;
   bool explicitNone = false;
-  forEachDelimitedToken(val, isCssWhitespace, [&](const std::string_view token) {
+  forEachDelimitedToken(val, isAsciiWhitespace, [&](const std::string_view token) {
     if (iequalsAscii(token, "none")) {
       explicitNone = true;
     } else if (iequalsAscii(token, "underline")) {
@@ -481,7 +843,7 @@ CssLength CssParser::interpretLength(std::string_view val) {
 }
 
 bool CssParser::tryInterpretLength(std::string_view val, CssLength& out) {
-  val = trimCssWhitespace(val);
+  val = trimAsciiWhitespace(val);
   if (val.empty()) {
     out = CssLength{};
     return false;
@@ -518,22 +880,78 @@ bool CssParser::tryInterpretLength(std::string_view val, CssLength& out) {
   return true;
 }
 
+bool CssParser::tryInterpretFontSize(std::string_view val, CssLength& out) {
+  val = trimAsciiWhitespace(val);
+
+  struct Keyword {
+    std::string_view name;
+    float scale;
+    CssUnit unit;
+  };
+  static constexpr Keyword KEYWORDS[] = {
+      {"xx-small", 0.6f, CssUnit::Rem}, {"x-small", 0.75f, CssUnit::Rem},  {"small", 0.89f, CssUnit::Rem},
+      {"medium", 1.0f, CssUnit::Rem},   {"large", 1.2f, CssUnit::Rem},     {"x-large", 1.5f, CssUnit::Rem},
+      {"xx-large", 2.0f, CssUnit::Rem}, {"xxx-large", 3.0f, CssUnit::Rem}, {"smaller", 0.83f, CssUnit::Em},
+      {"larger", 1.2f, CssUnit::Em},
+  };
+  for (const Keyword& keyword : KEYWORDS) {
+    if (iequalsAscii(val, keyword.name)) {
+      out = CssLength{keyword.scale, keyword.unit};
+      return true;
+    }
+  }
+
+  size_t unitStart = val.size();
+  for (size_t i = 0; i < val.size(); ++i) {
+    if (!std::isdigit(static_cast<unsigned char>(val[i])) && val[i] != '.' && val[i] != '+' && val[i] != '-') {
+      unitStart = i;
+      break;
+    }
+  }
+  float number = 0;
+  if (!tryParseNumber(val.substr(0, unitStart), number) || !(number > 0)) return false;
+
+  // Absolute sizes resolve against the CSS default body size: 16px = 12pt = 1rem.
+  const std::string_view unit = val.substr(unitStart);
+  if (unit.empty() || iequalsAscii(unit, "px")) {
+    out = CssLength{number / 16.0f, CssUnit::Rem};
+  } else if (iequalsAscii(unit, "pt")) {
+    out = CssLength{number / 12.0f, CssUnit::Rem};
+  } else if (iequalsAscii(unit, "rem")) {
+    out = CssLength{number, CssUnit::Rem};
+  } else if (iequalsAscii(unit, "em")) {
+    out = CssLength{number, CssUnit::Em};
+  } else if (unit == "%") {
+    out = CssLength{number / 100.0f, CssUnit::Em};
+  } else if (iequalsAscii(unit, "ex") || iequalsAscii(unit, "ch")) {
+    out = CssLength{number / 2.0f, CssUnit::Em};
+  } else {
+    return false;
+  }
+  return true;
+}
+
 // Declaration parsing
 
 void CssParser::parseDeclarationIntoStyle(std::string_view decl, CssStyle& style) {
   const size_t colonPos = decl.find(':');
   if (colonPos == std::string_view::npos || colonPos == 0) return;
 
-  const std::string_view name = trimCssWhitespace(decl.substr(0, colonPos));
-  std::string_view value = trimCssWhitespace(decl.substr(colonPos + 1));
+  const std::string_view name = trimAsciiWhitespace(decl.substr(0, colonPos));
+  std::string_view value = trimAsciiWhitespace(decl.substr(colonPos + 1));
 
   if (name.empty() || value.empty()) return;
 
-  // !important carries no cascade weight here, and every interpreter below
-  // compares the whole value, so a "2em !important" would be dropped outright.
   value = stripTrailingImportant(value);
 
-  if (iequalsAscii(name, "text-align")) {
+  if (iequalsAscii(name, "white-space")) {
+    const bool preserve =
+        iequalsAscii(value, "pre-wrap") || iequalsAscii(value, "pre") || iequalsAscii(value, "break-spaces");
+    if (preserve || iequalsAscii(value, "normal")) {
+      style.preserveWhitespace = preserve;
+      style.defined.whiteSpace = 1;
+    }
+  } else if (iequalsAscii(name, "text-align")) {
     style.textAlign = interpretAlignment(value);
     style.defined.textAlign = 1;
   } else if (iequalsAscii(name, "font-style")) {
@@ -624,9 +1042,102 @@ void CssParser::parseDeclarationIntoStyle(std::string_view decl, CssStyle& style
       style.verticalAlign = CssVerticalAlign::Sub;
       style.defined.verticalAlign = 1;
     }
+  } else if (iequalsAscii(name, "font-size")) {
+    CssLength size;
+    if (tryInterpretFontSize(value, size)) {
+      style.fontSize = size;
+      style.defined.fontSize = 1;
+    }
+  } else if (iequalsAscii(name, "font-variant") || iequalsAscii(name, "font-variant-caps")) {
+    bool smallCaps = false;
+    forEachDelimitedToken(value, isAsciiWhitespace, [&](const std::string_view token) {
+      smallCaps = smallCaps || iequalsAscii(token, "small-caps") || iequalsAscii(token, "all-small-caps");
+    });
+    style.smallCaps = smallCaps;
+    style.defined.smallCaps = 1;
+  } else if (iequalsAscii(name, "page-break-before") || iequalsAscii(name, "break-before")) {
+    style.pageBreakBefore = interpretForcedBreak(value);
+    style.defined.pageBreakBefore = 1;
+  } else if (iequalsAscii(name, "page-break-after") || iequalsAscii(name, "break-after")) {
+    style.pageBreakAfter = interpretForcedBreak(value);
+    style.defined.pageBreakAfter = 1;
+  } else if (name.size() >= 6 && iequalsAscii(name.substr(0, 6), "border")) {
+    parseBorderDeclaration(name, value, style);
+  } else if (iequalsAscii(name, "background-color") || iequalsAscii(name, "background")) {
+    style.shaded = interpretShade(value);
+    style.defined.shaded = 1;
+  } else if (iequalsAscii(name, "float")) {
+    style.floatLeft = iequalsAscii(value, "left");
+    style.defined.floatLeft = 1;
+  } else if (iequalsAscii(name, "initial-letter")) {
+    uint32_t lines = 0;
+    forEachDelimitedToken(value, isAsciiWhitespace, [&](const std::string_view token) {
+      float number = 0;
+      if (lines == 0 && tryParseNumber(token, number) && number >= 1) lines = static_cast<uint32_t>(number + 0.5f);
+    });
+    style.initialLetter = static_cast<uint8_t>(std::min<uint32_t>(lines, MAX_INITIAL_LETTER));
+    style.defined.initialLetter = 1;
   } else if (iequalsAscii(name, "list-style-type")) {
-    style.listStyleType = iequalsAscii(value, "none") ? CssListStyleType::None : CssListStyleType::Disc;
+    const std::string_view listStyleValue = stripTrailingImportant(value);
+    style.listStyleType = iequalsAscii(listStyleValue, "none") ? CssListStyleType::None : CssListStyleType::Disc;
     style.defined.listStyleType = 1;
+  }
+}
+
+void CssParser::parseBorderDeclaration(const std::string_view name, const std::string_view value, CssStyle& style) {
+  CssBorderSide* sides[4] = {&style.borderTop, &style.borderRight, &style.borderBottom, &style.borderLeft};
+  const auto markDefined = [&style](const size_t side, const bool width, const bool borderStyle) {
+    if (width) style.borderWidthsDefined |= 1u << side;
+    if (borderStyle) style.borderStylesDefined |= 1u << side;
+    if (side == 0) style.defined.borderTop = 1;
+    if (side == 1) style.defined.borderRight = 1;
+    if (side == 2) style.defined.borderBottom = 1;
+    if (side == 3) style.defined.borderLeft = 1;
+  };
+  static constexpr std::string_view SIDE_NAMES[] = {"top", "right", "bottom", "left"};
+
+  if (iequalsAscii(name, "border")) {
+    const CssBorderSide side = interpretBorderShorthand(value);
+    for (size_t i = 0; i < 4; ++i) {
+      *sides[i] = side;
+      markDefined(i, true, true);
+    }
+    return;
+  }
+
+  // border-width / border-style take 1-4 edge values (top, right, bottom, left).
+  const bool edgeWidths = iequalsAscii(name, "border-width");
+  if (edgeWidths || iequalsAscii(name, "border-style")) {
+    std::string_view tokens[4];
+    const size_t count = collectEdgeValueTokens(value, tokens);
+    if (count == 0) return;
+    const size_t source[4] = {0, count >= 2 ? 1u : 0u, count >= 3 ? 2u : 0u, count >= 4 ? 3u : (count >= 2 ? 1u : 0u)};
+    for (size_t i = 0; i < 4; ++i) {
+      const std::string_view token = tokens[source[i]];
+      if (edgeWidths ? interpretBorderWidth(token, sides[i]->width) : interpretBorderStyle(token, sides[i]->style)) {
+        markDefined(i, edgeWidths, !edgeWidths);
+      }
+    }
+    return;
+  }
+
+  // border-<side>, border-<side>-width, border-<side>-style
+  if (name.size() <= 7 || name[6] != '-') return;
+  const std::string_view prefix = name.substr(7);  // after "border-"
+  for (size_t i = 0; i < 4; ++i) {
+    if (prefix.size() < SIDE_NAMES[i].size() || !iequalsAscii(prefix.substr(0, SIDE_NAMES[i].size()), SIDE_NAMES[i])) {
+      continue;
+    }
+    const std::string_view suffix = prefix.substr(SIDE_NAMES[i].size());
+    if (suffix.empty()) {
+      *sides[i] = interpretBorderShorthand(value);
+      markDefined(i, true, true);
+    } else if (iequalsAscii(suffix, "-width")) {
+      if (interpretBorderWidth(trimAsciiWhitespace(value), sides[i]->width)) markDefined(i, true, false);
+    } else if (iequalsAscii(suffix, "-style")) {
+      if (interpretBorderStyle(trimAsciiWhitespace(value), sides[i]->style)) markDefined(i, false, true);
+    }
+    return;
   }
 }
 
@@ -654,98 +1165,93 @@ void CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const 
     return;
   }
 
-  // Check if we've reached the rule limit before processing
-  if (entryCount_ >= MAX_RULES) {
-    LOG_DBG("CSS", "Reached max rules limit (%zu), stopping CSS parsing", MAX_RULES);
-    return;
-  }
-
-  // Walk comma-separated selectors in place — no vector allocation. Selectors
-  // with unsupported syntax (combinators, attributes, pseudo, etc.) are skipped
-  // silently.
-  bool limitReached = false;
+  // Walk comma-separated selectors in place. The bounded store reports every
+  // capacity or allocation failure without crossing a throwing STL boundary.
   forEachDelimitedToken(
       selectorGroup, [](char c) { return c == ','; },
       [&](std::string_view sel) {
-        if (limitReached) return;
-
         if (sel.size() > MAX_SELECTOR_LENGTH) {
           LOG_DBG("CSS", "Selector too long (%zu > %zu), skipping", sel.size(), MAX_SELECTOR_LENGTH);
           return;
         }
 
-        // TODO: Support richer CSS selector syntax in the future. For now we only
-        // handle `tag`, `.class`, or `tag.class`. Reject anything containing a
-        // character that introduces unsupported syntax:
-        //   '+'  adjacent sibling combinator
-        //   '>'  child combinator
-        //   '['  attribute selector
-        //   ':'  pseudo class/element
-        //   '#'  ID selector
-        //   '~'  general sibling combinator
-        //   '*'  wildcard
-        //   ' '  descendant combinator
-        // Single-pass scan via find_first_of instead of eight sequential find() calls.
-        constexpr std::string_view kUnsupportedSelectorChars = "+>[:#~* ";
+        // ::first-letter (or legacy :first-letter) rules are stored under their own key.
+        bool firstLetter = false;
+        for (const std::string_view suffix : {FIRST_LETTER_MARKER, FIRST_LETTER_MARKER.substr(1)}) {
+          if (!firstLetter && sel.size() > suffix.size() &&
+              iequalsAscii(sel.substr(sel.size() - suffix.size()), suffix)) {
+            sel.remove_suffix(suffix.size());
+            firstLetter = true;
+          }
+        }
+
+        // Sibling combinators, attribute selectors and other pseudo-classes/elements are unsupported.
+        constexpr std::string_view kUnsupportedSelectorChars = "+~[:";
         if (sel.find_first_of(kUnsupportedSelectorChars) != std::string_view::npos) return;
 
-        // Selectors are stored case-folded, so two selectors that differ only
-        // in ASCII case land on the same entry and merge.
-        bool exact = false;
-        const size_t pos = lowerBound(sel, {}, {}, exact);
-        if (exact) {
-          // Duplicate selector: later declarations win property-by-property.
-          // On intern failure keep the pre-merge style — degrade, never corrupt.
-          SelectorEntry& entry = entries_[pos];
-          CssStyle merged = stylePool_[entry.styleIdx];
-          merged.applyOver(style);
-          uint16_t mergedIdx = 0;
-          if (internStyle(merged, mergedIdx)) entry.styleIdx = mergedIdx;
-          return;
+        std::string_view context = sel;
+        CompoundSelector subject;
+        if (!parseCompound(popTrailingCompound(context), subject) || subject.empty()) return;
+        bool hasAncestor = false;
+        for (std::string_view rest = context;;) {
+          popTrailingCombinator(rest);
+          if (rest.empty()) break;
+          CompoundSelector ancestor;
+          if (!parseCompound(popTrailingCompound(rest), ancestor)) return;
+          hasAncestor = true;
+        }
+        if (!context.empty() && !hasAncestor) return;
+
+        // Canonical subject: element, #id, then classes in sorted order, which is
+        // the order resolveStyle enumerates them in.
+        sortIgnoringAsciiCase(subject.classes, subject.classCount);
+        KeyPieces key;
+        key.add(subject.tag);
+        if (!subject.id.empty()) {
+          key.add(ID_MARKER);
+          key.add(subject.id);
+        }
+        for (uint8_t i = 0; i < subject.classCount; ++i) {
+          key.add(CLASS_MARKER);
+          key.add(subject.classes[i]);
+        }
+        if (firstLetter) key.add(FIRST_LETTER_MARKER);
+        if (hasAncestor) {
+          key.add(CONTEXT_SEPARATOR);
+          key.add(context);
         }
 
-        // Skip if this would exceed the rule limit
-        if (entryCount_ >= MAX_RULES) {
-          LOG_DBG("CSS", "Reached max rules limit, stopping selector processing");
-          limitReached = true;
-          return;
+        if (ruleGrowthStopped_) {
+          // Continue the cascade for stored selectors without retrying failed
+          // allocations for new rules.
+          bool exact = false;
+          const size_t matchingIndex = lowerBound(key, exact);
+          if (!exact || matchingIndex >= entryCount_) return;
         }
-
-        // Ordered so a failure partway leaves at worst an orphaned pooled
-        // style, never a dangling index entry.
-        if (!ensureEntryCapacity(static_cast<size_t>(entryCount_) + 1)) return;
-        uint16_t styleIdx = 0;
-        if (!internStyle(style, styleIdx)) return;
-        uint32_t offset = 0;
-        if (!appendSelector(sel, offset)) return;
-
-        SelectorEntry* base = entries_.get();
-        memmove(base + pos + 1, base + pos, (entryCount_ - pos) * sizeof(SelectorEntry));
-        base[pos] = SelectorEntry{offset, styleIdx, static_cast<uint16_t>(sel.size())};
-        ++entryCount_;
+        const RuleInsertResult result = insertOrMerge(key, style);
+        if (result == RuleInsertResult::Limit) {
+          LOG_ERR("CSS", "CSS rule store limit reached at %u rules", entryCount_);
+          ruleGrowthStopped_ = true;
+        } else if (result == RuleInsertResult::OutOfMemory) {
+          LOG_ERR("CSS", "OOM while growing CSS rule store at %u rules", entryCount_);
+          ruleGrowthStopped_ = true;
+        }
       });
 }
 
 // Main parsing entry point
 
-bool CssParser::loadFromStream(HalFile& source) {
+CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
   if (!source) {
     LOG_ERR("CSS", "Cannot read from invalid file");
-    return false;
+    return ParseResult::Error;
   }
 
   size_t totalRead = 0;
 
-  // Fixed-capacity buffers, so no reallocation while parsing. 2 KB together: on the
-  // heap, since the parse can run on the 8 KB render task.
-  const auto selectorBuf = makeUniqueNoThrow<StackBuffer>();
-  const auto declBuf = makeUniqueNoThrow<StackBuffer>();
-  if (!selectorBuf || !declBuf) {
-    LOG_ERR("CSS", "OOM: parse buffers");
-    return false;
-  }
-  StackBuffer& selector = *selectorBuf;
-  StackBuffer& declBuffer = *declBuf;
+  // Use stack-allocated buffers for parsing to avoid heap reallocations
+  StackBuffer selector;
+  StackBuffer declBuffer;
 
   bool inComment = false;
   bool maybeSlash = false;
@@ -756,6 +1262,9 @@ bool CssParser::loadFromStream(HalFile& source) {
 
   int bodyDepth = 0;
   bool skippingRule = false;
+  bool selectorTruncated = false;
+  bool declarationTruncated = false;
+  bool inputTruncated = false;
   CssStyle currentStyle;
 
   auto handleChar = [&](const char c) {
@@ -772,7 +1281,7 @@ bool CssParser::loadFromStream(HalFile& source) {
     }
 
     if (bodyDepth == 0) {
-      if (selector.empty() && isCssWhitespace(c)) {
+      if (selector.empty() && isAsciiWhitespace(c)) {
         return;
       }
       if (c == '@' && selector.empty()) {
@@ -784,12 +1293,13 @@ bool CssParser::loadFromStream(HalFile& source) {
         bodyDepth = 1;
         currentStyle = CssStyle{};
         declBuffer.clear();
-        if (selector.size() > MAX_SELECTOR_LENGTH * 4) {
-          skippingRule = true;
-        }
+        skippingRule = selectorTruncated || selector.size() > MAX_SELECTOR_LENGTH * 4;
         return;
       }
-      selector.push_back(c);
+      if (!selector.push_back(c)) {
+        selectorTruncated = true;
+        inputTruncated = true;
+      }
       return;
     }
 
@@ -801,7 +1311,7 @@ bool CssParser::loadFromStream(HalFile& source) {
     if (c == '}') {
       --bodyDepth;
       if (bodyDepth == 0) {
-        if (!skippingRule && !declBuffer.empty()) {
+        if (!skippingRule && !declarationTruncated && !declBuffer.empty()) {
           parseDeclarationIntoStyle(declBuffer, currentStyle);
         }
         if (!skippingRule) {
@@ -810,6 +1320,8 @@ bool CssParser::loadFromStream(HalFile& source) {
         selector.clear();
         declBuffer.clear();
         skippingRule = false;
+        selectorTruncated = false;
+        declarationTruncated = false;
         return;
       }
       return;
@@ -819,12 +1331,16 @@ bool CssParser::loadFromStream(HalFile& source) {
     }
     if (!skippingRule) {
       if (c == ';') {
-        if (!declBuffer.empty()) {
+        if (!declarationTruncated && !declBuffer.empty()) {
           parseDeclarationIntoStyle(declBuffer, currentStyle);
-          declBuffer.clear();
         }
+        declBuffer.clear();
+        declarationTruncated = false;
       } else {
-        declBuffer.push_back(c);
+        if (!declBuffer.push_back(c)) {
+          declarationTruncated = true;
+          inputTruncated = true;
+        }
       }
     }
   };
@@ -874,41 +1390,145 @@ bool CssParser::loadFromStream(HalFile& source) {
     handleChar('/');
   }
 
+  if (inputTruncated) {
+    LOG_ERR("CSS", "CSS input exceeded parser buffer; cache will remain partial");
+  }
+  const bool incompleteInput = bodyDepth > 0 || inAtRule || inComment || !selector.empty();
   LOG_DBG("CSS", "Parsed %zu rules from %zu bytes", ruleCount(), totalRead);
-  return true;
+  return ruleGrowthStopped_ || inputTruncated || incompleteInput ? ParseResult::Partial : ParseResult::Complete;
 }
 
 // Style resolution
 
-CssStyle CssParser::resolveStyle(std::string_view tagName, std::string_view classAttr) const {
+CssAncestor CssParser::makeAncestor(const std::string_view tagName, const std::string_view classAttr,
+                                    const std::string_view idAttr) {
+  CssAncestor ancestor;
+  ancestor.tagHash = hashIgnoringAsciiCase(tagName);
+  ancestor.idHash = idAttr.empty() ? 0 : hashIgnoringAsciiCase(idAttr);
+  forEachDelimitedToken(classAttr, isAsciiWhitespace, [&](const std::string_view cls) {
+    if (ancestor.classCount < CssAncestor::MAX_CLASSES) {
+      ancestor.classHashes[ancestor.classCount++] = hashIgnoringAsciiCase(cls);
+    }
+  });
+  return ancestor;
+}
+
+CssStyle CssParser::resolveStyle(const std::string_view tagName, const std::string_view classAttr,
+                                 const std::string_view idAttr, const CssAncestor* ancestors,
+                                 const size_t ancestorCount, const bool firstLetter) const {
+  // Lookup borrows the stored rules and merges scalar fields without allocating.
   CssStyle result;
-  if (entryCount_ == 0) return result;
+  if (entryCount_ == 0 || (firstLetter && !hasFirstLetterRules_)) return result;
 
-  // 1. Apply element-level style (lowest priority). Lookups fold case, so the
-  // raw tagName view can be used as the probe.
-  if (const CssStyle* style = findStyle(tagName)) {
-    result.applyOver(*style);
-  }
-
-  if (classAttr.empty()) return result;
-
-  // TODO: Support combinations of classes (e.g. style on .class1.class2)
-  // 2. Apply class styles (medium priority). The probe pieces are compared as
-  // if concatenated, so we never materialize ".classname".
-  forEachDelimitedToken(classAttr, isCssWhitespace, [&](std::string_view cls) {
-    if (const CssStyle* style = findStyle(".", cls)) {
-      result.applyOver(*style);
-    }
+  std::string_view classes[MAX_ELEMENT_CLASSES];
+  size_t classCount = 0;
+  forEachDelimitedToken(classAttr, isAsciiWhitespace, [&](const std::string_view cls) {
+    if (classCount < MAX_ELEMENT_CLASSES) classes[classCount++] = cls;
   });
+  sortIgnoringAsciiCase(classes, classCount);
+  classCount = static_cast<size_t>(std::unique(classes, classes + classCount,
+                                               [](const std::string_view a, const std::string_view b) {
+                                                 return !lessIgnoringAsciiCase(a, b) && !lessIgnoringAsciiCase(b, a);
+                                               }) -
+                                   classes);
 
-  // TODO: Support combinations of classes (e.g. style on p.class1.class2)
-  // 3. Apply element.class styles (higher priority).
-  forEachDelimitedToken(classAttr, isCssWhitespace, [&](std::string_view cls) {
-    if (const CssStyle* style = findStyle(tagName, ".", cls)) {
-      result.applyOver(*style);
+  struct Match {
+    uint32_t specificity;
+    uint16_t entryIndex;
+  };
+  Match matches[MAX_STYLE_MATCHES];
+  size_t matchCount = 0;
+  Match lastApplied{};
+  bool hasLastApplied = false;
+  // Selector text is appended in source order, including across stylesheets.
+  const auto precedes = [this](const Match& a, const Match& b) {
+    return a.specificity < b.specificity ||
+           (a.specificity == b.specificity && entries_[a.entryIndex].offset < entries_[b.entryIndex].offset);
+  };
+  const auto addMatch = [&](const uint32_t specificity, const uint16_t entryIndex) {
+    const Match match{specificity, entryIndex};
+    if (hasLastApplied && !precedes(lastApplied, match)) return;
+    size_t position = 0;
+    while (position < matchCount && precedes(matches[position], match)) ++position;
+    if (position == MAX_STYLE_MATCHES) return;
+    if (matchCount < MAX_STYLE_MATCHES) ++matchCount;
+    for (size_t i = matchCount - 1; i > position; --i) matches[i] = matches[i - 1];
+    matches[position] = match;
+  };
+
+  KeyPieces key;
+  const auto lookup = [&](const uint32_t specificity) {
+    bool exact = false;
+    const size_t position = lowerBound(key, exact);
+    for (size_t i = position; i < entryCount_ && compareEntryToPieces(entries_[i], key) == 0; ++i) {
+      addMatch(specificity, static_cast<uint16_t>(i));
     }
-  });
+    if (!hasContextualRules_ || ancestorCount == 0 || !key.add(CONTEXT_SEPARATOR)) return;
+    for (size_t i = lowerBound(key, exact); i < entryCount_ && compareEntryToPieces(entries_[i], key, true) == 0; ++i) {
+      const std::string_view context = selectorAt(i).substr(key.length);
+      if (ancestorsMatch(context, ancestors, ancestorCount)) {
+        addMatch(specificity + contextSpecificity(context), static_cast<uint16_t>(i));
+      }
+    }
+    key.count--;
+    key.length -= CONTEXT_SEPARATOR.size();
+  };
 
+  const size_t subsetClassCount = std::min(classCount, MAX_COMPOUND_SUBSET_CLASSES);
+  const bool useIdRules = hasIdRules_ && !idAttr.empty();
+  // Process additional matches in bounded batches instead of dropping repeated rules.
+  do {
+    matchCount = 0;
+    for (uint32_t withId = 0; withId <= (useIdRules ? 1u : 0u); ++withId) {
+      for (uint32_t withTag = 0; withTag <= 1; ++withTag) {
+        key = KeyPieces{};
+        if (withTag) key.add(tagName);
+        if (withId) {
+          key.add(ID_MARKER);
+          key.add(idAttr);
+        }
+        const KeyPieces base = key;
+        const auto addPseudo = [&] {
+          if (firstLetter) key.add(FIRST_LETTER_MARKER);
+        };
+        if (withTag || withId) {
+          addPseudo();
+          lookup(packSpecificity(withId, 0, withTag));
+        }
+
+        for (size_t i = 0; i < classCount; ++i) {
+          key = base;
+          key.add(CLASS_MARKER);
+          key.add(classes[i]);
+          addPseudo();
+          lookup(packSpecificity(withId, 1, withTag));
+        }
+
+        if (!hasCompoundRules_) continue;
+        for (uint32_t mask = 1; mask < (1u << subsetClassCount); ++mask) {
+          const auto bits = static_cast<uint32_t>(__builtin_popcount(mask));
+          if (bits < 2) continue;
+          key = base;
+          for (size_t i = 0; i < subsetClassCount; ++i) {
+            if (mask & (1u << i)) {
+              key.add(CLASS_MARKER);
+              key.add(classes[i]);
+            }
+          }
+          addPseudo();
+          lookup(packSpecificity(withId, bits, withTag));
+        }
+      }
+    }
+
+    for (size_t i = 0; i < matchCount; ++i) {
+      result.applyOver(stylePool_[entries_[matches[i].entryIndex].styleIndex]);
+    }
+    if (matchCount > 0) {
+      lastApplied = matches[matchCount - 1];
+      hasLastApplied = true;
+    }
+  } while (matchCount == MAX_STYLE_MATCHES);
   return result;
 }
 
@@ -920,78 +1540,195 @@ CssStyle CssParser::parseInlineStyle(std::string_view styleValue) { return parse
 
 // Cache file name (version is CssParser::CSS_CACHE_VERSION)
 constexpr char rulesCache[] = "/css_rules.cache";
-constexpr uint8_t CACHE_FLAG_PARTIAL = 0x01;
+constexpr char rulesCacheTmp[] = "/css_rules.cache.tmp";
+constexpr char rulesCacheBackup[] = "/css_rules.cache.bak";
+constexpr uint8_t CSS_CACHE_FLAG_PARTIAL = 1 << 0;
+constexpr uint8_t CSS_CACHE_KNOWN_FLAGS = CSS_CACHE_FLAG_PARTIAL;
 
 bool CssParser::hasCache() const { return Storage.exists((cachePath + rulesCache).c_str()); }
 
-void CssParser::deleteCache() const {
-  if (hasCache()) Storage.remove((cachePath + rulesCache).c_str());
-}
-
-// Cache format v10:
-//   u8  version
-//   u8  flags (bit0 = partial: built under OOM, rebuild when heap allows)
-//   u16 entryCount E, u16 styleCount S, u32 stringPoolBytes P
-//   E*8  SelectorEntry records (persisted sorted — load never sorts)
-//   S*66 style wire records (encodeStyleWire layout)
-//   P    case-folded selector chars, no separators
-// File size must equal 10 + 8E + 66S + P exactly.
-
-bool CssParser::saveToCache() const {
+bool CssParser::restoreCacheBackupIfNeeded() const {
   if (cachePath.empty()) {
     return false;
   }
 
-  HalFile file;
-  if (!Storage.openFileForWrite("CSS", cachePath + rulesCache, file)) {
+  const std::string finalPath = cachePath + rulesCache;
+  if (Storage.exists(finalPath.c_str())) {
+    return true;
+  }
+
+  const std::string backupPath = cachePath + rulesCacheBackup;
+  if (!Storage.exists(backupPath.c_str())) {
     return false;
   }
 
-  // Header fields are memcpy'd into place: both targets are little-endian and
-  // RISC-V faults on unaligned stores through cast pointers.
-  uint8_t header[10];
-  header[0] = CssParser::CSS_CACHE_VERSION;
-  header[1] = partial_ ? CACHE_FLAG_PARTIAL : 0;
-  memcpy(header + 2, &entryCount_, sizeof(entryCount_));
-  memcpy(header + 4, &styleCount_, sizeof(styleCount_));
-  memcpy(header + 6, &poolSize_, sizeof(poolSize_));
-  bool ok = file.write(header, sizeof(header)) == sizeof(header);
-
-  if (ok && entryCount_ > 0) {
-    const size_t bytes = entryCount_ * sizeof(SelectorEntry);
-    ok = file.write(entries_.get(), bytes) == bytes;
-  }
-
-  for (uint16_t i = 0; ok && i < styleCount_; ++i) {
-    uint8_t wire[STYLE_WIRE_BYTES];
-    encodeStyleWire(stylePool_[i], wire);
-    ok = file.write(wire, STYLE_WIRE_BYTES) == STYLE_WIRE_BYTES;
-  }
-
-  if (ok && poolSize_ > 0) {
-    ok = file.write(selectorPool_.get(), poolSize_) == poolSize_;
-  }
-
-  if (!ok) {
-    // A full card: leave no truncated cache behind to be tried at the next open.
-    LOG_ERR("CSS", "Short write saving the CSS cache");
-    file.close();
-    Storage.remove((cachePath + rulesCache).c_str());
+  if (!Storage.rename(backupPath.c_str(), finalPath.c_str())) {
+    LOG_ERR("CSS", "Failed to restore CSS cache backup");
     return false;
   }
 
-  LOG_DBG("CSS", "Saved %u rules to cache%s", entryCount_, partial_ ? " (partial)" : "");
+  LOG_DBG("CSS", "Restored CSS cache backup after interrupted replacement");
   return true;
 }
 
-CssParser::CacheLoad CssParser::loadFromCache(const bool headerOnly) {
-  if (cachePath.empty()) {
-    return CacheLoad::Invalid;
+void CssParser::deleteCache() const {
+  if (hasCache()) Storage.remove((cachePath + rulesCache).c_str());
+  Storage.remove((cachePath + rulesCacheTmp).c_str());
+  Storage.remove((cachePath + rulesCacheBackup).c_str());
+}
+
+CssParser::CacheStatus CssParser::inspectCache() const {
+  if (cachePath.empty() || (!hasCache() && !restoreCacheBackupIfNeeded())) {
+    return CacheStatus::Missing;
   }
 
   HalFile file;
   if (!Storage.openFileForRead("CSS", cachePath + rulesCache, file)) {
-    return CacheLoad::Invalid;
+    return CacheStatus::Invalid;
+  }
+
+  uint8_t version = 0;
+  uint8_t flags = 0;
+  uint16_t ruleCount = 0;
+  if (file.read(&version, sizeof(version)) != sizeof(version) || version != CSS_CACHE_VERSION ||
+      file.read(&flags, sizeof(flags)) != sizeof(flags) || (flags & ~CSS_CACHE_KNOWN_FLAGS) != 0 ||
+      file.read(&ruleCount, sizeof(ruleCount)) != sizeof(ruleCount) || ruleCount > MAX_RULES) {
+    return CacheStatus::Invalid;
+  }
+
+  const bool partial = (flags & CSS_CACHE_FLAG_PARTIAL) != 0;
+  if (!partial) {
+    // Complete caches are fully validated while hydrating, avoiding a second
+    // payload scan on every EPUB open.
+    return CacheStatus::Complete;
+  }
+
+  const auto skipBytes = [&file](const size_t byteCount) {
+    return static_cast<size_t>(file.available()) >= byteCount && file.seekCur(byteCount);
+  };
+  size_t selectorBytes = 0;
+  for (uint16_t i = 0; i < ruleCount; ++i) {
+    uint16_t selectorLen = 0;
+    if (file.read(&selectorLen, sizeof(selectorLen)) != sizeof(selectorLen) || selectorLen == 0 ||
+        selectorLen > MAX_STORED_KEY_LENGTH) {
+      return CacheStatus::Invalid;
+    }
+    selectorBytes += selectorLen;
+    if (selectorBytes > SELECTOR_POOL_CAP || !skipBytes(static_cast<size_t>(selectorLen) + STYLE_WIRE_BYTES)) {
+      return CacheStatus::Invalid;
+    }
+  }
+
+  if (file.available() != 0) {
+    return CacheStatus::Invalid;
+  }
+
+  return CacheStatus::Partial;
+}
+
+bool CssParser::saveToCache(const bool complete) const {
+  if (cachePath.empty()) {
+    return false;
+  }
+
+  // Preserve source order on reload; the bounded index can exceed the task's stack budget.
+  auto sourceOrder = entryCount_ > 0 ? makeUniqueNoThrow<uint16_t[]>(entryCount_) : nullptr;
+  if (entryCount_ > 0 && !sourceOrder) {
+    LOG_ERR("CSS", "OOM sorting CSS cache rules");
+    return false;
+  }
+  if (entryCount_ > 0) {
+    for (uint16_t i = 0; i < entryCount_; ++i) sourceOrder[i] = i;
+    std::sort(sourceOrder.get(), sourceOrder.get() + entryCount_,
+              [this](const uint16_t a, const uint16_t b) { return entries_[a].offset < entries_[b].offset; });
+  }
+
+  const std::string finalPath = cachePath + rulesCache;
+  const std::string tmpPath = cachePath + rulesCacheTmp;
+  const std::string backupPath = cachePath + rulesCacheBackup;
+
+  Storage.remove(tmpPath.c_str());
+
+  HalFile file;
+  if (!Storage.openFileForWrite("CSS", tmpPath, file)) {
+    return false;
+  }
+
+  bool writeOk = true;
+  const auto writeBytes = [&file, &writeOk](const void* data, const size_t size) {
+    if (writeOk && size > 0 && file.write(data, size) != size) {
+      writeOk = false;
+    }
+  };
+  const auto writeByte = [&writeBytes](const uint8_t value) { writeBytes(&value, sizeof(value)); };
+
+  writeByte(CssParser::CSS_CACHE_VERSION);
+
+  // A partial cache can style the current low-memory session, but the next
+  // EPUB load must retry the source stylesheets instead of trusting it.
+  writeByte(complete ? 0 : CSS_CACHE_FLAG_PARTIAL);
+
+  // Write rule count
+  const uint16_t ruleCount = entryCount_;
+  writeBytes(&ruleCount, sizeof(ruleCount));
+
+  // Write each rule: selector string + CssStyle fields
+  for (uint16_t i = 0; i < entryCount_; ++i) {
+    const uint16_t entryIndex = sourceOrder[i];
+    const std::string_view selector = selectorAt(entryIndex);
+    // Write selector string (length-prefixed)
+    const auto selectorLen = static_cast<uint16_t>(selector.size());
+    writeBytes(&selectorLen, sizeof(selectorLen));
+    writeBytes(selector.data(), selectorLen);
+
+    uint8_t styleWire[STYLE_WIRE_BYTES];
+    encodeStyleWire(stylePool_[entries_[entryIndex].styleIndex], styleWire);
+    writeBytes(styleWire, sizeof(styleWire));
+    if (!writeOk) break;
+  }
+
+  if (!writeOk || !file.close()) {
+    LOG_ERR("CSS", "Failed to write temporary CSS cache");
+    file.close();
+    Storage.remove(tmpPath.c_str());
+    return false;
+  }
+
+  const bool hadExistingCache = Storage.exists(finalPath.c_str());
+  if (hadExistingCache) {
+    Storage.remove(backupPath.c_str());
+    if (!Storage.rename(finalPath.c_str(), backupPath.c_str())) {
+      LOG_ERR("CSS", "Failed to back up existing CSS cache");
+      Storage.remove(tmpPath.c_str());
+      return false;
+    }
+  }
+
+  if (!Storage.rename(tmpPath.c_str(), finalPath.c_str())) {
+    LOG_ERR("CSS", "Failed to promote temporary CSS cache");
+    Storage.remove(tmpPath.c_str());
+    if (Storage.exists(backupPath.c_str()) && !Storage.rename(backupPath.c_str(), finalPath.c_str())) {
+      LOG_ERR("CSS", "Failed to restore previous CSS cache");
+    }
+    return false;
+  }
+
+  Storage.remove(backupPath.c_str());
+
+  LOG_DBG("CSS", "Saved %u rules to %s cache", ruleCount, complete ? "complete" : "partial");
+  return true;
+}
+
+CssParser::CacheLoadResult CssParser::loadFromCache() {
+  if (cachePath.empty()) {
+    return CacheLoadResult::Invalid;
+  }
+
+  HalFile file;
+  if (!Storage.openFileForRead("CSS", cachePath + rulesCache, file)) {
+    if (!restoreCacheBackupIfNeeded() || !Storage.openFileForRead("CSS", cachePath + rulesCache, file)) {
+      return CacheLoadResult::Invalid;
+    }
   }
 
   // Clear existing rules
@@ -1005,116 +1742,116 @@ CssParser::CacheLoad CssParser::loadFromCache(const bool headerOnly) {
     // Explicitly close() file before calling Storage.remove()
     file.close();
     Storage.remove((cachePath + rulesCache).c_str());
-    return CacheLoad::Invalid;
+    return CacheLoadResult::Invalid;
   }
 
-  uint8_t header[9];
-  if (file.read(header, sizeof(header)) != sizeof(header)) {
-    return CacheLoad::Invalid;
-  }
-  const bool partial = (header[0] & CACHE_FLAG_PARTIAL) != 0;
-  uint16_t entryCount = 0;
-  uint16_t styleCount = 0;
-  uint32_t poolBytes = 0;
-  memcpy(&entryCount, header + 1, sizeof(entryCount));
-  memcpy(&styleCount, header + 3, sizeof(styleCount));
-  memcpy(&poolBytes, header + 5, sizeof(poolBytes));
-
-  if (entryCount > MAX_RULES || styleCount > MAX_UNIQUE_STYLES || poolBytes > STRING_POOL_CAP) {
-    LOG_DBG("CSS", "Invalid cache header (%u rules, %u styles, %u pool bytes)", entryCount, styleCount,
-            static_cast<unsigned>(poolBytes));
-    return CacheLoad::Invalid;
+  uint8_t flags = 0;
+  if (file.read(&flags, sizeof(flags)) != sizeof(flags) || (flags & ~CSS_CACHE_KNOWN_FLAGS) != 0) {
+    LOG_DBG("CSS", "Invalid CSS cache flags: %u", flags);
+    return CacheLoadResult::Invalid;
   }
 
-  // The remaining payload size must match the header exactly
-  const size_t expectedBytes = entryCount * sizeof(SelectorEntry) + styleCount * STYLE_WIRE_BYTES + poolBytes;
-  if (static_cast<size_t>(file.available()) != expectedBytes) {
-    LOG_DBG("CSS", "CSS cache size mismatch");
-    return CacheLoad::Invalid;
-  }
-  if (headerOnly) {
-    partial_ = partial;
-    return CacheLoad::Ok;
+  // Read rule count
+  uint16_t ruleCount = 0;
+  if (file.read(&ruleCount, sizeof(ruleCount)) != sizeof(ruleCount)) {
+    return CacheLoadResult::Invalid;
   }
 
-  if (entryCount > 0) {
-    entries_ = makeUniqueNoThrow<SelectorEntry[]>(entryCount);
-    if (!entries_) {
-      LOG_ERR("CSS", "OOM: selector index (%u entries)", entryCount);
+  if (ruleCount > MAX_RULES) {
+    LOG_DBG("CSS", "Invalid cache rule count (%u > %zu)", ruleCount, MAX_RULES);
+    clear();
+    return CacheLoadResult::Invalid;
+  }
+
+  const PoolResult entryCapacityResult = ensureEntryCapacity(ruleCount);
+  if (entryCapacityResult == PoolResult::OutOfMemory) {
+    clear();
+    return CacheLoadResult::LowMemory;
+  }
+  if (entryCapacityResult == PoolResult::Limit) {
+    clear();
+    return CacheLoadResult::Invalid;
+  }
+
+  auto selectorBuffer = ruleCount > 0 ? makeUniqueNoThrow<char[]>(MAX_STORED_KEY_LENGTH) : nullptr;
+  if (ruleCount > 0 && !selectorBuffer) {
+    clear();
+    return CacheLoadResult::LowMemory;
+  }
+
+  // Read each rule
+  for (uint16_t i = 0; i < ruleCount; ++i) {
+    // Read selector string
+    uint16_t selectorLen = 0;
+    if (file.read(&selectorLen, sizeof(selectorLen)) != sizeof(selectorLen)) {
       clear();
-      return CacheLoad::NoMemory;
+      return CacheLoadResult::Invalid;
     }
-    const size_t entryBytes = entryCount * sizeof(SelectorEntry);
-    if (file.read(entries_.get(), entryBytes) != static_cast<int>(entryBytes)) {
+
+    if (selectorLen == 0 || selectorLen > MAX_STORED_KEY_LENGTH) {
+      LOG_DBG("CSS", "Invalid selector length in cache: %u", selectorLen);
       clear();
-      return CacheLoad::Invalid;
+      return CacheLoadResult::Invalid;
+    }
+
+    if (file.read(selectorBuffer.get(), selectorLen) != selectorLen) {
+      clear();
+      return CacheLoadResult::Invalid;
+    }
+
+    uint8_t styleWire[STYLE_WIRE_BYTES];
+    if (file.read(styleWire, sizeof(styleWire)) != sizeof(styleWire)) {
+      clear();
+      return CacheLoadResult::Invalid;
+    }
+
+    CssStyle style;
+    if (!decodeStyleWire(styleWire, style)) {
+      clear();
+      return CacheLoadResult::Invalid;
+    }
+
+    KeyPieces key;
+    key.add(std::string_view(selectorBuffer.get(), selectorLen));
+    const RuleInsertResult insertResult = insertOrMerge(key, style);
+    if (insertResult == RuleInsertResult::OutOfMemory) {
+      clear();
+      return CacheLoadResult::LowMemory;
+    }
+    if (insertResult == RuleInsertResult::Limit) {
+      clear();
+      return CacheLoadResult::Invalid;
+    }
+    if (insertResult == RuleInsertResult::Merged) {
+      LOG_DBG("CSS", "Duplicate selector in CSS cache");
+      clear();
+      return CacheLoadResult::Invalid;
     }
   }
 
-  if (styleCount > 0) {
-    stylePool_ = makeUniqueNoThrow<CssStyle[]>(styleCount);
-    styleHashes_ = makeUniqueNoThrow<uint32_t[]>(styleCount);
-    if (!stylePool_ || !styleHashes_) {
-      LOG_ERR("CSS", "OOM: style pool (%u styles)", styleCount);
-      clear();
-      return CacheLoad::NoMemory;
-    }
-    for (uint16_t i = 0; i < styleCount; ++i) {
-      uint8_t wire[STYLE_WIRE_BYTES];
-      if (file.read(wire, STYLE_WIRE_BYTES) != static_cast<int>(STYLE_WIRE_BYTES)) {
-        clear();
+  if (file.available() != 0) {
+    clear();
+    return CacheLoadResult::Invalid;
+  }
+
+  const bool partial = (flags & CSS_CACHE_FLAG_PARTIAL) != 0;
+  LOG_DBG("CSS", "Loaded %u rules from %s cache", ruleCount, partial ? "partial" : "complete");
+  return CacheLoadResult::Complete;
+}
+
+CssParser::CacheLoad CssParser::loadFromCache(const bool headerOnly) {
+  const CacheStatus status = inspectCache();
+  if (status == CacheStatus::Missing || status == CacheStatus::Invalid) return CacheLoad::Invalid;
+  if (!headerOnly) {
+    switch (loadFromCache()) {
+      case CacheLoadResult::Complete:
+        break;
+      case CacheLoadResult::LowMemory:
+        return CacheLoad::NoMemory;
+      case CacheLoadResult::Invalid:
         return CacheLoad::Invalid;
-      }
-      decodeStyleWire(wire, stylePool_[i]);
-      styleHashes_[i] = hashStyleWire(wire);
     }
   }
-
-  if (poolBytes > 0) {
-    selectorPool_ = makeUniqueNoThrow<char[]>(poolBytes);
-    if (!selectorPool_) {
-      LOG_ERR("CSS", "OOM: selector pool (%u bytes)", static_cast<unsigned>(poolBytes));
-      clear();
-      return CacheLoad::NoMemory;
-    }
-    if (file.read(selectorPool_.get(), poolBytes) != static_cast<int>(poolBytes)) {
-      clear();
-      return CacheLoad::Invalid;
-    }
-  }
-
-  entryCount_ = entryCount;
-  entryCapacity_ = entryCount;
-  styleCount_ = styleCount;
-  styleCapacity_ = styleCount;
-  poolSize_ = poolBytes;
-  poolCapacity_ = poolBytes;
-  partial_ = partial;
-
-  // Validate every entry so a corrupt cache cannot break binary search or
-  // index out of bounds: offsets/lengths in range, style indices valid, and
-  // entries strictly ascending in folded-byte order.
-  const char* pool = selectorPool_.get();
-  for (uint16_t i = 0; i < entryCount; ++i) {
-    const SelectorEntry& entry = entries_[i];
-    if (entry.length == 0 || entry.length > MAX_SELECTOR_LENGTH || entry.offset > poolBytes ||
-        static_cast<size_t>(entry.offset) + entry.length > poolBytes || entry.styleIdx >= styleCount) {
-      LOG_DBG("CSS", "Invalid cache entry %u", i);
-      clear();
-      return CacheLoad::Invalid;
-    }
-    if (i > 0) {
-      const SelectorEntry& prev = entries_[i - 1];
-      const uint16_t commonLen = prev.length < entry.length ? prev.length : entry.length;
-      const int cmp = memcmp(pool + prev.offset, pool + entry.offset, commonLen);
-      if (cmp > 0 || (cmp == 0 && prev.length >= entry.length)) {
-        LOG_DBG("CSS", "Cache entries not sorted at %u", i);
-        clear();
-        return CacheLoad::Invalid;
-      }
-    }
-  }
-
-  LOG_DBG("CSS", "Loaded %u rules from cache%s", entryCount, partial ? " (partial)" : "");
+  partial_ = status == CacheStatus::Partial;  // after the load: it clears
   return CacheLoad::Ok;
 }
