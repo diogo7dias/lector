@@ -97,6 +97,18 @@ class ParsedText {
   std::vector<uint8_t> reorderedFocusBoundaryScratch;
   std::vector<uint16_t> visualOrderScratch;
 
+ public:
+  // An inline image on the line extractLine just emitted: its token id, x within the line
+  // (same origin as the TextBlock's word x) and height.
+  struct InlineImagePlacement {
+    uint16_t id;
+    int16_t x;
+    uint16_t height;
+  };
+
+ private:
+  std::vector<InlineImagePlacement> lineImages;
+
   int spaceAdvance(const GfxRenderer& renderer, int fontId, uint32_t leftCp, uint32_t rightCp,
                    EpdFontFamily::Style style) const;
   int guideDotNaturalGap(const GfxRenderer& renderer, int fontId, const std::string& leftWord,
@@ -144,6 +156,11 @@ class ParsedText {
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle, bool attachToPrevious = false,
                uint32_t visibleTextOffset = 0, uint8_t sizeSlot = 0, bool noSpaceBefore = false);
+  // A small image laid out like a word: width x height, wrapping like one. The parser keeps
+  // the ImageBlock under `id` and places it from currentLineImages() as each line lands.
+  void addInlineImage(uint16_t id, uint16_t width, uint16_t height, bool attachToPrevious, uint32_t visibleTextOffset);
+  // Images on the line most recently handed to the line sink (valid during that call).
+  const std::vector<InlineImagePlacement>& currentLineImages() const { return lineImages; }
   void setRubyForWordAt(size_t index, const std::string& ruby);
   void setRubyGroupAt(size_t startIndex, size_t count, const std::string& ruby);
   // The word's renderer style: stored flags removed, small caps restored from its size slot.

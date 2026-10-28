@@ -87,6 +87,14 @@ class ChapterHtmlSlimParser {
   std::string contentBase;
   std::string imageBasePath;
   int imageCounter = 0;
+  // Small images laid out inside the open paragraph, waiting for their line to land.
+  static constexpr size_t MAX_PENDING_INLINE_IMAGES = 16;
+  struct PendingInlineImage {
+    uint16_t id;
+    std::unique_ptr<ImageBlock> block;
+  };
+  std::vector<PendingInlineImage> pendingInlineImages;
+  uint16_t nextInlineImageId = 0;
 
   // Style tracking (replaces depth-based approach)
   struct StyleStackEntry {
