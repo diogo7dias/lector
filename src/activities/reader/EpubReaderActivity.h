@@ -12,6 +12,7 @@
 #include "EpubReaderMenuActivity.h"
 #include "ProgressMapper.h"
 #include "ReaderLanding.h"
+#include "ReaderPinchGesture.h"
 #include "ReaderPrefs.h"
 #include "ReaderProgressSaveDebouncer.h"
 #include "ReaderReturnHistory.h"
@@ -106,6 +107,7 @@ class EpubReaderActivity final : public Activity {
   // Paired with the displayed offset, even if a later destination fails to load.
   int32_t currentPageSpineIndex = -1;
   ReaderReturnHistory returnHistory;
+  ReaderPinchGesture pinchGesture;  // two fingers spread or pinched step the text size
   // Call under RenderLock, before changing the reading position.
   void recordJumpOrigin(bool accepted = true);
   void jumpToContentOffset(int spineIndex, uint32_t offset, int pageHint = 0);

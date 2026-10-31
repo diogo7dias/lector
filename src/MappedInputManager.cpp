@@ -407,6 +407,14 @@ bool MappedInputManager::wasScreenLongPress(int& x, int& y) const {
   return WakeTiming::noteAcceptedInput(true);
 }
 
+bool MappedInputManager::getTwoFingerTouch(int& x1, int& y1, int& x2, int& y2) const {
+  float nx1, ny1, nx2, ny2;
+  if (!gpio.getTwoTouchContacts(nx1, ny1, nx2, ny2)) return false;
+  renderer.tapToLogical(nx1, ny1, x1, y1);
+  renderer.tapToLogical(nx2, ny2, x2, y2);
+  return true;
+}
+
 bool MappedInputManager::wasScreenTouchReleased() const {
   return WakeTiming::noteAcceptedInput(gpio.wasTouchReleased());
 }

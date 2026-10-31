@@ -49,6 +49,8 @@ Run it first whenever anything looks off.
   Home key). C3 boards: `back confirm left right up down power`. `power` holds 1.2 s to
   sleep, or wakes when asleep.
 - `lv tap <x> <y> [ms]` and `lv swipe <x1> <y1> <x2> <y2>`: the upright panel is 480x800.
+- `lv pinch <spanStart> <spanEnd>`: two fingers on a vertical line through the centre, spanStart px
+  apart, move to spanEnd px apart (larger spreads, smaller pinches). Needs QEMU with patch 0012.
   Touch boards only. On x4pro a first tap arms a row (dashed outline), the second opens it.
 - `lv ink <x> <y> <w> <h>` returns `{"ink","area"}` for a box. Use it to prove a value
   changed in one spot (a toggle column, a dashed outline) without a full screenshot diff.

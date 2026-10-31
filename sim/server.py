@@ -11,6 +11,8 @@ Boots that board's firmware from its last `pio run` on a fresh card, then serves
   POST /reboot       cut the power and switch on again (flash and card persist)
   POST /tap/<x>/<y>[?ms=N]  touch the upright panel (480x800) for N ms (300), touch boards only
   POST /swipe/<x1>/<y1>/<x2>/<y2>  slide a finger across it
+  POST /pinch/<spanStart>/<spanEnd>  two fingers on a vertical line through the centre, apart by
+       spanStart px, move to spanEnd px apart (spread when larger, pinch when smaller)
 """
 import io, json, os, re, sys, tempfile, threading
 from urllib.parse import parse_qs
@@ -152,6 +154,11 @@ class Device:
         with self.lock:
             self.sim.swipe(*points, duration=duration)
 
+    def pinch(self, start, end):
+        with self.lock:
+            self.sim.pinch((240, 400 - start // 2), (240, 400 + start // 2), (240, 400 - end // 2),
+                           (240, 400 + end // 2))
+
 
 def handler(device):
     class Handler(BaseHTTPRequestHandler):
@@ -200,6 +207,12 @@ def handler(device):
                     self.send(400, b"bad point or hold", "text/plain")
                     return
                 device.swipe(*(points * 2 if len(points) == 2 else points), duration=ms / 1000)
+            elif parts[0] == "pinch" and len(parts) == 3 and BOARDS[BOARD].get("touch"):
+                spans = [int(v) for v in parts[1:] if v.isdigit()]
+                if len(spans) != 2 or not all(20 <= v <= 700 for v in spans):
+                    self.send(400, b"spans are 20..700 px", "text/plain")
+                    return
+                device.pinch(*spans)
             elif parts[0] == "press" and len(parts) == 2 and parts[1] in KEYS:
                 device.press(parts[1], int(parse_qs(query).get("ms", ["150"])[0]) / 1000)
             elif parts == ["reboot"]:

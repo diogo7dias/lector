@@ -221,6 +221,25 @@ class LectorSim:
             self.wait_frames(before + 1, timeout=15)
             self.wait_idle()
 
+    def pinch(self, a1, a2, b1, b2, duration=0.4, settle=True):
+        """Two fingers move from points a1, a2 to b1, b2 (each (x, y), upright), then lift."""
+        before = self.frames()
+        self._finger(*a1)
+        self.q.set("/machine/touch", "x2", a2[0])
+        self.q.set("/machine/touch", "y2", a2[1])
+        self.q.set("/machine/touch", "down", True)
+        self.q.set("/machine/touch", "down2", True)
+        for i in range(1, 9):
+            time.sleep(duration / 8)
+            self._finger(a1[0] + (b1[0] - a1[0]) * i // 8, a1[1] + (b1[1] - a1[1]) * i // 8)
+            self.q.set("/machine/touch", "x2", a2[0] + (b2[0] - a2[0]) * i // 8)
+            self.q.set("/machine/touch", "y2", a2[1] + (b2[1] - a2[1]) * i // 8)
+        self.q.set("/machine/touch", "down2", False)
+        self.q.set("/machine/touch", "down", False)
+        if settle:
+            self.wait_frames(before + 1, timeout=30)
+            self.wait_idle()
+
     def screen(self):
         """The panel as the reader sees it, upright (X4/X4 Pro 480x800, X3 528x792)."""
         raw = Image.open(self.image)

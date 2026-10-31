@@ -6,6 +6,7 @@
 #   lv press <key> [ms]        up down home power (x4pro); back confirm left right up down power (C3)
 #   lv tap <x> <y> [ms]        touch the upright 480x800 panel (touch boards)
 #   lv swipe <x1> <y1> <x2> <y2>
+#   lv pinch <spanStart> <spanEnd>   two fingers apart by spanStart px move to spanEnd px (touch boards)
 #   lv ink <x> <y> <w> <h>     dark pixels in a box
 #   lv reboot                  power-cycle, flash and card persist
 #   lv shot <name>             save <name>.png + <name>.json (state) as evidence
@@ -78,6 +79,7 @@ state) curl -sf "$BASE/state"; echo ;;
 press) post "/press/$1?ms=${2:-150}" ;;
 tap) post "/tap/$1/$2?ms=${3:-300}" ;;
 swipe) post "/swipe/$1/$2/$3/$4" ;;
+pinch) post "/pinch/$1/$2" ;;
 ink) curl -sf "$BASE/ink/$1/$2/$3/$4"; echo ;;
 reboot) post /reboot ;;
 shot)

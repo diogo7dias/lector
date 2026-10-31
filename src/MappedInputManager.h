@@ -93,6 +93,8 @@ class MappedInputManager {
   void spendTouchContact();
   bool isScreenTouchHeld(int& x, int& y) const;
   bool wasScreenLongPress(int& x, int& y) const;
+  // Two fingers on the panel, in logical (oriented) coordinates.
+  bool getTwoFingerTouch(int& x1, int& y1, int& x2, int& y2) const;
   bool wasScreenTouchReleased() const;
   // Combined touch interaction for a band of equal rows with caller-supplied
   // geometry — the shared hit-test for lists the theme helpers above do not
