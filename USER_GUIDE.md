@@ -62,7 +62,9 @@ Three things are deliberately left on a single tap, because a confirming tap wou
 way: the on-screen keyboard, sliders (brightness, text size and the rest, which are dragged or
 stepped), and the Yes/No pop-ups, which are already a question being answered. Page turns by
 tap while reading are unchanged. Holding a word on the page for half a second looks it up in
-the dictionary.
+the dictionary. Spreading two fingers apart on the page makes the text one size
+larger, pinching them together one size smaller; one step per gesture, for this book only,
+like the size row in the light panel. It needs a font with more than one size installed.
 
 **Touch Sleep** (Settings > System, X4 Pro) is Off by default. Set to 15 s, 30 s or 1 min,
 it saves a little battery by putting the touch screen to sleep after that long without

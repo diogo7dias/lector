@@ -587,7 +587,7 @@ python3 sim/soak.py x4pro 10 600                  # 10 boots + 600 s idle; exit 
 ```
 
 To prove one change by hand mid-task, any agent: `.claude/skills/verify/bin/lv start x4pro`,
-then `lv doctor`, `lv tap|press|swipe|reboot`, `lv shot <name>`, `lv stop`. Recipes per
+then `lv doctor`, `lv tap|press|swipe|pinch|reboot`, `lv shot <name>`, `lv stop`. Recipes per
 feature and the proof rules: `.claude/skills/verify/SKILL.md` and its `features/`.
 
 - QEMU changes live only as patches in `sim/qemu-patches/` (base tag in `build-qemu.sh`).

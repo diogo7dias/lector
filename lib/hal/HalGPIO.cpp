@@ -8,6 +8,8 @@
 #include <XteinkDetect.h>
 #include <esp_sleep.h>
 
+#include <algorithm>
+
 // Global HalGPIO instance
 HalGPIO gpio;
 
@@ -245,6 +247,21 @@ bool HalGPIO::isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) c
 }
 
 bool HalGPIO::isTouchHeldAt(float& nx, float& ny) const { return inputMgr.isTouchHeldAt(nx, ny); }
+
+bool HalGPIO::getTwoTouchContacts(float& nx1, float& ny1, float& nx2, float& ny2) const {
+  if (!inputMgr.supportsMultiTouch()) return false;
+  const auto snapshot = inputMgr.getTouchSnapshot();
+  if (snapshot.count != 2 || snapshot.reportedCount != 2) return false;
+  const auto& touch = BoardConfig::ACTIVE.touch;
+  const float width = touch.rawMaxX > touch.rawMinX ? touch.rawMaxX - touch.rawMinX : 1;
+  const float height = touch.rawMaxY > touch.rawMinY ? touch.rawMaxY - touch.rawMinY : 1;
+  const auto clamp01 = [](const float v) { return std::clamp(v, 0.0f, 1.0f); };
+  nx1 = clamp01(snapshot.points[0].point.x / width);
+  ny1 = clamp01(snapshot.points[0].point.y / height);
+  nx2 = clamp01(snapshot.points[1].point.x / width);
+  ny2 = clamp01(snapshot.points[1].point.y / height);
+  return true;
+}
 
 unsigned long HalGPIO::lastTouchHeldMs() const { return inputMgr.lastTouchHeldMs(); }
 

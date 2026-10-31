@@ -983,6 +983,23 @@ void EpubReaderActivity::loop() {
 
   // Holding a word looks it up. The long press fires mid-contact and suppresses the rest
   // of it, so the lift neither turns the page nor taps the picker that opens.
+  // Two fingers spread or pinched step the text size once per gesture, like the size row
+  // in the light panel. The contact is suppressed so the lift neither taps nor swipes.
+  int pinchX1 = 0;
+  int pinchY1 = 0;
+  int pinchX2 = 0;
+  int pinchY2 = 0;
+  if (SETTINGS.touchReaderControls != CrossPointSettings::TOUCH_READER_OFF &&
+      mappedInput.getTwoFingerTouch(pinchX1, pinchY1, pinchX2, pinchY2)) {
+    if (!pinchGesture.isActive()) gpio.suppressTouchContact();
+    const auto action = pinchGesture.update(pinchX1, pinchY1, pinchX2, pinchY2);
+    if (action != ReaderPinchGesture::Action::None) {
+      lightPanelStepAux(action == ReaderPinchGesture::Action::Increase ? 1 : -1);
+    }
+    return;
+  }
+  pinchGesture.reset();
+
   int holdX = 0;
   int holdY = 0;
   if (mappedInput.wasScreenLongPress(holdX, holdY)) {
