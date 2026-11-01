@@ -56,3 +56,5 @@ TEST(BoundActionScope, DeletingAWallpaperNeedsAnOpenBook) {
   // menu is: the reader.
   EXPECT_FALSE(allowedOutsideBook(LP_MENU_WALLPAPER_DELETE));
 }
+
+TEST(BoundActionScope, QuickLockWorksAnywhere) { EXPECT_TRUE(allowedOutsideBook(LP_MENU_QUICK_LOCK)); }

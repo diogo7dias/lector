@@ -32,6 +32,14 @@ inline std::vector<uint8_t> retiredBoundFunctions() {
           CrossPointSettings::LP_MENU_TEXT_SETTINGS, CrossPointSettings::LP_MENU_READING_STATS};
 }
 
+// The rows below act from inside the input a Quick Lock stops, so a lock set from one
+// could never be released. Only the Buttons screen offers it.
+inline std::vector<uint8_t> hiddenFromHoldRows() {
+  auto hidden = retiredBoundFunctions();
+  hidden.push_back(CrossPointSettings::LP_MENU_QUICK_LOCK);
+  return hidden;
+}
+
 inline std::vector<StrId> boundFunctionLabels() {
   std::vector<StrId> labels;
   labels.reserve(CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT);
@@ -526,11 +534,11 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
 
   emit(SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction, boundFunctionLabels(),
                          "longPressMenuFunction", StrId::STR_CAT_CONTROLS)
-           .withHiddenEnumValues(retiredBoundFunctions()));
+           .withHiddenEnumValues(hiddenFromHoldRows()));
 
   emit(SettingInfo::Enum(StrId::STR_MENU_HOLD, &CrossPointSettings::menuHoldFunction, boundFunctionLabels(),
                          "menuHoldFunction", StrId::STR_CAT_CONTROLS)
-           .withHiddenEnumValues(retiredBoundFunctions()));
+           .withHiddenEnumValues(hiddenFromHoldRows()));
 
   emit(SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
                            "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS));

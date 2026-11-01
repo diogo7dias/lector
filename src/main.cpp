@@ -1146,14 +1146,17 @@ void loop() {
   static unsigned long lastActivityTime = millis();
   // Touch counts: before Touch Sleep it did not, so a touch-only session never
   // reset the auto-sleep clock or took the post-input activity lock.
-  if (mappedInputManager.isInputActive() || activityManager.preventAutoSleep()) {
+  // A locked device in a bag is pressed against all day and must still go to sleep.
+  const bool quickLocked = activityManager.isQuickLocked();
+  if ((mappedInputManager.isInputActive() && !quickLocked) || activityManager.preventAutoSleep()) {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
   // Any input wakes touch (only a button can, while it sleeps); the wake itself
   // finishes over the next few polls.
   const unsigned long touchSleepMs = SETTINGS.touchSleepMs();
-  gpio.setTouchAsleep(touchSleepMs > 0 && millis() - lastActivityTime >= touchSleepMs);
+  // Not while locked: the timer no longer tracks input, and the Home key may be what unlocks.
+  gpio.setTouchAsleep(!quickLocked && touchSleepMs > 0 && millis() - lastActivityTime >= touchSleepMs);
   // The press, not the release, and not "any activity": this is the instant the reader's
   // thumb acted, and the refresh that answers it closes the measurement. A release-driven
   // action (a short power click) still lands within the same press-to-paint window.
@@ -1169,7 +1172,7 @@ void loop() {
 
   static bool screenshotButtonsReleased = true;
   static bool screenshotComboActive = false;
-  if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
+  if (!quickLocked && gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
     screenshotComboActive = true;
     if (screenshotButtonsReleased) {
       screenshotButtonsReleased = false;
@@ -1268,6 +1271,11 @@ void loop() {
     // Two actions ActivityManager cannot run: only this file can put the device down, and
     // only this file owns the renderer a forced refresh paints through.
     const auto runBoundFunction = [&](const uint8_t function) {
+      if (function == CrossPointSettings::LP_MENU_QUICK_LOCK) {
+        activityManager.toggleQuickLock();
+        return;
+      }
+      if (activityManager.isQuickLocked()) return;
       if (function == CrossPointSettings::LP_MENU_SLEEP) {
         enterDeepSleep();
       }

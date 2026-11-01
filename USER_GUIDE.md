@@ -326,6 +326,13 @@ of them can be pointed at any action.
 **Pop-up Items** decides which rows the quick pop-up those bindings can open actually
 contains.
 
+**Quick Lock** is on offer only in **Settings > Controls > Buttons**: bind it to a button
+gesture, in the book, outside it or both. Firing it leaves the screen as it is with a
+**Locked** badge in the corner, and touch and every button stop answering until you fire the
+same gesture again. Holding **Power** still sleeps while that hold is set to Sleep, **Time to
+Sleep** still runs (pressing things does not hold it back), and any sleep ends the lock. It
+is refused while a transfer is running or the light panel is open.
+
 Text Settings is no longer one of the actions on offer, and is no longer a pop-up row.
 It is reached from Settings, or from the in-book menu. A binding that pointed at it
 reads as Disabled after the update; pick another action for that gesture.
