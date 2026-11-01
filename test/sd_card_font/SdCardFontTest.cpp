@@ -89,10 +89,11 @@ bool covers(SdCardFont& font, uint8_t style, uint32_t cp) {
 const std::vector<Interval> LATIN = {{0x20, 0x7E}, {0xA0, 0xFF}};
 const std::vector<Interval> HANGUL = {{0x20, 0x7E}, {0xAC00, 0xD7A3}};
 
+// Interval tables a load allocates: the one style-record array per load is not counted.
 int allocsToLoad(SdCardFont& font, const std::string& path) {
   nothrowArrayAllocs = 0;
   EXPECT_TRUE(font.load(path.c_str()));
-  return nothrowArrayAllocs;
+  return nothrowArrayAllocs - 1;
 }
 
 TEST(SdCardFontIntervals, IdenticalTablesAreAllocatedOnce) {

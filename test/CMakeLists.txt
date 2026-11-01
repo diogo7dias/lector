@@ -29,6 +29,7 @@ target_include_directories(crosspoint_test_common INTERFACE
   ${REPO_ROOT}
   ${REPO_ROOT}/lib
   ${REPO_ROOT}/lib/Serialization
+  ${REPO_ROOT}/lib/Memory
 )
 target_compile_options(crosspoint_test_common INTERFACE
   -Wall
@@ -42,6 +43,7 @@ include(GoogleTest)
 add_subdirectory(streaming_json_parser)
 add_subdirectory(release_json_parser)
 add_subdirectory(font_manifest_parser)
+add_subdirectory(shrink_to_fit)
 add_subdirectory(ttf_family_scan)
 add_subdirectory(sd_card_font)
 add_subdirectory(differential_rounding)

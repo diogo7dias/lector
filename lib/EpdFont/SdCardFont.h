@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <memory>
 #include <string>
 
 #include "EpdFont.h"
@@ -101,6 +102,9 @@ class SdCardFont {
   // Returns pointer to the managed EpdFont for a given style.
   // Returns nullptr if the style is not present.
   EpdFont* getEpdFont(uint8_t style = 0);
+
+  // True if the given style is present in this font file.
+  bool hasStyle(uint8_t style) const;
 
   // Resolve requested style bits to the closest present style.
   uint8_t resolveStyle(uint8_t style) const;
@@ -259,11 +263,14 @@ class SdCardFont {
 
     // The EpdFont whose data pointer we manage
     EpdFont epdFont{&stubData};
-
-    bool present = false;
   };
 
-  PerStyle styles_[MAX_STYLES] = {};
+  // Allocated once per load; EpdFont pointers remain stable until unload.
+  std::unique_ptr<PerStyle[]> styles_;
+  // Zero means absent; present styles store their array slot plus one.
+  uint8_t styleSlots_[MAX_STYLES] = {};
+  PerStyle& styleData(uint8_t style) { return styles_[styleSlots_[style] - 1]; }
+  const PerStyle& styleData(uint8_t style) const { return styles_[styleSlots_[style] - 1]; }
   uint8_t styleCount_ = 0;
 
   char filePath_[128] = {};
