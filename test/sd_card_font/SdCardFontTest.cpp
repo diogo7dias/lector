@@ -2,12 +2,15 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <new>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "SdCardFont.h"
@@ -143,6 +146,43 @@ TEST(SdCardFontIntervals, ReloadAndDestroyFreeSharedTableOnce) {
   EXPECT_TRUE(covers(font, 1, 0xAC00));
   EXPECT_EQ(allocsToLoad(font, same), 1);
   EXPECT_TRUE(covers(font, 1, 0xE9));
+}
+
+TEST(SdCardFontIntervals, FontsWithTheSameCoverageShareOneTable) {
+  // The sizes of one family: separate files, same cmap.
+  const auto size10 = writeFont("share-10.cpfont", {{20000, HANGUL}});
+  const auto size12 = writeFont("share-12.cpfont", {{20000, HANGUL}});
+  auto first = std::make_unique<SdCardFont>();
+  auto second = std::make_unique<SdCardFont>();
+  EXPECT_EQ(allocsToLoad(*first, size10), 1);
+  EXPECT_EQ(allocsToLoad(*second, size12), 0);
+
+  // The table outlives the font that allocated it while another still uses it.
+  first.reset();
+  EXPECT_TRUE(covers(*second, 0, 0xAC00));
+  EXPECT_FALSE(covers(*second, 0, 0xE9));
+
+  // Once the last user is gone it is really gone: the next load allocates again.
+  second.reset();
+  SdCardFont third;
+  EXPECT_EQ(allocsToLoad(third, size10), 1);
+}
+
+TEST(SdCardFontIntervals, ConcurrentLoadsAndUnloadsKeepTablesAlive) {
+  // The main loop loads fonts while the render task loads and evicts size variants.
+  const auto path = writeFont("race.cpfont", {{20000, HANGUL}});
+  std::atomic<int> wrong{0};
+  const auto churn = [&] {
+    for (int i = 0; i < 300; i++) {
+      SdCardFont font;
+      if (!font.load(path.c_str()) || !covers(font, 0, 0xAC00) || covers(font, 0, 0xE9)) wrong++;
+    }
+  };
+  std::thread a(churn), b(churn), c(churn);
+  a.join();
+  b.join();
+  c.join();
+  EXPECT_EQ(wrong.load(), 0);
 }
 
 // Six Latin glyphs 'A'..'F' plus U+FFFD, with left classes for 'A' and 'C',
