@@ -181,9 +181,7 @@ class SdCardFont {
     static_assert(sizeof(BmpInterval16) == 6, "BmpInterval16 must remain compact");
     BmpInterval16* bmpIntervals = nullptr;
     bool intervalsAreBmp16 = false;
-    // True when the interval table above is borrowed from an earlier style with identical
-    // records; only that owner frees it.
-    bool intervalsShared = false;
+    // The table may be shared with other styles and other loaded fonts; see releaseIntervals().
 
     // Ligature table (lazy-loaded on first prewarm). No kern table is resident:
     // buildMiniKernMatrix reads the class-table blocks (~3KB per side per style
@@ -335,6 +333,8 @@ class SdCardFont {
   void applyKernLigaturePointers(PerStyle& s, EpdFontData& data) const;
   void applyGlyphMissCallback(uint8_t styleIdx);
   int32_t findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) const;
+  // Drops this style's reference to its interval table and frees the table with the last one.
+  static void releaseIntervals(PerStyle& s);
   int fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCount, uint8_t styleMask);
   template <typename Iter>
   int buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, uint8_t styleMask,

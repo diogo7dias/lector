@@ -745,9 +745,20 @@ void setup() {
   // Brightness and warmth always come back; whether the light itself does is
   // FrontlightBootPolicy's call. Inert on a board without a frontlight.
   SETTINGS.clampFrontlightBrightness();
+  // A clock that does not answer leaves the schedule out rather than guessing.
+  bool scheduledOn = false;
+  uint16_t nowMinutes = 0;
+  if (SETTINGS.frontlightScheduleEnabled != 0 &&
+      halClock.localMinutes(nowMinutes, SETTINGS.clockUtcOffsetQ, SETTINGS.clockTimeZone)) {
+    scheduledOn =
+        frontlight::insideSchedule(SETTINGS.frontlightScheduleOn * frontlight::SCHEDULE_STEP_MINUTES,
+                                   SETTINGS.frontlightScheduleOff * frontlight::SCHEDULE_STEP_MINUTES, nowMinutes);
+    LOG_INF("MAIN", "Light schedule: %02d:%02d local, %s", nowMinutes / 60, nowMinutes % 60,
+            scheduledOn ? "inside" : "outside");
+  }
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth,
                    frontlight::restoreLightOnAtBoot({SETTINGS.frontlightOn != 0, SETTINGS.frontlightRestoreOnWake != 0,
-                                                     isSilentReboot, litBeforeSilentReboot}));
+                                                     isSilentReboot, litBeforeSilentReboot, scheduledOn}));
 
   const uint32_t classifyStartedMs = millis();
   const auto wakeupReason = gpio.getWakeupReason();

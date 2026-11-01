@@ -950,6 +950,11 @@ belongs to, so the rows here appear in the same order as on the device.
 - **Frontlight**, **Brightness**, **Warmth**, **Restore on Wake**.
 - **Max Brightness** — the top of the brightness range, 10 to 100 (default 30). The light
   panel's brightness track runs from 0 to this, and a brightness above it is brought down.
+- **Light Schedule**, **Light On From**, **Light On Until** (boards with a clock) — at each
+  wake inside these hours the light comes on by itself, whatever it was before sleep; 20:00
+  to 07:00 by default, in 15-minute steps. Only the wake reads it: a light you change by hand
+  stays that way until the next one, and the light does not go off by itself at the end time.
+  Outside the hours **Restore on Wake** decides as usual.
 
 In a book the light panel also has **Align Left** and **Justify**, which set the book's paragraph
 alignment (for that EPUB alone; in a TXT book, for every TXT book), and **Paragraph Spacing**,
