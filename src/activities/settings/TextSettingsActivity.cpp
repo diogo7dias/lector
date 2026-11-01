@@ -83,6 +83,8 @@ TextSettingsActivity::TextSettingsActivity(GfxRenderer& renderer, MappedInputMan
 void TextSettingsActivity::onEnter() {
   UiGridActivity::onEnter();
 
+  loadRowSettings();
+
   metrics_ = UITheme::getInstance().getMetrics();
   afterHeader = metrics_.topPadding + metrics_.headerHeight + metrics_.verticalSpacing;
   bottomReserved = metrics_.buttonHintsHeight + metrics_.verticalSpacing;
@@ -196,19 +198,34 @@ constexpr RowSpec ROW_SPECS[] = {
 };
 }  // namespace
 
-const SettingInfo* TextSettingsActivity::settingOf(const Row row) {
+// The settings list is not kept in heap, so the screen holds its own rows' entries while open:
+// settingOf() runs for every row on every frame, and option popups keep their label arrays.
+void TextSettingsActivity::loadRowSettings() {
+  rowSettings_.reserve(std::size(ROW_SPECS));
+  auto keep = [this](SettingInfo& info) {
+    if (!info.valuePtr) return;
+    for (const RowSpec& spec : ROW_SPECS) {
+      if (spec.setting == info.valuePtr) {
+        rowSettings_.push_back(std::move(info));
+        return;
+      }
+    }
+  };
+  forEachBaseSetting(keep);
+}
+
+const SettingInfo* TextSettingsActivity::settingOf(const Row row) const {
   static_assert(std::size(ROW_SPECS) == static_cast<size_t>(Row::Count),
                 "every Row needs exactly one ROW_SPECS line, in Row order");
   const auto member = ROW_SPECS[static_cast<size_t>(row)].setting;
   if (!member) return nullptr;
-  // The static list itself, not getSettingsList(): that copies all ~90 entries.
-  for (const SettingInfo& info : settingsBaseList()) {
+  for (const SettingInfo& info : rowSettings_) {
     if (info.valuePtr == member) return &info;
   }
   return nullptr;
 }
 
-TextSettingsActivity::RowKind TextSettingsActivity::kindOf(const Row row) {
+TextSettingsActivity::RowKind TextSettingsActivity::kindOf(const Row row) const {
   if (row == Row::Font) return RowKind::FontList;
   if (row == Row::Size) return RowKind::Picker;
   const SettingInfo* info = settingOf(row);

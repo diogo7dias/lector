@@ -7,13 +7,12 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
+#include "SettingInfo.h"
 #include "TextSettingsPreview.h"
 #include "activities/UiGridActivity.h"
 #include "components/OptionPopup.h"
 #include "components/themes/BaseTheme.h"
 #include "util/HoldRepeat.h"
-
-struct SettingInfo;
 
 // Reader text settings: a live page preview in the band above a grid of name-over-value
 // cells, one per setting (UiGridActivity). Toggles flip on Confirm, pickers open an
@@ -86,8 +85,9 @@ class TextSettingsActivity final : public UiGridActivity {
 
   // The SettingInfo entry behind a row: its name, kind, range, step and option labels.
   // nullptr for Font and Size, whose options come from the font registry.
-  static const SettingInfo* settingOf(Row row);
-  static RowKind kindOf(Row row);
+  const SettingInfo* settingOf(Row row) const;
+  RowKind kindOf(Row row) const;
+  void loadRowSettings();
   // The rows that apply right now, in draw order. Rebuilt from the live settings because
   // three rows come and go (indent %, the linked/split vertical margins, hidden dots).
   std::vector<Row> visibleRows() const;
@@ -126,6 +126,7 @@ class TextSettingsActivity final : public UiGridActivity {
   void commit();
   void loadLookFont();
   OptionPopup optionPopup_;
+  std::vector<SettingInfo> rowSettings_;  // see loadRowSettings()
   std::vector<FontEntry> fonts_;
   std::vector<SizeEntry> sizes_;
   textsettings::PreviewLayout previewLayout_;  // cached preview line layout; relaid only on setting/geometry change
