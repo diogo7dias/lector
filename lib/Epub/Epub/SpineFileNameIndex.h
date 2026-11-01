@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Fnv1a.h>
+#include <Memory.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -74,7 +75,7 @@ class SpineFileNameIndex {
 
   void clear() {
     entries_.clear();
-    entries_.shrink_to_fit();
+    shrinkToFit(entries_);
     added_ = 0;
     sealed_ = false;
   }

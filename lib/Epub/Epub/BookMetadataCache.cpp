@@ -3,6 +3,7 @@
 #include <BufferedFile.h>
 #include <Fnv1a.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Serialization.h>
 #include <Utf8.h>
 #include <ZipFile.h>
@@ -325,7 +326,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     LOG_DBG("BMC", "Batch lookup matched %d/%d spine items", matched, spineCount);
 
     targets.clear();
-    targets.shrink_to_fit();
+    shrinkToFit(targets);
 
     useBatchSizes = true;
   }

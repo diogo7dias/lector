@@ -40,7 +40,7 @@ void FontManifestParser::reset() {
   version_ = 0;
   baseUrl_[0] = '\0';
   families_.clear();
-  families_.shrink_to_fit();
+  shrinkToFit(families_);
   currentFamily_ = FontManifestFamily{};
   currentFile_ = FontManifestFile{};
   fileScratchCount_ = 0;

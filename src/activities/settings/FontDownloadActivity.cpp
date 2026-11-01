@@ -426,7 +426,7 @@ bool FontDownloadActivity::parseManifest(const FontManifestParser::FileRetention
   snprintf(manifestBytes, sizeof(manifestBytes), "%u bytes", static_cast<unsigned>(manifestFile.fileSize()));
 
   out.clear();
-  out.shrink_to_fit();
+  shrinkToFit(out);
 
   // On the heap, not the stack: the parser carries a fixed file scratch array and
   // an activity task's stack is not the place for it.
@@ -913,7 +913,7 @@ bool FontDownloadActivity::downloadFamily(const std::string& familyName) {
     }
   }
   reread.clear();
-  reread.shrink_to_fit();
+  shrinkToFit(reread);
   if (files.empty()) {
     LOG_ERR("FONT", "No files listed for %s in the manifest", familyName.c_str());
     setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_BAD_LIST), "");
