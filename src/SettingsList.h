@@ -17,6 +17,7 @@
 #include "KOReaderCredentialStore.h"
 #include "ReaderFontSizes.h"
 #include "activities/settings/SettingInfo.h"
+#include "frontlight/FrontlightBootPolicy.h"
 #include "util/BoundMenuLabels.h"
 #include "util/DictionaryRegistry.h"
 
@@ -234,7 +235,7 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
     // "Stack protection fault" during boot before anything painted. push_back keeps
     // exactly one SettingInfo temporary alive at a time.
     std::vector<SettingInfo> v;
-    v.reserve(88);
+    v.reserve(91);
     // --- Display ---
     v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
                                   std::move(sleepScreenValues), "sleepScreen", StrId::STR_CAT_DISPLAY)
@@ -303,6 +304,12 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 
     v.push_back(SettingInfo::Toggle(StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
                                     "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY));
+    v.push_back(SettingInfo::Toggle(StrId::STR_FRONTLIGHT_SCHEDULE, &CrossPointSettings::frontlightScheduleEnabled,
+                                    "frontlightScheduleEnabled", StrId::STR_CAT_DISPLAY));
+    v.push_back(SettingInfo::Value(StrId::STR_FRONTLIGHT_SCHEDULE_ON, &CrossPointSettings::frontlightScheduleOn,
+                                   {0, frontlight::SCHEDULE_LAST_STEP, 1}, nullptr, StrId::STR_CAT_DISPLAY));
+    v.push_back(SettingInfo::Value(StrId::STR_FRONTLIGHT_SCHEDULE_OFF, &CrossPointSettings::frontlightScheduleOff,
+                                   {0, frontlight::SCHEDULE_LAST_STEP, 1}, nullptr, StrId::STR_CAT_DISPLAY));
 
     v.push_back(SettingInfo::Enum(StrId::STR_AUTHOR_DISPLAY, &CrossPointSettings::authorDisplay,
                                   {StrId::STR_AUTHOR_INITIALS, StrId::STR_AUTHOR_FULL_NAME}, "authorDisplay",
@@ -830,9 +837,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   // the static baseList because the static is built on first use, which is not
   // guaranteed to be after HalFrontlight::begin().
   if (!withAbsentHardware && !Frontlight.present()) {
-    static constexpr StrId FRONTLIGHT_ROWS[] = {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS,
-                                                StrId::STR_FRONTLIGHT_MAX_BRIGHTNESS, StrId::STR_FRONTLIGHT_WARMTH,
-                                                StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE};
+    static constexpr StrId FRONTLIGHT_ROWS[] = {StrId::STR_FRONTLIGHT,
+                                                StrId::STR_FRONTLIGHT_BRIGHTNESS,
+                                                StrId::STR_FRONTLIGHT_MAX_BRIGHTNESS,
+                                                StrId::STR_FRONTLIGHT_WARMTH,
+                                                StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE,
+                                                StrId::STR_FRONTLIGHT_SCHEDULE,
+                                                StrId::STR_FRONTLIGHT_SCHEDULE_ON,
+                                                StrId::STR_FRONTLIGHT_SCHEDULE_OFF};
     v.erase(std::remove_if(v.begin(), v.end(),
                            [](const SettingInfo& s) {
                              return std::find(std::begin(FRONTLIGHT_ROWS), std::end(FRONTLIGHT_ROWS), s.nameId) !=
@@ -850,7 +862,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             v.end());
   }
   if (!withAbsentHardware && !halClock.isAvailable()) {
-    v.erase(std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_CLOCK; }),
+    // The schedule reads the same clock, at a wake, so the same reasoning drops it.
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) {
+                             return s.nameId == StrId::STR_CLOCK || s.nameId == StrId::STR_FRONTLIGHT_SCHEDULE ||
+                                    s.nameId == StrId::STR_FRONTLIGHT_SCHEDULE_ON ||
+                                    s.nameId == StrId::STR_FRONTLIGHT_SCHEDULE_OFF;
+                           }),
             v.end());
   }
   if (registry && registry->getFamilyCount() > 0) {

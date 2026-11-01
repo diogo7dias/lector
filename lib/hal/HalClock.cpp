@@ -76,9 +76,7 @@ bool HalClock::getDateTime(uint16_t& year, uint8_t& month, uint8_t& day, uint8_t
   return true;
 }
 
-bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased, bool use12Hour,
-                          const uint8_t zone) const {
-  if (bufSize < (use12Hour ? 9u : 6u)) return false;
+bool HalClock::localMinutes(uint16_t& minutes, uint8_t utcOffsetQuarterHoursBiased, const uint8_t zone) const {
   uint8_t h, m;
   if (!getTime(h, m)) return false;
 
@@ -105,7 +103,15 @@ bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHou
   int totalMinutes = static_cast<int>(h) * 60 + static_cast<int>(m) + offsetMinutes;
 
   // Wrap around 24 hours
-  totalMinutes = ((totalMinutes % 1440) + 1440) % 1440;
+  minutes = static_cast<uint16_t>(((totalMinutes % 1440) + 1440) % 1440);
+  return true;
+}
+
+bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased, bool use12Hour,
+                          const uint8_t zone) const {
+  if (bufSize < (use12Hour ? 9u : 6u)) return false;
+  uint16_t totalMinutes;
+  if (!localMinutes(totalMinutes, utcOffsetQuarterHoursBiased, zone)) return false;
 
   const int hour24 = totalMinutes / 60;
   const int min = totalMinutes % 60;

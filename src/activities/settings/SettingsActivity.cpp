@@ -41,11 +41,27 @@
 #include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "frontlight/FrontlightBootPolicy.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "util/CredentialBundle.h"
 #include "util/ReleaseStorage.h"
 
 namespace {
+
+bool isScheduleTime(const SettingInfo& setting) {
+  return setting.nameId == StrId::STR_FRONTLIGHT_SCHEDULE_ON || setting.nameId == StrId::STR_FRONTLIGHT_SCHEDULE_OFF;
+}
+
+// In the reader's clock format. Rounds down to the step, since a drag lands anywhere on the slider.
+void formatScheduleMinutes(const int minutes, char* const out, const size_t outSize) {
+  const int stepped = minutes - minutes % frontlight::SCHEDULE_STEP_MINUTES;
+  const int hour = stepped / 60;
+  if (SETTINGS.clockFormat == 1) {
+    snprintf(out, outSize, "%d:%02d %s", hour % 12 == 0 ? 12 : hour % 12, stepped % 60, hour >= 12 ? "PM" : "AM");
+  } else {
+    snprintf(out, outSize, "%02d:%02d", hour, stepped % 60);
+  }
+}
 
 // Push a just-changed frontlight row down to the hardware, so the light answers
 // the row instead of waiting for the next boot. No-op for every other row, and
@@ -131,6 +147,11 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) const
   }
   if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     char valueBuffer[32];
+    if (isScheduleTime(setting)) {
+      formatScheduleMinutes(SETTINGS.*(setting.valuePtr) * frontlight::SCHEDULE_STEP_MINUTES, valueBuffer,
+                            sizeof(valueBuffer));
+      return valueBuffer;
+    }
     if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
       if (SETTINGS.sleepTimeoutMinutes >= CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES) return tr(STR_SLEEP_NEVER);
       snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT),
@@ -316,7 +337,8 @@ void SettingsActivity::rebuildSettingsList() {
           // heading for a group whose rows are all missing.
           {StrId::STR_GRP_FRONTLIGHT,
            {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS, StrId::STR_FRONTLIGHT_MAX_BRIGHTNESS,
-            StrId::STR_FRONTLIGHT_WARMTH, StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE}},
+            StrId::STR_FRONTLIGHT_WARMTH, StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE, StrId::STR_FRONTLIGHT_SCHEDULE,
+            StrId::STR_FRONTLIGHT_SCHEDULE_ON, StrId::STR_FRONTLIGHT_SCHEDULE_OFF}},
           {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},
           {StrId::STR_GRP_SLEEP_SCREEN, {StrId::STR_SLEEP_SCREEN}},
           {StrId::STR_GRP_WALLPAPER,
@@ -492,7 +514,7 @@ ListChrome SettingsActivity::chrome() const {
 
   const int index = selected();
   const bool onSleepTimeout = mode == Mode::Category && index >= 0 && index < settingsCount &&
-                              settings[index].nameId == StrId::STR_TIME_TO_SLEEP;
+                              (settings[index].nameId == StrId::STR_TIME_TO_SLEEP || isScheduleTime(settings[index]));
   chrome.confirmHint = onSleepTimeout ? tr(STR_SELECT) : tr(STR_TOGGLE);
   chrome.thirdHint = tr(STR_DIR_UP);
   chrome.fourthHint = tr(STR_DIR_DOWN);
@@ -510,6 +532,10 @@ void SettingsActivity::toggleCurrentSetting() {
 
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
     openSleepTimeoutPicker();
+    return;
+  }
+  if (isScheduleTime(setting)) {
+    openScheduleTimePicker(setting.valuePtr, setting.nameId);
     return;
   }
 
@@ -831,6 +857,28 @@ void SettingsActivity::shareCredentials() {
   // onExit, so nothing here waits around holding passwords on the card.
   activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
       renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, path));
+}
+
+void SettingsActivity::openScheduleTimePicker(uint8_t CrossPointSettings::* const valuePtr, const StrId titleId) {
+  // In minutes so the step hints read "15 min" and "60 min".
+  constexpr int step = frontlight::SCHEDULE_STEP_MINUTES;
+  auto dialog = makeUniqueNoThrow<IntervalSelectionActivity>(
+      renderer, mappedInput, "SettingValue", titleId, SETTINGS.*valuePtr * step, 0,
+      frontlight::SCHEDULE_LAST_STEP * step, step, 60, StrId::STR_SLEEP_TIMER_VALUE_FORMAT);
+  if (!dialog) {
+    LOG_ERR("SET", "OOM: IntervalSelectionActivity");
+    return;
+  }
+  dialog->setReadoutFormat(formatScheduleMinutes);
+  startActivityForResult(std::move(dialog), [this, valuePtr](const ActivityResult& result) {
+    if (!result.isCancelled) {
+      SETTINGS.*valuePtr = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value / step);
+      SETTINGS.saveToFile();
+    }
+    rebuildSettingsList();
+    restoreCursorAfterRebuild();
+    requestUpdate();
+  });
 }
 
 void SettingsActivity::openSleepTimeoutPicker() {

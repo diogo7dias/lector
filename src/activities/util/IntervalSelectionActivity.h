@@ -27,6 +27,9 @@ class IntervalSelectionActivity final : public UiStatusActivity {
     void* ctx = nullptr;
   };
   void setLiveApply(const LiveApply apply) { liveApply = apply; }
+  // Replaces the readout for a value that is not a plain number (a time of day).
+  using ReadoutFormat = void (*)(int value, char* out, size_t outSize);
+  void setReadoutFormat(const ReadoutFormat format) { readoutFormat = format; }
 
   explicit IntervalSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* activityName,
                                      StrId titleId, int initialValue, int minValue, int maxValue, int smallStep,
@@ -69,6 +72,7 @@ class IntervalSelectionActivity final : public UiStatusActivity {
   bool ignoreConfirmRelease;
   ButtonNavigator buttonNavigator;
   LiveApply liveApply;
+  ReadoutFormat readoutFormat = nullptr;
   // What to hand back to liveApply if the reader cancels.
   int openedWithValue = 0;
   void applyLive() const;
