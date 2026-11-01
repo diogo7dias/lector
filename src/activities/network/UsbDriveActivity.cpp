@@ -78,8 +78,20 @@ bool UsbDriveActivity::handleCustomInput() {
         restartToHome();
       }
       return true;
-    case Phase::Preparing:
     case Phase::Connected:
+      // Unplugged on battery, TinyUSB stays mounted and only reports suspend. Host
+      // sleep ends the session too, on purpose: the card stays lent otherwise.
+      if (!Storage.usbDriveHostSuspended()) {
+        suspendedSince = 0;
+      } else if (suspendedSince == 0) {
+        suspendedSince = millis() | 1;
+      } else if (millis() - suspendedSince >= HOST_SUSPEND_TIMEOUT_MS) {
+        LOG_INF("USB", "USB host suspended; leaving USB Drive");
+        restartToHome();
+        return true;
+      }
+      break;
+    case Phase::Preparing:
       break;
   }
 

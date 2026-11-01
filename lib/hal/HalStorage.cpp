@@ -27,6 +27,11 @@ freeink::UsbMassStorage usbMassStorage;
 #endif
 }  // namespace
 
+#if FREEINK_CAP_USB_MSC
+extern "C" bool tud_mounted(void);
+extern "C" bool tud_suspended(void);
+#endif
+
 HalStorage::HalStorage() {
   // Recursive so the same task can re-enter StorageLock without self-deadlock.
   // openFileForRead/Write take the lock and then assign to a HalFile&
@@ -98,6 +103,15 @@ bool HalStorage::disconnectUsbDriveHost() {
 #if FREEINK_CAP_USB_MSC
   StorageLock lock;
   return usbMassStorage.disconnectHost();
+#else
+  return false;
+#endif
+}
+
+bool HalStorage::usbDriveHostSuspended() const {
+#if FREEINK_CAP_USB_MSC
+  StorageLock lock;
+  return usbMassStorage.active() && tud_mounted() && tud_suspended();
 #else
   return false;
 #endif
