@@ -1193,6 +1193,9 @@ when you are done; it writes to the card while it is on.
 - **Clear Reading Cache**.
 - **Check for updates**, **Install Other Firmware** and **SD Card Firmware Update** — see
   [section 13](#13-updating-the-firmware).
+- **What's New** — the notes for this release. After an update they also open once by
+  themselves, the first time Home appears; **OK** or Back closes them. A fresh install skips
+  that.
 
 ---
 

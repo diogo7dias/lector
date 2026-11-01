@@ -35,6 +35,8 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // sleep is a chip reset: a RAM-only flag would re-warn on every wake below the
   // threshold. Cleared again once the charge climbs back over LOW_BATTERY_CLEAR_PERCENT.
   bool lowBatteryWarned = false;
+  // What's New revision the reader has seen (ReleaseNotesActivity::REVISION).
+  uint16_t releaseNotesSeen = 0;
   // Wallpaper the last sleep screen actually rendered, or empty when the sleep screen
   // was not a wallpaper. Deep sleep is a chip reset, so the wake has no other way to
   // know what the panel is holding. The wake uses it to tell a wallpaper sleep from a

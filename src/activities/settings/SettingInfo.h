@@ -30,6 +30,7 @@ enum class SettingAction {
   PopupItems,
   Buttons,
   ShareCredentials,
+  ReleaseNotes,
 };
 
 struct SettingInfo {
