@@ -52,6 +52,12 @@ void IntervalSelectionActivity::applyLive() const {
 }
 
 void IntervalSelectionActivity::refreshValueText() {
+  if (readoutFormat) {
+    char text[32];
+    readoutFormat(value, text, sizeof(text));
+    valueText = text;
+    return;
+  }
   // A range whose top means "never" or "off" says so instead of showing the
   // number that stands for it.
   if (maxBoundaryLabelId != StrId::STR_NONE_OPT && value == maxValue) {

@@ -801,6 +801,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // switches itself on in a bright room is worse than one you turn on.
   // Brightness and warmth are remembered either way. See FrontlightBootPolicy.h.
   uint8_t frontlightRestoreOnWake = 0;
+  // Daily schedule, read at each wake: quarter hours since local midnight (see
+  // FrontlightBootPolicy.h). Needs a clock, so it is only offered on a board with one.
+  uint8_t frontlightScheduleEnabled = 0;
+  uint8_t frontlightScheduleOn = 80;   // 20:00
+  uint8_t frontlightScheduleOff = 28;  // 07:00
 
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
   static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;

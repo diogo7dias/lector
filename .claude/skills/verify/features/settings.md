@@ -20,10 +20,10 @@ Preconditions: baseline (default settings).
 
 - **Open.** `lv tap 240 729` twice. `activity` becomes `Settings`.
 - **Tab.** `lv tap 100 84` twice (Display).
-- **Read value.** `lv ink 400 403 76 22` is the value column of "Show Favorite Badge"; note its `ink`. `lv shot before`.
-- **Toggle.** `lv tap 150 413` twice. Poll `lv ink 400 403 76 22` until `ink` differs. `lv shot after`.
+- **Read value.** `lv ink 400 493 76 22` is the value column of "Show Favorite Badge"; note its `ink`. `lv shot before`.
+- **Toggle.** `lv tap 150 503` twice. Poll `lv ink 400 493 76 22` until `ink` differs. `lv shot after`.
 - **Persist.** `lv press home`, `lv reboot`, then Settings and Display again as above.
-  `lv ink 400 403 76 22` equals the toggled value. `lv shot after-reboot`.
+  `lv ink 400 493 76 22` equals the toggled value. `lv shot after-reboot`.
 
 ## Gotchas
 
