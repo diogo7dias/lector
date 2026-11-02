@@ -131,8 +131,7 @@ void ButtonBindingsActivity::openActionPicker(const size_t row) {
   std::vector<bool> disabledRows;
   pickerFunctions.clear();
   int currentIndex = 0;
-  for (uint8_t function = 0; function < CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT; ++function) {
-    if (std::find(retired.begin(), retired.end(), function) != retired.end()) continue;
+  const auto addRow = [&](const uint8_t function) {
     // Greyed rather than hidden outside a book: the two groups then list the same
     // actions in the same order, so the one that is missing reads as unavailable here
     // rather than as absent from the firmware.
@@ -141,6 +140,14 @@ void ButtonBindingsActivity::openActionPicker(const size_t row) {
     disabledRows.push_back(unavailable);
     if (function == *binding) currentIndex = static_cast<int>(pickerFunctions.size());
     pickerFunctions.push_back(function);
+  };
+  for (uint8_t function = 0; function < CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT; ++function) {
+    if (std::find(retired.begin(), retired.end(), function) != retired.end()) continue;
+    if (function == CrossPointSettings::LP_MENU_QUICK_LOCK) continue;
+    addRow(function);
+    // The pop-up does not scroll and this list runs past the panel, so the newest action
+    // cannot simply go last: it would be the one row nobody can see.
+    if (function == CrossPointSettings::LP_MENU_SLEEP) addRow(CrossPointSettings::LP_MENU_QUICK_LOCK);
   }
   if (pickerFunctions.empty()) return;
 

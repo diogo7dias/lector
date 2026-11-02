@@ -91,6 +91,9 @@ enum LONG_PRESS_MENU_FUNCTION {
   LP_MENU_ALIGN_JUSTIFY = 33,
   // Flips Extra Paragraph Spacing, beside the alignment pair in the light panel.
   LP_MENU_TOGGLE_PARAGRAPH_SPACING = 34,
+  // Ignores every input until the same action fires again, so it can only sit on a
+  // Buttons binding: the routed gestures are the one path that still runs while locked.
+  LP_MENU_QUICK_LOCK = 35,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 

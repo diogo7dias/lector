@@ -22,6 +22,7 @@
 #include "components/BusyBanner.h"
 #include "components/HintBandGeometry.h"
 #include "components/RowHitTest.h"
+#include "fontIds.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
@@ -178,7 +179,9 @@ void ActivityManager::renderTaskLoop() {
         // one place a paint begins, rather than inside the list draws — a screen that draws
         // two lists (the home's books and its menu) would otherwise have the second wipe the
         // first, and a screen that draws none would leave the previous screen's rows live.
-        if (lightPanel.isActive()) {
+        if (quickLocked) {
+          paintQuickLockBadge();
+        } else if (lightPanel.isActive()) {
           // Deliberately not re-rendering the activity: the panel is drawn over the page
           // already in the framebuffer, which is what makes it a live preview of the light
           // rather than a screen you leave the book for.
@@ -215,6 +218,12 @@ void ActivityManager::renderTaskLoop() {
 void ActivityManager::loop() {
   if (requiresExclusiveStorageLoop()) {
     currentActivity->loop();
+    if (requestedUpdate.exchange(false) && renderTaskHandle) xTaskNotify(renderTaskHandle, 1, eIncrement);
+    return;
+  }
+
+  // The one gate: every screen, the light panel and the Home gesture read their input below.
+  if (quickLocked) {
     if (requestedUpdate.exchange(false) && renderTaskHandle) xTaskNotify(renderTaskHandle, 1, eIncrement);
     return;
   }
@@ -435,6 +444,7 @@ void ActivityManager::goToReader(std::string path, const bool allowFastInitialRe
 void ActivityManager::goToSleep(bool fromTimeout) {
   // An open panel eats every loop() pass, so the sleep screen would never be applied.
   if (lightPanel.isActive()) lightPanel.close([] {});
+  quickLocked = false;  // Likewise, and the wake is a chip reset that would forget it anyway.
   replaceActivity(std::make_unique<SleepActivity>(renderer, mappedInput, fromTimeout));
   loop();  // Important: sleep screen must be rendered immediately, the caller will go to sleep right after this returns
 }
@@ -496,6 +506,36 @@ bool ActivityManager::isHomeActivity() const { return currentActivity && current
 bool ActivityManager::handleForcedRefresh() { return currentActivity && currentActivity->handleForcedRefresh(); }
 
 bool ActivityManager::isBookContext() const { return currentActivity && currentActivity->isBookContext(); }
+
+void ActivityManager::toggleQuickLock() {
+  if (!quickLocked &&
+      (!currentActivity || lightPanel.isActive() || pendingAction != PendingAction::None || preventAutoSleep())) {
+    LOG_INF("ACT", "Quick Lock refused");
+    return;
+  }
+  quickLocked = !quickLocked;
+  LOG_INF("ACT", "Quick Lock %s", quickLocked ? "on" : "off");
+  // Whatever is held now belongs to the gesture that fired this, not to the screen.
+  mappedInput.suppressHeldButtonRelease();
+  mappedInput.spendTouchContact();
+  if (!quickLocked) currentActivity->onRevealed();
+  requestUpdate(/*immediate=*/true);
+}
+
+// Over the page already in the framebuffer, like the light panel: nothing on screen is
+// changing, so the screen does not render again until the lock ends.
+void ActivityManager::paintQuickLockBadge() {
+  constexpr int padding = 6;
+  const char* text = tr(STR_LOCKED);
+  int top, right, bottom, left;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  const int width = renderer.getTextWidth(UI_10_FONT_ID, text) + padding * 2;
+  const int height = renderer.getLineHeight(UI_10_FONT_ID) + padding;
+  const int x = renderer.getScreenWidth() - right - width;
+  renderer.fillRect(x, top, width, height);
+  renderer.drawText(UI_10_FONT_ID, x + padding, top + padding / 2, text, /*black=*/false);
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+}
 
 bool ActivityManager::runBoundAction(const uint8_t function) {
   debug_trace::note("bound action %u dispatched", function);

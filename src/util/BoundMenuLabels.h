@@ -88,6 +88,8 @@ inline StrId boundMenuActionLabel(const uint8_t function) {
       return StrId::STR_FRONTLIGHT;
     case CrossPointSettings::LP_MENU_SLEEP:
       return StrId::STR_SLEEP;
+    case CrossPointSettings::LP_MENU_QUICK_LOCK:
+      return StrId::STR_QUICK_LOCK;
     case CrossPointSettings::LP_MENU_POPUP:
     default:
       return StrId::STR_MENU_POPUP;
