@@ -52,6 +52,7 @@ class OptionPopup {
     leftAligned = leftAlign;
     // Never open on a row Confirm would refuse.
     if (isDisabled(selectedIndex)) selectedIndex = nextEnabled(selectedIndex, 1);
+    layoutValid = false;
   }
 
   // EXEMPT from two-tap confirmation (components/TwoTapGate.h): this popup IS the
@@ -61,6 +62,17 @@ class OptionPopup {
   // the code path itself; this note is here so it stays a decision, not an oversight.
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
     if (!active) return swallowClosingRelease(input);
+
+    // The keys walk off the end of a page by themselves; a touch reader flicks to the next.
+    const auto scroll = input.wasListScrollSwipe();
+    if (scroll != list_swipe::Scroll::None) {
+      const auto& page = getLayout(input.getRenderer()).page;
+      if (page.total > 1) {
+        const bool forward = scroll == list_swipe::Scroll::PageDown;
+        selectRow(nextEnabled(forward ? page.first + page.count - 1 : page.first, forward ? 1 : -1), requestUpdate);
+      }
+      return true;
+    }
 
     int tx = 0;
     int ty = 0;
@@ -99,12 +111,10 @@ class OptionPopup {
     }
 
     if (input.wasPressed(MappedInputManager::Button::NavPrevious)) {
-      selectedIndex = nextEnabled(selectedIndex, -1);
-      requestUpdate();
+      selectRow(nextEnabled(selectedIndex, -1), requestUpdate);
       return true;
     } else if (input.wasPressed(MappedInputManager::Button::NavNext)) {
-      selectedIndex = nextEnabled(selectedIndex, 1);
-      requestUpdate();
+      selectRow(nextEnabled(selectedIndex, 1), requestUpdate);
       return true;
     } else if (input.wasPressed(MappedInputManager::Button::Confirm)) {
       // Every row disabled: there is nothing to choose, so Confirm dismisses rather
@@ -157,6 +167,13 @@ class OptionPopup {
     active = true;
   }
 
+  // The selection decides the page, so the tap targets go with it.
+  void selectRow(const int index, const std::function<void()>& requestUpdate) {
+    selectedIndex = index;
+    layoutValid = false;
+    requestUpdate();
+  }
+
   void closeOnPress(const std::function<void()>& requestUpdate) {
     active = false;
     closing = true;
@@ -198,6 +215,7 @@ class OptionPopup {
   struct Layout {
     Rect dialog{0, 0, 0, 0};
     std::vector<Rect> options;
+    option_popup::Page page;
   };
 
   // Text measurement is expensive and wasScreenTouchDown() is level-triggered, so the
@@ -206,10 +224,11 @@ class OptionPopup {
     if (layoutValid) return layout;
 
     const auto& metrics = UITheme::getInstance().getMetrics();
-    const auto g = option_popup::compute(renderer, metrics, title.c_str(), ownedStrings);
+    const auto g = option_popup::compute(renderer, metrics, title.c_str(), ownedStrings, selectedIndex);
 
     const int optionCount = static_cast<int>(ownedStrings.size());
     layout.dialog = Rect{g.dialogX, g.dialogY, g.dialogW, g.dialogH};
+    layout.page = g.page;
     layout.options.clear();
     layout.options.reserve(optionCount);
     for (int i = 0; i < optionCount; i++) {

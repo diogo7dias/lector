@@ -145,8 +145,7 @@ void ButtonBindingsActivity::openActionPicker(const size_t row) {
     if (std::find(retired.begin(), retired.end(), function) != retired.end()) continue;
     if (function == CrossPointSettings::LP_MENU_QUICK_LOCK) continue;
     addRow(function);
-    // The pop-up does not scroll and this list runs past the panel, so the newest action
-    // cannot simply go last: it would be the one row nobody can see.
+    // Beside Sleep rather than last in the enum: both are how the device gets put away.
     if (function == CrossPointSettings::LP_MENU_SLEEP) addRow(CrossPointSettings::LP_MENU_QUICK_LOCK);
   }
   if (pickerFunctions.empty()) return;

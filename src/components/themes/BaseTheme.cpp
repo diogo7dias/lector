@@ -1261,7 +1261,7 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   constexpr EpdFontFamily::Style optionStyle = option_popup::FONT_STYLE;
 
   // Shared with OptionPopup's hit-test layout, so a tap always resolves to the row it landed on.
-  const auto geometry = option_popup::compute(renderer, metrics, title, options);
+  const auto geometry = option_popup::compute(renderer, metrics, title, options, selectedIndex);
   const int innerPadding = geometry.innerPadding;
   const int selectionHPadding = metrics.optionPopupSelectionHPadding;
   const int lineHeight = geometry.lineHeight;
@@ -1289,6 +1289,12 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   }
 
   int y = dialogY + innerPadding;
+  if (geometry.page.total > 1) {
+    char pageText[12];
+    snprintf(pageText, sizeof(pageText), "%d/%d", geometry.page.number, geometry.page.total);
+    renderer.drawText(optionFontId, dialogX + dialogW - innerPadding - renderer.getTextWidth(optionFontId, pageText), y,
+                      pageText, true, optionStyle);
+  }
   for (const std::string& line : geometry.titleLines) {
     renderer.drawCenteredText(optionFontId, y, line.c_str(), true, optionStyle);
     y += lineHeight;
@@ -1306,6 +1312,7 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   for (int i = 0; i < optionCount; i++) {
     const int itemY = geometry.rowTop[i];
     const int rowHeight = geometry.rowHeight[i];
+    if (rowHeight == 0) continue;  // on another page
     const bool selected = (i == selectedIndex);
     const auto& lines = geometry.optionLines[i];
 
