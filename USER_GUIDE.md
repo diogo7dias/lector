@@ -980,6 +980,12 @@ which turns the extra space between an EPUB's paragraphs on or off for that book
   default) keeps Refresh Frequency; any other value applies only to inverted pages.
 - **Refresh at Chapter Start** — off by default. On adds a full refresh on the first page of
   each chapter you enter, on top of Refresh Frequency, so every chapter opens clean. EPUB only.
+- **Screen Calibration** — if the bezel covers the edge of the page, or leaves a gap, move each
+  edge until the whole border shows: pick **Top**, **Right**, **Bottom** or **Left**, then drag the
+  slider or step it, from 0 to 32 pixels. **Save** applies it to reading pages and the status
+  bar, and each book lays itself out again the next time you open it; Back keeps what you had.
+  **Reset to Defaults** goes back to this model's measurements. It is kept on the device, not on
+  the card. Menu screens keep their own spacing.
 - **Sunlight Fading Fix** — software fix for white X4 units fading in direct sunlight.
 
 **Home**

@@ -26,6 +26,7 @@
 #include "OtaUpdateActivity.h"
 #include "PopupItemsActivity.h"
 #include "ReleaseNotesActivity.h"
+#include "ScreenCalibrationActivity.h"
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
@@ -309,6 +310,7 @@ void SettingsActivity::rebuildSettingsList() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SHARE_CREDENTIALS, SettingAction::ShareCredentials));
   displaySettings.push_back(SettingInfo::Action(StrId::STR_SHUFFLE_WALLPAPERS, SettingAction::ShuffleWallpapers));
+  displaySettings.push_back(SettingInfo::Action(StrId::STR_SCREEN_CALIBRATION, SettingAction::ScreenCalibration));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAN_STORAGE, SettingAction::CleanStorage));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
@@ -339,7 +341,8 @@ void SettingsActivity::rebuildSettingsList() {
            {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS, StrId::STR_FRONTLIGHT_MAX_BRIGHTNESS,
             StrId::STR_FRONTLIGHT_WARMTH, StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE, StrId::STR_FRONTLIGHT_SCHEDULE,
             StrId::STR_FRONTLIGHT_SCHEDULE_ON, StrId::STR_FRONTLIGHT_SCHEDULE_OFF}},
-          {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},
+          {StrId::STR_GRP_SCREEN,
+           {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX, StrId::STR_SCREEN_CALIBRATION}},
           {StrId::STR_GRP_SLEEP_SCREEN, {StrId::STR_SLEEP_SCREEN}},
           {StrId::STR_GRP_WALLPAPER,
            {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER, StrId::STR_SHOW_SLEEP_IMAGE_FILENAME,
@@ -751,6 +754,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::SdFirmwareUpdate:
         startActivityForResult(std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::ScreenCalibration:
+        startActivityForResult(std::make_unique<ScreenCalibrationActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::ReleaseNotes:
         startActivityForResult(std::make_unique<ReleaseNotesActivity>(renderer, mappedInput), resultHandler);

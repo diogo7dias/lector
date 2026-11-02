@@ -15,6 +15,7 @@ class SdCardFont;
 
 #include "Bitmap.h"
 #include "FontVariantProvider.h"
+#include "ViewableInsets.h"
 
 namespace glyphBitmap {
 struct Frame;
@@ -37,6 +38,8 @@ class GfxRenderer {
   };
 
  private:
+  gfx::ViewableInsets calibratedInsets;
+  bool hasCalibratedInsets = false;
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
 
   HalDisplay& display;
@@ -160,7 +163,7 @@ class GfxRenderer {
   // Bezel-covered edge insets come from the running board profile
   // (BoardConfig::ACTIVE.viewableInsets), so a board whose bezel covers less than
   // the X4's keeps its chrome flush with the screen edge. See
-  // getOrientedViewableTRBL().
+  // getOrientedViewableTRBL(). Screen Calibration can override them per device.
 
   // Setup
   void begin();  // must be called right after display.begin()
@@ -244,6 +247,12 @@ class GfxRenderer {
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
+  // The reader's own calibration, when there is one, stands in for the board's measurements.
+  gfx::ViewableInsets portraitViewableInsets() const;
+  void setViewableInsets(const gfx::ViewableInsets& insets) {
+    calibratedInsets = insets;
+    hasCalibratedInsets = true;
+  }
 
   // Tiled grayscale strip target. While active, drawPixel() and clearScreen()
   // operate on `scratch` (panelWidthBytes * stripRows bytes, holding physical
