@@ -326,6 +326,10 @@ of them can be pointed at any action.
 **Pop-up Items** decides which rows the quick pop-up those bindings can open actually
 contains.
 
+A list too long for the screen, such as the actions in **Buttons**, splits into pages and
+shows `1/2` beside its title. The side keys walk from one page to the next; on a touch screen,
+flick up or down.
+
 **Quick Lock** is on offer only in **Settings > Controls > Buttons**: bind it to a button
 gesture, in the book, outside it or both. Firing it leaves the screen as it is with a
 **Locked** badge in the corner, and touch and every button stop answering until you fire the
