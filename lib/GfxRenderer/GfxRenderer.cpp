@@ -2424,6 +2424,12 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
   }
 }
 
+gfx::ViewableInsets GfxRenderer::portraitViewableInsets() const {
+  if (hasCalibratedInsets) return calibratedInsets;
+  const auto& insets = BoardConfig::ACTIVE.viewableInsets;
+  return {insets.top, insets.right, insets.bottom, insets.left};
+}
+
 void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const {
   // The board profile measures the bezel in the renderer's Portrait frame; the pure
   // helper rotates it into whatever orientation is on screen. The cast is only safe
@@ -2433,9 +2439,8 @@ void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBo
   static_assert(static_cast<int>(PortraitInverted) == static_cast<int>(gfx::InsetOrientation::PortraitInverted));
   static_assert(static_cast<int>(LandscapeCounterClockwise) ==
                 static_cast<int>(gfx::InsetOrientation::LandscapeCounterClockwise));
-  const auto& insets = BoardConfig::ACTIVE.viewableInsets;
-  const gfx::ViewableInsets oriented = gfx::orientInsets({insets.top, insets.right, insets.bottom, insets.left},
-                                                         static_cast<gfx::InsetOrientation>(orientation));
+  const gfx::ViewableInsets oriented =
+      gfx::orientInsets(portraitViewableInsets(), static_cast<gfx::InsetOrientation>(orientation));
   *outTop = oriented.top;
   *outRight = oriented.right;
   *outBottom = oriented.bottom;

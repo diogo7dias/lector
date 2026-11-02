@@ -9,6 +9,7 @@
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
+#include <HalScreenCalibration.h>
 #include <HalStorage.h>
 #include <HalSystem.h>
 #include <I18n.h>
@@ -432,6 +433,12 @@ bool recoveryChordHeld(const unsigned long inputStartedMs) {
 static void setupDisplay(const bool seamless, const HalGPIO::WakeupReason wakeupReason) {
   display.begin(seamless, wakeupReason);
   renderer.begin();
+  uint8_t calibratedEdges[4];
+  if (HalScreenCalibration::load(calibratedEdges)) {
+    const gfx::ViewableInsets calibrated{calibratedEdges[0], calibratedEdges[1], calibratedEdges[2],
+                                         calibratedEdges[3]};
+    if (gfx::validCalibration(calibrated)) renderer.setViewableInsets(calibrated);
+  }
   // Only this file can put the device down, so the light panel's Sleep button is handed
   // the same entry point every other sleep route uses.
   activityManager.setSleepAction([] { enterDeepSleep(); });
