@@ -112,6 +112,15 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 80
+
+Layout fixes; the binary layout is unchanged. Text running straight into a block or heading
+start stays its own word. Justification counts a literal space only when it has a continuation
+after it, and a no-break space carried to the start of a wrapped line is dropped.
+`font-weight: inherit` and `font-style: inherit` keep the parent's emphasis, which moves the CSS
+rules cache to version 19. SD font word widths snap per glyph, as drawing does. The partial
+version is 202.
+
 ### Version 79
 
 Small images (no taller than two text lines and narrower than the column, unless the book

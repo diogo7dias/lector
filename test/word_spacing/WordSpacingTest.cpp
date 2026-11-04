@@ -6,57 +6,10 @@
 #include <iterator>
 #include <sstream>
 
+#include "LayoutCapture.h"
 #include "ParsedText.h"
 
 namespace {
-struct Line {
-  std::vector<std::string> words;
-  std::vector<int16_t> x;
-  std::vector<EpdFontFamily::Style> styles;
-  std::vector<uint8_t> focus;
-  std::vector<uint16_t> suffix;
-  std::vector<uint16_t> dots;
-};
-std::vector<Line> lines;
-const GfxRenderer renderer;
-constexpr int FONT = 0;
-constexpr const char* PROSE =
-    "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau";
-
-void layout(const std::string& text, int percent, int width, CssTextAlign align = CssTextAlign::Left,
-            uint8_t dots = GUIDE_DOTS_OFF, bool rtl = false, bool styled = false) {
-  lines.clear();
-  BlockStyle style;
-  style.alignment = align;
-  style.textAlignDefined = true;
-  style.directionDefined = true;
-  style.isRtl = rtl;
-  ParsedText parsed(false, dots, style, 1, 0, percent);
-  std::istringstream input(text);
-  std::string word;
-  int i = 0;
-  while (input >> word) {
-    const auto fontStyle = styled && ++i % 2 == 0 ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
-    // ChapterHtmlSlimParser::characterData emits NBSP as an attached space token.
-    size_t start = 0;
-    size_t nbsp;
-    while ((nbsp = word.find("\xC2\xA0", start)) != std::string::npos) {
-      parsed.addWord(word.substr(start, nbsp - start), fontStyle, start != 0);
-      parsed.addWord(" ", fontStyle, true);
-      start = nbsp + 2;
-    }
-    parsed.addWord(word.substr(start), fontStyle, start != 0);
-  }
-  parsed.layoutAndExtractLines(renderer, FONT, width, [](void*, std::unique_ptr<TextBlock>, uint32_t) {}, nullptr);
-}
-
-int rightEdge(const Line& line) {
-  int edge = 0;
-  for (size_t i = 0; i < line.words.size(); ++i)
-    edge = std::max(edge, line.x[i] + renderer.getTextAdvanceX(FONT, line.words[i].c_str(), line.styles[i]));
-  return edge;
-}
-
 // Unambiguous byte snapshot of every word, position, style and optional annotation.
 std::string snapshot() {
   std::ostringstream out;
@@ -161,6 +114,34 @@ TEST_P(WordSpacing, NbspStaysAttachedAndScales) {
       GetParam(), 103, CssTextAlign::Justify);
   ASSERT_GT(lines.size(), 1u);
   for (size_t i = 0; i + 1 < lines.size(); ++i) EXPECT_EQ(103, rightEdge(lines[i]));
+}
+
+TEST_P(WordSpacing, NbspAfterDashStaysFlushWhenJustified) {
+  layout(
+      "a b foo\xE2\x80\x94\xC2\xA0"
+      "bar c d e f g h i j k l m n o p",
+      GetParam(), 160, CssTextAlign::Justify);
+  ASSERT_GT(lines.size(), 1u);
+  for (size_t i = 0; i + 1 < lines.size(); ++i) EXPECT_EQ(160, rightEdge(lines[i])) << "line " << i;
+}
+
+TEST(WordSpacing, NbspEndingALineDoesNotLeaveItShort) {
+  layout(
+      "aa bb cc\xC2\xA0 "
+      "dddddddddd eeeeeeeeee",
+      100, 110, CssTextAlign::Justify);
+  ASSERT_GT(lines.size(), 1u);
+  ASSERT_EQ(" ", lines[0].words.back());
+  EXPECT_EQ(110, rightEdge(lines[0]));
+}
+
+TEST(WordSpacing, NbspCarriedToTheNextLineDoesNotIndentIt) {
+  layout(
+      "foo\xE2\x80\x94\xC2\xA0"
+      "barbar",
+      100, 70, CssTextAlign::Left);
+  ASSERT_EQ(2u, lines.size());
+  EXPECT_EQ(std::vector<std::string>{"barbar"}, lines[1].words);
 }
 
 TEST_P(WordSpacing, CjkKeepsZeroWidthBoundariesAndFlushJustification) {
