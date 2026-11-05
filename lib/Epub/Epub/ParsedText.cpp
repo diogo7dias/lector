@@ -186,27 +186,28 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text, const 
     size_t endOffset;
   };
 
-  // A word holding Hangul is a Korean word, Hanja and all, so it stays one token.
-  for (const auto* p = reinterpret_cast<const unsigned char*>(text.c_str()); *p && !splitHangul;) {
-    if (utf8IsHangul(utf8NextCodepoint(&p))) return {};
+  // A word holding Hangul is a Korean word, Hanja and all, so it stays one token. Runs for every
+  // word in a book, so Latin and Korean words leave before the staging vector below is allocated.
+  bool hasCjkBreakable = false;
+  for (const auto* p = reinterpret_cast<const unsigned char*>(text.c_str()); *p;) {
+    const uint32_t cp = utf8NextCodepoint(&p);
+    if (!splitHangul && utf8IsHangul(cp)) return {};
+    if (utf8IsCjkBreakable(cp)) hasCjkBreakable = true;
   }
+  if (!hasCjkBreakable) return {};
 
   std::vector<CodepointBoundary> codepoints;
   codepoints.reserve(text.size());
-  bool hasCjkBreakable = false;
 
   const auto* ptr = reinterpret_cast<const unsigned char*>(text.c_str());
   const auto* const start = ptr;
   while (*ptr) {
     const uint32_t cp = utf8NextCodepoint(&ptr);
     if (cp == 0) break;
-    if (utf8IsCjkBreakable(cp)) {
-      hasCjkBreakable = true;
-    }
     codepoints.push_back({cp, static_cast<size_t>(ptr - start)});
   }
 
-  if (!hasCjkBreakable || codepoints.size() < 2) return {};
+  if (codepoints.size() < 2) return {};
 
   std::vector<size_t> allowedOffsets;
   allowedOffsets.reserve(codepoints.size() - 1);
