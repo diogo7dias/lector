@@ -6,6 +6,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <algorithm>
 #include <cctype>
 #include <climits>
 #include <cstdlib>
@@ -46,7 +47,6 @@ void indexBuildYield(void*) { vTaskDelay(1); }
 
 void DictionaryWordSelectActivity::onEnter() {
   Activity::onEnter();
-  lineHeight = renderer.getLineHeight(fontId);
   // No null check: a failed allocation just disables the differential
   // fast path (drawHighlightWithSnapshot skips the read), keeping the
   // full-repaint path as the fallback.
@@ -88,33 +88,40 @@ void DictionaryWordSelectActivity::extractWords() {
     if (!block || !block->valid()) continue;
 
     bool rowHasWords = false;
-    const int ascender = renderer.getFontAscenderSize(fontId);
-    const int rubyShift = block->getRubyShift(ascender);
     for (uint16_t i = 0; i < block->wordCount(); i++) {
       const char* text = block->wordText(i);
       if (!isSelectableToken(text)) continue;
 
       WordBox box;
       box.x = static_cast<int16_t>(line->xPos + block->wordXpos(i) + marginLeft);
-      box.y = static_cast<int16_t>(line->yPos + marginTop + rubyShift);
-      box.style = block->wordStyle(i);
-      box.width = 0;  // measured below, once the advance table is ready
+      box.y = static_cast<int16_t>(line->yPos + marginTop + block->wordBoxTop(renderer, fontId, i));
+      box.width = 0;   // measured below, once the advance table is ready
+      box.height = 0;  // likewise, with the font resolved
       box.row = rowCount;
-      box.text = text;
+      box.index = i;
+      box.block = block.get();
       words.push_back(box);
       rowHasWords = true;
 
       pageText.append(text);
       pageText.push_back(' ');
-      styleMask |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(box.style) & 0x03));
+      styleMask |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(block->wordStyle(i)) & 0x03));
     }
     if (rowHasWords) rowCount++;
   }
 
   if (styleMask == 0) styleMask = 0x01;  // REGULAR
-  renderer.ensureSdCardFontReady(fontId, pageText.c_str(), styleMask);
+  // ponytail: a page with more sizes than this measures the rest off the SD card, just slower.
+  int readied[4];
+  size_t readiedCount = 0;
   for (auto& word : words) {
-    word.width = static_cast<int16_t>(renderer.getTextAdvanceX(fontId, word.text, word.style));
+    const int font = word.block->wordRenderFont(renderer, fontId, word.index);
+    if (readiedCount < 4 && std::find(readied, readied + readiedCount, font) == readied + readiedCount) {
+      renderer.ensureSdCardFontReady(font, pageText.c_str(), styleMask);
+      readied[readiedCount++] = font;
+    }
+    word.width = static_cast<int16_t>(word.block->wordWidth(renderer, fontId, word.index));
+    word.height = static_cast<int16_t>(renderer.getLineHeight(font));
   }
 }
 
@@ -125,7 +132,7 @@ int DictionaryWordSelectActivity::wordAt(const int x, const int y) const {
   constexpr int SLOP = 4;  // matches the highlight box (+2) plus finger error
   for (int i = 0; i < static_cast<int>(words.size()); i++) {
     const WordBox& word = words[i];
-    if (x >= word.x - SLOP && x < word.x + word.width + SLOP && y >= word.y - SLOP && y < word.y + lineHeight + SLOP) {
+    if (x >= word.x - SLOP && x < word.x + word.width + SLOP && y >= word.y - SLOP && y < word.y + word.height + SLOP) {
       return i;
     }
   }
@@ -183,7 +190,7 @@ void DictionaryWordSelectActivity::performLookup() {
   std::string definition;
   std::string headword;
   Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
-  const bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);
+  const bool found = ok && dict.lookup(words[selected].text(), definition, headword, &result);
 
   if (found) {
     popup = Popup::None;
@@ -294,7 +301,7 @@ bool DictionaryWordSelectActivity::drawHighlightWithSnapshot() {
   int hx = word.x - 2;
   int hy = word.y - 2;
   int hw = word.width + 4;
-  int hh = lineHeight + 4;
+  int hh = word.height + 4;
   // Clamp to the panel so save, draw and restore all use the same box.
   if (hx < 0) {
     hw += hx;
@@ -316,7 +323,7 @@ bool DictionaryWordSelectActivity::drawHighlightWithSnapshot() {
   snapshotIdx = saved ? selected : -1;
 
   renderer.fillRect(hx, hy, hw, hh, true);
-  renderer.drawText(fontId, word.x, word.y, word.text, false, word.style);
+  word.block->drawWord(renderer, fontId, word.index, word.x, word.y, false);
   return saved;
 }
 
@@ -348,8 +355,10 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
     renderer.writeFramebufferRegion(snapshotX, snapshotY, snapshotW, snapshotH, snapshot.get());
     // The full path's PrewarmScope cleared the glyph cache on exit; batch-load
     // just the highlighted word's glyphs before drawing them white-on-black.
+    const WordBox& word = words[selected];
     renderer.getFontCacheManager()->prewarmCache(
-        fontId, words[selected].text, static_cast<uint8_t>(1u << (static_cast<uint8_t>(words[selected].style) & 0x03)));
+        word.block->wordRenderFont(renderer, fontId, word.index), word.text(),
+        static_cast<uint8_t>(1u << (static_cast<uint8_t>(word.block->wordStyle(word.index)) & 0x03)));
     if (drawHighlightWithSnapshot()) {
       drawHints();
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);

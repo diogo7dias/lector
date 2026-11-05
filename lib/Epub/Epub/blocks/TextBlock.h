@@ -1,4 +1,5 @@
 #pragma once
+#include <BidiUtils.h>
 #include <EpdFontFamily.h>
 #include <HalStorage.h>
 
@@ -71,6 +72,8 @@ class TextBlock final : public Block {
   TextBlock() = default;  // deserialize() fills the fields directly
   static size_t arenaSize(uint16_t wordCount, bool hasFocus, bool hasGuideDots, uint16_t textBytes);
   void bindArenaPointers();
+  void drawWordInk(const GfxRenderer& renderer, int wordFont, uint16_t i, int x, int y, bool black,
+                   BidiUtils::BidiBaseDir baseDir) const;
 
  public:
   // Flatten-on-construct: copies the layout-time vectors into the arena; the
@@ -103,8 +106,15 @@ class TextBlock final : public Block {
   static int renderFontId(const GfxRenderer& renderer, int fontId, int sectionFontId);
   // Ascent of the line's shared baseline: the tallest font among its words.
   int lineAscent(const GfxRenderer& renderer, int sectionFontId) const;
-  // Offset from the line top at which to draw word i so every word shares the baseline.
-  int wordYOffset(const GfxRenderer& renderer, int sectionFontId, uint16_t i) const;
+  // Word i's font as render() draws it, for screens that measure or redraw it over the page.
+  int wordRenderFont(const GfxRenderer& renderer, int sectionFontId, uint16_t i) const;
+  // Top of word i's box below the line top: the ruby gap plus the drop to the shared
+  // baseline. The box is as tall as wordRenderFont's line height.
+  int wordBoxTop(const GfxRenderer& renderer, int sectionFontId, uint16_t i) const;
+  // Word i's width as drawn, Word Expansion included.
+  int wordWidth(const GfxRenderer& renderer, int sectionFontId, uint16_t i) const;
+  // Draws word i over its box at (x, boxTop) exactly as render() does, in either color.
+  void drawWord(const GfxRenderer& renderer, int sectionFontId, uint16_t i, int x, int boxTop, bool black) const;
   // Extra height the line needs beyond its block font for taller words.
   int extraAscent(const GfxRenderer& renderer, int sectionFontId) const;
   bool isEmpty() override { return numWords == 0; }
