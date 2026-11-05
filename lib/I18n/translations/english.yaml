@@ -243,7 +243,7 @@ STR_NOTES_TEXT_BODY: "On a touch screen, spread or pinch two fingers to change t
 STR_NOTES_BOOKS_TITLE: "Books as the publisher set them"
 STR_NOTES_BOOKS_BODY: "Drop caps, borders, small caps and type sizes from the book's own style. Small pictures stay inside the line, and Go to Page jumps to a printed page number."
 STR_NOTES_FILES_TITLE: "Your device, your way"
-STR_NOTES_FILES_BODY: "Rename a book from the file browser and it keeps its place. Quick Lock stops buttons and touch. Screen Calibration moves the page in from the bezel. With a frontlight, Light Schedule turns it on when you wake the reader at night."
+STR_NOTES_FILES_BODY: "Rename a book and it keeps its place. Quick Lock stops buttons and touch. Screen Calibration fits the page to the bezel. Light Schedule turns the frontlight on at night."
 STR_LANGUAGE: "Language"
 STR_CLEAR_READING_CACHE: "Clear Reading Cache"
 STR_USERNAME: "Username"
