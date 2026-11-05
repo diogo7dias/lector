@@ -2015,14 +2015,14 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
   std::string visual;
   text = resolveVisualText(text, visual, BidiUtils::BidiBaseDir::AUTO);
 
-  // Advance table fast-path for SD card fonts during layout.
-  // No kerning/ligature lookup — consistent with previous metadataOnly behavior
-  // where kern/lig data was not loaded.
+  // Advance table fast-path for SD card fonts during layout. Snaps each advance like drawText.
+  // Kerning/ligature data is not resident during layout, so kerned pairs can still differ.
   // Letters stepped between, for Character Spacing: counted the way drawText counts them.
   int glyphs = 0;
   auto sdIt = sdCardFonts_.find(resolvedFontId);
   if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
-    int32_t widthFP = 0;
+    int widthPx = 0;
+    int32_t prevAdvanceFP = 0;
     const bool isSupSub = (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0;
     const uint8_t styleIdx = resolveSdCardStyle(*sdIt->second, style);
     const auto fontIt = fontMap.find(resolvedFontId);
@@ -2032,22 +2032,24 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     }
     const auto& font = fontIt->second;
     while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text))) {
-      // RTL vowel marks (niqqud/harakat) are zero-advance overlays in drawText — no width.
-      if (BidiUtils::isTransparentMark(cp)) {
+      // RTL vowel marks (niqqud/harakat) and combining marks are zero-advance overlays in drawText.
+      if (BidiUtils::isTransparentMark(cp) || utf8IsCombiningMark(cp)) {
         continue;
       }
       const uint32_t smallCapCp = (style & EpdFontFamily::SMALL_CAPS) ? utf8SmallCapsUpper(cp) : cp;
       const bool isSmallCap = smallCapCp != cp;
       cp = smallCapCp;
       int32_t advFP = sdIt->second->getAdvance(cp, styleIdx);
-      if (advFP == 0 && !utf8IsCombiningMark(cp)) {
+      if (advFP == 0) {
         const EpdGlyph* glyph = font.getGlyph(cp, style);
         advFP = glyph ? glyph->advanceX : 0;
       }
-      widthFP += isSupSub ? (advFP + 1) / 2 : (isSmallCap ? scaleSmallCapAdvance(advFP) : advFP);
-      if (!utf8IsCombiningMark(cp)) ++glyphs;
+      widthPx += fp4::toPixel(prevAdvanceFP);
+      prevAdvanceFP = isSupSub ? (advFP + 1) / 2 : (isSmallCap ? scaleSmallCapAdvance(advFP) : advFP);
+      ++glyphs;
     }
-    return fp4::toPixel(widthFP) + spacingPixels(std::max(0, glyphs - 1), trackingFor(fontId));
+    widthPx += fp4::toPixel(prevAdvanceFP);
+    return widthPx + spacingPixels(std::max(0, glyphs - 1), trackingFor(fontId));
   }
 
   const auto fontIt = fontMap.find(resolvedFontId);
