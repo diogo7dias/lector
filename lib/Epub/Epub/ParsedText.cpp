@@ -121,27 +121,28 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text, const 
     size_t endOffset;
   };
 
-  // A word holding Hangul is a Korean word, Hanja and all, so it stays one token.
-  for (const auto* p = reinterpret_cast<const unsigned char*>(text.c_str()); *p && !splitHangul;) {
-    if (utf8IsHangul(utf8NextCodepoint(&p))) return {};
+  // A word holding Hangul is a Korean word, Hanja and all, so it stays one token. Runs for every
+  // word in a book, so Latin and Korean words leave before the staging vector below is allocated.
+  bool hasCjkBreakable = false;
+  for (const auto* p = reinterpret_cast<const unsigned char*>(text.c_str()); *p;) {
+    const uint32_t cp = utf8NextCodepoint(&p);
+    if (!splitHangul && utf8IsHangul(cp)) return {};
+    if (utf8IsCjkBreakable(cp)) hasCjkBreakable = true;
   }
+  if (!hasCjkBreakable) return {};
 
   std::vector<CodepointBoundary> codepoints;
   codepoints.reserve(text.size());
-  bool hasCjkBreakable = false;
 
   const auto* ptr = reinterpret_cast<const unsigned char*>(text.c_str());
   const auto* const start = ptr;
   while (*ptr) {
     const uint32_t cp = utf8NextCodepoint(&ptr);
     if (cp == 0) break;
-    if (utf8IsCjkBreakable(cp)) {
-      hasCjkBreakable = true;
-    }
     codepoints.push_back({cp, static_cast<size_t>(ptr - start)});
   }
 
-  if (!hasCjkBreakable || codepoints.size() < 2) return {};
+  if (codepoints.size() < 2) return {};
 
   std::vector<size_t> allowedOffsets;
   allowedOffsets.reserve(codepoints.size() - 1);
@@ -1196,7 +1197,11 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
                              const std::vector<size_t>& lineBreakIndices, const LineSinkFn processLine,
                              void* const processLineCtx, const GfxRenderer& renderer, const int fontId) {
   const size_t lineBreak = lineBreakIndices[breakIndex];
-  const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
+  size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
+  // A no-break space carried across a soft wrap must not indent the next line.
+  if (breakIndex > 0) {
+    while (lastBreakAt + 1 < lineBreak && continuesVec[lastBreakAt] && words[lastBreakAt] == " ") ++lastBreakAt;
+  }
   const size_t lineWordCount = lineBreak - lastBreakAt;
   const uint32_t lineVisibleOffset = visibleOffsetAt(lastBreakAt);
 
@@ -1244,8 +1249,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     lineWordWidthSum += wordWidths[lastBreakAt + wordIdx];
     if (wordIdx == 0) continue;
     const size_t boundaryIdx = lastBreakAt + wordIdx;
-    const bool isSpaceToken = lineWords[wordIdx] == " ";
-    if (TokenBoundary::isJustifiableGap(continuesVec[boundaryIdx], noSpaceBeforeVec[boundaryIdx], isSpaceToken)) {
+    const bool isStretchableSpace =
+        lineWords[wordIdx] == " " && wordIdx + 1 < lineWordCount && continuesVec[boundaryIdx + 1];
+    if (TokenBoundary::isJustifiableGap(continuesVec[boundaryIdx], isStretchableSpace)) {
       actualGapCount++;
     }
     if (continuesVec[boundaryIdx]) {
@@ -1377,7 +1383,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
             spaceAdvance(renderer, fontId, lastCodepoint(reorderedWordsScratch[wordIdx - 1]),
                          firstCodepoint(reorderedWordsScratch[wordIdx]), reorderedStylesScratch[wordIdx - 1]);
       } else if (wordIdx > 0 && reorderedContinuesScratch[wordIdx]) {
-        if (reorderedWordsScratch[wordIdx] == " ") {
+        if (reorderedWordsScratch[wordIdx] == " " && wordIdx + 1 < reorderedWidthsScratch.size() &&
+            reorderedContinuesScratch[wordIdx + 1]) {
           reorderedGapCount++;
         }
         reorderedNaturalGaps +=

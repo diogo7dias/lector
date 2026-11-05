@@ -132,7 +132,10 @@ namespace {
 //      tables plan their columns; orphan/widow lines move to the next page.
 // v79: small images (up to two lines tall) sit inside the text line instead of breaking the
 //      paragraph; a line with one grows to the image's height (CrossInk 9e7cf2f09).
-constexpr uint8_t SECTION_FILE_VERSION = 79;
+// v80: text running into a block stays its own word; literal spaces count correctly when
+//      justifying; a carried no-break space does not indent; font-weight/font-style: inherit
+//      keep the parent's emphasis; SD font widths snap per glyph like drawText.
+constexpr uint8_t SECTION_FILE_VERSION = 80;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

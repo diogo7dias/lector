@@ -84,6 +84,20 @@ TEST_F(CssParserTest, ResolvesCaseInsensitiveCascadeAndRepeatedSelectors) {
   EXPECT_EQ(style.marginTop.unit, CssUnit::Em);
 }
 
+TEST_F(CssParserTest, ExplicitFontInheritanceSurvivesTheCache) {
+  CssParser writer(cachePath());
+  ASSERT_EQ(loadCss(writer, ".reset { font-weight: inherit; font-style: inherit; }\n"),
+            CssParser::ParseResult::Complete);
+  EXPECT_EQ(writer.resolveStyle("span", "reset").fontWeight, CssFontWeight::Inherit);
+  EXPECT_EQ(writer.resolveStyle("span", "reset").fontStyle, CssFontStyle::Inherit);
+  ASSERT_TRUE(writer.saveToCache(true));
+
+  CssParser reader(cachePath());
+  ASSERT_EQ(reader.loadFromCache(), CssParser::CacheLoadResult::Complete);
+  EXPECT_EQ(reader.resolveStyle("span", "reset").fontWeight, CssFontWeight::Inherit);
+  EXPECT_EQ(reader.resolveStyle("span", "reset").fontStyle, CssFontStyle::Inherit);
+}
+
 TEST_F(CssParserTest, DeduplicatedStylesReachTheBoundedRuleCap) {
   CssParser parser(cachePath());
   std::string css;

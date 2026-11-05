@@ -1397,6 +1397,16 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     cssStyle.keepBuckets(self->embeddedTextStyle, self->embeddedLayoutStyle, self->bookMargins);
   }
 
+  // Resolve explicit inheritance after the cascade, before this element changes the active style.
+  if (cssStyle.fontWeight == CssFontWeight::Inherit) {
+    cssStyle.fontWeight =
+        (self->effectiveBold || self->boldUntilDepth < self->depth) ? CssFontWeight::Bold : CssFontWeight::Normal;
+  }
+  if (cssStyle.fontStyle == CssFontStyle::Inherit) {
+    cssStyle.fontStyle =
+        (self->effectiveItalic || self->italicUntilDepth < self->depth) ? CssFontStyle::Italic : CssFontStyle::Normal;
+  }
+
   if (strcmp(name, "pre") == 0 && !cssStyle.defined.whiteSpace) {
     cssStyle.preserveWhitespace = true;
     cssStyle.defined.whiteSpace = 1;
@@ -2054,6 +2064,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   if (matches(name, HEADER_TAGS, std::size(HEADER_TAGS))) {
+    // Text running straight into a block ("text<h3>") is still in the part-word buffer;
+    // flush it into the block it belongs to before that block is replaced.
+    if (self->partWordBufferIndex > 0) self->flushPartWordBuffer();
     self->currentCssStyle = cssStyle;
     auto headerBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Center, self->viewportWidth);
     headerBlockStyle.textAlignDefined = true;
@@ -2086,6 +2099,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
       self->breakTextLine(self->blockStyleStack.back().withoutTop().withoutBottom());
     } else {
+      if (self->partWordBufferIndex > 0) self->flushPartWordBuffer();
       self->currentCssStyle = cssStyle;
       auto blockStyle = userAlignmentBlockStyle;
       self->applyBlockFontScale(blockStyle, cssStyle, name);
