@@ -38,8 +38,8 @@ class DictEntryList {
     uint32_t size;
     uint16_t nameAt;
   };
-  Entry entries[MAX_ENTRIES];
-  char names[NAME_BYTES];
+  Entry entries[MAX_ENTRIES] = {};
+  char names[NAME_BYTES] = {};
   size_t count = 0;
   size_t namesUsed = 0;
 };
