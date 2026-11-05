@@ -11,6 +11,9 @@
 #include <WiFi.h>
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
+#include <fcntl.h>
+#include <lwip/sockets.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <cctype>
@@ -27,6 +30,7 @@
 #include "SettingsList.h"
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
+#include "WsIdleClients.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
@@ -55,6 +59,9 @@ constexpr bool kVectorFontUploads = false;
 
 // Static pointer for WebSocket callback (WebSocketsServer requires C-style callback)
 CrossPointWebServer* wsInstance = nullptr;
+
+// millis() of each WebSocket client's last event, 0 for a free slot.
+uint32_t wsLastActivity[WEBSOCKETS_SERVER_CLIENT_MAX] = {};
 
 // WebSocket upload state
 HalFile wsUploadFile;
@@ -232,14 +239,15 @@ void CrossPointWebServer::begin() {
   if (!wsServer) {
     LOG_ERR("WEB", "OOM: WebSocketsServer; upload socket unavailable");
   } else {
+    std::fill(std::begin(wsLastActivity), std::end(wsLastActivity), 0);
     wsInstance = const_cast<CrossPointWebServer*>(this);
     wsServer->begin();
     wsServer->onEvent(wsEventCallback);
   }
   LOG_DBG("WEB", "WebSocket server started");
 
-  udpActive = udp.begin(LOCAL_UDP_PORT);
-  LOG_DBG("WEB", "Discovery UDP %s on port %d", udpActive ? "enabled" : "failed", LOCAL_UDP_PORT);
+  openDiscoverySocket();
+  LOG_DBG("WEB", "Discovery UDP %s on port %d", discoverySocket >= 0 ? "enabled" : "failed", LOCAL_UDP_PORT);
 
   // Do not subscribe the serving task to the task watchdog. Arduino WebServer
   // permits five-second client and ACK waits, which can consume the entire
@@ -349,10 +357,7 @@ void CrossPointWebServer::stop() {
   fetchQueued = false;
   fetchCancelRequested = fetchRunning;
 
-  if (udpActive) {
-    udp.stop();
-    udpActive = false;
-  }
+  closeDiscoverySocket();
 
   // Brief delay to allow any in-flight handleClient() calls to complete
   delay(20);
@@ -395,38 +400,63 @@ void CrossPointWebServer::handleClient() {
   // Handle WebSocket events
   if (wsServer) {
     wsServer->loop();
+    ws_idle::closeIdleClients(*wsServer, wsLastActivity, WEBSOCKETS_SERVER_CLIENT_MAX, millis());
   }
   // A transfer that failed in the pump above reaches the card here, outside
   // any render lock; a no-op when nothing was recorded.
   diag::flushIfPending();
 
-  // Respond to discovery broadcasts
-  if (udpActive) {
-    int packetSize = udp.parsePacket();
-    if (packetSize > 0) {
-      char buffer[16];
-      int len = udp.read(buffer, sizeof(buffer) - 1);
-      if (len > 0) {
-        buffer[len] = '\0';
-        if (strcmp(buffer, "hello") == 0) {
-          String hostname = WiFi.getHostname();
-          if (hostname.isEmpty()) {
-            hostname = "crosspoint";
-          }
-          String message = "crosspoint (on " + hostname + ");" + String(wsPort);
-          udp.beginPacket(udp.remoteIP(), udp.remotePort());
-          udp.write(reinterpret_cast<const uint8_t*>(message.c_str()), message.length());
-          udp.endPacket();
-        }
-      }
-    }
-  }
+  answerDiscovery();
 
   // Last, so the transfer starts from a serviced server rather than from the
   // middle of a request: runQueuedFetch() pumps the server itself while it runs.
   if (fetchQueued) {
     runQueuedFetch();
   }
+}
+
+// Discovery uses a plain socket: NetworkUDP keeps a 1,460-byte send buffer
+// while it is open, for a reply of a few dozen bytes.
+void CrossPointWebServer::openDiscoverySocket() {
+  if (discoverySocket >= 0) return;
+  const int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  if (fd < 0) return;
+  sockaddr_in addr = {};
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(LOCAL_UDP_PORT);
+  addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  if (bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0 ||
+      fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK) < 0) {
+    close(fd);
+    return;
+  }
+  discoverySocket = fd;
+}
+
+void CrossPointWebServer::closeDiscoverySocket() {
+  if (discoverySocket < 0) return;
+  close(discoverySocket);
+  discoverySocket = -1;
+}
+
+// Answers a "hello" broadcast with the device name and WebSocket port.
+void CrossPointWebServer::answerDiscovery() const {
+  if (discoverySocket < 0) return;
+  char buffer[16];
+  sockaddr_in from = {};
+  socklen_t fromLen = sizeof(from);
+  const int len =
+      recvfrom(discoverySocket, buffer, sizeof(buffer) - 1, 0, reinterpret_cast<sockaddr*>(&from), &fromLen);
+  if (len <= 0) return;
+  buffer[len] = '\0';
+  if (strcmp(buffer, "hello") != 0) return;
+  const char* hostname = WiFi.getHostname();
+  char message[96];
+  const int messageLen = snprintf(message, sizeof(message), "crosspoint (on %s);%u",
+                                  hostname && hostname[0] ? hostname : "crosspoint", static_cast<unsigned>(wsPort));
+  if (messageLen <= 0) return;
+  sendto(discoverySocket, message, std::min(static_cast<size_t>(messageLen), sizeof(message) - 1), 0,
+         reinterpret_cast<sockaddr*>(&from), fromLen);
 }
 
 bool CrossPointWebServer::recentlyActive() const {
@@ -1973,6 +2003,9 @@ void CrossPointWebServer::wsEventCallback(uint8_t num, WStype_t type, uint8_t* p
   if (wsInstance) {
     wsInstance->onWebSocketEvent(num, type, payload, length);
   }
+  // Stamped after the handler: checking a large partial before a RESUME offer can
+  // block for minutes, and the client must not be called idle for the device's wait.
+  if (num < WEBSOCKETS_SERVER_CLIENT_MAX) wsLastActivity[num] = type == WStype_DISCONNECTED ? 0 : millis();
 }
 
 // WebSocket event handler for fast binary uploads

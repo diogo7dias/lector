@@ -1,7 +1,6 @@
 #pragma once
 
 #include <HalStorage.h>
-#include <NetworkUdp.h>
 #include <WebServer.h>
 #include <WebSocketsServer.h>
 
@@ -112,9 +111,11 @@ class CrossPointWebServer {
   bool running = false;
   bool apMode = false;  // true when running in AP mode, false for STA mode
   uint16_t port = 80;
-  uint16_t wsPort = 81;  // WebSocket port
-  NetworkUDP udp;
-  bool udpActive = false;
+  uint16_t wsPort = 81;      // WebSocket port
+  int discoverySocket = -1;  // UDP discovery, -1 when closed
+  void openDiscoverySocket();
+  void closeDiscoverySocket();
+  void answerDiscovery() const;
 
   // WebSocket upload state
   void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
