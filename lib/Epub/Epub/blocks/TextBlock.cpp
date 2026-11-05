@@ -145,6 +145,48 @@ bool TextBlock::hasRuby() const {
   return false;
 }
 
+namespace {
+int scriptShift(const EpdFontFamily::Style style, const int ascender) {
+  if ((style & EpdFontFamily::SUP) != 0) return -(ascender * 2 / 5);
+  if ((style & EpdFontFamily::SUB) != 0) return ascender / 4;
+  return 0;
+}
+}  // namespace
+
+void TextBlock::drawWordInk(const GfxRenderer& renderer, const int wordFont, const uint16_t i, const int x, const int y,
+                            const bool black, const BidiUtils::BidiBaseDir baseDir) const {
+  const char* word = wordText(i);
+  const EpdFontFamily::Style style = wordStyle(i);
+  const uint8_t boundary = focusBoundary(i);
+  if (boundary == 0) {
+    renderer.drawText(wordFont, x, y, word, black, style, baseDir, letterSpacing);
+    return;
+  }
+  // Focus split: draw bold prefix, then the regular suffix at a pre-computed x offset.
+  // The bold prefix is bounded to 9 codepoints by the clamp on targetBoldChars in
+  // ParsedText::addWord; 9 UTF-8 codepoints occupy at most 9 * 4 = 36 bytes, +1 for null = 37.
+  // suffixX is computed at cache-creation time to avoid font metric lookups at render time.
+  static constexpr size_t MAX_FOCUS_PREFIX_BYTES = 9 * 4 + 1;
+  char boldBuf[40];
+  static_assert(sizeof(boldBuf) >= MAX_FOCUS_PREFIX_BYTES,
+                "boldBuf too small for max focus prefix (9 codepoints * 4 UTF-8 bytes + null)");
+  const auto boldStyle = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD);
+  const size_t boldLen =
+      std::min<size_t>({static_cast<size_t>(boundary), static_cast<size_t>(wordTextLen(i)), sizeof(boldBuf) - 1});
+  memcpy(boldBuf, word, boldLen);
+  boldBuf[boldLen] = '\0';
+  renderer.drawText(wordFont, x, y, boldBuf, black, boldStyle, baseDir);
+  renderer.drawText(wordFont, x + focusSuffixXArr[i], y, word + boldLen, black, style, baseDir);
+}
+
+void TextBlock::drawWord(const GfxRenderer& renderer, const int sectionFontId, const uint16_t i, const int x,
+                         const int boxTop, const bool black) const {
+  const auto baseDir = BidiUtils::detectParagraphLevel(
+      wordText(i), blockStyle.isRtl ? BidiUtils::BidiBaseDir::RTL : BidiUtils::BidiBaseDir::LTR);
+  drawWordInk(renderer, wordRenderFont(renderer, sectionFontId, i), i, x,
+              boxTop + scriptShift(wordStyle(i), lineAscent(renderer, sectionFontId)), black, baseDir);
+}
+
 void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, const int x, const int y) const {
   if (!isValid) {
     LOG_ERR("TXB", "Render skipped: invalid block");
@@ -229,7 +271,6 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
     const EpdFontFamily::Style currentStyle = wordStyle(i);
     const auto baseDir = BidiUtils::detectParagraphLevel(
         word, blockStyle.isRtl ? BidiUtils::BidiBaseDir::RTL : BidiUtils::BidiBaseDir::LTR);
-    const uint8_t boundary = focusBoundary(i);
     const int wordFont = wordFontData ? renderFontId(renderer, wordFontId(i, sectionFontId), sectionFontId) : fontId;
     const int wordAscender = wordFont == fontId && !wordFontData ? ascender : renderer.getFontAscenderSize(wordFont);
 
@@ -237,35 +278,11 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
     // drawText, so these offsets are chosen relative to the full-size ascender:
     //   SUP: raise by 40% of ascender — sits clearly above the cap-height
     //   SUB: lower by 25% of ascender — descends below baseline without clashing with ascenders below
-    int wordY = y + rubyShift + (ascender - wordAscender);
-    if ((currentStyle & EpdFontFamily::SUP) != 0) {
-      wordY -= ascender * 2 / 5;
-    } else if ((currentStyle & EpdFontFamily::SUB) != 0) {
-      wordY += ascender / 4;
-    }
+    const int wordY = y + rubyShift + (ascender - wordAscender) + scriptShift(currentStyle, ascender);
 
     const int drawX = wordX;
 
-    if (boundary > 0) {
-      // Focus split: draw bold prefix, then the regular suffix at a pre-computed x offset.
-      // The bold prefix is bounded to 9 codepoints by the clamp on targetBoldChars in
-      // ParsedText::addWord; 9 UTF-8 codepoints occupy at most 9 * 4 = 36 bytes, +1 for null = 37.
-      // suffixX is computed at cache-creation time to avoid font metric lookups at render time.
-      static constexpr size_t MAX_FOCUS_PREFIX_BYTES = 9 * 4 + 1;
-      char boldBuf[40];
-      static_assert(sizeof(boldBuf) >= MAX_FOCUS_PREFIX_BYTES,
-                    "boldBuf too small for max focus prefix (9 codepoints * 4 UTF-8 bytes + null)");
-      const auto boldStyle = static_cast<EpdFontFamily::Style>(currentStyle | EpdFontFamily::BOLD);
-      const size_t boldLen =
-          std::min<size_t>({static_cast<size_t>(boundary), static_cast<size_t>(wordTextLen(i)), sizeof(boldBuf) - 1});
-      memcpy(boldBuf, word, boldLen);
-      boldBuf[boldLen] = '\0';
-      renderer.drawText(wordFont, drawX, wordY, boldBuf, true, boldStyle, baseDir);
-      const int suffixX = drawX + focusSuffixXArr[i];
-      renderer.drawText(wordFont, suffixX, wordY, word + boldLen, true, currentStyle, baseDir);
-    } else {
-      renderer.drawText(wordFont, drawX, wordY, word, true, currentStyle, baseDir, letterSpacing);
-    }
+    drawWordInk(renderer, wordFont, i, drawX, wordY, true, baseDir);
 
     // Horizontal ruby text rendering
     if (blockHasRuby && i < rubyTexts.size() && !rubyTexts[i].empty() &&

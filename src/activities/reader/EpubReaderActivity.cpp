@@ -2483,22 +2483,32 @@ void EpubReaderActivity::drawQuoteUnderlines(const Page& page, const int marginL
   // NUL-terminated text and outlives this call, so no strings are copied.
   struct TokenBox {
     int16_t x;
-    int16_t y;
-    EpdFontFamily::Style style;
+    int16_t y;  // line top, ruby gap included: every word of a row shares it
+    uint16_t word;
+    const TextBlock* block;
   };
+  // Reserve the page's real count: a box is 12 bytes, and 512 of them would all be taken.
+  size_t pageTokens = 0;
+  for (const auto& el : page.elements) {
+    if (el->getTag() != TAG_PageLine) continue;
+    const auto& block = static_cast<const PageLine&>(*el).getBlock();
+    if (block && block->valid()) pageTokens += block->wordCount();
+  }
+  pageTokens = std::min(pageTokens, MAX_PAGE_TOKENS);
   std::vector<const char*> texts;
   std::vector<TokenBox> boxes;
-  texts.reserve(MAX_PAGE_TOKENS);
-  boxes.reserve(MAX_PAGE_TOKENS);
+  texts.reserve(pageTokens);
+  boxes.reserve(pageTokens);
   for (const auto& el : page.elements) {
     if (el->getTag() != TAG_PageLine) continue;
     const auto& line = static_cast<const PageLine&>(*el);
     const auto& block = line.getBlock();
     if (!block || !block->valid()) continue;
+    const int top = line.yPos + marginTop + block->getRubyShift(block->lineAscent(renderer, fontId));
     for (uint16_t i = 0; i < block->wordCount() && texts.size() < MAX_PAGE_TOKENS; i++) {
       texts.push_back(block->wordText(i));
-      boxes.push_back({static_cast<int16_t>(line.xPos + block->wordXpos(i) + marginLeft),
-                       static_cast<int16_t>(line.yPos + marginTop), block->wordStyle(i)});
+      boxes.push_back({static_cast<int16_t>(line.xPos + block->wordXpos(i) + marginLeft), static_cast<int16_t>(top), i,
+                       block.get()});
     }
   }
   if (texts.empty()) return;
@@ -2512,7 +2522,6 @@ void EpubReaderActivity::drawQuoteUnderlines(const Page& page, const int marginL
   HalFile file;
   if (!Storage.openFileForRead("ERS", path, file)) return;
 
-  const int ascender = renderer.getFontAscenderSize(fontId);
   for (size_t c = 0; c < candidateCount; c++) {
     const auto& ref = quoteAnchors[candidates[c]];
     if (!file.seek(ref.textOffset)) continue;
@@ -2536,10 +2545,14 @@ void EpubReaderActivity::drawQuoteUnderlines(const Page& page, const int marginL
       const int16_t rowY = boxes[i].y;
       size_t rowEnd = i;
       while (rowEnd + 1 <= last && boxes[rowEnd + 1].y == rowY) rowEnd++;
-      const int x2 = boxes[rowEnd].x + renderer.getTextAdvanceX(fontId, texts[rowEnd], boxes[rowEnd].style);
-      underlineMemo.push_back(
-          {boxes[i].x, static_cast<int16_t>(x2),
-           static_cast<int16_t>(quote_underline::underlineY(rowY, ascender, lineHeight, thickness))});
+      const TextBlock& rowBlock = *boxes[i].block;
+      const int x2 = boxes[rowEnd].x + boxes[rowEnd].block->wordWidth(renderer, fontId, boxes[rowEnd].word);
+      const int rowHeight =
+          renderer.getLineHeight(TextBlock::renderFontId(renderer, rowBlock.blockFontId(fontId), fontId)) +
+          rowBlock.extraAscent(renderer, fontId);
+      underlineMemo.push_back({boxes[i].x, static_cast<int16_t>(x2),
+                               static_cast<int16_t>(quote_underline::underlineY(
+                                   rowY, rowBlock.lineAscent(renderer, fontId), rowHeight, thickness))});
       i = rowEnd + 1;
     }
   }

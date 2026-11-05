@@ -39,10 +39,20 @@ int TextBlock::lineAscent(const GfxRenderer& renderer, const int sectionFontId) 
   return ascent;
 }
 
-int TextBlock::wordYOffset(const GfxRenderer& renderer, const int sectionFontId, const uint16_t i) const {
-  if (!wordFontData) return 0;
-  return lineAscent(renderer, sectionFontId) -
-         renderer.getFontAscenderSize(renderFontId(renderer, wordFontId(i, sectionFontId), sectionFontId));
+int TextBlock::wordRenderFont(const GfxRenderer& renderer, const int sectionFontId, const uint16_t i) const {
+  return renderFontId(renderer, wordFontId(i, sectionFontId), sectionFontId);
+}
+
+int TextBlock::wordBoxTop(const GfxRenderer& renderer, const int sectionFontId, const uint16_t i) const {
+  const int ascent = lineAscent(renderer, sectionFontId);
+  return getRubyShift(ascent) + ascent - renderer.getFontAscenderSize(wordRenderFont(renderer, sectionFontId, i));
+}
+
+int TextBlock::wordWidth(const GfxRenderer& renderer, const int sectionFontId, const uint16_t i) const {
+  const int font = wordRenderFont(renderer, sectionFontId, i);
+  const int width = renderer.getTextAdvanceX(font, wordText(i), wordStyle(i));
+  if (!letterSpacing) return width;
+  return width + letterSpacing * std::max(0, renderer.spacedGlyphCount(font, wordText(i), wordStyle(i)) - 1);
 }
 
 int TextBlock::extraAscent(const GfxRenderer& renderer, const int sectionFontId) const {
