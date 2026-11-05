@@ -577,7 +577,11 @@ Error messages include:
 | `ERROR:Upload overflow` | Client sent more bytes than declared |
 | `ERROR:Write failed - disk full?` | SD write failed |
 
-Incomplete WebSocket uploads are deleted on disconnect or error.
+A disconnect keeps an unfinished upload's `.part` file so the next attempt can resume it.
+
+The server accepts two WebSocket connections at a time and closes further ones
+without a reply. It closes a connection that sends nothing for two minutes, which
+counts as a disconnect.
 
 ## WebDAV
 
