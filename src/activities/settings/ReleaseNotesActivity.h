@@ -10,7 +10,7 @@ class ReleaseNotesActivity final : public UiStatusActivity {
  public:
   // Bump with each release whose notes change, and rewrite the notes strings in english.yaml:
   // every reader whose saved revision is lower sees What's New once.
-  static constexpr uint16_t REVISION = 1;
+  static constexpr uint16_t REVISION = 2;
   // The release the notes describe, kept apart from CROSSPOINT_VERSION so a patch
   // build does not relabel them.
   static constexpr char VERSION[] = "0.48.0";
