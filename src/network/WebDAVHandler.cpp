@@ -11,7 +11,6 @@
 #include "util/TaskWatchdog.h"
 
 namespace {
-constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 
 // RFC 1123 date format helper: "Sun, 06 Nov 1994 08:49:37 GMT"
 // ESP32 doesn't have real-time clock set by default, so we use a fixed epoch date
@@ -815,9 +814,7 @@ bool WebDAVHandler::isProtectedPath(const String& path) {
 
     if (segment.startsWith(".")) return true;
 
-    for (const auto* item : HIDDEN_ITEMS) {
-      if (segment.equals(item)) return true;
-    }
+    if (FsHelpers::isSystemFolderName(std::string_view{segment.c_str(), segment.length()})) return true;
 
     start = end + 1;
   }

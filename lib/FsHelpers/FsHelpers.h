@@ -79,6 +79,10 @@ bool hasTextBookExtension(std::string_view fileName);
 // Any file the reader opens as a book: EPUB, XTC or text.
 bool hasBookExtension(std::string_view fileName);
 
+// A folder the OS or another reader writes on the card ("System Volume Information",
+// "XTCache"): never a book folder, and never listed or walked.
+bool isSystemFolderName(std::string_view name);
+
 // Check for .css extension (case-insensitive)
 bool hasCssExtension(std::string_view fileName);
 inline bool hasCssExtension(const String& fileName) {

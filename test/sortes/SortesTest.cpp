@@ -58,6 +58,8 @@ TEST_F(SortesTest, ScansEveryFolderAndNeverSelectsUnfinishedBooks) {
   for (const auto& path : eligible) book(path, 100);
   book("/read/unfinished.epub", 20);
   book("/.crosspoint/ignored.epub", 100);
+  book("/System Volume Information/ignored.epub", 100);
+  book("/books/XTCache/ignored.epub", 100);
   std::set<std::string> seen;
   for (int i = 0; i < 100; ++i) {
     seed = static_cast<uint32_t>(i);

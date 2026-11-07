@@ -109,7 +109,7 @@ void FileBrowserActivity::loadFiles() {
     if ((++scanned & 0x3F) == 0) busy::tick();
     file.getName(fileNameBuffer.get(), NAME_BUFFER_SIZE);
     if ((!SETTINGS.showHiddenFiles && fileNameBuffer[0] == '.') ||
-        strcmp(fileNameBuffer.get(), "System Volume Information") == 0) {
+        FsHelpers::isSystemFolderName(fileNameBuffer.get())) {
       continue;
     }
 

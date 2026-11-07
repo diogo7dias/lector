@@ -124,3 +124,11 @@ TEST(FsHelpers, SanitizeDoesNotSplitLetterAtBufferLimit) {
   EXPECT_EQ(sanitize("Жизнь", 8), "Жиз");
   EXPECT_EQ(sanitize(kLongTitle), "Богиня-глюкозы.-Нормализуйте-уров");
 }
+
+TEST(FsHelpersTest, SystemFolderNamesAreExact) {
+  EXPECT_TRUE(FsHelpers::isSystemFolderName("System Volume Information"));
+  EXPECT_TRUE(FsHelpers::isSystemFolderName("XTCache"));
+  EXPECT_FALSE(FsHelpers::isSystemFolderName("system volume information"));
+  EXPECT_FALSE(FsHelpers::isSystemFolderName("XTCache2"));
+  EXPECT_FALSE(FsHelpers::isSystemFolderName("books"));
+}
