@@ -6,8 +6,8 @@
 #include <functional>
 
 #include "CrossPointState.h"
+#include "QuoteText.h"
 #include "RecentBooksStore.h"
-#include "activities/reader/QuoteText.h"
 #include "util/BookmarkUtil.h"
 
 namespace bookfiling {

@@ -36,7 +36,4 @@ std::string deobfuscateFromBase64(const char* encoded, bool* ok = nullptr);
 // allocating its result buffer and reports that case through tooLong.
 std::string deobfuscateFromBase64(const char* encoded, size_t maxDecodedLength, bool* ok, bool* tooLong);
 
-// Self-test: verifies round-trip obfuscation with hardware key. Logs PASS/FAIL.
-void selfTest();
-
 }  // namespace obfuscation

@@ -1,6 +1,5 @@
 #include "Logging.h"
 
-#include <BoardConfig.h>
 #include <esp_rom_sys.h>
 
 #include <string>

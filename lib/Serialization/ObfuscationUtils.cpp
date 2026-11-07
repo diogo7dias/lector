@@ -91,26 +91,4 @@ std::string deobfuscateFromBase64(const char* encoded, const size_t maxDecodedLe
   return result;
 }
 
-void selfTest() {
-  const char* testInputs[] = {"", "hello", "WiFi P@ssw0rd!", "a"};
-  bool allPassed = true;
-  for (const char* input : testInputs) {
-    String encoded = obfuscateToBase64(std::string(input));
-    std::string decoded = deobfuscateFromBase64(encoded.c_str());
-    if (decoded != input) {
-      LOG_ERR("OBF", "FAIL: \"%s\" -> \"%s\" -> \"%s\"", input, encoded.c_str(), decoded.c_str());
-      allPassed = false;
-    }
-  }
-  // Verify obfuscated form differs from plaintext
-  String enc = obfuscateToBase64("test123");
-  if (enc == "test123") {
-    LOG_ERR("OBF", "FAIL: obfuscated output identical to plaintext");
-    allPassed = false;
-  }
-  if (allPassed) {
-    LOG_DBG("OBF", "Obfuscation self-test PASSED");
-  }
-}
-
 }  // namespace obfuscation

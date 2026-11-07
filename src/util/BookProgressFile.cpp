@@ -5,8 +5,8 @@
 
 #include <cstring>
 
+#include "ProgressFile.h"
 #include "RecentBooksStore.h"
-#include "activities/reader/ProgressFile.h"
 #include "util/BookCacheUtils.h"
 
 namespace book_progress {

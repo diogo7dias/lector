@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "activities/reader/ReaderPrefs.h"
+#include "ReaderPrefs.h"
 
 // A named set of reader look settings — "Reading Themes" in the UI.
 //

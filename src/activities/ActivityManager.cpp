@@ -231,7 +231,7 @@ void ActivityManager::loop() {
   if (currentActivity) {
     // Home from anywhere, handled once here rather than in every activity: the
     // capacitive Home key on boards that have one, the bottom-edge up-swipe on the
-    // rest. Activities that need to intervene override handleHomeGesture().
+    // rest.
     // The light panel takes input before anything else while it is up, and the top-edge
     // swipe opens it from any screen. Handled once here for the same reason Home is.
     // Immediate, not deferred. Every branch below returns out of loop() before the
@@ -254,7 +254,6 @@ void ActivityManager::loop() {
     }
 
     if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
-      if (currentActivity->handleHomeGesture()) return;
       goHome();
       return;
     }

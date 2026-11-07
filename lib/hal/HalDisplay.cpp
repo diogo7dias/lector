@@ -294,10 +294,6 @@ void HalDisplay::deepSleep() {
 // and returns immediately when the rails are already down, so a repeat costs no bus traffic.
 void HalDisplay::powerOffPanel() { einkDisplay.powerOffPanel(); }
 
-void HalDisplay::setBusyWaitSliceHook(bool (*sliceHook)(int8_t busyPin, uint8_t busyLevel)) {
-  einkDisplay.setBusyWaitSliceHook(sliceHook);
-}
-
 uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
 uint8_t* HalDisplay::lendFrameBufferStorage(uint32_t* sizeOut) { return einkDisplay.lendBuildStorage(sizeOut); }

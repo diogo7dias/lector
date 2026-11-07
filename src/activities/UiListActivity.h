@@ -44,10 +44,6 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Touch long-press on a row; only fires when the subclass opted in via the
   // wantsTouchLongPress constructor flag (rows must also carry InputLongPress).
   virtual void onRowLongPress(int index) {}
-  // The selection/viewport state the loop, sync, and row dispatch operate on.
-  // Default (and only current) storage is the single `nav` member; the hook
-  // exists so a screen with more than one viewport can redirect it.
-  virtual freeink::ui::ListNav& activeNav() { return nav; }
   // Bounds-checked ACTION_ROW dispatch. Default: selection follows the tapped
   // row, then long-press/activate.
   virtual void onRowAction(const freeink::ui::ActionEvent& event);
@@ -73,17 +69,10 @@ class UiListActivity : public Activity, protected UiAppHost {
   virtual ListChrome chrome() const;
   // Shorthand for the common case: a title and nothing else.
   virtual const char* headerTitle() const { return nullptr; }
-  // The paint itself. Overriding these is the exception now; chrome() is the
-  // hook, and the base reserves the body from the same numbers it draws with.
-  virtual void drawChrome();
-  virtual void drawFooter();
   // Drawn over the finished page, after the app and the hints. Return true when
   // the overlay refreshed the display itself (GUI.drawPopup does) so the base
   // does not push a second refresh behind it.
   virtual bool drawOverlay() { return false; }
-  // The waveform this pass is pushed with. The first paint after entry or a
-  // reveal is promoted from FAST to HALF by the base (cleanPaint_).
-  virtual HalDisplay::RefreshMode refreshMode() { return HalDisplay::FAST_REFRESH; }
 
   // --- helpers ---------------------------------------------------------------
   // Measure visibleRows for the screen band, apply follow-on-build, clamp the
@@ -104,8 +93,7 @@ class UiListActivity : public Activity, protected UiAppHost {
   // --- shared state ----------------------------------------------------------
   // Where the last build put the rows, for drawScrollArrows().
   Rect listBand{};
-  // Selection + viewport (selected/top/visibleRows/followOnBuild). Access via
-  // activeNav() in shared code; `nav` is the single-list default storage.
+  // Selection + viewport (selected/top/visibleRows/followOnBuild).
   freeink::ui::ListNav nav;
   // List repeat rates, not the {500, 500} page-flick default: holding used to
   // jump a whole page per repeat, which is ~14 rows twice a second and reads as

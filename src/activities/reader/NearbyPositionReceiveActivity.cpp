@@ -13,10 +13,10 @@
 
 #include "CrossPointSettings.h"
 #include "NearbyPositionSession.h"
-#include "ProgressFile.h"
 #include "RecentBooksStore.h"
 #include "activities/ActivityManager.h"
 #include "util/BookCacheUtils.h"
+#include "util/ProgressFile.h"
 
 using namespace nearby_position;
 

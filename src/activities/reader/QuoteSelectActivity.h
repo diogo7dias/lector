@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "QuoteText.h"
 #include "activities/Activity.h"
+#include "util/QuoteText.h"
 
 // Grab Quote: pick a passage on the current reader page with the buttons and
 // save it to "<book>_QUOTES.txt". Two phases:

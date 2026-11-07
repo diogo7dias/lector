@@ -11,8 +11,8 @@
 #include <climits>
 
 #include "QuoteSidecar.h"
-#include "QuoteText.h"
 #include "components/UITheme.h"
+#include "util/QuoteText.h"
 
 QuoteSelectActivity::QuoteSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Section* section,
                                          int startPageNumber, int marginLeft, int marginTop, Epub& epub, int spineIndex,

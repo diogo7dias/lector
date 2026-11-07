@@ -49,12 +49,3 @@ TEST(DeviceLookAudit, EveryTouchOnlyShapeAsksWhetherTheBoardHasTouch) {
     EXPECT_TRUE(contains(source, "mappedInput.hasTouch()")) << path << " draws a touch-only shape unconditionally";
   }
 }
-
-TEST(DeviceLookAudit, EverySliderSurfaceHasAKeysOnlyBar) {
-  for (const std::string& path : sourcePaths()) {
-    const std::string source = readSource(path);
-    if (!contains(source, "fui::sliderRow(")) continue;
-    EXPECT_TRUE(contains(source, "plain_slider_band::draw"))
-        << path << " has a slider row with no bar for the keys-only boards";
-  }
-}

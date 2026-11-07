@@ -5,7 +5,7 @@
 
 #include <cstdint>
 
-#include "activities/reader/ReaderPrefs.h"
+#include "ReaderPrefs.h"
 #include "util/BoundMenuActions.h"
 #include "util/MarginLink.h"
 
