@@ -3,6 +3,8 @@
 // On-disk layout of a section cache file (.crosspoint/epub_<hash>/sections/<n>.bin),
 // shared by the Section*.cpp files. Private to the Section implementation.
 
+#include <Serialization.h>
+
 #include <cstdint>
 
 namespace {
@@ -167,4 +169,25 @@ constexpr uint32_t PARAGRAPH_LUT_FIELD = HEADER_SIZE - sizeof(uint32_t) * 3;
 constexpr uint32_t LI_LUT_FIELD = HEADER_SIZE - sizeof(uint32_t) * 2;
 constexpr uint32_t VISIBLE_LUT_FIELD = HEADER_SIZE - sizeof(uint32_t);
 constexpr uint32_t PAGE_COUNT_FIELD = PAGE_LUT_FIELD - sizeof(uint16_t);
+
+// Reads the version byte at the file start. True for a finished layout, and for a
+// suspended build too when the caller passes `partial` (which then says which it was).
+template <class File>
+bool readKnownVersion(File& f, bool* partial) {
+  uint8_t version = 0;
+  if (!serialization::readPod(f, version)) return false;
+  if (partial) *partial = version == SECTION_FILE_PARTIAL_VERSION;
+  return version == SECTION_FILE_VERSION || (partial && version == SECTION_FILE_PARTIAL_VERSION);
+}
+
+// File offset of 4-byte entry `index` in the table whose offset is stored at `field`,
+// or 0 when that table or entry lies outside the file: a torn or old cache file must
+// yield nothing rather than a value decoded from a garbage offset.
+template <class File>
+uint32_t lutEntryAt(File& f, const uint32_t field, const uint32_t index) {
+  uint32_t lut = 0;
+  if (!f.seek(field) || !serialization::readPod(f, lut) || lut < HEADER_SIZE) return 0;
+  const uint64_t entry = static_cast<uint64_t>(lut) + static_cast<uint64_t>(index) * sizeof(uint32_t);
+  return entry + sizeof(uint32_t) <= f.size() ? static_cast<uint32_t>(entry) : 0;
+}
 }  // namespace

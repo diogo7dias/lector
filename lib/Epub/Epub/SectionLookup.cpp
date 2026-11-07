@@ -266,9 +266,8 @@ std::optional<uint32_t> Section::getVisibleTextOffsetForPage(const uint16_t page
     return std::nullopt;
   }
 
-  uint8_t version;
-  serialization::readPod(f, version);
-  if (version != SECTION_FILE_VERSION && version != SECTION_FILE_PARTIAL_VERSION) {
+  bool partial = false;
+  if (!readKnownVersion(f, &partial)) {
     return std::nullopt;
   }
 
@@ -279,16 +278,11 @@ std::optional<uint32_t> Section::getVisibleTextOffsetForPage(const uint16_t page
     return std::nullopt;
   }
 
-  uint32_t visibleLutOffset = 0;
-  if (f.seek(VISIBLE_LUT_FIELD)) serialization::readPod(f, visibleLutOffset);
-  const uint32_t entryOffset = visibleLutOffset + static_cast<uint32_t>(page) * sizeof(uint32_t);
-  if (visibleLutOffset < HEADER_SIZE || entryOffset + sizeof(uint32_t) > f.size()) {
+  const uint32_t entryOffset = lutEntryAt(f, VISIBLE_LUT_FIELD, page);
+  uint32_t result = 0;
+  if (entryOffset == 0 || !f.seek(entryOffset) || !serialization::readPod(f, result)) {
     return std::nullopt;
   }
-
-  f.seek(entryOffset);
-  uint32_t result;
-  serialization::readPod(f, result);
   return result;
 }
 
@@ -327,12 +321,10 @@ std::optional<uint16_t> Section::getPageForVisibleTextOffset(const uint32_t offs
     return std::nullopt;
   }
 
-  uint8_t version;
-  serialization::readPod(f, version);
-  if (version != SECTION_FILE_VERSION && version != SECTION_FILE_PARTIAL_VERSION) {
+  bool partial = false;
+  if (!readKnownVersion(f, &partial)) {
     return std::nullopt;
   }
-  const bool partial = version == SECTION_FILE_PARTIAL_VERSION;
 
   f.seek(PAGE_COUNT_FIELD);
   uint16_t count;
@@ -341,11 +333,12 @@ std::optional<uint16_t> Section::getPageForVisibleTextOffset(const uint32_t offs
     return std::nullopt;
   }
 
-  uint32_t visibleLutOffset = 0;
-  if (f.seek(VISIBLE_LUT_FIELD)) serialization::readPod(f, visibleLutOffset);
-  if (visibleLutOffset < HEADER_SIZE || visibleLutOffset + static_cast<uint32_t>(count) * sizeof(uint32_t) > f.size()) {
+  // The last entry in range means the whole table is.
+  const uint32_t lastEntry = lutEntryAt(f, VISIBLE_LUT_FIELD, count - 1u);
+  if (lastEntry == 0) {
     return std::nullopt;
   }
+  const uint32_t visibleLutOffset = lastEntry - (count - 1u) * sizeof(uint32_t);
 
   if (!f.seek(visibleLutOffset)) {
     LOG_ERR("SCT", "Failed to seek visible-text LUT");

@@ -31,6 +31,7 @@
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
 #include "WsIdleClients.h"
+#include "frontlight/ApplyFrontlightSetting.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
@@ -1723,6 +1724,7 @@ void CrossPointWebServer::handlePostSettings() {
         const int val = doc[s.key].as<int>() ? 1 : 0;
         if (s.valuePtr) {
           SETTINGS.*(s.valuePtr) = val;
+          applyFrontlightSetting(s.valuePtr);
         }
         applied++;
         break;
@@ -1746,6 +1748,7 @@ void CrossPointWebServer::handlePostSettings() {
         if (val >= s.valueRange.min && val <= s.valueRange.max) {
           if (s.valuePtr) {
             SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
+            applyFrontlightSetting(s.valuePtr);
           }
           applied++;
         }
@@ -1768,7 +1771,11 @@ void CrossPointWebServer::handlePostSettings() {
     }
   }
 
-  SETTINGS.saveToFile();
+  if (!SETTINGS.saveToFile()) {
+    LOG_ERR("WEB", "Applied %d setting(s) but could not save them", applied);
+    server->send(500, "text/plain", "Settings applied but not saved");
+    return;
+  }
 
   LOG_DBG("WEB", "Applied %d setting(s)", applied);
   server->send(200, "text/plain", String("Applied ") + String(applied) + " setting(s)");

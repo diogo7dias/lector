@@ -148,16 +148,13 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
   // Match parameters
   bool filePartial = false;
   {
-    uint8_t version;
-    serialization::readPod(file, version);
-    if (version != SECTION_FILE_VERSION && version != SECTION_FILE_PARTIAL_VERSION) {
+    if (!readKnownVersion(file, &filePartial)) {
       // Explicit close() required: member variable persists beyond function scope
       file.close();
-      LOG_ERR("SCT", "Deserialization failed: Unknown version %u", version);
+      LOG_ERR("SCT", "Deserialization failed: unknown version");
       clearCache();
       return false;
     }
-    filePartial = (version == SECTION_FILE_PARTIAL_VERSION);
 
     ReaderRenderSpec cached;
     readSpecFields(file, cached);
@@ -245,12 +242,10 @@ bool Section::swapInPreviousLayout(const ReaderRenderSpec& spec, const bool curr
   bool prevMatches = false;
   {
     HalFile prev;
-    if (Storage.openFileForRead("SCT", prevPath, prev)) {
-      uint8_t version = 0;
-      serialization::readPod(prev, version);
+    if (Storage.openFileForRead("SCT", prevPath, prev) && readKnownVersion(prev, nullptr)) {
       ReaderRenderSpec cached;
       readSpecFields(prev, cached);
-      prevMatches = version == SECTION_FILE_VERSION && sectionCacheMatches(spec, cached);
+      prevMatches = sectionCacheMatches(spec, cached);
     }
   }
 
@@ -317,13 +312,10 @@ std::unique_ptr<Page> Section::loadPageAt(const int page) const {
   // Read this page's visible-codepoint start offset from the visible-offset LUT (last header slot)
   // in the same open handle, so the reader can persist progress without reopening the section file
   // on every page turn (see Page::visibleTextOffset). A malformed/old file leaves it at 0.
-  uint32_t visibleLutOffset = 0;
-  if (f.seek(VISIBLE_LUT_FIELD)) serialization::readPod(f, visibleLutOffset);
   uint32_t visibleTextOffset = 0;
-  const uint32_t visibleEntry = visibleLutOffset + sizeof(uint32_t) * page;
-  if (visibleLutOffset >= HEADER_SIZE && visibleEntry + sizeof(uint32_t) <= fileSize) {
-    f.seek(visibleEntry);
-    serialization::readPod(f, visibleTextOffset);
+  const uint32_t visibleEntry = lutEntryAt(f, VISIBLE_LUT_FIELD, page);
+  if (visibleEntry != 0 && (!f.seek(visibleEntry) || !serialization::readPod(f, visibleTextOffset))) {
+    visibleTextOffset = 0;
   }
 
   f.seek(pagePos);
@@ -385,15 +377,10 @@ std::optional<uint16_t> Section::getCachedPageCount() const {
   // Only a finalized section's count is the chapter total; a partial's count is just the
   // suspended build's watermark, which would skew progress mapping. Callers fall back to
   // their own estimates.
-  uint8_t version;
-  serialization::readPod(f, version);
-  if (version != SECTION_FILE_VERSION) {
+  uint16_t count = 0;
+  if (!readKnownVersion(f, nullptr) || !f.seek(PAGE_COUNT_FIELD) || !serialization::readPod(f, count)) {
     return std::nullopt;
   }
-
-  f.seek(PAGE_COUNT_FIELD);
-  uint16_t count;
-  serialization::readPod(f, count);
   return count;
 }
 
@@ -402,15 +389,12 @@ bool Section::openAnchorMap(HalFile& f, uint16_t& count) const {
     return false;
   }
 
-  const uint32_t fileSize = f.size();
-  f.seek(ANCHOR_MAP_FIELD);
-  uint32_t anchorMapOffset;
-  serialization::readPod(f, anchorMapOffset);
-  if (anchorMapOffset == 0 || anchorMapOffset >= fileSize) {
+  uint32_t anchorMapOffset = 0;
+  if (!f.seek(ANCHOR_MAP_FIELD) || !serialization::readPod(f, anchorMapOffset) || anchorMapOffset == 0 ||
+      anchorMapOffset >= f.size()) {
     return false;
   }
-  f.seek(anchorMapOffset);
-  return serialization::readPod(f, count);
+  return f.seek(anchorMapOffset) && serialization::readPod(f, count);
 }
 
 std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) const {
