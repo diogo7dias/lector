@@ -240,14 +240,22 @@ jobs:
           if-no-files-found: error
 
   # The real firmware of every board in QEMU (sim/): boots, touch and keys, reading.
-  # Each board waits only on its own image. The x4pro suite runs in shards, one QEMU each.
+  # Each board waits only on its own image. The x4pro suite runs in shards, one QEMU each,
+  # cut by measured time: quick-lock ~130 s, screen-calibration + sleep ~135 s, the rest ~125 s.
+  # The last shard takes every file the others do not name, so a new suite always runs.
   sim-x4pro:
     needs: build-x4pro
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        include:
+          - shard: 1
+            files: quick-lock
+          - shard: 2
+            files: screen-calibration sleep
+          - shard: 3
+            files: rest
     steps:
       - uses: actions/checkout@v6
 
@@ -260,7 +268,18 @@ jobs:
 
       - name: Run e2e (x4pro, shard ${{ matrix.shard }}/3)
         working-directory: sim
-        run: npm run test:e2e:x4pro -- --shard ${{ matrix.shard }}/3
+        env:
+          FILES: ${{ matrix.files }}
+        run: |
+          if [ "$FILES" = rest ]; then
+            # Whole-name match: a new sleep-wake.e2e.ts must land here, not be dropped.
+            FILES=$(ls tests/x4pro/*.e2e.ts | grep -vxF -e tests/x4pro/quick-lock.e2e.ts \
+              -e tests/x4pro/screen-calibration.e2e.ts -e tests/x4pro/sleep.e2e.ts)
+          else
+            FILES=$(for f in $FILES; do echo tests/x4pro/$f.e2e.ts; done)
+          fi
+          echo "$FILES"
+          npm run test:e2e:x4pro -- $FILES
 
       - name: Upload e2e report
         if: failure()
