@@ -292,6 +292,10 @@ jobs:
   sim-c3:
     needs: build
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [x3, x3uc8279, x4]
     steps:
       - uses: actions/checkout@v6
 
@@ -302,15 +306,15 @@ jobs:
 
       - uses: ./.github/actions/sim-setup
 
-      - name: Run e2e (x3, x3uc8279, x4)
+      - name: Run e2e (${{ matrix.board }})
         working-directory: sim
-        run: npm run test:e2e:x3 && npm run test:e2e:x3uc8279 && npm run test:e2e:x4
+        run: npm run test:e2e:${{ matrix.board }}
 
       - name: Upload e2e report
         if: failure()
         uses: actions/upload-artifact@v6
         with:
-          name: sim-e2e-report-c3
+          name: sim-e2e-report-${{ matrix.board }}
           path: sim/.e2e
           include-hidden-files: true
 
