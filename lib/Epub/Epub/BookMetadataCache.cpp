@@ -99,7 +99,6 @@ bool BookMetadataCache::beginWrite() {
 bool BookMetadataCache::beginContentOpfPass() {
   LOG_DBG("BMC", "Beginning content opf pass");
 
-  // Open spine file for writing
   if (!Storage.openFileForWrite("BMC", cachePath + tmpSpineBinFile, spineFile)) {
     return false;
   }
@@ -373,7 +372,6 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     // Write out spine data to book.bin
     writeSpineEntryTo(bookOut, spineEntry);
   }
-  // Close opened zip file
   zip.close();
 
   // Loop through toc entries from toc file writing to book.bin

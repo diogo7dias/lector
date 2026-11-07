@@ -118,7 +118,6 @@ bool Txt::generateCoverBmp() const {
   const std::string partPath = FsHelpers::partialPathFor(bmpPath);
   bool success = false;
   if (FsHelpers::hasBmpExtension(coverImagePath)) {
-    // Copy BMP file to cache
     LOG_DBG("TXT", "Copying BMP cover image to cache");
     HalFile src, dst;
     if (!Storage.openFileForRead("TXT", coverImagePath, src)) {

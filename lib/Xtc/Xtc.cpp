@@ -26,14 +26,12 @@ void yieldDuringThumbnail(uint8_t& rowsSinceYield) {
 bool Xtc::load() {
   LOG_DBG("XTC", "Loading XTC: %s", filepath.c_str());
 
-  // Initialize parser
   parser = makeUniqueNoThrow<xtc::XtcParser>();
   if (!parser) {
     LOG_ERR("XTC", "OOM: XtcParser");
     return false;
   }
 
-  // Open XTC file
   xtc::XtcError err = parser->open(filepath.c_str());
   if (err != xtc::XtcError::OK) {
     LOG_ERR("XTC", "Failed to load: %s", xtc::errorToString(err));
@@ -66,7 +64,6 @@ void Xtc::setupCacheDir() const {
     return;
   }
 
-  // Create directories recursively
   for (size_t i = 1; i < cachePath.length(); i++) {
     if (cachePath[i] == '/') {
       Storage.mkdir(cachePath.substr(0, i).c_str());
@@ -148,14 +145,12 @@ bool Xtc::generateCoverBmp() const {
   // Setup cache directory
   setupCacheDir();
 
-  // Get first page info for cover
   xtc::PageInfo pageInfo;
   if (!parser->getPageInfo(0, pageInfo)) {
     LOG_DBG("XTC", "Failed to get first page info");
     return false;
   }
 
-  // Get bit depth
   const uint8_t bitDepth = parser->getBitDepth();
 
   // Allocate buffer for page data

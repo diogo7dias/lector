@@ -608,7 +608,6 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style requestedS
     }
   }
 
-  // Process the final remaining segment
   size_t segmentLen = end - segmentStart;
   std::string_view segment(reinterpret_cast<const char*>(segmentStart), segmentLen);
   const bool breakAfterPrev = !isFirstSegment && !words.empty() && endsWithBreakableHyphen(words.back());

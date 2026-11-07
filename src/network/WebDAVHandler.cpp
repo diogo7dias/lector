@@ -193,7 +193,6 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
 
   LOG_DBG("DAV", "PROPFIND %s depth=%d", path.c_str(), depth);
 
-  // Check if path exists
   if (!Storage.exists(path.c_str()) && path != "/") {
     s.send(404, "text/plain", "Not Found");
     return;
@@ -244,7 +243,6 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
       file.getName(name, sizeof(name));
       String fileName(name);
 
-      // Skip hidden/protected items
       const bool shouldHide = isProtectedPath(fileName);
 
       if (!shouldHide) {
@@ -445,7 +443,6 @@ void WebDAVHandler::handleDelete(WebServer& s) {
   }
 
   if (file.isDirectory()) {
-    // Check if directory is empty
     HalFile entry = file.openNextFile();
     if (entry) {
       entry.close();

@@ -67,13 +67,11 @@ class CrossPointWebServer {
   // Start the web server (call after WiFi is connected)
   void begin();
 
-  // Stop the web server
   void stop();
 
   // Call this periodically to handle client requests
   void handleClient();
 
-  // Check if server is running
   bool isRunning() const { return running; }
 
   WsUploadStatus getWsUploadStatus() const;

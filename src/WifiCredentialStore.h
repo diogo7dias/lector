@@ -58,7 +58,6 @@ class WifiCredentialStore : public PersistableStore<WifiCredentialStore> {
   // Last connected network
   void setLastConnectedSsid(const std::string& ssid);
   std::string getLastConnectedSsid() const;
-  // Clear all credentials
   void clearAll();
 };
 

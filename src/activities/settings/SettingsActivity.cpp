@@ -412,7 +412,6 @@ void SettingsActivity::onEnter() {
   selectedCategory = 0;
   setSelected(0);
 
-  // Trigger first update
   requestUpdate();
 }
 

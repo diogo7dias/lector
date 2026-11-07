@@ -46,12 +46,10 @@ void QrUtils::drawQrCode(const GfxRenderer& renderer, const Rect& bounds, const 
     int px = maxDim / qrcode.size;
     if (px < 1) px = 1;
 
-    // Calculate centering X and Y
     const int qrDisplaySize = qrcode.size * px;
     const int xOff = bounds.x + (bounds.width - qrDisplaySize) / 2;
     const int yOff = bounds.y + (bounds.height - qrDisplaySize) / 2;
 
-    // Draw the QR Code
     for (uint8_t cy = 0; cy < qrcode.size; cy++) {
       for (uint8_t cx = 0; cx < qrcode.size; cx++) {
         if (qrcode_getModule(&qrcode, cx, cy)) {

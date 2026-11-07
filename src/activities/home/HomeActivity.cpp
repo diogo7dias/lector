@@ -57,7 +57,6 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
     // spends its seconds.
     busy::tick();
 
-    // Skip if file no longer exists
     if (RecentBooksStore::isMissing(book)) {
       continue;
     }
@@ -117,7 +116,6 @@ void HomeActivity::onEnter() {
                       ? 0
                       : base + menuItemToIndex(initialMenuItem, hasOpdsServers, bookOrbitMissing > 0);
 
-  // Trigger first update
   requestUpdate();
 }
 

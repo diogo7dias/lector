@@ -93,11 +93,9 @@ bool naturalLessC(const char* s1, const char* s2) {
   // bytes above 0x7f with signed char) is undefined behavior
   const auto isDigit = [](const char c) { return isdigit(static_cast<unsigned char>(c)) != 0; };
 
-  // Iterate while both strings have characters
   while (*s1 && *s2) {
     // Check if both are at the start of a number
     if (isDigit(*s1) && isDigit(*s2)) {
-      // Skip leading zeros and track them
       while (*s1 == '0') s1++;
       while (*s2 == '0') s2++;
 

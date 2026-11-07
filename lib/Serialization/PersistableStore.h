@@ -90,7 +90,6 @@ class PersistableStore : public PersistableStoreBase {
   ~PersistableStore() = default;
 
  public:
-  // Delete copy constructor and assignment
   PersistableStore(const PersistableStore&) = delete;
   PersistableStore& operator=(const PersistableStore&) = delete;
 

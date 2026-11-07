@@ -53,7 +53,6 @@ void TxtReaderActivity::onEnter() {
   RECENT_BOOKS.addBook(filePath, fileName, "");
   journal.clock.touch(millis());
 
-  // Trigger first update
   requestUpdate();
 }
 
@@ -178,7 +177,6 @@ void TxtReaderActivity::initializeReader() {
   const uint8_t topMargin = SETTINGS.screenMarginTop;
   const uint8_t bottomMargin = SETTINGS.screenMarginBottom;
 
-  // Calculate viewport dimensions
   renderer.getOrientedViewableTRBL(&cachedOrientedMarginTop, &cachedOrientedMarginRight, &cachedOrientedMarginBottom,
                                    &cachedOrientedMarginLeft);
   // v2 status bar: reserve a band at the top and/or bottom edge (whichever holds
@@ -213,11 +211,9 @@ void TxtReaderActivity::initializeReader() {
   if (!loadPageIndexCache()) {
     // Cache not found, build page index
     buildPageIndex();
-    // Save to cache for next time
     savePageIndexCache();
   }
 
-  // Load saved progress
   loadProgress();
 
   initialized = true;
@@ -228,7 +224,6 @@ void TxtReaderActivity::render(RenderLock&&) {
     return;
   }
 
-  // Initialize reader if not done
   if (!initialized) {
     initializeReader();
   }
@@ -246,7 +241,6 @@ void TxtReaderActivity::render(RenderLock&&) {
   if (currentPage < 0) currentPage = 0;
   if (currentPage >= totalPages) currentPage = totalPages - 1;
 
-  // Load current page content
   size_t offset = pageOffsets[currentPage];
   size_t nextOffset;
   currentPageLines.clear();
@@ -259,7 +253,6 @@ void TxtReaderActivity::render(RenderLock&&) {
   // one extra panel update, but only while the popup is actually open.
   settingsPopup.processRender(renderer, mappedInput);
 
-  // Save progress
   if (progressSaveDebouncer.observe(currentPage)) saveProgress(currentPage);
 }
 
@@ -270,7 +263,6 @@ void TxtReaderActivity::renderPage() {
   const int verticalOffset = fullTextPageOffset(
       viewportHeight, 0, (static_cast<int>(currentPageLines.size()) - 1) * lineHeight, lineHeight, lineHeight);
 
-  // Render text lines with alignment
   auto renderLines = [&]() {
     int y = cachedOrientedMarginTop + verticalOffset;
     for (const auto& line : currentPageLines) {

@@ -205,7 +205,6 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       self->itemIndex.push_back(entry);
     }
 
-    // Write items down to SD card
     serialization::writeString(self->tempItemStore, itemId);
     serialization::writeString(self->tempItemStore, href);
 

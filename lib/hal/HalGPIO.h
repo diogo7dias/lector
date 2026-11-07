@@ -110,7 +110,6 @@ class HalGPIO {
   // Should only be called when wakeup reason is PowerButton.
   bool verifyPowerButtonWakeup();
 
-  // Check if USB is connected
   bool isUsbConnected() const;
 
   // Whether a cold boot with no USB detected can be trusted to mean a held

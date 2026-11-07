@@ -367,7 +367,6 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
   const bool smoothUpscale =
       progressiveDecode && needsScaling && scaleSrcWidth <= outWidth && scaleSrcHeight <= outHeight;
 
-  // Write BMP header with output dimensions
   bmp_writer::writeHeader2bit(bmpOut, outWidth, outHeight);
   const int bytesPerRow = (outWidth * 2 + 31) / 32 * 4;
 

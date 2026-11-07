@@ -385,7 +385,6 @@ void KOReaderSyncActivity::onEnter() {
   UiStatusActivity::onEnter();
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
-  // Check for credentials first
   if (!KOREADER_STORE.hasCredentials()) {
     state = NO_CREDENTIALS;
     requestUpdate();
@@ -505,7 +504,6 @@ void KOReaderSyncActivity::onBackButton() { returnToReader(); }
 
 void KOReaderSyncActivity::onConfirmButton() {
   if (state == NO_REMOTE_PROGRESS) {
-    // Calculate hash if not done yet
     if (documentHash.empty()) {
       documentHash = KOReaderDocumentId::calculateFor(epubPath, KOREADER_STORE.getMatchMethod());
     }

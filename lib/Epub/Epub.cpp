@@ -384,7 +384,6 @@ bool Epub::parseCssFiles() const {
     // Explicitly close() file before reopening for reading
     tempCssFile.close();
 
-    // Parse the CSS file
     if (!Storage.openFileForRead("EBP", tmpCssPath, tempCssFile)) {
       LOG_ERR("EBP", "Could not open temp CSS file for reading");
       Storage.remove(tmpCssPath.c_str());
@@ -492,7 +491,6 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   LOG_DBG("EBP", "Loading ePub: %s", filepath.c_str());
   dropCacheIfSourceChanged();
 
-  // Initialize spine/TOC cache
   bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
   if (!bookMetadataCache) {
     LOG_ERR("EBP", "OOM: BookMetadataCache");
@@ -617,7 +615,6 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   }
   LOG_DBG("EBP", "TOC pass completed in %lu ms", millis() - tocStart);
 
-  // Close the cache files
   if (!bookMetadataCache->endWrite()) {
     LOG_ERR("EBP", "Could not end writing cache");
     return false;

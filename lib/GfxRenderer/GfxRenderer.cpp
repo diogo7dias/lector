@@ -618,7 +618,6 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
     return;
   }
 
-  // Calculate byte position and bit position
   const uint32_t byteIndex = rowY * panelWidthBytes + (phyX / 8);
   const uint8_t bitPosition = 7 - (phyX % 8);  // MSB first
 
@@ -1520,7 +1519,6 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
   uint8_t* rowBytes = outputRow + outputRowSize;
 
   for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
-    // Read rows sequentially using readNextRow
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
       LOG_ERR("GFX", "Failed to read row %d from 1-bit bitmap", bmpY);
       return;
@@ -1601,7 +1599,6 @@ void GfxRenderer::preserveImagePolarity(const int x, const int y, const int widt
 void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state) const {
   if (numPoints < 3) return;
 
-  // Find bounding box
   int minY = yPoints[0], maxY = yPoints[0];
   for (int i = 1; i < numPoints; i++) {
     if (yPoints[i] < minY) minY = yPoints[i];
@@ -1612,7 +1609,6 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
   if (minY < 0) minY = 0;
   if (maxY >= getScreenHeight()) maxY = getScreenHeight() - 1;
 
-  // Allocate node buffer for scanline algorithm
   auto nodeX = makeUniqueNoThrow<int[]>(numPoints);
   if (!nodeX) {
     LOG_ERR("GFX", "!! Failed to allocate polygon node buffer");
@@ -1623,7 +1619,6 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
   for (int scanY = minY; scanY <= maxY; scanY++) {
     int nodes = 0;
 
-    // Find all intersection points with edges
     int j = numPoints - 1;
     for (int i = 0; i < numPoints; i++) {
       if ((yPoints[i] < scanY && yPoints[j] >= scanY) || (yPoints[j] < scanY && yPoints[i] >= scanY)) {
@@ -1639,7 +1634,6 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
     // Sort nodes by X
     std::sort(nodeX.get(), nodeX.get() + nodes);
 
-    // Fill between pairs of nodes
     for (int i = 0; i < nodes - 1; i += 2) {
       int startX = nodeX[i];
       int endX = nodeX[i + 1];
@@ -1648,7 +1642,6 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
       if (startX < 0) startX = 0;
       if (endX >= getScreenWidth()) endX = getScreenWidth() - 1;
 
-      // Draw horizontal line
       for (int x = startX; x <= endX; x++) {
         drawPixel(x, scanY, state);
       }
@@ -1851,7 +1844,6 @@ std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* 
       return lines;
     }
 
-    // Find next word
     size_t spacePos = remaining.find(' ');
     std::string word;
 
@@ -2353,7 +2345,6 @@ void GfxRenderer::freeBwBufferChunks() {
  */
 bool GfxRenderer::storeBwBuffer() {
   if (!frameBuffer) return false;
-  // Allocate and copy each chunk
   for (size_t i = 0; i < bwBufferChunks.size(); i++) {
     // Check if any chunks are already allocated
     if (bwBufferChunks[i]) {
@@ -2368,7 +2359,6 @@ bool GfxRenderer::storeBwBuffer() {
 
     if (!bwBufferChunks[i]) {
       LOG_ERR("GFX", "!! Failed to allocate BW buffer chunk %zu (%zu bytes)", i, chunkSize);
-      // Free previously allocated chunks
       freeBwBufferChunks();
       return false;
     }
@@ -2390,7 +2380,6 @@ void GfxRenderer::restoreBwBuffer() {
     freeBwBufferChunks();
     return;
   }
-  // Check if all chunks are allocated
   bool missingChunks = false;
   for (const auto& bwBufferChunk : bwBufferChunks) {
     if (!bwBufferChunk) {

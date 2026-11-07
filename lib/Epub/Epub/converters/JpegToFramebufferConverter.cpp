@@ -383,7 +383,6 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
     LOG_INF("JPG", "Progressive JPEG detected - decoding DC coefficients only (lower quality)");
   }
 
-  // Calculate overall target scale
   float targetScale;
   int destWidth, destHeight;
 

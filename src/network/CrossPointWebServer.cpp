@@ -182,16 +182,13 @@ void CrossPointWebServer::begin() {
   // Upload endpoint with special handling for multipart form data
   server->on("/upload", HTTP_POST, [this] { handleUploadPost(upload); }, [this] { handleUpload(upload); });
 
-  // Create folder endpoint
   server->on("/mkdir", HTTP_POST, [this] { handleCreateFolder(); });
 
   // Rename file endpoint
   server->on("/rename", HTTP_POST, [this] { handleRename(); });
 
-  // Move file endpoint
   server->on("/move", HTTP_POST, [this] { handleMove(); });
 
-  // Delete file/folder endpoint
   server->on("/delete", HTTP_POST, [this] { handleDelete(); });
 
   // Settings endpoints
@@ -344,7 +341,6 @@ void CrossPointWebServer::stop() {
     abortWsUpload("WEB", true, "server stopped");
   }
 
-  // Stop WebSocket server
   if (wsServer) {
     LOG_DBG("WEB", "Stopping WebSocket server...");
     wsServer->close();
@@ -398,7 +394,6 @@ void CrossPointWebServer::handleClient() {
 
   server->handleClient();
 
-  // Handle WebSocket events
   if (wsServer) {
     wsServer->loop();
     ws_idle::closeIdleClients(*wsServer, wsLastActivity, WEBSOCKETS_SERVER_CLIENT_MAX, millis());
@@ -1165,7 +1160,6 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
 
       state.size += upload.currentSize;
 
-      // Log progress every 100KB
       if (state.size - lastLoggedSize >= 102400) {
         const unsigned long elapsed = millis() - uploadStartTime;
         const float kbps = (elapsed > 0) ? (state.size / 1024.0) / (elapsed / 1000.0) : 0;
@@ -1233,7 +1227,6 @@ void CrossPointWebServer::handleUploadPost(UploadState& state) const {
 }
 
 void CrossPointWebServer::handleCreateFolder() const {
-  // Get folder name from form data
   if (!server->hasArg("name")) {
     server->send(400, "text/plain", "Missing folder name");
     return;
@@ -1257,7 +1250,6 @@ void CrossPointWebServer::handleCreateFolder() const {
     return;
   }
 
-  // Get parent path
   String parentPath = "/";
   if (server->hasArg("path")) {
     parentPath = normalizeWebPath(server->arg("path"));
@@ -1267,20 +1259,17 @@ void CrossPointWebServer::handleCreateFolder() const {
     return;
   }
 
-  // Build full folder path
   String folderPath = parentPath;
   if (!folderPath.endsWith("/")) folderPath += "/";
   folderPath += folderName;
 
   LOG_DBG("WEB", "Creating folder: %s", folderPath.c_str());
 
-  // Check if already exists
   if (Storage.exists(folderPath.c_str())) {
     server->send(400, "text/plain", "Folder already exists");
     return;
   }
 
-  // Create the folder
   if (Storage.mkdir(folderPath.c_str())) {
     LOG_DBG("WEB", "Folder created successfully: %s", folderPath.c_str());
     server->send(200, "text/plain", "Folder created: " + folderName);
@@ -1489,7 +1478,6 @@ void CrossPointWebServer::handleDelete() const {
     return;
   }
 
-  // Parse paths
   String pathsArg;
   JsonDocument doc;
   DeserializationError error = DeserializationError(DeserializationError::Code::Ok);
@@ -1542,7 +1530,6 @@ void CrossPointWebServer::handleDelete() const {
       continue;
     }
 
-    // Check if item exists
     if (!Storage.exists(itemPath.c_str())) {
       failedItems += itemPath + " (not found); ";
       allSuccess = false;
@@ -2043,7 +2030,6 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
     }
 
     case WStype_TEXT: {
-      // Parse control messages
       String msg = String((char*)payload);
       LOG_DBG("WS", "Text from client %u: %s", num, msg.c_str());
 
@@ -2145,7 +2131,6 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             Storage.remove(wsUploadPartialPath.c_str());
           }
 
-          // Open file for writing
           resetTaskWatchdogIfSubscribed();
           if (!Storage.openFileForWrite("WS", wsUploadPartialPath, wsUploadFile)) {
             wsServer->sendTXT(num, "ERROR:Failed to create file");
@@ -2243,7 +2228,6 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         return;
       }
 
-      // Write binary data directly to file
       size_t remaining = wsUploadSize - wsUploadReceived;
       if (length > remaining) {
         // Nothing of this frame was written, so what is on the card is still a
@@ -2273,7 +2257,6 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         wsLastProgressSent = wsUploadReceived;
       }
 
-      // Check if upload complete
       if (wsUploadReceived >= wsUploadSize) {
         // Explicit close() required: file-scope global persists beyond function scope
         wsUploadFile.close();

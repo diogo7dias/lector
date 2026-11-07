@@ -53,7 +53,6 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   // Get MD5 hash of password for API authentication
   std::string getMd5Password() const;
 
-  // Check if credentials are set
   bool hasCredentials() const;
 
   // Server URL management
@@ -70,7 +69,6 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   void setMatchMethod(DocumentMatchMethod method);
   DocumentMatchMethod getMatchMethod() const { return matchMethod; }
 
-  // Send metadata setting
   void setSendMetadata(bool enabled);
   bool getSendMetadata() const { return sendMetadata; }
 
