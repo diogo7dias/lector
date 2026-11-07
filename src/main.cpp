@@ -18,7 +18,6 @@
 #include <PerfStats.h>
 #include <SPI.h>
 #include <WiFi.h>
-#include <builtinFonts/all.h>
 #include <esp_random.h>
 #include <esp_system.h>
 #include <esp_timer.h>
@@ -38,6 +37,7 @@
 #include "ReaderPresetStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "SilentRestart.h"
 #include "SleepTiming.h"
 #include "UiFont.h"
 #include "WakeTiming.h"
@@ -72,147 +72,6 @@ FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts
 // while the button is held; swallow the one release that ends that wake gesture.
 static bool wakePowerReleasePending = false;
 
-// Fonts
-// ChareInk is lector's single built-in reading family (an e-ink tuned Charis derivative).
-// It is compiled in at 14 pt only: its glyph set is far larger than the Vollkorn it
-// replaced, and four sizes would not fit the app partition. Every other size, and every
-// other family, is installed from the SD card. Noto Sans survives only as the 8 pt small
-// font (below) and Ubuntu as the UI font.
-EpdFont chareink14RegularFont(&chareink_14_regular);
-EpdFont chareink14BoldFont(&chareink_14_bold);
-EpdFont chareink14ItalicFont(&chareink_14_italic);
-EpdFont chareink14BoldItalicFont(&chareink_14_bolditalic);
-EpdFontFamily chareink14FontFamily(&chareink14RegularFont, &chareink14BoldFont, &chareink14ItalicFont,
-                                   &chareink14BoldItalicFont);
-
-EpdFont smallFont(&notosans_8_regular);
-EpdFontFamily smallFontFamily(&smallFont);
-
-// The UI families ship REGULAR ONLY, and the regular face fills the family's bold slot
-// so a stray BOLD request resolves to regular instead of nullptr. This is the old-Lector
-// arrangement: menu weight hierarchy comes from SIZE, not from a second cut. Emphasis in
-// the UI, if ever wanted, is the Paperback Look smear (GfxRenderer::setPaperbackLook),
-// which thickens whatever face is loaded and costs no flash.
-
-// Ubuntu UI family — the FULL-coverage fallback (Latin + Arabic + Hebrew + Vietnamese,
-// baked with the extra script intervals). Bound permanently to UBUNTU_10/12_FONT_ID and
-// used for Arabic/Hebrew UI and for the language-picker native-name list.
-EpdFont ubuntu10RegularFont(&ubuntu_10_regular);
-EpdFontFamily ubuntu10FontFamily(&ubuntu10RegularFont, &ubuntu10RegularFont);
-
-EpdFont ubuntu12RegularFont(&ubuntu_12_regular);
-EpdFontFamily ubuntu12FontFamily(&ubuntu12RegularFont, &ubuntu12RegularFont);
-
-EpdFont ubuntu14RegularFont(&ubuntu_14_regular);
-EpdFontFamily ubuntu14FontFamily(&ubuntu14RegularFont, &ubuntu14RegularFont);
-
-// Cozette UI family — lector's default menu font (Latin + Cyrillic + Greek + Vietnamese;
-// no Arabic/Hebrew). Sizes match the previous mature Lector: 10 = SMALL_FONT_ID,
-// 12 = UI_10_FONT_ID (list rows), 14 = UI_12_FONT_ID (header title). Bound for every
-// language except Arabic/Hebrew (which use the Ubuntu family at the same sizes).
-EpdFont cozette10RegularFont(&cozette_10_regular);
-EpdFontFamily cozette10FontFamily(&cozette10RegularFont, &cozette10RegularFont);
-
-EpdFont cozette12RegularFont(&cozette_12_regular);
-EpdFontFamily cozette12FontFamily(&cozette12RegularFont, &cozette12RegularFont);
-
-EpdFont cozette14RegularFont(&cozette_14_regular);
-EpdFontFamily cozette14FontFamily(&cozette14RegularFont, &cozette14RegularFont);
-
-// Cozette cannot draw Arabic or Hebrew, so those two UI languages use the Ubuntu
-// family. Every other language (incl. Cyrillic + Vietnamese, verified in Cozette's
-// cmap) uses Cozette. Called at boot and on every in-app language change (declared
-// in UiFont.h so LanguageSelectActivity can rebind after a change).
-static bool uiLanguageNeedsUbuntu() {
-  const Language lang = I18n::getInstance().getLanguage();
-  return lang == Language::AR || lang == Language::HE;
-}
-
-void bindUiFontsForLanguage(GfxRenderer& renderer) {
-  const bool useUbuntu = uiLanguageNeedsUbuntu();
-  // insertFont() ignores an already-registered id, so drop the old binding first.
-  // Sizes mirror the previous mature Lector (2px larger than the CrossPoint base):
-  // SMALL = 10, UI_10 (list rows) = 12, UI_12 (header title) = 14. Arabic/Hebrew use the
-  // Ubuntu family at the same sizes so their small text renders too (Cozette lacks AR/HE).
-  renderer.removeFont(SMALL_FONT_ID);
-  renderer.removeFont(UI_10_FONT_ID);
-  renderer.removeFont(UI_12_FONT_ID);
-  renderer.insertFont(SMALL_FONT_ID, useUbuntu ? ubuntu10FontFamily : cozette10FontFamily);
-  renderer.insertFont(UI_10_FONT_ID, useUbuntu ? ubuntu12FontFamily : cozette12FontFamily);
-  renderer.insertFont(UI_12_FONT_ID, useUbuntu ? ubuntu14FontFamily : cozette14FontFamily);
-}
-
-// Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
-RTC_NOINIT_ATTR uint32_t silentRebootMagic;
-RTC_NOINIT_ATTR uint32_t silentRebootTarget;
-RTC_NOINIT_ATTR uint32_t silentRebootPayload;
-constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
-constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
-constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
-constexpr uint32_t SILENT_REBOOT_TARGET_SETTINGS = 2;
-constexpr uint32_t SILENT_REBOOT_LIGHT_ON = 1U << 0;
-
-// Breadcrumbs for the heap-defrag reboot, in RTC memory because the card is one of the
-// suspects: an X3 that left a WiFi screen sat on "Loading" until Power was held, and
-// nothing said which step it stopped at. The trail names the last step passed; the
-// rescue timer reboots a restart that has not reached its first frame in time, and
-// the next boot writes where it stopped to the diagnostics file.
-RTC_NOINIT_ATTR uint32_t restartTrail;
-RTC_NOINIT_ATTR uint32_t restartRescuedAt;
-constexpr uint32_t RESTART_TRAIL_MAGIC = 0x7EA11000;
-constexpr uint32_t RESTART_TRAIL_MASK = 0xFFFFFF00;
-enum RestartStage : uint8_t {
-  STAGE_ENTERED = 1,
-  STAGE_POPUP_DRAWN,
-  STAGE_STATE_SAVED,
-  STAGE_RESTART_CALLED,
-  STAGE_BOOT_SILENT,
-  STAGE_DISPLAY_UP,
-  STAGE_LOOP_RUNNING,
-};
-constexpr const char* kRestartStageNames[] = {"none",           "entered",       "popup drawn", "state saved",
-                                              "restart called", "boot (silent)", "display up",  "loop running"};
-constexpr uint64_t RESTART_RESCUE_US = 30ULL * 1000 * 1000;
-static esp_timer_handle_t restartRescueTimer = nullptr;
-
-static void markRestartStage(const RestartStage stage) {
-  restartTrail = RESTART_TRAIL_MAGIC | stage;
-  debug_trace::note("restart stage: %s", kRestartStageNames[stage]);
-}
-
-// Decodes a breadcrumb word; 0 when it is cold-boot garbage or cleared.
-static uint8_t restartStageOf(const uint32_t word) {
-  if ((word & RESTART_TRAIL_MASK) != RESTART_TRAIL_MAGIC) return 0;
-  const uint8_t stage = word & 0xFF;
-  return stage <= STAGE_LOOP_RUNNING ? stage : 0;
-}
-
-// esp_timer task context: no card, no display, no mutex. Only the RTC word and a reset.
-// The magic goes too, so the rescue boot is a plain one: if the seamless path is what
-// hangs, a silent rescue would only hang again, every 30 s.
-static void restartRescueFired(void*) {
-  restartRescuedAt = restartTrail;
-  silentRebootMagic = 0;
-  esp_restart();
-}
-
-static void armRestartRescue() {
-  if (!restartRescueTimer) {
-    const esp_timer_create_args_t args = {.callback = restartRescueFired, .name = "rstrescue"};
-    if (esp_timer_create(&args, &restartRescueTimer) != ESP_OK) return;
-  }
-  esp_timer_stop(restartRescueTimer);  // harmless when not running
-  esp_timer_start_once(restartRescueTimer, RESTART_RESCUE_US);
-}
-
-// The restart landed its first frame: the trail has nothing left to say.
-static void finishRestartTrail() {
-  if (restartTrail == 0) return;
-  if (restartRescueTimer) esp_timer_stop(restartRescueTimer);
-  restartTrail = 0;
-  debug_trace::note("restart stage: first frame");
-}
-
 // How the device is coming back to life, resolved once at boot. Both resume
 // flows suppress the splash and leave the panel holding its pre-boot frame; a
 // plain boot shows the splash. See setup() for the resolution.
@@ -220,66 +79,6 @@ enum class BootResume : uint8_t {
   Splash,  // cold boot, flash, panic, or plain reboot
   Silent,  // heap-defrag ESP.restart() (RTC flag; lost on power loss)
 };
-
-// Latched true once enterDeepSleep() commits to sleeping, before it tears down
-// the current activity. WiFi activities call silentRestart() in onExit() to
-// clear heap fragmentation on the way out, but deep sleep is a full chip reset
-// on wake and already clears the heap, so rebooting here would just power the
-// device back up against the user's sleep gesture. Never cleared:
-// startDeepSleep() does not return, so a set latch only ends at the wakeup reset.
-static bool deepSleepInProgress = false;
-
-// The anti-ghost budget lives in RAM, and every reboot is a reset, so it has to be
-// written down before the device goes away. Deep sleep does this in enterDeepSleep();
-// the heap-defrag reboots below are the other routine way a session ends, and without
-// this a reader who trips one (returning from KOReader sync, leaving a WiFi screen)
-// hands the next session a budget of zero and delays the panel's next discharge.
-void persistAntiGhostBudget() {
-  APP_STATE.fastRefreshesSinceFull = display.fastRefreshesSinceFull();
-  APP_STATE.inkDebt = display.inkDebt();
-  APP_STATE.saveToFile();
-}
-
-// SETTINGS.frontlightOn is the saved preference, not the live state: a wake with
-// Restore Light on Wake off leaves the light dark while "was on" stays saved. The
-// live state rides across the reboot so the light comes back exactly as it was.
-static void armSilentReboot(const uint32_t target) {
-  silentRebootTarget = target;
-  silentRebootPayload = Frontlight.isOn() ? SILENT_REBOOT_LIGHT_ON : 0;
-  silentRebootMagic = SILENT_REBOOT_MAGIC;
-}
-
-static void silentRestartTo(const uint32_t target) {
-  if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
-  armRestartRescue();
-  markRestartStage(STAGE_ENTERED);
-  armSilentReboot(target);
-  LOG_DBG("MAIN", "Silent restart (target=%lu)", static_cast<unsigned long>(target));
-  // E-ink retains the previous frame until Home's first paint lands (~2-3s).
-  // Without an overlay, users don't see the reboot and fire input through to
-  // Home. Select on the default selectorIndex=0 then opens the most-recent
-  // book, looking like a trampoline back to the reader they just exited.
-  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-  markRestartStage(STAGE_POPUP_DRAWN);
-  persistAntiGhostBudget();
-  markRestartStage(STAGE_STATE_SAVED);
-  delay(50);
-  markRestartStage(STAGE_RESTART_CALLED);
-  ESP.restart();
-}
-
-void silentRestart() { silentRestartTo(SILENT_REBOOT_TARGET_HOME); }
-
-void silentRestartToReader() { silentRestartTo(SILENT_REBOOT_TARGET_READER); }
-
-void silentRestartToSettings() { silentRestartTo(SILENT_REBOOT_TARGET_SETTINGS); }
-
-void teardownWifiAndRestart(void (*restart)()) {
-  if (WiFi.getMode() == WIFI_MODE_NULL) return;  // WiFi never came up: nothing to defrag
-  WiFi.disconnect(false);
-  delay(30);
-  restart();
-}
 
 // Defined below setup()'s helpers.
 static std::string pickRandomRecentBookPath();
@@ -321,7 +120,7 @@ static std::string pickBootBookPath();
 
   // Commit to sleeping before goToSleep() runs the outgoing activity's onExit():
   // a WiFi activity would otherwise silentRestart() here and reboot instead.
-  deepSleepInProgress = true;
+  markDeepSleepCommitted();
   activityManager.goToSleep(fromTimeout);
   sleepTPaint = millis();
   // Behind the sleep face: the reader's onExit above has saved the position it pushes.
@@ -452,14 +251,7 @@ static void setupBuiltinFonts() {
   fontDecompressor.init();
   fontCacheManager.setFontDecompressor(&fontDecompressor);
   renderer.setFontCacheManager(&fontCacheManager);
-  renderer.insertFont(CHAREINK_14_FONT_ID, chareink14FontFamily);
-  // Permanent Ubuntu ids (full Latin/Arabic/Hebrew/Vietnamese coverage) for the
-  // language-select native-name list and the Arabic/Hebrew UI.
-  renderer.insertFont(UBUNTU_10_FONT_ID, ubuntu10FontFamily);
-  renderer.insertFont(UBUNTU_12_FONT_ID, ubuntu12FontFamily);
-  // Active UI ids (SMALL / UI_10 / UI_12): Cozette by default, Ubuntu for Arabic/Hebrew
-  // (honors the persisted SETTINGS.language already loaded at this point).
-  bindUiFontsForLanguage(renderer);
+  bindBuiltinFonts(renderer);
 }
 
 void setupDisplayAndFonts(const bool seamless, const HalGPIO::WakeupReason wakeupReason) {
@@ -583,25 +375,8 @@ void setup() {
   WakeTiming::mark(WakeTiming::Stage::SysReady);
   const bool rebootedFromPanic = HalSystem::isRebootFromPanic();
 
-  // Read-and-clear so a panic later in setup() doesn't loop into silent reboot.
-  // Bound the target range too — RTC_NOINIT memory is uninitialized on cold boot.
-  const bool isSilentReboot = (silentRebootMagic == SILENT_REBOOT_MAGIC);
-  const uint32_t snapshotTarget =
-      (isSilentReboot && silentRebootTarget <= SILENT_REBOOT_TARGET_SETTINGS) ? silentRebootTarget : 0;
-  const bool litBeforeSilentReboot = isSilentReboot && (silentRebootPayload & SILENT_REBOOT_LIGHT_ON) != 0;
-  silentRebootMagic = 0;
-  silentRebootTarget = 0;
-  silentRebootPayload = 0;
-  // Where the last restart stopped, read before the silent boot below overwrites it.
-  const uint8_t trailStage = restartStageOf(restartTrail);
-  const uint8_t rescuedStage = restartStageOf(restartRescuedAt);
-  restartRescuedAt = 0;
-  if (isSilentReboot) {
-    armRestartRescue();
-    restartTrail = RESTART_TRAIL_MAGIC | STAGE_BOOT_SILENT;
-  } else {
-    restartTrail = 0;
-  }
+  const RestartBoot restartBoot = takeRestartBoot();
+  const bool isSilentReboot = restartBoot.silent;
 
 #if FREEINK_DEVICE_X4PRO
   sdMountJoiner = xTaskGetCurrentTaskHandle();
@@ -675,10 +450,10 @@ void setup() {
   diag::recordAbnormalBoot();
   // A restart the rescue timer had to finish, or one that ended some other way (Power
   // held, a crash) before its first frame. A clean restart leaves no trail.
-  if (rescuedStage) {
-    diag::recordRestartTrail(kRestartStageNames[rescuedStage], true);
-  } else if (trailStage && !(isSilentReboot && trailStage == STAGE_RESTART_CALLED)) {
-    diag::recordRestartTrail(kRestartStageNames[trailStage], false);
+  if (restartBoot.rescued) {
+    diag::recordRestartTrail(restartBoot.rescuedStage, true);
+  } else if (restartBoot.trailWorthRecording) {
+    diag::recordRestartTrail(restartBoot.trailStage, false);
   }
   diag::flushIfPending();
 
@@ -731,7 +506,7 @@ void setup() {
   const uint32_t logsStartedMs = millis();
   debug_trace::begin();
   debug_trace::note("boot: reset=%d silent=%d trail=%s rescued=%s", static_cast<int>(esp_reset_reason()),
-                    isSilentReboot ? 1 : 0, kRestartStageNames[trailStage], kRestartStageNames[rescuedStage]);
+                    isSilentReboot ? 1 : 0, restartBoot.trailStage, restartBoot.rescuedStage);
   {
     const DeviceProfile dev = deviceProfileFromHardware();
     startPerfLogSink(dev.isX3 ? "x3" : dev.isX4Pro ? "x4pro" : "x4");
@@ -764,7 +539,7 @@ void setup() {
   }
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth,
                    frontlight::restoreLightOnAtBoot({SETTINGS.frontlightOn != 0, SETTINGS.frontlightRestoreOnWake != 0,
-                                                     isSilentReboot, litBeforeSilentReboot, scheduledOn}));
+                                                     isSilentReboot, restartBoot.lightOn, scheduledOn}));
 
   const uint32_t classifyStartedMs = millis();
   const auto wakeupReason = gpio.getWakeupReason();
@@ -811,7 +586,7 @@ void setup() {
   wakeInputs.fastUnlock = SETTINGS.fastUnlock != 0;
 
   setupDisplay(resume != BootResume::Splash || paintedFaceWake, wakeupReason);
-  if (restartTrail) markRestartStage(STAGE_DISPLAY_UP);
+  noteRestartDisplayUp();
   setupBuiltinFonts();
 
   // How the page gets over the painted sleep face; see wake_sequence::clearStrategy.
@@ -923,8 +698,8 @@ void setup() {
   wakeInputs.recoveryFirmwareMode = recoveryFirmwareMode;
   wakeInputs.panic = rebootedFromPanic;
   wakeInputs.silentReboot = resume == BootResume::Silent;
-  wakeInputs.silentTargetIsReader = snapshotTarget == SILENT_REBOOT_TARGET_READER;
-  wakeInputs.silentTargetIsSettings = snapshotTarget == SILENT_REBOOT_TARGET_SETTINGS;
+  wakeInputs.silentTargetIsReader = restartBoot.target == RestartTarget::Reader;
+  wakeInputs.silentTargetIsSettings = restartBoot.target == RestartTarget::Settings;
   wakeInputs.openEpubPathEmpty = APP_STATE.openEpubPath.empty();
   wakeInputs.lastSleepFromReader = APP_STATE.lastSleepFromReader;
   wakeInputs.backHeld = mappedInputManager.isPressed(MappedInputManager::Button::Back);
@@ -1090,12 +865,7 @@ void loop() {
   // wasReleased() in the firmware went dead and Back could never leave a book.
   mappedInputManager.update();
 
-  if (restartTrail) {
-    if (restartStageOf(restartTrail) < STAGE_LOOP_RUNNING) markRestartStage(STAGE_LOOP_RUNNING);
-    uint64_t wireUs = 0, waveUs = 0, totalUs = 0;
-    PerfStats::splitTotals(wireUs, waveUs, totalUs);
-    if (totalUs > 0) finishRestartTrail();  // a refresh has completed since boot
-  }
+  noteRestartLoopPass();
 
   // Cleared here, once, so that every early return below (the screenshot combo, the sleep
   // paths) leaves the power release ungated. The double-click block further down is the
