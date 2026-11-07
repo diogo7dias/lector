@@ -36,11 +36,6 @@ constexpr char kMagic[4] = {'L', 'W', 'X', '1'};
 constexpr uint8_t kVersion = 1;
 constexpr size_t kWdtInterval = 50;
 
-// Set from any task by mutation sites; folded into APP_STATE by markDirty() on
-// the main task only. Plain aligned bool: single writer semantics per site,
-// torn reads impossible on a 32-bit store.
-volatile bool s_pendingMutation = false;
-
 struct Header {
   char magic[4];
   uint8_t version;
@@ -441,12 +436,7 @@ void noteLapWrapped() {
   APP_STATE.sleepIndexNeedsRebuild = true;
 }
 
-void noteMutation() { s_pendingMutation = true; }
-
-bool hasPendingMutation() { return s_pendingMutation; }
-
 void markDirty() {
-  s_pendingMutation = false;
   if (APP_STATE.sleepIndexDirty) return;  // already persisted: no SD write
   APP_STATE.sleepIndexDirty = true;
   APP_STATE.saveToFile();
@@ -525,7 +515,6 @@ void storeQueueState(const sleep_queue::QueueState& s) {
 }
 
 void reconcileAtColdBoot(GfxRenderer& renderer) {
-  if (s_pendingMutation) markDirty();  // fold a pre-boot RAM mark (defensive)
   const uint8_t dirId = resolveSleepDirId();
 
   // Late banner — an unchanged folder's check paints nothing unless it

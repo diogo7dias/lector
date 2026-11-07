@@ -148,12 +148,6 @@ void noteCreated(const std::string& path);
 // shown once, so flag a rebuild for the next cold boot when holes exist.
 void noteLapWrapped();
 
-// Task-safe RAM mark: "the sleep folder was mutated this session". Callable
-// from any task (background rename worker, web server handlers) — it never
-// touches APP_STATE. A main-task point folds it in via markDirty().
-void noteMutation();
-bool hasPendingMutation();
-
 // MAIN TASK ONLY: persist the dirty mark into APP_STATE.sleepIndexDirty so the
 // next boot reconciles even when it is a silent restart. Saves state.json the
 // first time the flag flips; no-op (and no SD write) once set.

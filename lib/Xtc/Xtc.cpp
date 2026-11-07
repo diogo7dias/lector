@@ -12,16 +12,6 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-
-namespace {
-void yieldDuringThumbnail(uint8_t& rowsSinceYield) {
-  if (++rowsSinceYield < 8) return;
-  rowsSinceYield = 0;
-  vTaskDelay(1);
-}
-}  // namespace
 
 bool Xtc::load() {
   LOG_DBG("XTC", "Loading XTC: %s", filepath.c_str());

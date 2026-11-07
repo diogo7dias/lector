@@ -63,9 +63,4 @@ std::string moveBookToFolder(const std::string& srcPath, const std::string& dstP
   return dstPath;
 }
 
-std::string unfileFromRecents(const std::string& srcPath, const std::string& cachePathHint) {
-  if (!isInFolder(srcPath, RECENTS_FOLDER)) return srcPath;
-  return moveBookToFolder(srcPath, buildFolderDestination(srcPath, ROOT_FOLDER), cachePathHint);
-}
-
 }  // namespace bookfiling

@@ -129,8 +129,8 @@ bool NearbyPositionReceiveActivity::applyPosition(const PacketView& packet) {
   uint8_t bytes[10];
   std::optional<CachedPosition> local;
   {
-    auto file = Storage.open((cache + "/progress.bin").c_str());
-    if (!file || file.size() > sizeof(bytes)) return false;
+    HalFile file;
+    if (!ProgressFile::openForRead("NPR", cache, file) || file.size() > sizeof(bytes)) return false;
     const size_t size = file.size();
     if (file.read(bytes, size) != static_cast<int>(size)) return false;
     local = readCachedPosition(bytes, size);

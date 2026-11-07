@@ -135,8 +135,8 @@ bool NearbyFileTransferActivity::openCurrentSource() {
   sourcePosition = {};
   const std::string cacheDir = bookCacheDirForPath(path);
   if (!cacheDir.empty()) {
-    HalFile progress = Storage.open((cacheDir + "/progress.bin").c_str());
-    if (progress && progress.fileSize() <= sourcePosition.bytes.size()) {
+    HalFile progress;
+    if (ProgressFile::openForRead("NFT", cacheDir, progress) && progress.fileSize() <= sourcePosition.bytes.size()) {
       sourcePosition.length = static_cast<uint8_t>(progress.fileSize());
       if (!sourcePosition.validFor(sourceName) ||
           progress.read(sourcePosition.bytes.data(), sourcePosition.length) != sourcePosition.length) {
