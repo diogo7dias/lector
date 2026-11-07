@@ -598,7 +598,7 @@ feature and the proof rules: `.claude/skills/verify/SKILL.md` and its `features/
   lands while a press frame is being read is reported next, never dropped. Dropping it
   left a contact that never ended, and the next tap never completed (CI-only, slow hosts).
 - CI runs the sims on every PR: `sim-x4pro` (3 shards, split by file in `ci.yml`) on the `build-x4pro` image,
-  `sim-c3` (x3, x3uc8279, x4) on the `build` image.
+  `sim-c3` (one job per board: x3, x3uc8279, x4) on the `build` image.
 - The page's Reboot (`POST /reboot`) power-cycles with the same flash and card, so
   settings and reading position must survive it. Emulated boot is slower than the
   device: wake holds Power until a frame appears (`power_on`).
