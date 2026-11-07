@@ -1,0 +1,37 @@
+name: Simulator setup
+description: Tools, patched QEMU (cached) and the e2e runner for the sim/ suites.
+runs:
+  using: composite
+  steps:
+    - name: Install tools
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ninja-build libglib2.0-dev libpixman-1-dev libgcrypt20-dev \
+          libslirp-dev python3-venv mtools dosfstools fdisk
+        pip install esptool pillow
+
+    - name: Cache QEMU
+      id: qemu
+      uses: actions/cache@v4
+      with:
+        path: sim/.qemu
+        key: qemu-${{ runner.os }}-${{ hashFiles('sim/qemu-patches/**', 'sim/build-qemu.sh') }}
+
+    # On a hit the binaries are already patched: build-qemu.sh would re-apply the patches,
+    # touch the sources and make ninja rebuild for ~3.5 min.
+    - name: Build QEMU
+      if: steps.qemu.outputs.cache-hit != 'true'
+      shell: bash
+      run: ./sim/build-qemu.sh
+
+    - uses: actions/setup-node@v6
+      with:
+        node-version: 22
+
+    - name: Install e2e
+      shell: bash
+      working-directory: sim
+      run: |
+        npm ci
+        npx playwright install --with-deps chromium
