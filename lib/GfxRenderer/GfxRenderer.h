@@ -337,8 +337,9 @@ class GfxRenderer {
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                 BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO, int letterSpacing = 0) const;
-  // Glyphs drawText steps between for `text`: ligatures applied, combining marks not counted.
-  int spacedGlyphCount(int fontId, const char* text, EpdFontFamily::Style style) const;
+  // Glyphs drawText steps between for `text`: the one count every letter-spacing width uses.
+  int spacedGlyphCount(int fontId, const char* text, EpdFontFamily::Style style,
+                       BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
   // Draws one glyph at scale256/256 of its size with its baseline at baselineY (drop caps).
   // Outlines are bilinearly resampled from the font bitmap, so no larger font is loaded.
   // Returns the scaled advance in pixels.

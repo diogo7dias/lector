@@ -137,7 +137,9 @@ namespace {
 // v80: text running into a block stays its own word; literal spaces count correctly when
 //      justifying; a carried no-break space does not indent; font-weight/font-style: inherit
 //      keep the parent's emphasis; SD font widths snap per glyph like drawText.
-constexpr uint8_t SECTION_FILE_VERSION = 80;
+// v81: Word Expansion counts letters the way drawText steps them (no ligatures in small
+//      caps, shaped visual text), so justified lines with those words lay out again.
+constexpr uint8_t SECTION_FILE_VERSION = 81;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

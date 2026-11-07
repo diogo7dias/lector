@@ -112,6 +112,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 81
+
+Layout fix; the binary layout is unchanged. Word Expansion counts the letters it spaces the
+way drawing steps them: small caps keep ligature pairs as separate letters, and the count runs
+over the shaped visual text. Justified lines holding such words lay out again. The partial
+version is 201.
+
 ### Version 80
 
 Layout fixes; the binary layout is unchanged. Text running straight into a block or heading
