@@ -24,17 +24,6 @@
 #include "components/UITheme.h"
 #include "util/BookProgressFile.h"
 
-bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
-
-bool ReaderActivity::isTxtFile(const std::string& path) {
-  return FsHelpers::hasTxtExtension(path) ||
-         FsHelpers::hasMarkdownExtension(path);  // Treat .md as txt files (until we have a markdown reader)
-}
-
-bool ReaderActivity::isImageFile(const std::string& path) {
-  return FsHelpers::hasBmpExtension(path) || FsHelpers::hasPngExtension(path);
-}
-
 int ReaderActivity::initialRefreshCountdown() const {
   if (!allowFastInitialRefresh) return 0;
   // 2 = the first paint is a FAST, the very next page turn is the clean pass: after a
@@ -189,13 +178,13 @@ void ReaderActivity::onEnter() {
   // activities themselves paint from onEnter, so the wait sits in front of each of them,
   // after its load. No-op when nothing is in flight.
   const auto waitForPanel = [this] { renderer.waitRefreshComplete(); };
-  if (isImageFile(initialBookPath)) {
+  if (FsHelpers::hasBmpExtension(initialBookPath) || FsHelpers::hasPngExtension(initialBookPath)) {
     waitForPanel();
     onGoToBmpViewer(initialBookPath);
   } else if (hasPxcExtension(initialBookPath)) {
     waitForPanel();
     onGoToPxcViewer(initialBookPath);
-  } else if (isXtcFile(initialBookPath)) {
+  } else if (FsHelpers::hasXtcExtension(initialBookPath)) {
     auto xtc = loadXtc(initialBookPath);
     if (!xtc) {
       onGoBack();
@@ -203,7 +192,7 @@ void ReaderActivity::onEnter() {
     }
     waitForPanel();
     onGoToXtcReader(std::move(xtc));
-  } else if (isTxtFile(initialBookPath)) {
+  } else if (FsHelpers::hasTextBookExtension(initialBookPath)) {
     auto txt = loadTxt(initialBookPath);
     if (!txt) {
       onGoBack();

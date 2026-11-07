@@ -97,20 +97,7 @@ void TxtReaderActivity::onExit() {
   // the EPUB reader's move-on-exit filing avoids in the same way.
   const std::string deletePath = pendingDeleteBook && txt ? txt->getPath() : std::string();
   txt.reset();
-  if (!deletePath.empty()) {
-    if (Storage.remove(deletePath.c_str())) {
-      // The cache directory is keyed on the path, so leaving it behind would strand
-      // an index and a progress file that nothing will ever open again.
-      clearBookCache(deletePath);
-      RECENT_BOOKS.removeByPath(deletePath);
-      // Without this, Back on the home screen would try to reopen the deleted file.
-      if (APP_STATE.openEpubPath == deletePath) {
-        APP_STATE.openEpubPath.clear();
-      }
-    } else {
-      LOG_ERR("TRS", "Failed to delete book: %s", deletePath.c_str());
-    }
-  }
+  if (!deletePath.empty()) deleteOpenedBook(deletePath);
 
   APP_STATE.saveToFile();
 }

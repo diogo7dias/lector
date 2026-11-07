@@ -19,10 +19,6 @@ namespace fui = freeink::ui;
 
 namespace {
 constexpr unsigned long POPUP_DURATION_MS = 1500;
-
-// Same yield the page-side lookup passes: an index build runs long enough to starve the
-// watchdog without it.
-void indexBuildYield(void*) { vTaskDelay(1); }
 }  // namespace
 
 void DictionaryHistoryActivity::onEnter() {
@@ -61,7 +57,7 @@ void DictionaryHistoryActivity::lookUp(const std::string& word) {
   bool ok = dictOpenOk;
   Dictionary::IndexResult indexResult = Dictionary::IndexResult::Ok;
   if (ok && dictNeedsIndex) {
-    ok = dict.buildIndex(&indexBuildYield, nullptr, &indexResult);
+    ok = dict.buildIndex(&indexResult);
     dictNeedsIndex = !ok;  // a successful build leaves the sidecar fresh; a failed one retries
     if (ok) {
       // The build is over; the wait that remains is the lookup, so say so.

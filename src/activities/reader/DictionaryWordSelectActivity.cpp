@@ -41,8 +41,6 @@ bool isSelectableToken(const char* text) {
   return false;
 }
 
-void indexBuildYield(void*) { vTaskDelay(1); }
-
 }  // namespace
 
 void DictionaryWordSelectActivity::onEnter() {
@@ -183,7 +181,7 @@ void DictionaryWordSelectActivity::performLookup() {
   bool ok = dictOpenOk;
   Dictionary::IndexResult indexResult = Dictionary::IndexResult::Ok;
   if (ok && dictNeedsIndex) {
-    ok = dict.buildIndex(&indexBuildYield, nullptr, &indexResult);
+    ok = dict.buildIndex(&indexResult);
     dictNeedsIndex = !ok;  // a successful build leaves the sidecar fresh; a failed one retries
   }
 

@@ -184,6 +184,14 @@ bool hasTxtExtension(std::string_view fileName) { return checkFileExtension(file
 
 bool hasMarkdownExtension(std::string_view fileName) { return checkFileExtension(fileName, ".md"); }
 
+bool hasTextBookExtension(std::string_view fileName) {
+  return hasTxtExtension(fileName) || hasMarkdownExtension(fileName);
+}
+
+bool hasBookExtension(std::string_view fileName) {
+  return hasEpubExtension(fileName) || hasXtcExtension(fileName) || hasTextBookExtension(fileName);
+}
+
 bool hasCssExtension(std::string_view fileName) { return checkFileExtension(fileName, ".css"); }
 
 std::string partialPathFor(const std::string_view finalPath) { return std::string(finalPath) + PARTIAL_SUFFIX; }

@@ -11,6 +11,8 @@
 #include <cstdlib>
 #include <utility>
 
+#include "CrossPointState.h"
+#include "RecentBooksStore.h"
 #include "TaskWatchdog.h"
 
 namespace {
@@ -89,8 +91,7 @@ bool bookCacheKeyForPath(const std::string& path, BookCacheKey& key) {
     key.prefix = BookCacheKey::EPUB;
   } else if (FsHelpers::hasXtcExtension(path)) {
     key.prefix = BookCacheKey::XTC;
-  } else if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
-    // .md has no reader of its own and is opened as text, so it caches under txt_.
+  } else if (FsHelpers::hasTextBookExtension(path)) {
     key.prefix = BookCacheKey::TXT;
   } else {
     return false;
@@ -114,13 +115,26 @@ void clearBookCache(const std::string& path) {
     Epub(path, CACHE_DIR).clearCache();
   } else if (FsHelpers::hasXtcExtension(path)) {
     Xtc(path, CACHE_DIR).clearCache();
-  } else if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
-    // .md is opened by the txt reader and caches under txt_ (see bookCacheKeyForPath).
+  } else if (FsHelpers::hasTextBookExtension(path)) {
     Txt(path, CACHE_DIR).clearCache();
   } else {
     return;
   }
   LOG_DBG("BookCache", "Done checking metadata cache for: %s", path.c_str());
+}
+
+bool deleteOpenedBook(const std::string& path) {
+  if (!Storage.remove(path.c_str())) {
+    LOG_ERR("BookCache", "Failed to delete book: %s", path.c_str());
+    return false;
+  }
+  clearBookCache(path);
+  RECENT_BOOKS.removeByPath(path);
+  if (APP_STATE.openEpubPath == path) {
+    APP_STATE.openEpubPath.clear();
+    APP_STATE.saveToFile();
+  }
+  return true;
 }
 
 bool collectLiveBookCacheKeys(std::vector<BookCacheKey>& live) {

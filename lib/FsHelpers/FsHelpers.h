@@ -73,6 +73,12 @@ inline bool hasTxtExtension(const String& fileName) {
 // Check for .md extension (case-insensitive)
 bool hasMarkdownExtension(std::string_view fileName);
 
+// A book the text reader opens: .txt, or .md (there is no markdown reader).
+bool hasTextBookExtension(std::string_view fileName);
+
+// Any file the reader opens as a book: EPUB, XTC or text.
+bool hasBookExtension(std::string_view fileName);
+
 // Check for .css extension (case-insensitive)
 bool hasCssExtension(std::string_view fileName);
 inline bool hasCssExtension(const String& fileName) {
