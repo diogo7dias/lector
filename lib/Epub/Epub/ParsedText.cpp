@@ -116,13 +116,8 @@ bool hasCjkBreakOpportunityBetween(const uint32_t leftCp, const uint32_t rightCp
 
 // splitHangul is only for a Korean word too wide for the line; any other word holding Hangul stays whole.
 std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text, const bool splitHangul = false) {
-  struct CodepointBoundary {
-    uint32_t cp;
-    size_t endOffset;
-  };
-
   // A word holding Hangul is a Korean word, Hanja and all, so it stays one token. Runs for every
-  // word in a book, so Latin and Korean words leave before the staging vector below is allocated.
+  // word in a book, so Latin and Korean words leave before anything is allocated.
   bool hasCjkBreakable = false;
   for (const auto* p = reinterpret_cast<const unsigned char*>(text.c_str()); *p;) {
     const uint32_t cp = utf8NextCodepoint(&p);
@@ -131,26 +126,33 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text, const 
   }
   if (!hasCjkBreakable) return {};
 
-  std::vector<CodepointBoundary> codepoints;
-  codepoints.reserve(text.size());
-
-  const auto* ptr = reinterpret_cast<const unsigned char*>(text.c_str());
-  const auto* const start = ptr;
-  while (*ptr) {
-    const uint32_t cp = utf8NextCodepoint(&ptr);
-    if (cp == 0) break;
-    codepoints.push_back({cp, static_cast<size_t>(ptr - start)});
+  const auto allowsBreak = [splitHangul](const uint32_t current, const uint32_t next) {
+    return splitHangul ? cjkBoundaryAllowsBreak(current, next) : hasCjkBreakOpportunityBetween(current, next);
+  };
+  // Two passes over the UTF-8, counting first, so no per-codepoint staging buffer is needed and
+  // a word without an accepted boundary allocates nothing.
+  const auto* const start = reinterpret_cast<const unsigned char*>(text.c_str());
+  size_t boundaryCount = 0;
+  const auto* ptr = start;
+  uint32_t previous = utf8NextCodepoint(&ptr);
+  while (previous != 0 && *ptr) {
+    const uint32_t current = utf8NextCodepoint(&ptr);
+    if (current == 0) break;
+    if (allowsBreak(previous, current)) ++boundaryCount;
+    previous = current;
   }
-
-  if (codepoints.size() < 2) return {};
+  if (boundaryCount == 0) return {};
 
   std::vector<size_t> allowedOffsets;
-  allowedOffsets.reserve(codepoints.size() - 1);
-  for (size_t i = 0; i + 1 < codepoints.size(); ++i) {
-    const uint32_t current = codepoints[i].cp;
-    const uint32_t next = codepoints[i + 1].cp;
-    if (!(splitHangul ? cjkBoundaryAllowsBreak(current, next) : hasCjkBreakOpportunityBetween(current, next))) continue;
-    allowedOffsets.push_back(codepoints[i].endOffset);
+  allowedOffsets.reserve(boundaryCount);
+  ptr = start;
+  previous = utf8NextCodepoint(&ptr);
+  while (previous != 0 && *ptr) {
+    const size_t offset = static_cast<size_t>(ptr - start);
+    const uint32_t current = utf8NextCodepoint(&ptr);
+    if (current == 0) break;
+    if (allowsBreak(previous, current)) allowedOffsets.push_back(offset);
+    previous = current;
   }
   return allowedOffsets;
 }
