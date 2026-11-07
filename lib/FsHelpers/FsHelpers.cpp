@@ -190,6 +190,10 @@ bool hasBookExtension(std::string_view fileName) {
   return hasEpubExtension(fileName) || hasXtcExtension(fileName) || hasTextBookExtension(fileName);
 }
 
+bool isSystemFolderName(const std::string_view name) {
+  return name == "System Volume Information" || name == "XTCache";
+}
+
 bool hasCssExtension(std::string_view fileName) { return checkFileExtension(fileName, ".css"); }
 
 std::string partialPathFor(const std::string_view finalPath) { return std::string(finalPath) + PARTIAL_SUFFIX; }

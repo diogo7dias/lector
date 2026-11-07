@@ -104,7 +104,7 @@ void NearbyPositionReceiveActivity::scanNext() {
     setState(State::Unavailable);
     return;
   }
-  if (entryName[0] == '.') return;
+  if (entryName[0] == '.' || FsHelpers::isSystemFolderName(entryName)) return;
   const std::string path = paths[depth] + "/" + entryName;
   if (path.size() > 1024) {
     setState(State::Unavailable);

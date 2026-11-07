@@ -223,7 +223,9 @@ have never opened show no badge, and comics (XTC) never carry one.
 Upgrading from an older release, the books still in your Recents list get their badge on the
 first boot; any other book read long ago gets one the next time you close it.
 
-**Settings > System > Show Hidden Files** decides whether entries beginning with `.` appear.
+**Settings > System > Show Hidden Files** decides whether entries beginning with `.` appear. The
+`System Volume Information` and `XTCache` folders never appear, and their contents are never
+picked as books.
 **File Browser Order** lists a folder alphabetically, in random order, by the date each file
 was added, or by when you last read it. Both date orders put the newest first and leave the
 folders at the top; books you have never opened sit at the bottom of Last Read, in name
