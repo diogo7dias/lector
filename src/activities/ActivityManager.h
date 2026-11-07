@@ -94,12 +94,9 @@ class ActivityManager {
  public:
   GfxRenderer& getRenderer() { return renderer; }
 
-  explicit ActivityManager(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : renderer(renderer), mappedInput(mappedInput), renderingMutex(xSemaphoreCreateMutex()) {
-    assert(renderingMutex != nullptr && "Failed to create rendering mutex");
-    stackActivities.reserve(10);
-  }
-  ~ActivityManager() { assert(false); /* should never be called */ };
+  // Out of line: the unique_ptr<Activity> members need Activity complete to grow and destroy.
+  explicit ActivityManager(GfxRenderer& renderer, MappedInputManager& mappedInput);
+  ~ActivityManager();
 
   void begin();
 
