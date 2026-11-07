@@ -60,10 +60,9 @@ bool ButtonRemapActivity::handleCustomInput() {
 
   // Finish the whole gesture before returning to Settings or changing the live mapping.
   if (exitAction != ExitAction::None) {
-    using Button = MappedInputManager::Button;
-    for (const Button button : {Button::Back, Button::Confirm, Button::Left, Button::Right, Button::Up, Button::Down}) {
-      if (mappedInput.isPressed(button)) return true;
-    }
+    // Raw keys: the screen exists to repair a mapping, so the old logical table may not
+    // reach the button still held.
+    if (mappedInput.isAnyPressed()) return true;
     switch (exitAction) {
       case ExitAction::None:
         return true;
