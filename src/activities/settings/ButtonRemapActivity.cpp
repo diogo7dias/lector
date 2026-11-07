@@ -22,6 +22,7 @@ void ButtonRemapActivity::onEnter() {
 
   // Start with all roles unassigned to avoid duplicate blocking.
   currentStep = 0;
+  exitAction = ExitAction::None;
   tempMapping[0] = kUnassigned;
   tempMapping[1] = kUnassigned;
   tempMapping[2] = kUnassigned;
@@ -39,6 +40,16 @@ void ButtonRemapActivity::onExit() {
 int ButtonRemapActivity::listCount() const { return kRoleCount; }
 
 bool ButtonRemapActivity::handleCustomInput() {
+  // Side buttons: Up resets the mapping to defaults, Down cancels without saving. Remember the
+  // first one even while another button is still held.
+  if (exitAction == ExitAction::None || exitAction == ExitAction::Save) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
+      exitAction = ExitAction::Reset;
+    } else if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+      exitAction = ExitAction::Cancel;
+    }
+  }
+
   // Clear any temporary warning after its timeout.
   if (errorUntil > 0 && millis() > errorUntil) {
     errorMessage.clear();
@@ -47,22 +58,29 @@ bool ButtonRemapActivity::handleCustomInput() {
     return true;
   }
 
-  // Side buttons:
-  // - Up: reset mapping to defaults and exit.
-  // - Down: cancel without saving.
-  if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
-    // Persist default mapping immediately so the user can recover quickly.
-    SETTINGS.frontButtonBack = CrossPointSettings::FRONT_HW_BACK;
-    SETTINGS.frontButtonConfirm = CrossPointSettings::FRONT_HW_CONFIRM;
-    SETTINGS.frontButtonLeft = CrossPointSettings::FRONT_HW_LEFT;
-    SETTINGS.frontButtonRight = CrossPointSettings::FRONT_HW_RIGHT;
-    SETTINGS.saveToFile();
-    finish();
-    return true;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-    // Exit without changing settings.
+  // Finish the whole gesture before returning to Settings or changing the live mapping.
+  if (exitAction != ExitAction::None) {
+    using Button = MappedInputManager::Button;
+    for (const Button button : {Button::Back, Button::Confirm, Button::Left, Button::Right, Button::Up, Button::Down}) {
+      if (mappedInput.isPressed(button)) return true;
+    }
+    switch (exitAction) {
+      case ExitAction::None:
+        return true;
+      case ExitAction::Save:
+        applyTempMapping();
+        SETTINGS.saveToFile();
+        break;
+      case ExitAction::Reset:
+        SETTINGS.frontButtonBack = CrossPointSettings::FRONT_HW_BACK;
+        SETTINGS.frontButtonConfirm = CrossPointSettings::FRONT_HW_CONFIRM;
+        SETTINGS.frontButtonLeft = CrossPointSettings::FRONT_HW_LEFT;
+        SETTINGS.frontButtonRight = CrossPointSettings::FRONT_HW_RIGHT;
+        SETTINGS.saveToFile();
+        break;
+      case ExitAction::Cancel:
+        break;
+    }
     finish();
     return true;
   }
@@ -88,11 +106,8 @@ bool ButtonRemapActivity::handleCustomInput() {
     currentStep++;
 
     if (currentStep >= kRoleCount) {
-      // All roles assigned; save to settings and exit.
-      applyTempMapping();
-      SETTINGS.saveToFile();
-      finish();
-      return true;
+      // All roles assigned: save and leave once the button is released.
+      exitAction = ExitAction::Save;
     }
 
     requestUpdate();
@@ -139,8 +154,9 @@ void ButtonRemapActivity::buildScreen(UiScreen& screen) {
   props.items = rows.data();
   props.count = kRoleCount;
   props.action = ACTION_ROW;
-  // The step being asked about is the selection; nothing else can move it.
-  nav.selected = currentStep;
+  // The step being asked about is the selection; nothing else can move it. Once all are
+  // assigned, the last row stays selected until the button comes up.
+  nav.selected = currentStep < kRoleCount ? currentStep : kRoleCount - 1;
   nav.follow(kRoleCount);
   syncListViewport(screen, props);
   screen.list(props);

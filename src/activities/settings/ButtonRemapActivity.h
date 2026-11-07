@@ -31,6 +31,10 @@ class ButtonRemapActivity final : public UiListActivity {
 
   // Index of the logical role currently awaiting input.
   uint8_t currentStep = 0;
+  // What the screen does once every button is up again: leaving on the press let its release
+  // land on the Settings screen, already under the new mapping.
+  enum class ExitAction : uint8_t { None, Save, Reset, Cancel };
+  ExitAction exitAction = ExitAction::None;
   // Temporary mapping from logical role -> hardware button index.
   uint8_t tempMapping[4] = {0xFF, 0xFF, 0xFF, 0xFF};
   // Error banner timing (used when reassigning duplicate buttons).
