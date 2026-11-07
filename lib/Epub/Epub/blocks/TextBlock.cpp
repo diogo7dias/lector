@@ -314,20 +314,21 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
       }
 
       // Do not decorate the synthetic em-space used for paragraph indentation.
+      const char* decorated = word;
       if (wordTextLen(i) >= 3 && static_cast<uint8_t>(word[0]) == 0xE2 && static_cast<uint8_t>(word[1]) == 0x80 &&
           static_cast<uint8_t>(word[2]) == 0x83) {
-        const char* visibleText = word + 3;
-        lineStartX += renderer.getTextAdvanceX(wordFont, "\xe2\x80\x83", currentStyle);
-        lineWidth = renderer.getTextWidth(wordFont, visibleText, currentStyle, baseDir);
+        decorated = word + 3;
+        // The indent plus the step after it: kerning, Character Spacing and Word Expansion.
+        lineStartX += renderer.getTextAdvanceX(wordFont, word, currentStyle) -
+                      renderer.getTextAdvanceX(wordFont, decorated, currentStyle) + letterSpacing;
+        lineWidth = renderer.getTextWidth(wordFont, decorated, currentStyle, baseDir);
         if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
           lineWidth = (lineWidth + 1) / 2;
         }
       }
+      // Word Expansion widened the word; the underline follows its letters.
       if (letterSpacing) {
-        // Word Expansion widened the word; the underline follows. The em-space indent is one
-        // glyph, so counting the whole word adds exactly the steps under the visible text.
-        lineWidth += letterSpacing * std::max(0, renderer.spacedGlyphCount(wordFont, word, currentStyle) - 2 +
-                                                     (lineStartX == drawX ? 1 : 0));
+        lineWidth += letterSpacing * std::max(0, renderer.spacedGlyphCount(wordFont, decorated, currentStyle) - 1);
       }
 
       for (auto& line : decorationLines) {

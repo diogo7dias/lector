@@ -656,7 +656,7 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
   int w = 0, h = 0;
   fontIt->second.getTextDimensions(renderedText, &w, &h, style);
   const int stepFP = trackingFor(fontId);
-  if (stepFP != 0) w += spacingPixels(std::max(0, spacedGlyphCount(fontId, text, style) - 1), stepFP);
+  if (stepFP != 0) w += spacingPixels(std::max(0, spacedGlyphCount(fontId, text, style, baseDir) - 1), stepFP);
   return w;
 }
 
@@ -791,15 +791,20 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   }
 }
 
-int GfxRenderer::spacedGlyphCount(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+int GfxRenderer::spacedGlyphCount(const int fontId, const char* text, const EpdFontFamily::Style style,
+                                  const BidiUtils::BidiBaseDir baseDir) const {
+  if (text == nullptr) return 0;
   const auto fontIt = fontMap.find(resolveTextFontId(fontId, text, style));
-  if (text == nullptr || fontIt == fontMap.end()) return 0;
+  if (fontIt == fontMap.end()) return 0;
+  // Count the stream drawText walks: the shaped visual text, and no ligatures in small caps.
+  std::string visual;
+  const char* cursor = resolveVisualText(text, visual, baseDir);
+  const bool joins = (style & EpdFontFamily::SMALL_CAPS) == 0 && ligates(fontId);
   int count = 0;
-  const char* cursor = text;
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&cursor)))) {
     if (utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp)) continue;
-    if (ligates(fontId)) fontIt->second.applyLigatures(cp, cursor, style);
+    if (joins) fontIt->second.applyLigatures(cp, cursor, style);
     ++count;
   }
   return count;
