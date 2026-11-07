@@ -1,8 +1,15 @@
 #include "Logging.h"
 
+#include <BoardConfig.h>
 #include <esp_rom_sys.h>
 
 #include <string>
+
+// BoardConfig.h picks the transport. Without it both names below are undefined, the
+// #if compares 0 == 0, and every board silently logs through ROM printf.
+#ifndef FREEINK_LOG_TRANSPORT
+#error "FREEINK_LOG_TRANSPORT undefined: include <BoardConfig.h>"
+#endif
 
 #define MAX_ENTRY_LEN 256
 #define MAX_LOG_LINES 16
