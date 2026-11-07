@@ -40,6 +40,7 @@ void EpubReaderActivity::runIdleBackgroundWork() {
     RenderLock lock;  // the page table must not change under the scan
     // Re-check under the lock: peek() and acquisition are not atomic, so the render
     // task may have reset/replaced the section or moved the page in between.
+    // cppcheck-suppress knownConditionTrueFalse ; the render task changes section between the checks
     if (section && !section->isBuilding() &&
         (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage)) {
       const int neighbour = idlePrewarmNeighbour(section->currentPage, idlePrewarmPage, idlePrewarmSpine,
