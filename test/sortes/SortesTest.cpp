@@ -144,7 +144,17 @@ TEST(SortesRandom, RejectsBiasedTailAndReturnsRealPageIndices) {
 // The hardware activity cannot run on the host. Check that it actually passes the
 // tested mode into the production writer and doesn't reach the exit/history sinks.
 TEST(SortesWiring, EntryExitSleepAndMenuWritesAreGated) {
-  const auto source = bytes(std::string(SORTES_REPO) + "/src/activities/reader/EpubReaderActivity.cpp");
+  // The class is split across EpubReaderActivity*.cpp; onExit stays in the first file.
+  const std::filesystem::path dir = std::string(SORTES_REPO) + "/src/activities/reader";
+  std::set<std::filesystem::path> parts;
+  for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+    const auto name = entry.path().filename().string();
+    if (name.rfind("EpubReaderActivity", 0) == 0 && entry.path().extension() == ".cpp") parts.insert(entry.path());
+  }
+  ASSERT_GT(parts.size(), 1u);
+  std::string source = bytes(dir / "EpubReaderActivity.cpp");
+  for (const auto& part : parts)
+    if (part.filename() != "EpubReaderActivity.cpp") source += bytes(part);
   EXPECT_NE(source.find("pageCount, offset, sortesMode)"), std::string::npos);
   EXPECT_NE(source.find("if (!sortesMode && SETTINGS.removeReadBooksFromRecents)"), std::string::npos);
   const auto exit = source.substr(source.find("void EpubReaderActivity::onExit()"));

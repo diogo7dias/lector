@@ -246,6 +246,16 @@ class EpubReaderActivity final : public Activity {
   uint8_t* acquireGrayscaleStripScratch(size_t bytes);
   void releaseGrayscaleStripScratch();
 
+  // render() phases.
+  void showPendingSyncSaveError();
+  // A build failure leaves the "Indexing" popup up with no way forward; this replaces it
+  // with the error, its code and the heap at the moment of failure.
+  void showBuildError(Section::BuildFailure code, uint32_t freeHeap, uint32_t maxAlloc);
+  void failBuild(const char* what, GfxRenderer::FrameBufferLoan* loan = nullptr);
+  bool buildToCurrentPage();
+  bool openSectionForRender(const ReaderRenderSpec& renderSpec);
+  // loop() phase: prewarm, progress save and background builds while input is idle.
+  void runIdleBackgroundWork();
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
