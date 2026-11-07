@@ -99,13 +99,9 @@ jobs:
           restore-keys: pio-${{ runner.os }}-
 
       - name: Build CrossPoint
-        # Both envs in ONE pio invocation: a second `pio run` can wipe the whole
-        # .pio/build tree (project-checksum mismatch after the S3 toolchain
-        # installs into the restored cache), deleting the default firmware.bin
-        # before the artifact upload.
         run: |
           set -euo pipefail
-          pio run -e default -e sticky | tee pio.log
+          pio run -e default | tee pio.log
 
       - name: Extract firmware stats
 
@@ -134,6 +130,39 @@ jobs:
           name: sim-default
           path: .pio/build/default/*.bin
           if-no-files-found: error
+
+  # Compile-only coverage for the Sticky board, beside the other builds: in the default
+  # build job it added ~7 min before the C3 sims could start.
+  build-sticky:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+      - name: Cache PlatformIO packages
+        # Own key, like x4pro: its custom_sdkconfig framework rebuild must not leak into the others.
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-sticky-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-sticky-${{ runner.os }}-
+
+      - name: Build Sticky
+        run: pio run -e sticky
 
   build-x4pro:
     runs-on: ubuntu-latest
@@ -175,57 +204,58 @@ jobs:
           if-no-files-found: error
 
   # The real firmware of every board in QEMU (sim/): boots, touch and keys, reading.
-  sim-e2e:
-    needs: [build, build-x4pro]
+  # Each board waits only on its own image. The x4pro suite runs in shards, one QEMU each.
+  sim-x4pro:
+    needs: build-x4pro
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v6
-
-      - name: Install tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build libglib2.0-dev libpixman-1-dev libgcrypt20-dev \
-            libslirp-dev python3-venv mtools dosfstools fdisk
-          pip install esptool pillow
-
-      - uses: actions/download-artifact@v7
-        with:
-          name: sim-default
-          path: .pio/build/default
 
       - uses: actions/download-artifact@v7
         with:
           name: sim-x4pro
           path: .pio/build/x4pro
 
-      - name: Cache QEMU
-        uses: actions/cache@v4
-        with:
-          path: sim/.qemu
-          key: qemu-${{ runner.os }}-${{ hashFiles('sim/qemu-patches/**', 'sim/build-qemu.sh') }}
+      - uses: ./.github/actions/sim-setup
 
-      - name: Build QEMU
-        run: ./sim/build-qemu.sh
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-
-      - name: Install e2e
+      - name: Run e2e (x4pro, shard ${{ matrix.shard }}/3)
         working-directory: sim
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
-
-      - name: Run e2e (x4pro, x3, x3uc8279, x4)
-        working-directory: sim
-        run: npm run test:e2e
+        run: npm run test:e2e:x4pro -- --shard ${{ matrix.shard }}/3
 
       - name: Upload e2e report
         if: failure()
         uses: actions/upload-artifact@v6
         with:
-          name: sim-e2e-report
+          name: sim-e2e-report-x4pro-${{ matrix.shard }}
+          path: sim/.e2e
+          include-hidden-files: true
+
+  sim-c3:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: sim-default
+          path: .pio/build/default
+
+      - uses: ./.github/actions/sim-setup
+
+      - name: Run e2e (x3, x3uc8279, x4)
+        working-directory: sim
+        run: npm run test:e2e:x3 && npm run test:e2e:x3uc8279 && npm run test:e2e:x4
+
+      - name: Upload e2e report
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: sim-e2e-report-c3
           path: sim/.e2e
           include-hidden-files: true
 
@@ -269,8 +299,10 @@ jobs:
     name: Test Status
     needs:
       - build
+      - build-sticky
       - build-x4pro
-      - sim-e2e
+      - sim-x4pro
+      - sim-c3
       - clang-format
       - forbidden-calls
       - cppcheck
