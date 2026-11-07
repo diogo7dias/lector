@@ -1,6 +1,6 @@
 #pragma once
 
-#include "activities/reader/ReaderPrefs.h"
+#include "ReaderPrefs.h"
 #include "util/MarginLink.h"
 
 // Migrations a saved reader preset needs when it predates a settings change.

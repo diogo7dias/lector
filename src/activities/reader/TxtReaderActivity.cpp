@@ -15,7 +15,6 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
-#include "ProgressFile.h"
 #include "ReaderFontSizes.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
@@ -26,6 +25,7 @@
 #include "util/BookCacheUtils.h"
 #include "util/BookFilingNames.h"
 #include "util/BookProgressFile.h"
+#include "util/ProgressFile.h"
 #include "util/ReadingJournalStore.h"
 #include "util/ReadingPercent.h"
 

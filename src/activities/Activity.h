@@ -100,11 +100,6 @@ class Activity {
   // re-sort what it drew: Last Read reads a key per book off the card.
   virtual void onBookOrderChanged() {}
   virtual bool isHomeActivity() const { return false; }
-  // The Home gesture (the capacitive Home key, or a bottom-edge up-swipe on boards
-  // without one) pops to Home from anywhere. An activity that must do something
-  // else first — save, confirm, leave a sub-mode — overrides this and returns true
-  // to keep the pop from happening.
-  virtual bool handleHomeGesture() { return false; }
   virtual ScreenshotInfo getScreenshotInfo() const { return {}; }
 
   // Start a new activity without destroying the current one

@@ -18,7 +18,7 @@
 // card cannot say which book was read most recently. The counter is handed out by
 // CrossPointState, one per reading session, and only its order is ever compared.
 //
-// Sibling of activities/reader/ProgressFile.h, which writes `progress.bin` into the same
+// Sibling of util/ProgressFile.h, which writes `progress.bin` into the same
 // directory: that one holds the reading POSITION and is rewritten on a debounce, this one
 // holds what the library screens show ABOUT the book. This file is written in place rather
 // than through a temp-and-rename: a torn write leaves a short or zero-length record, which

@@ -3,7 +3,7 @@ add_executable(QuoteTextTest
 )
 
 target_include_directories(QuoteTextTest PRIVATE
-  ${REPO_ROOT}/src/activities/reader
+  ${REPO_ROOT}/src
   ${REPO_ROOT}/lib/Memory
 )
 

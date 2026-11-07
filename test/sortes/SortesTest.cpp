@@ -6,9 +6,9 @@
 #include <set>
 
 #include "activities/reader/EpubReaderUtils.h"
-#include "activities/reader/ProgressFile.h"
 #include "util/BookFilingNames.h"
 #include "util/BookProgressFile.h"
+#include "util/ProgressFile.h"
 #include "util/Sortes.h"
 
 std::string bookCacheDirForPath(const std::string& path) { return bookfiling::cacheDirFor(path); }

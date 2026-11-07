@@ -94,7 +94,6 @@ class PageDropCap final : public PageElement {
  public:
   PageDropCap(int32_t fontId, uint16_t scale256, EpdFontFamily::Style style, const char* utf8, int16_t xPos,
               int16_t yPos);
-  const char* getText() const { return text; }
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
   bool serialize(HalFile& file) override;
   PageElementTag getTag() const override { return TAG_PageDropCap; }

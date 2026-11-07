@@ -19,12 +19,12 @@
 #include "WifiCredentialStore.h"
 #include "activities/ActivityManager.h"
 #include "activities/reader/NearbyPositionReceiveActivity.h"
-#include "activities/reader/ProgressFile.h"
 #include "util/BookCacheUtils.h"
 #include "util/BookFilingNames.h"
 #include "util/BusyTick.h"
 #include "util/CredentialBundle.h"
 #include "util/PartialUploads.h"
+#include "util/ProgressFile.h"
 
 using namespace nearby_file;
 using freeink::nearby::PacketType;

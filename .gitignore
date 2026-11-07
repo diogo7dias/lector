@@ -41,3 +41,6 @@ NEW-STRINGS.md
 sim/.qemu/
 sim/node_modules/
 sim/.e2e/
+
+# ctest scratch output
+test/Testing/

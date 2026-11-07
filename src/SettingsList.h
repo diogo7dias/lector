@@ -16,7 +16,7 @@
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "ReaderFontSizes.h"
-#include "activities/settings/SettingInfo.h"
+#include "SettingInfo.h"
 #include "frontlight/FrontlightBootPolicy.h"
 #include "util/BoundMenuLabels.h"
 #include "util/DictionaryRegistry.h"

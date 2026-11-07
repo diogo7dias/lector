@@ -14,8 +14,8 @@
 #include "NearbyPositionReceive.h"
 #include "ProgressMapper.h"
 #include "WifiCredentialStore.h"
-#include "activities/reader/ProgressFile.h"
 #include "network/opds/BookOrbitMissing.h"
+#include "util/ProgressFile.h"
 
 namespace {
 

@@ -5,7 +5,7 @@
 
 #include <optional>
 
-#include "ProgressFile.h"
+#include "util/ProgressFile.h"
 
 namespace EpubReaderUtils {
 
