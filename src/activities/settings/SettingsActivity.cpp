@@ -2,7 +2,6 @@
 
 #include <BoardConfig.h>
 #include <GfxRenderer.h>
-#include <HalFrontlight.h>
 #include <Logging.h>
 #include <Memory.h>
 
@@ -42,6 +41,7 @@
 #include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "frontlight/ApplyFrontlightSetting.h"
 #include "frontlight/FrontlightBootPolicy.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "util/CredentialBundle.h"
@@ -61,21 +61,6 @@ void formatScheduleMinutes(const int minutes, char* const out, const size_t outS
     snprintf(out, outSize, "%d:%02d %s", hour % 12 == 0 ? 12 : hour % 12, stepped % 60, hour >= 12 ? "PM" : "AM");
   } else {
     snprintf(out, outSize, "%02d:%02d", hour, stepped % 60);
-  }
-}
-
-// Push a just-changed frontlight row down to the hardware, so the light answers
-// the row instead of waiting for the next boot. No-op for every other row, and
-// on a board with no frontlight (HalFrontlight is inert there).
-void applyFrontlightSetting(uint8_t CrossPointSettings::* const valuePtr) {
-  if (valuePtr == &CrossPointSettings::frontlightOn) {
-    Frontlight.setOn(SETTINGS.frontlightOn != 0);
-  } else if (valuePtr == &CrossPointSettings::frontlightBrightness ||
-             valuePtr == &CrossPointSettings::frontlightMaxBrightness) {
-    SETTINGS.clampFrontlightBrightness();
-    Frontlight.setBrightness(SETTINGS.frontlightBrightness);
-  } else if (valuePtr == &CrossPointSettings::frontlightWarmth) {
-    Frontlight.setWarmth(SETTINGS.frontlightWarmth);
   }
 }
 
