@@ -71,7 +71,6 @@ void CrossPointWebServerActivity::onEnter() {
     LOG_DBG("WEBACT", "Free heap after SD font cache release: %d bytes", ESP.getFreeHeap());
   }
 
-  // Reset state
   state = WebServerActivityState::MODE_SELECTION;
   networkMode = NetworkMode::JOIN_NETWORK;
   isApMode = false;
@@ -190,13 +189,10 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
   LOG_DBG("WEBACT", "WifiSelectionActivity completed, connected=%d", connected);
 
   if (connected) {
-    // Get connection info before exiting subactivity
     isApMode = false;
 
-    // Start mDNS for hostname resolution
     restartMdns(AP_HOSTNAME, "WEBACT");
 
-    // Start the web server
     startWebServer();
   } else {
     // User cancelled - go back to mode selection
@@ -221,7 +217,6 @@ void CrossPointWebServerActivity::startAccessPoint() {
   WiFi.mode(WIFI_AP);
   delay(100);
 
-  // Start soft AP
   bool apStarted;
   if (AP_PASSWORD && strlen(AP_PASSWORD) >= 8) {
     apStarted = WiFi.softAP(AP_SSID, AP_PASSWORD, AP_CHANNEL, false, AP_MAX_CONNECTIONS);
@@ -238,7 +233,6 @@ void CrossPointWebServerActivity::startAccessPoint() {
 
   delay(100);  // Wait for AP to fully initialize
 
-  // Get AP IP address
   const IPAddress apIP = WiFi.softAPIP();
   char ipStr[16];
   snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", apIP[0], apIP[1], apIP[2], apIP[3]);
@@ -249,7 +243,6 @@ void CrossPointWebServerActivity::startAccessPoint() {
   LOG_DBG("WEBACT", "SSID: %s", AP_SSID);
   LOG_DBG("WEBACT", "IP: %s", connectedIP.c_str());
 
-  // Start mDNS for hostname resolution
   restartMdns(AP_HOSTNAME, "WEBACT");
 
   // Start DNS server for captive portal behavior
@@ -266,7 +259,6 @@ void CrossPointWebServerActivity::startAccessPoint() {
 
   LOG_DBG("WEBACT", "Free heap after AP start: %d bytes", ESP.getFreeHeap());
 
-  // Start the web server
   startWebServer();
 }
 
@@ -319,7 +311,6 @@ void CrossPointWebServerActivity::closeTransfer(const char* cause) {
 }
 
 bool CrossPointWebServerActivity::handleCustomInput() {
-  // Handle different states
   if (state == WebServerActivityState::SERVER_RUNNING) {
     // Handle DNS requests for captive portal (AP mode only)
     if (isApMode && dnsServer) {

@@ -80,7 +80,6 @@ class Xtc {
    */
   size_t loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize) const;
 
-  // Check if file is loaded
   bool isLoaded() const { return loaded; }
 
   // Error information

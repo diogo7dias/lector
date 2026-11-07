@@ -61,7 +61,6 @@ class AtkinsonDitherer {
   AtkinsonDitherer& operator=(const AtkinsonDitherer& other) = delete;
 
   uint8_t processPixel(int gray, int x) {
-    // Add accumulated error
     int adjusted = gray + errorRow0[x + 2];
     if (adjusted < 0) adjusted = 0;
     if (adjusted > 255) adjusted = 255;

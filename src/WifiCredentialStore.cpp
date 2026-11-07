@@ -120,13 +120,11 @@ bool WifiCredentialStore::addCredential(const std::string& ssid, const std::stri
       cred->password = password;
       LOG_DBG("WCS", "Updated credentials for: %s", ssid.c_str());
     } else {
-      // Check if we've reached the limit
       if (credentials.size() >= MAX_NETWORKS) {
         LOG_DBG("WCS", "Cannot add more networks, limit of %zu reached", MAX_NETWORKS);
         return false;
       }
 
-      // Add new credential
       credentials.push_back({ssid, password});
       LOG_DBG("WCS", "Added credentials for: %s", ssid.c_str());
     }

@@ -353,7 +353,6 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   ImageDimensions sourceDimensions;
   if (!validateAndStoreDimensions(png->getWidth(), png->getHeight(), sourceDimensions, "PNG")) return false;
 
-  // Calculate output dimensions
   ctx.srcWidth = sourceDimensions.width;
   ctx.srcHeight = sourceDimensions.height;
   ctx.cropLeft = static_cast<int>(ctx.srcWidth * std::clamp(config.sourceCropX, 0.0f, 0.99f) / 2.0f);

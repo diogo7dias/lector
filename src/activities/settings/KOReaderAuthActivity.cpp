@@ -74,7 +74,6 @@ void KOReaderAuthActivity::performAuthentication() {
 void KOReaderAuthActivity::onEnter() {
   UiStatusActivity::onEnter();
 
-  // Check if already connected
   if (WiFi.status() == WL_CONNECTED) {
     onWifiSelectionComplete(true);
     return;

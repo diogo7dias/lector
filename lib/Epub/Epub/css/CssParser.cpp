@@ -1670,7 +1670,6 @@ bool CssParser::saveToCache(const bool complete) const {
   // EPUB load must retry the source stylesheets instead of trusting it.
   writeByte(complete ? 0 : CSS_CACHE_FLAG_PARTIAL);
 
-  // Write rule count
   const uint16_t ruleCount = entryCount_;
   writeBytes(&ruleCount, sizeof(ruleCount));
 
@@ -1733,10 +1732,8 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
     }
   }
 
-  // Clear existing rules
   clear();
 
-  // Read and verify version
   uint8_t version = 0;
   if (file.read(&version, 1) != 1 || version != CssParser::CSS_CACHE_VERSION) {
     LOG_DBG("CSS", "Cache version mismatch (got %u, expected %u), removing stale cache for rebuild", version,
@@ -1753,7 +1750,6 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
     return CacheLoadResult::Invalid;
   }
 
-  // Read rule count
   uint16_t ruleCount = 0;
   if (file.read(&ruleCount, sizeof(ruleCount)) != sizeof(ruleCount)) {
     return CacheLoadResult::Invalid;
@@ -1781,9 +1777,7 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
     return CacheLoadResult::LowMemory;
   }
 
-  // Read each rule
   for (uint16_t i = 0; i < ruleCount; ++i) {
-    // Read selector string
     uint16_t selectorLen = 0;
     if (file.read(&selectorLen, sizeof(selectorLen)) != sizeof(selectorLen)) {
       clear();

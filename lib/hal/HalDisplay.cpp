@@ -38,7 +38,6 @@ void HalDisplay::begin(bool seamless, const wake_classify::WakeupReason wakeupRe
   // in this file, take their answer from this latched value rather than the global.
   deviceProfile = deviceProfileFromHardware();
 
-  // Set X3-specific panel mode before initializing.
   if (deviceProfile.isX3) {
     einkDisplay.setDisplayX3();
   }

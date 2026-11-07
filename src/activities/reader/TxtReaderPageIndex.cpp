@@ -107,7 +107,6 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
     return false;
   }
 
-  // Read a chunk from file
   size_t chunkSize = std::min(CHUNK_SIZE, fileSize - offset);
   auto* buffer = static_cast<uint8_t*>(malloc(chunkSize + 1));
   if (!buffer) {
@@ -151,7 +150,6 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
                                                                                                                     : 0;
 
   while (pos < textLen && static_cast<int>(outLines.size()) < linesPerPage) {
-    // Find end of line
     size_t lineEnd = pos;
     while (lineEnd < textLen && buffer[lineEnd] != '\n') {
       lineEnd++;
@@ -178,7 +176,6 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
     // Calculate the actual length of line content in the buffer (excluding newline)
     size_t lineContentLen = lineEnd - pos;
 
-    // Check for carriage return
     bool hasCR = (lineContentLen > 0 && buffer[pos + lineContentLen - 1] == '\r');
     size_t displayLen = hasCR ? lineContentLen - 1 : lineContentLen;
 
@@ -205,7 +202,6 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
         break;
       }
 
-      // Find break point
       size_t breakPos = line.length();
       while (breakPos > 0 && renderer.getTextAdvanceX(cachedFontId, line.substr(0, breakPos).c_str(),
                                                       EpdFontFamily::REGULAR) > viewportWidth) {
@@ -229,7 +225,6 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
 
       outLines.push_back(line.substr(0, breakPos));
 
-      // Skip space at break point
       size_t skipChars = breakPos;
       if (breakPos < line.length() && line[breakPos] == ' ') {
         skipChars++;
@@ -364,7 +359,6 @@ bool TxtReaderActivity::loadPageIndexCache() {
     return false;
   }
 
-  // Read page offsets
   pageOffsets.clear();
   paraPagesFor = -1;
   pageOffsets.reserve(numPages);
@@ -392,7 +386,6 @@ void TxtReaderActivity::savePageIndexCache() const {
     return;
   }
 
-  // Write header using serialization module
   serialization::writePod(f, CACHE_MAGIC);
   serialization::writePod(f, CACHE_VERSION);
   serialization::writePod(f, static_cast<uint32_t>(txt->getFileSize()));
@@ -403,7 +396,6 @@ void TxtReaderActivity::savePageIndexCache() const {
   serialization::writePod(f, cachedParagraphAlignment);
   serialization::writePod(f, static_cast<uint32_t>(pageOffsets.size()));
 
-  // Write page offsets
   for (size_t offset : pageOffsets) {
     serialization::writePod(f, static_cast<uint32_t>(offset));
   }

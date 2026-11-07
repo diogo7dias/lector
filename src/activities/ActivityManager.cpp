@@ -313,7 +313,6 @@ void ActivityManager::loop() {
         // Resume bookkeeping runs before the result handler can render or navigate again.
         currentActivity->becameTopmost();
         currentActivity->onRevealed();
-        // Handle result if necessary
         if (currentActivity->resultHandler) {
           LOG_DBG("ACT", "Handling result for popped activity");
 
@@ -339,13 +338,11 @@ void ActivityManager::loop() {
       if (pendingAction == PendingAction::Replace) {
         // Destroy the current activity
         exitActivity(lock);
-        // Clear the stack
         while (!stackActivities.empty()) {
           stackActivities.back()->onExit();
           stackActivities.pop_back();
         }
       } else if (pendingAction == PendingAction::Push) {
-        // Move current activity to stack
         stackActivities.push_back(std::move(currentActivity));
         LOG_DBG("ACT", "Pushed to activity stack, new size = %zu", stackActivities.size());
       }

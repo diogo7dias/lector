@@ -57,7 +57,6 @@ class RecentBooksStore : public PersistableStore<RecentBooksStore> {
   // Get the list of recent books (most recent first)
   const std::vector<RecentBook>& getBooks() const { return recentBooks; }
 
-  // Get the count of recent books
   int getCount() const { return static_cast<int>(recentBooks.size()); }
 };
 

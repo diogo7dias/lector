@@ -77,7 +77,6 @@ void XMLCALL TocNavParser::startElement(void* userData, const XML_Char* name, co
 
   if (self->state == IN_LI && xmlLocalNameEquals(name, "a")) {
     self->state = IN_ANCHOR;
-    // Get href attribute
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "href") == 0) {
         self->currentHref = atts[i + 1];

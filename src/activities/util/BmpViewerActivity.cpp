@@ -179,7 +179,6 @@ void BmpViewerActivity::onEnter() {
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 
     } else {
-      // Handle file parsing error
       renderer.clearScreen();
       GUI.drawHelpText(renderer, Rect{0, pageHeight / 2, renderer.getScreenWidth(), lineHeightForHelp(renderer)},
                        tr(STR_INVALID_BMP_FILE));
@@ -190,7 +189,6 @@ void BmpViewerActivity::onEnter() {
 
     file.close();
   } else {
-    // Handle file open error
     renderer.clearScreen();
     GUI.drawHelpText(renderer, Rect{0, pageHeight / 2, renderer.getScreenWidth(), lineHeightForHelp(renderer)},
                      tr(STR_FILE_OPEN_FAILED));

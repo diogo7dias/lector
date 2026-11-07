@@ -225,7 +225,6 @@ void EpubReaderActivity::onEnter() {
 
   loadCachedBookmarks();
 
-  // Trigger first update
   requestUpdate();
 }
 
@@ -2727,7 +2726,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     currentSpineIndex = epub->getSpineItemsCount();
   }
 
-  // Show end of book screen
   if (currentSpineIndex == epub->getSpineItemsCount()) {
     // Sole load site: runs on the render task (serialized by RenderLock); the main
     // task only reads the suggestions once the loaded flag is published

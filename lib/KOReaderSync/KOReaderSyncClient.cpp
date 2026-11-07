@@ -239,7 +239,6 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   LOG_DBG("KOSync", "Updating progress: %s (heap: %u)", url.c_str(), (unsigned)ESP.getFreeHeap());
   if (insufficientHeap()) return LOW_MEMORY;
 
-  // Build JSON body
   JsonDocument doc;
   doc["document"] = progress.document;
   if (progress.metadata.has_value()) {

@@ -486,7 +486,6 @@ BmpReaderError Bitmap::rewindToData() const {
     return BmpReaderError::SeekPixelDataFailed;
   }
 
-  // Reset dithering when rewinding
   if (atkinsonDitherer) atkinsonDitherer->reset();
   sourceRowsRead = 0;
   outputRowsRead = 0;

@@ -29,6 +29,5 @@ class Txt {
   [[nodiscard]] bool generateCoverBmp() const;
   [[nodiscard]] std::string findCoverImage() const;
 
-  // Read content from file
   [[nodiscard]] bool readContent(uint8_t* buffer, size_t offset, size_t length) const;
 };
