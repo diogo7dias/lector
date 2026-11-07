@@ -98,7 +98,19 @@ jobs:
           key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-${{ runner.os }}-
 
+      - name: Cache compiled objects
+        # SCons CacheDir keyed by source+flag signatures, so a hit is only ever an identical
+        # object. A fresh key per run (actions/cache never overwrites one) restores the newest.
+        # ponytail: grows until platformio.ini changes and resets the prefix; prune if it nears the 10 GB repo cap.
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/pio-build-cache
+          key: pio-obj-default-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-${{ github.run_id }}
+          restore-keys: pio-obj-default-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-
+
       - name: Build CrossPoint
+        env:
+          PLATFORMIO_BUILD_CACHE_DIR: ${{ runner.temp }}/pio-build-cache
         run: |
           set -euo pipefail
           pio run -e default | tee pio.log
@@ -161,7 +173,19 @@ jobs:
           key: pio-sticky-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-sticky-${{ runner.os }}-
 
+      - name: Cache compiled objects
+        # SCons CacheDir keyed by source+flag signatures, so a hit is only ever an identical
+        # object. A fresh key per run (actions/cache never overwrites one) restores the newest.
+        # ponytail: grows until platformio.ini changes and resets the prefix; prune if it nears the 10 GB repo cap.
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/pio-build-cache
+          key: pio-obj-sticky-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-${{ github.run_id }}
+          restore-keys: pio-obj-sticky-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-
+
       - name: Build Sticky
+        env:
+          PLATFORMIO_BUILD_CACHE_DIR: ${{ runner.temp }}/pio-build-cache
         run: pio run -e sticky
 
   build-x4pro:
@@ -193,7 +217,19 @@ jobs:
           key: pio-x4pro-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-x4pro-${{ runner.os }}-
 
+      - name: Cache compiled objects
+        # SCons CacheDir keyed by source+flag signatures, so a hit is only ever an identical
+        # object. A fresh key per run (actions/cache never overwrites one) restores the newest.
+        # ponytail: grows until platformio.ini changes and resets the prefix; prune if it nears the 10 GB repo cap.
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/pio-build-cache
+          key: pio-obj-x4pro-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-${{ github.run_id }}
+          restore-keys: pio-obj-x4pro-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-
+
       - name: Build X4 Pro
+        env:
+          PLATFORMIO_BUILD_CACHE_DIR: ${{ runner.temp }}/pio-build-cache
         run: pio run -e x4pro
 
       - name: Upload images for the simulator
