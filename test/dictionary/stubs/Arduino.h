@@ -8,3 +8,4 @@ struct EspStub {
 };
 inline EspStub ESP;
 inline unsigned long millis() { return 0; }
+inline void delay(unsigned long) {}

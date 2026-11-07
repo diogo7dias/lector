@@ -348,20 +348,7 @@ void EpubReaderActivity::onExit() {
 
   if (pageMoved && !pendingDeleteBook && !finalPath.empty()) ko_auto_sync::markMoved(finalPath);
 
-  if (pendingDeleteBook && !finalPath.empty()) {
-    if (Storage.remove(finalPath.c_str())) {
-      // The cache directory is keyed on the book path, so leaving it behind would
-      // strand a layout cache and a progress file nothing will open again.
-      clearBookCache(finalPath);
-      RECENT_BOOKS.removeByPath(finalPath);
-      if (APP_STATE.openEpubPath == finalPath) {
-        APP_STATE.openEpubPath.clear();
-        APP_STATE.saveToFile();
-      }
-    } else {
-      LOG_ERR("ERS", "Failed to delete book: %s", finalPath.c_str());
-    }
-  }
+  if (pendingDeleteBook && !finalPath.empty()) deleteOpenedBook(finalPath);
 
   if (pendingRemoveFromRecents && !finalPath.empty()) {
     RECENT_BOOKS.removeByPath(finalPath);

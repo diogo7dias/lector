@@ -97,11 +97,11 @@ class Dictionary {
 
   // One streaming pass over .idx writing the .qidx sidecar, plus a pass over
   // .syn writing the .sidx sidecar when a synonym file is present. Each sidecar
-  // is rebuilt only when actually stale. yieldFn (optional) is called every
-  // ~64KB consumed to feed the watchdog / repaint the UI. *outResult (if
+  // is rebuilt only when actually stale. Yields to the scheduler every ~64KB
+  // consumed: a build runs long enough to starve the watchdog. *outResult (if
   // provided) reports why a failed build failed; only the mandatory .idx pass
   // can fail the build (a failed .syn pass just disables synonyms).
-  bool buildIndex(void (*yieldFn)(void*) = nullptr, void* ctx = nullptr, IndexResult* outResult = nullptr);
+  bool buildIndex(IndexResult* outResult = nullptr);
 
   // Clean the word, look it up, and on a miss retry dictionary-authored
   // synonyms then mini stem variants (-'s/-s/-es/-ies/-ed/-ing). On a hit fills
@@ -198,7 +198,7 @@ class Dictionary {
   // (8 for .idx: offset+size; 4 for .syn: ordinal). magic tags the sidecar.
   // *outResult (if provided) reports why a failed pass failed.
   bool buildSidecar(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic, uint32_t suffixBytes,
-                    void (*yieldFn)(void*), void* ctx, IndexResult* outResult);
+                    IndexResult* outResult);
 
   // True when sidecarPath must be (re)built from sourcePath: missing/unreadable/
   // wrong-version sidecar, or a source-size mismatch. Shared by needsIndex() and

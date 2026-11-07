@@ -221,7 +221,7 @@ bool Dictionary::needsIndex() {
   return hasSyn && sidecarIsStale(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC);
 }
 
-bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx, IndexResult* outResult) {
+bool Dictionary::buildIndex(IndexResult* outResult) {
   const auto fail = [outResult](IndexResult r) {
     if (outResult) *outResult = r;
     return false;
@@ -233,7 +233,7 @@ bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx, IndexResult* outR
   // stale so a .syn-only change doesn't force a needless rescan of the (much
   // larger) .idx, and vice versa.
   if (sidecarIsStale(basePath + ".idx", basePath + ".qidx", QIDX_MAGIC) &&
-      !buildSidecar(basePath + ".idx", basePath + ".qidx", QIDX_MAGIC, 8, yieldFn, ctx, outResult)) {
+      !buildSidecar(basePath + ".idx", basePath + ".qidx", QIDX_MAGIC, 8, outResult)) {
     return false;
   }
 
@@ -244,14 +244,14 @@ bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx, IndexResult* outR
   // stale and a later build retries. openSynonyms() is what declines the
   // synonym path while the sidecar is unusable.
   if (hasSyn && sidecarIsStale(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC) &&
-      !buildSidecar(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC, 4, yieldFn, ctx, nullptr)) {
+      !buildSidecar(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC, 4, nullptr)) {
     LOG_ERR("DICT", "Synonym index build failed; synonyms disabled for %s", basePath.c_str());
   }
   return true;
 }
 
 bool Dictionary::buildSidecar(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic,
-                              uint32_t suffixBytes, void (*yieldFn)(void*), void* ctx, IndexResult* outResult) {
+                              uint32_t suffixBytes, IndexResult* outResult) {
   const auto fail = [outResult](IndexResult r) {
     if (outResult) *outResult = r;
     return false;
@@ -310,9 +310,9 @@ bool Dictionary::buildSidecar(const std::string& sourcePath, const std::string& 
     }
     pos += n;
     sinceYield += n;
-    if (yieldFn && sinceYield >= 64 * 1024) {
+    if (sinceYield >= 64 * 1024) {
       sinceYield = 0;
-      yieldFn(ctx);
+      delay(1);
     }
   }
 

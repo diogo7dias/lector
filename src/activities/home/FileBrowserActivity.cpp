@@ -130,10 +130,8 @@ void FileBrowserActivity::loadFiles() {
         if (FsHelpers::checkFileExtension(filename, ".bin")) {
           if (!files.push(filename)) break;
         }
-      } else if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
-                 FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
-                 FsHelpers::hasBmpExtension(filename) || FsHelpers::hasPngExtension(filename) ||
-                 hasPxcExtension(filename)) {
+      } else if (FsHelpers::hasBookExtension(filename) || FsHelpers::hasBmpExtension(filename) ||
+                 FsHelpers::hasPngExtension(filename) || hasPxcExtension(filename)) {
         // .pxc joins the list so a wallpaper folder can be browsed and triaged on
         // the device; selecting one opens PxcViewerActivity. .png joins it so a
         // transparent sleep overlay can be previewed the same way.
