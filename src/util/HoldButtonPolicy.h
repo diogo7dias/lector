@@ -72,8 +72,6 @@ class Tracker {
     return Fired::None;
   }
 
-  // True between the hold firing and the button coming back up.
-  bool holdFired() const { return fired; }
   void reset() {
     fired = false;
     armed = false;

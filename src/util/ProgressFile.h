@@ -91,7 +91,9 @@ inline bool openForRead(const char* tag, const std::string& cachePath, HalFile& 
   const std::string tmpPath = finalPath + ".tmp";
   if (!Storage.exists(finalPath.c_str()) && Storage.exists(tmpPath.c_str())) {
     LOG_INF("PRG", "Recovering progress from %s", tmpPath.c_str());
-    Storage.rename(tmpPath.c_str(), finalPath.c_str());
+    if (!Storage.rename(tmpPath.c_str(), finalPath.c_str())) {
+      LOG_ERR("PRG", "Could not recover %s", tmpPath.c_str());
+    }
   }
   return Storage.openFileForRead(tag, finalPath, f);
 }

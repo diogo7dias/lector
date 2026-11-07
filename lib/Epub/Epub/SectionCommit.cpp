@@ -18,6 +18,9 @@ bool Section::commitBuildFile(const uint8_t version, const uint32_t bytesConsume
     return false;
   };
 
+  // Every write is checked before the version byte commits the file: a card that
+  // fills or drops mid-commit must not leave a section that loads as complete.
+  bool ok = true;
   const uint32_t lutOffset = file.position();
   for (const auto& entry : build_->lut) {
     if (entry.fileOffset == 0) {
@@ -25,7 +28,7 @@ bool Section::commitBuildFile(const uint8_t version, const uint32_t bytesConsume
       noteBuildFailure(BuildFailure::Commit);
       return failCommit();
     }
-    serialization::writePod(file, entry.fileOffset);
+    ok &= serialization::writePod(file, entry.fileOffset);
   }
 
   // Write anchor-to-page map for fragment navigation (e.g. footnote targets). For a
@@ -36,47 +39,50 @@ bool Section::commitBuildFile(const uint8_t version, const uint32_t bytesConsume
   for (const auto& [anchor, page] : anchors) {
     if (!asPartial || page < builtPageCount_) anchorCount++;
   }
-  serialization::writePod(file, anchorCount);
+  ok &= serialization::writePod(file, anchorCount);
   for (const auto& [anchor, page] : anchors) {
     if (asPartial && page >= builtPageCount_) continue;
-    serialization::writePod(file, anchor);
-    serialization::writePod(file, page);
+    ok &= serialization::writePod(file, anchor);
+    ok &= serialization::writePod(file, page);
   }
 
   const uint32_t paragraphLutOffset = file.position();
-  serialization::writePod(file, static_cast<uint16_t>(build_->lut.size()));
+  ok &= serialization::writePod(file, static_cast<uint16_t>(build_->lut.size()));
   for (const auto& entry : build_->lut) {
-    serialization::writePod(file, entry.paragraphIndex);
+    ok &= serialization::writePod(file, entry.paragraphIndex);
   }
 
   const uint32_t liLutFileOffset = static_cast<uint32_t>(file.position());
   for (const auto& entry : build_->lut) {
-    serialization::writePod(file, entry.listItemIndex);
+    ok &= serialization::writePod(file, entry.listItemIndex);
   }
 
   const uint32_t visibleLutFileOffset = static_cast<uint32_t>(file.position());
   for (const auto& entry : build_->lut) {
-    serialization::writePod(file, entry.visibleTextOffset);
+    ok &= serialization::writePod(file, entry.visibleTextOffset);
   }
 
   if (asPartial) {
     // Watermark trailer, located on load immediately after the visible-offset LUT.
-    serialization::writePod(file, bytesConsumed);
-    serialization::writePod(file, totalBytes);
+    ok &= serialization::writePod(file, bytesConsumed);
+    ok &= serialization::writePod(file, totalBytes);
   }
 
   // Patch header with the built page count and section offsets...
-  file.seek(PAGE_COUNT_FIELD);
-  serialization::writePod(file, builtPageCount_);
-  serialization::writePod(file, lutOffset);
-  serialization::writePod(file, anchorMapOffset);
-  serialization::writePod(file, paragraphLutOffset);
-  serialization::writePod(file, liLutFileOffset);
-  serialization::writePod(file, visibleLutFileOffset);
+  ok &= file.seek(PAGE_COUNT_FIELD);
+  ok &= serialization::writePod(file, builtPageCount_);
+  ok &= serialization::writePod(file, lutOffset);
+  ok &= serialization::writePod(file, anchorMapOffset);
+  ok &= serialization::writePod(file, paragraphLutOffset);
+  ok &= serialization::writePod(file, liLutFileOffset);
+  ok &= serialization::writePod(file, visibleLutFileOffset);
   // ...then commit by overwriting the sentinel version with the real one. Writing the
   // version last makes it the commit point: a crash before here leaves version 0.
-  file.seek(0);
-  serialization::writePod(file, version);
+  if (!ok || !file.seek(0) || !serialization::writePod(file, version)) {
+    LOG_ERR("SCT", "Failed to write section cache");
+    noteBuildFailure(BuildFailure::Commit);
+    return failCommit();
+  }
   // Explicit close() required: member variable persists beyond function scope
   file.close();
 

@@ -43,7 +43,6 @@
 #include "WakeTiming.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
-#include "activities/boot_sleep/PxcSleepRenderer.h"
 #include "activities/settings/ReleaseNotesActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "activities/util/LowBatteryNoticeActivity.h"

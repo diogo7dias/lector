@@ -30,10 +30,4 @@ std::string buildFolderDestination(const std::string& srcPath, const char* folde
 std::string moveBookToFolder(const std::string& srcPath, const std::string& dstPath,
                              const std::string& cachePathHint = "");
 
-// Undo the filing that opening a book did: if it sits in "/recents", move it back to
-// the card root. Returns the path it ends up at, which is srcPath when it was not
-// filed there or the move failed. Does NOT touch the recent list — the caller
-// removes the entry, using the returned path.
-std::string unfileFromRecents(const std::string& srcPath, const std::string& cachePathHint = "");
-
 }  // namespace bookfiling

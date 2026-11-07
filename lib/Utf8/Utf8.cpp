@@ -196,13 +196,6 @@ size_t utf8RemoveLastChar(std::string& str) {
   return pos;
 }
 
-// Truncate string by removing N UTF-8 characters from the end
-void utf8TruncateChars(std::string& str, const size_t numChars) {
-  for (size_t i = 0; i < numChars && !str.empty(); ++i) {
-    utf8RemoveLastChar(str);
-  }
-}
-
 TextEncodingGuess utf8GuessEncoding(const unsigned char* data, const size_t len) {
   bool sawMultiByte = false;
   size_t i = 0;
