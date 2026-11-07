@@ -442,3 +442,33 @@ TEST(SdCardFontAdvances, AnEmptyBuildLeavesNoTable) {
 }
 
 }  // namespace
+
+TEST(SdCardFontTest, ACorruptGlyphEntryDrawsAsMissing) {
+  const std::string path = writeKerningFont();
+  // Glyph 3 ('D') claims more bytes than its 32x32 pixels need, as a corrupt .cpfont does.
+  constexpr size_t GLYPH_OFFSET = 64 + 24;
+  std::FILE* f = std::fopen(path.c_str(), "r+b");
+  ASSERT_NE(nullptr, f);
+  EpdGlyph glyph{};
+  std::fseek(f, GLYPH_OFFSET + 3 * sizeof(glyph), SEEK_SET);
+  ASSERT_EQ(1u, std::fread(&glyph, sizeof(glyph), 1, f));
+  glyph.dataLength = 49335;
+  std::fseek(f, GLYPH_OFFSET + 3 * sizeof(glyph), SEEK_SET);
+  ASSERT_EQ(1u, std::fwrite(&glyph, sizeof(glyph), 1, f));
+  std::fclose(f);
+
+  SdCardFont font;
+  ASSERT_TRUE(font.load(path.c_str()));
+  ASSERT_EQ(0, font.prewarm("ABCDEF", 1, false, false));
+  const EpdFont* epd = font.getEpdFont();
+  for (const char c : std::string("ABCDEF")) {
+    const EpdGlyph* found = epd->getGlyph(static_cast<uint32_t>(c));
+    ASSERT_NE(nullptr, found) << c;
+    if (c == 'D') {
+      EXPECT_EQ(0u, found->dataLength);
+      EXPECT_EQ(0, found->width);
+    } else {
+      EXPECT_EQ(128u, found->dataLength) << c;
+    }
+  }
+}

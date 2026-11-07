@@ -31,6 +31,15 @@ class HalFile {
 
   bool seekSet(uint64_t pos) { return fp_ && std::fseek(fp_, static_cast<long>(pos), SEEK_SET) == 0; }
 
+  size_t fileSize() {
+    if (!fp_) return 0;
+    const long pos = std::ftell(fp_);
+    std::fseek(fp_, 0, SEEK_END);
+    const long size = std::ftell(fp_);
+    std::fseek(fp_, pos, SEEK_SET);
+    return size < 0 ? 0 : static_cast<size_t>(size);
+  }
+
   bool close() {
     if (!fp_) return false;
     std::fclose(fp_);
