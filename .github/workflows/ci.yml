@@ -272,7 +272,9 @@ jobs:
           FILES: ${{ matrix.files }}
         run: |
           if [ "$FILES" = rest ]; then
-            FILES=$(ls tests/x4pro/*.e2e.ts | grep -v -e quick-lock -e screen-calibration -e sleep)
+            # Whole-name match: a new sleep-wake.e2e.ts must land here, not be dropped.
+            FILES=$(ls tests/x4pro/*.e2e.ts | grep -vxF -e tests/x4pro/quick-lock.e2e.ts \
+              -e tests/x4pro/screen-calibration.e2e.ts -e tests/x4pro/sleep.e2e.ts)
           else
             FILES=$(for f in $FILES; do echo tests/x4pro/$f.e2e.ts; done)
           fi
