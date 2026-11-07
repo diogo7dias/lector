@@ -124,10 +124,7 @@ uint8_t expandSampleToByte(uint8_t sample, int bitsPerSample) {
   return static_cast<uint8_t>((sample * 255U) / maxSample);
 }
 
-uint8_t alphaThreshold4x4(const int x, const int y) {
-  static constexpr uint8_t BAYER_4X4[16] = {0, 128, 32, 160, 192, 64, 224, 96, 48, 176, 16, 144, 240, 112, 208, 80};
-  return BAYER_4X4[((y & 0x03) << 2) | (x & 0x03)];
-}
+uint8_t alphaThreshold4x4(const int x, const int y) { return static_cast<uint8_t>(bayer4x4[y & 3][x & 3] * 16); }
 
 // Convert an entire source line to grayscale and optionally retain alpha.
 // Low-bit-depth grayscale/indexed scanlines are packed most-significant sample first.

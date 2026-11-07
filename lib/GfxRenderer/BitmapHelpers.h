@@ -14,6 +14,9 @@ struct QuantizedGray4 {
 
 enum class Gray4QuantizationMode : uint8_t { DisplayTuned, Native };
 
+// What the X4 panel shows for each of the four levels, darkest first.
+inline constexpr uint8_t DISPLAY_TUNED_GRAY4[4] = {15, 30, 80, 210};
+
 inline QuantizedGray4 quantizeGray4(int gray, const Gray4QuantizationMode mode) {
   if (gray < 0) gray = 0;
   if (gray > 255) gray = 255;
@@ -27,10 +30,10 @@ inline QuantizedGray4 quantizeGray4(int gray, const Gray4QuantizationMode mode) 
   }
 
   // Existing thresholds tuned for the X4 panel.
-  if (gray < 30) return {0, 15};
-  if (gray < 50) return {1, 30};
-  if (gray < 140) return {2, 80};
-  return {3, 210};
+  if (gray < 30) return {0, DISPLAY_TUNED_GRAY4[0]};
+  if (gray < 50) return {1, DISPLAY_TUNED_GRAY4[1]};
+  if (gray < 140) return {2, DISPLAY_TUNED_GRAY4[2]};
+  return {3, DISPLAY_TUNED_GRAY4[3]};
 }
 
 // Atkinson dithering - distributes only 6/8 (75%) of error for cleaner results

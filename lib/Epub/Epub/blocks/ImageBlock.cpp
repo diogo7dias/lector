@@ -32,13 +32,13 @@ void ImageBlock::setExtractor(void* ctx, ExtractFn fn) {
 
 namespace {
 
+// The image's extension becomes the pixel-cache suffix. Bump the tag when decoded pixels change
+// so old caches go unread: t1 = display-tuned grays.
+constexpr char PIXEL_CACHE_SUFFIX[] = ".t1.pxc";
+
 std::string getCachePath(const std::string& imagePath) {
-  // Replace extension with .pxc (pixel cache)
-  size_t dotPos = imagePath.rfind('.');
-  if (dotPos != std::string::npos) {
-    return imagePath.substr(0, dotPos) + ".pxc";
-  }
-  return imagePath + ".pxc";
+  const size_t dotPos = imagePath.rfind('.');
+  return (dotPos != std::string::npos ? imagePath.substr(0, dotPos) : imagePath) + PIXEL_CACHE_SUFFIX;
 }
 
 bool readValidCacheHeader(HalFile& cacheFile, const int expectedWidth, const int expectedHeight, uint16_t& cachedWidth,
