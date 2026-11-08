@@ -103,6 +103,19 @@ std::string fillerWord(const int i) {
 
 }  // namespace
 
+TEST_F(DictionaryTest, PrepareRemembersItsAnswerUntilTheIndexIsBuilt) {
+  writeDictionary({{"cat", "an animal"}}, "m");
+  EXPECT_EQ(dictionary.prepare("test"), Dictionary::Readiness::NeedsIndex);
+  EXPECT_EQ(dictionary.prepare("test"), Dictionary::Readiness::NeedsIndex);
+  ASSERT_TRUE(dictionary.buildIndex());
+  EXPECT_EQ(dictionary.prepare("test"), Dictionary::Readiness::Ready);
+}
+
+TEST_F(DictionaryTest, PrepareReportsAMissingDictionaryAsUnavailable) {
+  EXPECT_EQ(dictionary.prepare("absent"), Dictionary::Readiness::Unavailable);
+  EXPECT_EQ(dictionary.prepare("absent"), Dictionary::Readiness::Unavailable);
+}
+
 TEST_F(DictionaryTest, OneEntryKeepsItsDefinitionUntouched) {
   writeDictionary({{"bank", "a river side"}, {"cat", "an animal"}}, "m");
   openAndIndex();

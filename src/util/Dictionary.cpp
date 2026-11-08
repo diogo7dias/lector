@@ -221,6 +221,16 @@ bool Dictionary::needsIndex() {
   return hasSyn && sidecarIsStale(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC);
 }
 
+Dictionary::Readiness Dictionary::prepare(const char* folderName) {
+  if (readiness != Readiness::Unopened) return readiness;
+  if (!open(folderName)) {
+    readiness = Readiness::Unavailable;
+  } else {
+    readiness = needsIndex() ? Readiness::NeedsIndex : Readiness::Ready;
+  }
+  return readiness;
+}
+
 bool Dictionary::buildIndex(IndexResult* outResult) {
   const auto fail = [outResult](IndexResult r) {
     if (outResult) *outResult = r;
@@ -247,6 +257,7 @@ bool Dictionary::buildIndex(IndexResult* outResult) {
       !buildSidecar(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC, 4, nullptr)) {
     LOG_ERR("DICT", "Synonym index build failed; synonyms disabled for %s", basePath.c_str());
   }
+  readiness = Readiness::Ready;
   return true;
 }
 

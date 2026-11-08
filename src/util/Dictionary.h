@@ -76,6 +76,19 @@ class Dictionary {
   bool open(const char* folderName);
   bool isOpen() const { return !basePath.empty(); }
 
+  // How far this object has got towards answering a lookup.
+  enum class Readiness : uint8_t {
+    Unopened,
+    Unavailable,  // open() failed; stays failed for this object's life
+    NeedsIndex,   // open, but buildIndex() must succeed first
+    Ready,
+  };
+
+  // open() and needsIndex() once, then the remembered answer: needsIndex() validates a
+  // sidecar on the card, too slow to repeat per word. Only buildIndex() moves it on, and
+  // a failed build stays at NeedsIndex so the next lookup retries.
+  Readiness prepare(const char* folderName);
+
   // True when the .qidx sidecar (or the .sidx sidecar of a present .syn) is
   // missing or stale — call buildIndex() first so the UI can show an
   // "Indexing…" message for the slow first pass.
@@ -222,6 +235,7 @@ class Dictionary {
   static int readWordInto(HalFile& file, char* buf, size_t bufSize);
 
   std::string basePath;  // "/dictionaries/<folder>/<stem>", empty when not open
+  Readiness readiness = Readiness::Unopened;
   bool hasPlainDict = false;
   bool hasSyn = false;  // a <stem>.syn synonym index exists next to the .idx
   bool htmlDefinitions = false;
