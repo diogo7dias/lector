@@ -113,7 +113,8 @@ jobs:
           PLATFORMIO_BUILD_CACHE_DIR: ${{ runner.temp }}/pio-build-cache
         run: |
           set -euo pipefail
-          pio run -e default | tee pio.log
+          # Retry once: the platform re-downloads its Python dependencies on every run and a failed fetch stops the build before it compiles.
+          pio run -e default | tee pio.log || { sleep 60; pio run -e default | tee pio.log; }
 
       - name: Extract firmware stats
 
@@ -186,7 +187,8 @@ jobs:
       - name: Build Sticky
         env:
           PLATFORMIO_BUILD_CACHE_DIR: ${{ runner.temp }}/pio-build-cache
-        run: pio run -e sticky
+        # Retry once: the platform re-downloads its Python dependencies on every run and a failed fetch stops the build before it compiles.
+        run: pio run -e sticky || { sleep 60; pio run -e sticky; }
 
   build-x4pro:
     runs-on: ubuntu-latest
@@ -230,7 +232,8 @@ jobs:
       - name: Build X4 Pro
         env:
           PLATFORMIO_BUILD_CACHE_DIR: ${{ runner.temp }}/pio-build-cache
-        run: pio run -e x4pro
+        # Retry once: the platform re-downloads its Python dependencies on every run and a failed fetch stops the build before it compiles.
+        run: pio run -e x4pro || { sleep 60; pio run -e x4pro; }
 
       - name: Upload images for the simulator
         uses: actions/upload-artifact@v6
