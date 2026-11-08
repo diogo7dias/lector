@@ -88,7 +88,17 @@ def inject_version(env):
     short_sha = get_git_short_sha(project_dir)
     version_string = f'{base_version}-dev-{branch}-{short_sha}'
 
-    env.Append(CPPDEFINES=[('CROSSPOINT_VERSION', f'\\"{version_string}\\"')])
+    define = ('CROSSPOINT_VERSION', f'\\"{version_string}\\"')
+
+    # Only the files that name the macro get it. On every object it changed each
+    # one's command line per commit, so the CI object cache never hit.
+    def with_version(file_env, node):
+        with open(node.srcnode().get_abspath(), encoding='utf-8', errors='ignore') as f:
+            if 'CROSSPOINT_VERSION' not in f.read():
+                return node
+        return file_env.Object(node, CPPDEFINES=list(file_env['CPPDEFINES']) + [define])
+
+    env.AddBuildMiddleware(with_version)
     print(f'CrossPoint build version: {version_string}')
 
 
@@ -100,7 +110,7 @@ try:
     inject_version(env)     # noqa: F821  # type: ignore[name-defined]
 except NameError:
     class _Env(dict):
-        def Append(self, **_): pass
+        def AddBuildMiddleware(self, *_): pass
 
     _project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     inject_version(_Env({'PIOENV': 'default', 'PROJECT_DIR': _project_dir}))
