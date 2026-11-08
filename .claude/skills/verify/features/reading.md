@@ -21,7 +21,7 @@ power cycle.
 
 Preconditions: baseline; the card holds `test_kerning_ligature.epub`.
 
-- **Open.** `lv tap 240 517` twice (Browse Files), then `lv tap 150 310` twice (first book).
+- **Open.** `lv tap 240 517` twice (Browse Files), then `lv tap 150 279` twice (`test_kerning_ligature.epub`).
   Poll `lv state` until `activity` is `EpubReader`; `lv shot page1`.
 - **Swipe.** `lv swipe 420 420 100 420`. `frames` rises, `ink` above 5000, and the `lv shot page2`
   PNG differs from `page1.png` (`cmp` them).
