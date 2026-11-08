@@ -5,7 +5,7 @@
 #include "ActivityManager.h"
 
 void Activity::onEnter() {
-  LOG_DBG("ACT", "Entering activity: %s", name.c_str());
+  LOG_INF("ACT", "Entering activity: %s", name.c_str());
   becameTopmost();
   // A hint-band tap presses on one frame and releases on the next. If the press
   // brought this screen up, the release belongs to the screen that handled it, not

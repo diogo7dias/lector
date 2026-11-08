@@ -41,6 +41,10 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // Gate for a background build tick: true when the heap can take parse allocations.
   // Updates buildHeapPaused as a side effect.
   bool buildTickHeapGate();
+  bool backgroundBuildWanted() const {
+    return section && section->isBuilding() &&
+           (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
+  }
   // Draw the indexing popup mid-build (parser image-probe callback and deadline backstop).
   void showBuildPopup();
   // Map the cached content position into the rebuilt section (used after a
@@ -209,13 +213,14 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   void onExit() override;
   void loop() override;
   void render(RenderLock&& lock) override;
-  // Full CPU speed + fast loop ticks while a section build runs: at the low-power
+  // Full CPU speed + fast loop ticks while a section build has work to do: at the low-power
   // frequency a giant chapter's background rebuild stretches from ~40s to many
   // minutes, so the reader exits before it can finalize and the next open restarts
   // it from page 0. Reverts to normal power behavior the moment the build finishes,
-  // and while the build is heap-paused (no work is happening, so spinning at full
-  // speed would only burn battery; the paused gate still retries every loop pass).
-  bool skipLoopDelay() override { return section && section->isBuilding() && !buildHeapPaused; }
+  // while it waits for the reader to come within the build window, and while it is
+  // heap-paused (no work is happening, so spinning at full speed would only burn
+  // battery; the paused gate still retries every loop pass).
+  bool skipLoopDelay() override { return backgroundBuildWanted() && !buildHeapPaused; }
   bool isReaderActivity() const override { return true; }
   bool isBookContext() const override { return true; }
   bool applyReaderOrientation(const uint8_t orientation) override {

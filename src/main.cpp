@@ -179,7 +179,7 @@ static void finishDeepSleep(const unsigned long sleepT0, const unsigned long sle
   // INF, not DBG: a release kit runs at LOG_LEVEL 1 and this is the one line that says
   // what a lock cost.
   LOG_INF("SLP", "Lock %lu ms total (%s panel=%lu)", sleepTPanel - sleepT0, sleepNote, sleepTPanel - sleepTBudget);
-  LOG_DBG("MAIN", "Entering deep sleep");
+  LOG_INF("MAIN", "Entering deep sleep");
   // Last chance: startDeepSleep() does not return, and the USB-CDC link dies with the
   // chip, so anything still buffered here is lost.
   logFlush();

@@ -100,6 +100,26 @@ TEST(FontCacheManagerTest, PrewarmScopeMergesBuiltInStylesThatShareFontData) {
   EXPECT_STREQ("B", boldCall->text);
 }
 
+TEST(FontCacheManagerTest, SdFontsOnlyPrewarmInflatesNoBuiltInFont) {
+  EpdFontData regularData{reinterpret_cast<const void*>(1)};
+  const EpdFontFamily family(&regularData, nullptr, nullptr, nullptr);
+  const std::map<int, EpdFontFamily> builtinFonts{{5, family}};
+  SdCardFont fallbackFont;
+  const std::map<int, SdCardFont*> sdFonts{{23, &fallbackFont}};
+  FontDecompressor decompressor;
+  FontCacheManager manager(builtinFonts, sdFonts);
+  manager.setFontDecompressor(&decompressor);
+
+  auto scope = manager.createPrewarmScope();
+  manager.recordText("A", 5, EpdFontFamily::REGULAR);
+  manager.recordText("B", 23, EpdFontFamily::REGULAR);
+  scope.endScanAndPrewarmSdFonts();
+
+  EXPECT_EQ(0, decompressor.prewarmCallCount);
+  ASSERT_EQ(1, fallbackFont.prewarmCallCount);
+  EXPECT_STREQ("B", fallbackFont.prewarmCalls[0].text);
+}
+
 TEST(FontCacheManagerTest, PrewarmScopePreservesUniqueMultibyteCodepoints) {
   SdCardFont font;
   const std::map<int, EpdFontFamily> noBuiltinFonts;

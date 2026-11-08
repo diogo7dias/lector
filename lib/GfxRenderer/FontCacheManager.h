@@ -36,13 +36,18 @@ class FontCacheManager {
    public:
     explicit PrewarmScope(FontCacheManager& manager);
     ~PrewarmScope();
-    void endScanAndPrewarm();
+    void endScanAndPrewarm() { finishScan(false); }
+    // For a scope that ends before its glyphs are drawn: only SD fonts keep their
+    // glyphs across scopes, so inflating a built-in font here would be thrown away.
+    void endScanAndPrewarmSdFonts() { finishScan(true); }
     PrewarmScope(PrewarmScope&& other) noexcept;
     PrewarmScope& operator=(PrewarmScope&&) = delete;
     PrewarmScope(const PrewarmScope&) = delete;
     PrewarmScope& operator=(const PrewarmScope&) = delete;
 
    private:
+    void finishScan(bool sdFontsOnly);
+
     FontCacheManager* manager_;
     bool active_ = true;
   };
