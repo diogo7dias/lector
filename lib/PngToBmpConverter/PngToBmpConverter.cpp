@@ -561,8 +561,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
 
     if (!needsScaling) {
       // Direct output (no scaling)
-      packBmpRow(rowBuffer, bytesPerRow, outWidth, atkinsonDitherer.get(),
-                 [grayRow](const int x) { return grayRow[x]; });
+      packBmpRow(rowBuffer, bytesPerRow, outWidth, *atkinsonDitherer, [grayRow](const int x) { return grayRow[x]; });
       bmpOut.write(rowBuffer, bytesPerRow);
       yieldDuringDecode(rowsSinceYield);
     } else {
@@ -575,7 +574,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
       // Output all rows whose boundaries we've crossed (handles both up and downscaling)
       // For upscaling, one source row may produce multiple output rows
       while (srcY_fp >= nextOutY_srcStart && currentOutY < outHeight) {
-        packBmpRow(rowBuffer, bytesPerRow, outWidth, atkinsonDitherer.get(), [&rowAccum, &rowCount](const int x) {
+        packBmpRow(rowBuffer, bytesPerRow, outWidth, *atkinsonDitherer, [&rowAccum, &rowCount](const int x) {
           return static_cast<uint8_t>((rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0);
         });
         bmpOut.write(rowBuffer, bytesPerRow);

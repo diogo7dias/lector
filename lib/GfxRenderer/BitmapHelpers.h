@@ -4,9 +4,6 @@
 #include <cstring>
 #include <new>
 
-// Helper functions
-uint8_t quantizeSimple(int gray);
-
 struct QuantizedGray4 {
   uint8_t index;
   uint8_t value;
@@ -157,15 +154,15 @@ void accumulateAreaRow(const uint8_t* srcRow, const int srcWidth, const int outW
   }
 }
 
-// Dithers (or, without a ditherer, quantizes) one row of gray values into a
-// packed 2-bit BMP row. grayAt(x) yields the gray for column x.
+// Dithers one row of gray values into a packed 2-bit BMP row. grayAt(x) yields
+// the gray for column x.
 template <typename GrayAt>
-void packBmpRow(uint8_t* bmpRow, const int bytesPerRow, const int width, AtkinsonDitherer* ditherer, GrayAt grayAt) {
+void packBmpRow(uint8_t* bmpRow, const int bytesPerRow, const int width, AtkinsonDitherer& ditherer, GrayAt grayAt) {
   memset(bmpRow, 0, bytesPerRow);
   for (int x = 0; x < width; x++) {
     const uint8_t gray = grayAt(x);
-    const uint8_t twoBit = ditherer ? ditherer->processPixel(gray, x) : quantizeSimple(gray);
+    const uint8_t twoBit = ditherer.processPixel(gray, x);
     bmpRow[(x * 2) / 8] |= (twoBit << (6 - ((x * 2) % 8)));
   }
-  if (ditherer) ditherer->nextRow();
+  ditherer.nextRow();
 }

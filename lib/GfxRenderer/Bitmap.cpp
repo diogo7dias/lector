@@ -460,8 +460,9 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
       color = static_cast<uint8_t>(toneMappedLum >> 6);
     } else {
       // Non-native palette with dithering disabled: simple quantization
-      color = adaptiveToneMapping ? quantizeGray4(toneMappedLum, Gray4QuantizationMode::Native).index
-                                  : quantizeSimple(toneMappedLum);
+      color = quantizeGray4(toneMappedLum,
+                            adaptiveToneMapping ? Gray4QuantizationMode::Native : Gray4QuantizationMode::DisplayTuned)
+                  .index;
     }
     currentOutByte |= (color << bitShift);
     if (bitShift == 0) {
