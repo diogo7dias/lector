@@ -388,16 +388,19 @@ bool Dictionary::openSession(LookupSession& session) {
 }
 
 bool Dictionary::openSynonyms(LookupSession& session) {
-  if (session.synOpened) return session.synSize > 0;
-  session.synOpened = true;
-  if (!hasSyn) return false;
+  using SynonymIndex = LookupSession::SynonymIndex;
+  if (session.synonyms != SynonymIndex::Unopened) return session.synonyms == SynonymIndex::Ready;
+  if (!hasSyn) {
+    session.synonyms = SynonymIndex::Absent;
+    return false;
+  }
 
   char path[PATH_BUF_BYTES];
   if (!buildPath(path, sizeof(path), ".syn") || !Storage.openFileForRead("DICT", path, session.syn)) {
     // A .syn exists but won't open: the synonym probe never reached a verdict, so
     // flag it the way openSession() flags an unopenable .idx rather than let
     // lookup() report a genuine miss for a word the .syn does carry.
-    session.synFailed = true;
+    session.synonyms = SynonymIndex::Failed;
     return false;
   }
   session.synSize = static_cast<uint32_t>(session.syn.fileSize());
@@ -414,12 +417,13 @@ bool Dictionary::openSynonyms(LookupSession& session) {
   // the next index pass rebuilds it.
   if (session.synSampleCount == 0) {
     LOG_ERR("DICT", "Synonym index unusable for %s; synonyms skipped", basePath.c_str());
-    session.synFailed = true;
+    session.synonyms = SynonymIndex::Failed;
     session.synSize = 0;
     session.sidx.close();
     session.syn.close();
     return false;
   }
+  session.synonyms = SynonymIndex::Ready;
   return true;
 }
 
@@ -521,7 +525,7 @@ DictLocation Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordina
 }
 
 bool Dictionary::locateSynonyms(LookupSession& session, const char* target, DictEntryList& out) {
-  if (!openSynonyms(session)) return !session.synFailed;  // no .syn at all is a verdict
+  if (!openSynonyms(session)) return session.synonyms != LookupSession::SynonymIndex::Failed;  // no .syn is a verdict
 
   // Bisect the sampled offsets to the last synonym <= target, same descent
   // locateAll() runs over .qidx/.idx.
