@@ -53,7 +53,7 @@ void EpubReaderActivity::runIdleBackgroundWork() {
             const auto t0 = millis();
             auto scope = fcm->createPrewarmScope();
             p->render(renderer, SETTINGS.getReaderFontId(prefs_), 0, 0);  // scan only, no pixels
-            scope.endScanAndPrewarm();
+            scope.endScanAndPrewarmSdFonts();
             LOG_DBG("ERS", "Idle prewarm: page %d in %lums", neighbour, millis() - t0);
           }
         }

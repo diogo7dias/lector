@@ -147,7 +147,7 @@ FontCacheManager::PrewarmScope::PrewarmScope(FontCacheManager& manager) : manage
   memset(manager_->scanGroupCounts_, 0, sizeof(manager_->scanGroupCounts_));
 }
 
-void FontCacheManager::PrewarmScope::endScanAndPrewarm() {
+void FontCacheManager::PrewarmScope::finishScan(const bool sdFontsOnly) {
   manager_->scanMode_ = ScanMode::None;
   if (manager_->scanCodepointCount_ == 0) return;
 
@@ -165,6 +165,9 @@ void FontCacheManager::PrewarmScope::endScanAndPrewarm() {
     const uint16_t groupCount = manager_->scanGroupCounts_[group];
     if (groupCount == 0) continue;
 
+    const uint8_t fontSlot = static_cast<uint8_t>(group) / 4;
+    if (sdFontsOnly && manager_->sdCardFonts_.count(manager_->scanFontIds_[fontSlot]) == 0) continue;
+
     const uint16_t groupStart = groupStarts[group];
     char* const utf8Text = reinterpret_cast<char*>(manager_->scanCodepoints_ + groupStart);
     char* output = utf8Text;
@@ -174,7 +177,6 @@ void FontCacheManager::PrewarmScope::endScanAndPrewarm() {
     }
     *output = '\0';
 
-    const uint8_t fontSlot = static_cast<uint8_t>(group) / 4;
     const uint8_t style = static_cast<uint8_t>(group) & 0x03;
     manager_->prewarmCache(manager_->scanFontIds_[fontSlot], utf8Text, 1 << style);
   }
