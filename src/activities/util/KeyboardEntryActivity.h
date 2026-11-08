@@ -45,9 +45,10 @@ class KeyboardEntryActivity : public Activity {
   // layouts (with the always-visible number row); the URL layers are
   // app-defined tables in the .cpp.
   freeink::ui::KeyboardLayoutId layoutId = freeink::ui::KeyboardLayoutId::QwertyEn;
+  // shifted is separate because it also pages the symbol layer.
+  enum class KeyLayer : uint8_t { Letters, Symbols, UrlPanel };
+  KeyLayer keyLayer = KeyLayer::Letters;
   bool shifted = false;
-  bool symbols = false;
-  bool urlPanel = false;  // URL snippet panel replaces the letter layer
 
   // Key hit rects registered by the keyboard component during render();
   // loop() routes touch snapshots against them. 5-row EN layout registers 41
@@ -59,18 +60,17 @@ class KeyboardEntryActivity : public Activity {
   int selRow = 0;
   int selCol = 0;
 
-  bool confirmHeld = false;
-  bool confirmLongHandled = false;
+  // One physical key's press. Spent: it already acted, so its release does nothing.
+  enum class KeyPress : uint8_t { None, Down, Spent };
+  KeyPress confirmPress = KeyPress::None;
 
-  bool cursorMode = false;
-  bool togglePos = false;
+  // What the buttons act on: the key grid, the text cursor, or a password's show/hide toggle.
+  enum class Focus : uint8_t { Keys, Cursor, PasswordToggle };
+  Focus focus = Focus::Keys;
   size_t cursorPos = 0;  // byte offset into text (always on a code point boundary)
-  bool upHeld = false;
-  bool upLongHandled = false;
-  bool downHeld = false;
-  bool downLongHandled = false;
-  bool rightHeld = false;
-  bool rightLongHandled = false;
+  KeyPress upPress = KeyPress::None;
+  KeyPress downPress = KeyPress::None;
+  KeyPress rightPress = KeyPress::None;
   size_t savedCursorPos = 0;
   size_t rightStartCursorPos = 0;
 
