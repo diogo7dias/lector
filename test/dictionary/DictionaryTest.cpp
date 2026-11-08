@@ -116,6 +116,14 @@ TEST_F(DictionaryTest, PrepareReportsAMissingDictionaryAsUnavailable) {
   EXPECT_EQ(dictionary.prepare("absent"), Dictionary::Readiness::Unavailable);
 }
 
+TEST_F(DictionaryTest, AFailedReopenDoesNotKeepTheOldAnswer) {
+  writeDictionary({{"cat", "an animal"}}, "m");
+  openAndIndex();
+  ASSERT_EQ(dictionary.prepare("test"), Dictionary::Readiness::Ready);
+  EXPECT_FALSE(dictionary.open("absent"));
+  EXPECT_EQ(dictionary.prepare("absent"), Dictionary::Readiness::Unavailable);
+}
+
 TEST_F(DictionaryTest, OneEntryKeepsItsDefinitionUntouched) {
   writeDictionary({{"bank", "a river side"}, {"cat", "an animal"}}, "m");
   openAndIndex();

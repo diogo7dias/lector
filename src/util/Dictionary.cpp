@@ -151,6 +151,7 @@ DictLocation DictEntryList::location(const size_t index) const {
 
 bool Dictionary::open(const char* folderName) {
   basePath.clear();
+  readiness = Readiness::Unopened;  // an answer from an earlier open() describes another dictionary
   hasSyn = false;
   htmlDefinitions = false;
   inlineTypes = false;
