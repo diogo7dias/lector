@@ -101,12 +101,12 @@ jobs:
       - name: Cache compiled objects
         # SCons CacheDir keyed by source+flag signatures, so a hit is only ever an identical
         # object. A fresh key per run (actions/cache never overwrites one) restores the newest.
-        # ponytail: grows until platformio.ini changes and resets the prefix; prune if it nears the 10 GB repo cap.
+        # prune-object-caches keeps only the newest per branch. v2: fresh start after #412.
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/pio-build-cache
-          key: pio-obj-default-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-${{ github.run_id }}
-          restore-keys: pio-obj-default-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-
+          key: pio-obj-v2-default-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-${{ github.run_id }}
+          restore-keys: pio-obj-v2-default-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-
 
       - name: Build CrossPoint
         env:
@@ -176,12 +176,12 @@ jobs:
       - name: Cache compiled objects
         # SCons CacheDir keyed by source+flag signatures, so a hit is only ever an identical
         # object. A fresh key per run (actions/cache never overwrites one) restores the newest.
-        # ponytail: grows until platformio.ini changes and resets the prefix; prune if it nears the 10 GB repo cap.
+        # prune-object-caches keeps only the newest per branch. v2: fresh start after #412.
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/pio-build-cache
-          key: pio-obj-sticky-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-${{ github.run_id }}
-          restore-keys: pio-obj-sticky-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-
+          key: pio-obj-v2-sticky-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-${{ github.run_id }}
+          restore-keys: pio-obj-v2-sticky-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-
 
       - name: Build Sticky
         env:
@@ -220,12 +220,12 @@ jobs:
       - name: Cache compiled objects
         # SCons CacheDir keyed by source+flag signatures, so a hit is only ever an identical
         # object. A fresh key per run (actions/cache never overwrites one) restores the newest.
-        # ponytail: grows until platformio.ini changes and resets the prefix; prune if it nears the 10 GB repo cap.
+        # prune-object-caches keeps only the newest per branch. v2: fresh start after #412.
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/pio-build-cache
-          key: pio-obj-x4pro-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-${{ github.run_id }}
-          restore-keys: pio-obj-x4pro-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-
+          key: pio-obj-v2-x4pro-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-${{ github.run_id }}
+          restore-keys: pio-obj-v2-x4pro-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-
 
       - name: Build X4 Pro
         env:
@@ -351,6 +351,33 @@ jobs:
 
       - name: Run tests
         run: ctest --test-dir build/test --output-on-failure -j
+
+  # Each run saves a new object cache per env (a key is never overwritten), and the repo
+  # cap is 10 GB, so keep only the newest per env on this ref. A main run also drops PR
+  # entries: a PR falls back to main's. Not a gate: a fork PR's token cannot delete.
+  # ponytail: the cache dir itself still grows by the objects each commit changes; bump v2 if it bloats.
+  prune-object-caches:
+    needs: [build, build-sticky, build-x4pro]
+    if: always()
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Delete older object caches
+        run: |
+          for e in default sticky x4pro; do
+            gh cache list -k "pio-obj-v2-$e-" -r "$GITHUB_REF" -S created_at -O desc -L 100 \
+              --json id -q '.[1:][].id' | xargs -r -n1 gh cache delete
+          done
+          if [ "$GITHUB_REF" = refs/heads/main ]; then
+            gh cache list -k pio-obj-v2- -L 100 --json id,ref -q '.[] | select(.ref != "refs/heads/main") | .id' \
+              | xargs -r -n1 gh cache delete
+          fi
+          gh cache list -k pio-obj-v2- -L 100
 
   # This job is used as the PR required actions check, allows for changes to other steps in the future without breaking
   # PR requirements.
