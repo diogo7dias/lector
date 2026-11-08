@@ -193,8 +193,9 @@ class NearbyFileTransferActivity final : public UiStatusActivity {
   std::string progressBatchLine;
   std::string doneLine;
 
-  bool radioFailed = false;
-  bool sourceUnreadable = false;
+  // Set with errorMessage when the radio or the source file gives up. Latched: the screen
+  // then shows errorMessage and Confirm leaves.
+  bool failed = false;
   std::string errorMessage;
 
   // Progress is redrawn on a timer rather than per chunk: an e-ink panel cannot
