@@ -10,6 +10,7 @@
 
 #include <cstdint>
 
+#include "SilentRestart.h"
 #include "WakeFacePolicy.h"
 
 namespace wake_sequence {
@@ -45,8 +46,8 @@ struct WakeInputs {
   bool recoveryFirmwareMode = false;
   bool panic = false;
   bool silentReboot = false;
-  bool silentTargetIsReader = false;
-  bool silentTargetIsSettings = false;
+  // Where a silent reboot asked to go. One value, so it cannot ask for two places at once.
+  RestartTarget silentTarget = RestartTarget::Home;
 
   // Ordinary routing inputs. Each of these was read three or four separate times by the
   // chain this replaces; here each is read once.
@@ -122,11 +123,11 @@ inline constexpr WakePlan plan(const WakeInputs& in) {
     out.waitBeforeRoutePaint = true;
     return out;
   }
-  if (in.silentReboot && in.silentTargetIsReader && !in.openEpubPathEmpty) {
+  if (in.silentReboot && in.silentTarget == RestartTarget::Reader && !in.openEpubPathEmpty) {
     out.target = Target::SilentReader;
     return out;
   }
-  if (in.silentReboot && in.silentTargetIsSettings) {
+  if (in.silentReboot && in.silentTarget == RestartTarget::Settings) {
     out.target = Target::SilentSettings;
     return out;
   }

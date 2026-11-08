@@ -698,8 +698,7 @@ void setup() {
   wakeInputs.recoveryFirmwareMode = recoveryFirmwareMode;
   wakeInputs.panic = rebootedFromPanic;
   wakeInputs.silentReboot = resume == BootResume::Silent;
-  wakeInputs.silentTargetIsReader = restartBoot.target == RestartTarget::Reader;
-  wakeInputs.silentTargetIsSettings = restartBoot.target == RestartTarget::Settings;
+  wakeInputs.silentTarget = restartBoot.target;
   wakeInputs.openEpubPathEmpty = APP_STATE.openEpubPath.empty();
   wakeInputs.lastSleepFromReader = APP_STATE.lastSleepFromReader;
   wakeInputs.backHeld = mappedInputManager.isPressed(MappedInputManager::Button::Back);
