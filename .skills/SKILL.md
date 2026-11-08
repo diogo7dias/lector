@@ -576,7 +576,7 @@ pio run -t upload && pio device monitor
 - `x4`: C3 `default` binary. SSD1677, SPI SD, button ladder.
 
 `sim/server.py` serves the device as a page (keys, click or drag on the panel to
-touch, `/state`, `/ink/x/y/w/h`); the e2e suites (`sim/tests/<board>/`) drive it
+touch, `/state`, `/log`, `/ink/x/y/w/h`); the e2e suites (`sim/tests/<board>/`) drive it
 with exact checks (activity, frame count, panel ink).
 
 ```bash

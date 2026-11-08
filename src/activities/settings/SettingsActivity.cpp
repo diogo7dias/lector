@@ -79,7 +79,8 @@ struct SettingsGroup {
 //
 // Rows the map does not mention keep their relative order and are appended at the end
 // under no heading. That is deliberate: a setting added to SettingsList.h later stays
-// reachable on the device even if whoever added it never touched this map.
+// reachable on the device even if whoever added it never touched this map. The log line
+// is what fails the sim's Settings test when that happens.
 void applyGroups(std::vector<SettingInfo>& rows, const std::vector<SettingsGroup>& groups) {
   std::vector<SettingInfo> grouped;
   grouped.reserve(rows.size() + groups.size());
@@ -102,7 +103,9 @@ void applyGroups(std::vector<SettingInfo>& rows, const std::vector<SettingsGroup
   }
 
   for (size_t i = 0; i < rows.size(); ++i) {
-    if (!placed[i]) grouped.push_back(rows[i]);
+    if (placed[i]) continue;
+    LOG_ERR("SET", "Row not in a group map: %s", I18N.get(rows[i].nameId));
+    grouped.push_back(rows[i]);
   }
 
   rows.swap(grouped);
@@ -327,8 +330,9 @@ void SettingsActivity::rebuildSettingsList() {
             StrId::STR_FRONTLIGHT_WARMTH, StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE, StrId::STR_FRONTLIGHT_SCHEDULE,
             StrId::STR_FRONTLIGHT_SCHEDULE_ON, StrId::STR_FRONTLIGHT_SCHEDULE_OFF}},
           {StrId::STR_GRP_SCREEN,
-           {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX, StrId::STR_SCREEN_CALIBRATION}},
-          {StrId::STR_GRP_SLEEP_SCREEN, {StrId::STR_SLEEP_SCREEN}},
+           {StrId::STR_REFRESH_FREQ, StrId::STR_NIGHT_REFRESH_FREQ, StrId::STR_CHAPTER_START_REFRESH,
+            StrId::STR_SUNLIGHT_FADING_FIX, StrId::STR_SCREEN_CALIBRATION}},
+          {StrId::STR_GRP_SLEEP_SCREEN, {StrId::STR_SLEEP_SCREEN, StrId::STR_FAST_UNLOCK}},
           {StrId::STR_GRP_WALLPAPER,
            {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER, StrId::STR_SHOW_SLEEP_IMAGE_FILENAME,
             StrId::STR_SHOW_SLEEP_FAVORITE_BADGE, StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION,
@@ -376,7 +380,7 @@ void SettingsActivity::rebuildSettingsList() {
   applyGroups(
       systemSettings,
       {
-          {StrId::STR_GRP_POWER, {StrId::STR_TIME_TO_SLEEP}},
+          {StrId::STR_GRP_POWER, {StrId::STR_TIME_TO_SLEEP, StrId::STR_TOUCH_SLEEP}},
           {StrId::STR_GRP_LIBRARY,
            {StrId::STR_SHOW_HIDDEN_FILES, StrId::STR_BOOK_BROWSER_ORDER, StrId::STR_OPEN_BOOK_ON_BOOT,
             StrId::STR_REMOVE_READ_FROM_RECENTS, StrId::STR_MOVE_FINISHED_TO_READ, StrId::STR_MOVE_OPENED_TO_RECENTS}},

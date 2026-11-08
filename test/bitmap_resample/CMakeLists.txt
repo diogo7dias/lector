@@ -1,7 +1,6 @@
 add_executable(BitmapResampleTest
   BitmapResampleTest.cpp
   ${REPO_ROOT}/lib/GfxRenderer/Bitmap.cpp
-  ${REPO_ROOT}/lib/GfxRenderer/BitmapHelpers.cpp
 )
 
 target_include_directories(BitmapResampleTest PRIVATE

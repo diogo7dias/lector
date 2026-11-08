@@ -121,7 +121,7 @@ static void yieldDuringDecodeBlock(BmpConvertCtx* ctx) {
 
 // Write a fully-assembled output row (grayscale bytes, length outWidth) to BMP
 static void writeOutputRow(BmpConvertCtx* ctx, const uint8_t* srcRow, int outY) {
-  packBmpRow(ctx->bmpRow.get(), ctx->bytesPerRow, ctx->outWidth, ctx->atkinsonDitherer.get(),
+  packBmpRow(ctx->bmpRow.get(), ctx->bytesPerRow, ctx->outWidth, *ctx->atkinsonDitherer,
              [srcRow](const int x) { return srcRow[x]; });
   ctx->bmpOut->write(ctx->bmpRow.get(), ctx->bytesPerRow);
   yieldDuringDecode(ctx);
@@ -213,7 +213,7 @@ static void finishSmoothUpscale(BmpConvertCtx* ctx) {
 static void flushScaledRow(BmpConvertCtx* ctx) {
   const uint32_t* rowAccum = ctx->rowAccum.get();
   const uint32_t* rowCount = ctx->rowCount.get();
-  packBmpRow(ctx->bmpRow.get(), ctx->bytesPerRow, ctx->outWidth, ctx->atkinsonDitherer.get(),
+  packBmpRow(ctx->bmpRow.get(), ctx->bytesPerRow, ctx->outWidth, *ctx->atkinsonDitherer,
              [rowAccum, rowCount](const int x) {
                return static_cast<uint8_t>((rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0);
              });
