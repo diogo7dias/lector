@@ -351,8 +351,8 @@ void CrossPointWebServer::stop() {
 
   // A job queued but not yet started would otherwise run against a server that
   // is gone, into a directory that may no longer be the one the user meant.
-  fetchQueued = false;
-  fetchCancelRequested = fetchRunning;
+  if (fetch.state == FetchStatus::State::Queued) fetch.state = FetchStatus::State::Idle;
+  fetchCancelRequested = fetch.state == FetchStatus::State::Running;
 
   closeDiscoverySocket();
 
@@ -406,7 +406,7 @@ void CrossPointWebServer::handleClient() {
 
   // Last, so the transfer starts from a serviced server rather than from the
   // middle of a request: runQueuedFetch() pumps the server itself while it runs.
-  if (fetchQueued) {
+  if (fetch.state == FetchStatus::State::Queued) {
     runQueuedFetch();
   }
 }
@@ -559,7 +559,7 @@ const char* describeDownloadError(const HttpDownloader::DownloadError error) {
 // Queue a download. The request returns as soon as the job is accepted; the
 // browser follows it through /api/fetch/status.
 void CrossPointWebServer::handlePostFetch() {
-  if (fetchQueued || fetchRunning) {
+  if (fetchActive()) {
     server->send(409, "text/plain", "A download is already in progress");
     return;
   }
@@ -596,7 +596,7 @@ void CrossPointWebServer::handlePostFetch() {
   fetch.url = url.c_str();
   fetch.filename = filename;
   fetch.destPath = destPath;
-  fetchQueued = true;
+  fetch.state = FetchStatus::State::Queued;
 
   LOG_DBG("WEB", "Fetch queued: %s -> %s", fetch.url.c_str(), destPath.c_str());
 
@@ -614,6 +614,7 @@ void CrossPointWebServer::handleFetchStatus() const {
     case FetchStatus::State::Idle:
       doc["state"] = "idle";
       break;
+    case FetchStatus::State::Queued:
     case FetchStatus::State::Running:
       doc["state"] = "running";
       break;
@@ -638,7 +639,7 @@ void CrossPointWebServer::handleFetchStatus() const {
 // Called from the download's progress callback. The transfer runs on the same
 // task as the server, so without this the pages would freeze for the length of
 // the download; with it, status polling and the file list keep answering.
-// A fetch started here is refused by handlePostFetch (fetchRunning is set), so
+// A fetch started here is refused by handlePostFetch (the job is Running), so
 // this cannot recurse into another download.
 bool CrossPointWebServer::dropUploadIfCancelled() const {
   if (!cancelPoll || !cancelPoll()) return false;
@@ -660,7 +661,7 @@ void CrossPointWebServer::pumpDuringFetch() {
 }
 
 bool CrossPointWebServer::conflictsWithActiveFetch(const String& path) const {
-  if (!fetchQueued && !fetchRunning) return false;
+  if (!fetchActive()) return false;
   const std::string target(path.c_str());
   if (fetch.destPath == target) return true;
   // A parent folder counts: removing or moving it takes the open file with it.
@@ -668,7 +669,7 @@ bool CrossPointWebServer::conflictsWithActiveFetch(const String& path) const {
 }
 
 void CrossPointWebServer::handleCancelFetch() {
-  if (!fetchQueued && !fetchRunning) {
+  if (!fetchActive()) {
     server->send(409, "text/plain", "No download is in progress");
     return;
   }
@@ -705,8 +706,6 @@ void CrossPointWebServer::applyServerFilename(const std::string& contentDisposit
 }
 
 void CrossPointWebServer::runQueuedFetch() {
-  fetchQueued = false;
-  fetchRunning = true;
   fetchCancelRequested = false;
   fetch.state = FetchStatus::State::Running;
   lastFetchPumpAt = millis();
@@ -734,8 +733,6 @@ void CrossPointWebServer::runQueuedFetch() {
     // downloadToFile has already removed the partial (no resume here).
     LOG_ERR("WEB", "Fetch failed: %s (%s)", fetch.url.c_str(), fetch.error.c_str());
   }
-
-  fetchRunning = false;
 }
 
 void CrossPointWebServer::handleReadingList() const {

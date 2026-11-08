@@ -303,21 +303,20 @@ bool MappedInputManager::wasMenuGesture() const {
   int tx = 0;
   int ty = 0;
   if (isScreenTouchHeld(tx, ty)) {
-    if (!menuDragTracking_) {
+    if (menuDrag_ == MenuDrag::Idle) {
       // First sighting of this contact. Deliberately NOT wasScreenTouchDown(): that asks
       // whether the contact is still a tap candidate, which a finger already sliding down
       // the screen has stopped being, so the drag could never arm from it.
-      menuDragTracking_ = true;
-      menuDragFired_ = false;
+      menuDrag_ = MenuDrag::Tracking;
       menuDragStartX_ = tx;
       menuDragStartY_ = ty;
       debug_trace::note("touch down (%d,%d) topEdge=%d", tx, ty, topEdgeBottom);
     }
     const int travel = ty - menuDragStartY_;
-    if (!menuDragFired_ && menuDragStartY_ <= topEdgeBottom &&
+    if (menuDrag_ == MenuDrag::Tracking && menuDragStartY_ <= topEdgeBottom &&
         travel >= static_cast<int>(renderer.getScreenHeight() * MENU_DRAG_TRAVEL_FRAC_Y) &&
         travel > std::abs(tx - menuDragStartX_)) {
-      menuDragFired_ = true;
+      menuDrag_ = MenuDrag::Fired;
       // The rest of the contact belongs to the gesture: without this the finger lifting
       // would tap whatever the panel just drew under it.
       gpio.suppressTouchContact();
@@ -325,8 +324,8 @@ bool MappedInputManager::wasMenuGesture() const {
       rememberTouchHeldTime();
       return WakeTiming::noteAcceptedInput(true);
     }
-  } else if (menuDragTracking_) {
-    menuDragTracking_ = false;
+  } else if (menuDrag_ != MenuDrag::Idle) {
+    menuDrag_ = MenuDrag::Idle;
     debug_trace::note("contact ended, started (%d,%d), drag did not fire", menuDragStartX_, menuDragStartY_);
   }
 

@@ -167,22 +167,15 @@ void DictionaryWordSelectActivity::moveVertical(const int direction) {
 
 void DictionaryWordSelectActivity::performLookup() {
   popup = Popup::Busy;
-  if (!dictOpenAttempted) {
-    dictOpenAttempted = true;
-    dictOpenOk = dict.open(SETTINGS.dictionaryName);
-    // needsIndex() opens and validates the .qidx sidecar, so ask it once per
-    // open rather than once per word: the answer only changes when we build
-    // the sidecar ourselves, which is handled below.
-    dictNeedsIndex = dictOpenOk && dict.needsIndex();
-  }
-  popupMsg = dictNeedsIndex ? StrId::STR_DICT_INDEXING : StrId::STR_DICT_LOOKING_UP;
+  const Dictionary::Readiness readiness = dict.prepare(SETTINGS.dictionaryName);
+  const bool needsIndex = readiness == Dictionary::Readiness::NeedsIndex;
+  popupMsg = needsIndex ? StrId::STR_DICT_INDEXING : StrId::STR_DICT_LOOKING_UP;
   requestUpdateAndWait();  // paint the page + busy popup before blocking on SD
 
-  bool ok = dictOpenOk;
+  bool ok = readiness != Dictionary::Readiness::Unavailable;
   Dictionary::IndexResult indexResult = Dictionary::IndexResult::Ok;
-  if (ok && dictNeedsIndex) {
+  if (needsIndex) {
     ok = dict.buildIndex(&indexResult);
-    dictNeedsIndex = !ok;  // a successful build leaves the sidecar fresh; a failed one retries
   }
 
   std::string definition;

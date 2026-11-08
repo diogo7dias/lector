@@ -698,8 +698,7 @@ void setup() {
   wakeInputs.recoveryFirmwareMode = recoveryFirmwareMode;
   wakeInputs.panic = rebootedFromPanic;
   wakeInputs.silentReboot = resume == BootResume::Silent;
-  wakeInputs.silentTargetIsReader = restartBoot.target == RestartTarget::Reader;
-  wakeInputs.silentTargetIsSettings = restartBoot.target == RestartTarget::Settings;
+  wakeInputs.silentTarget = restartBoot.target;
   wakeInputs.openEpubPathEmpty = APP_STATE.openEpubPath.empty();
   wakeInputs.lastSleepFromReader = APP_STATE.lastSleepFromReader;
   wakeInputs.backHeld = mappedInputManager.isPressed(MappedInputManager::Button::Back);
@@ -946,28 +945,19 @@ void loop() {
     return;
   }
 
-  static bool screenshotButtonsReleased = true;
   static bool screenshotComboActive = false;
   if (!quickLocked && gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
-    screenshotComboActive = true;
-    if (screenshotButtonsReleased) {
-      screenshotButtonsReleased = false;
-      {
-        RenderLock lock;
-        ScreenshotUtil::takeScreenshot(renderer);
-      }
+    if (!screenshotComboActive) {
+      screenshotComboActive = true;
+      RenderLock lock;
+      ScreenshotUtil::takeScreenshot(renderer);
     }
     return;
   }
   if (screenshotComboActive) {
     if (gpio.isPressed(HalGPIO::BTN_POWER)) return;
-    if (gpio.wasReleased(HalGPIO::BTN_POWER)) {
-      screenshotButtonsReleased = true;
-      screenshotComboActive = false;
-      return;
-    }
-    screenshotButtonsReleased = true;
     screenshotComboActive = false;
+    if (gpio.wasReleased(HalGPIO::BTN_POWER)) return;
   }
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();

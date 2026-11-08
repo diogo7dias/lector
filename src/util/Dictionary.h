@@ -76,6 +76,19 @@ class Dictionary {
   bool open(const char* folderName);
   bool isOpen() const { return !basePath.empty(); }
 
+  // How far this object has got towards answering a lookup.
+  enum class Readiness : uint8_t {
+    Unopened,
+    Unavailable,  // open() failed; stays failed for this object's life
+    NeedsIndex,   // open, but buildIndex() must succeed first
+    Ready,
+  };
+
+  // open() and needsIndex() once, then the remembered answer: needsIndex() validates a
+  // sidecar on the card, too slow to repeat per word. Only buildIndex() moves it on, and
+  // a failed build stays at NeedsIndex so the next lookup retries.
+  Readiness prepare(const char* folderName);
+
   // True when the .qidx sidecar (or the .sidx sidecar of a present .syn) is
   // missing or stale — call buildIndex() first so the UI can show an
   // "Indexing…" message for the slow first pass.
@@ -156,11 +169,14 @@ class Dictionary {
     uint32_t entryCount = 0;   // .idx entries the sidecar was built over; 0 = unknown
     uint32_t synSize = 0;
     uint32_t synSampleCount = 0;
-    bool synOpened = false;  // openSynonyms() has run (success or failure)
-    // A .syn exists but couldn't be searched (open failure, or no usable .sidx),
-    // so a miss is an unfinished search rather than a verdict. Distinct from
-    // "this dictionary has no .syn", which is a legitimate miss.
-    bool synFailed = false;
+    // openSynonyms() decides this once per lookup session.
+    enum class SynonymIndex : uint8_t {
+      Unopened,
+      Absent,  // this dictionary has no .syn: a miss is a verdict
+      Failed,  // a .syn exists but couldn't be searched: a miss is an unfinished search
+      Ready,
+    };
+    SynonymIndex synonyms = SynonymIndex::Unopened;
   };
 
   // Open .idx (required) and .qidx (optional — locate() falls back to a full
@@ -170,7 +186,7 @@ class Dictionary {
   // Open .syn / .sidx into the session on first use. Idempotent; returns false
   // when there is no usable synonym index — either because no .syn exists, or
   // because it couldn't be opened / its .sidx is unusable, which sets
-  // session.synFailed and releases both handles (an unindexed .syn is never
+  // session.synonyms to Failed and releases both handles (an unindexed .syn is never
   // scanned linearly).
   bool openSynonyms(LookupSession& session);
 
@@ -222,6 +238,7 @@ class Dictionary {
   static int readWordInto(HalFile& file, char* buf, size_t bufSize);
 
   std::string basePath;  // "/dictionaries/<folder>/<stem>", empty when not open
+  Readiness readiness = Readiness::Unopened;
   bool hasPlainDict = false;
   bool hasSyn = false;  // a <stem>.syn synonym index exists next to the .idx
   bool htmlDefinitions = false;

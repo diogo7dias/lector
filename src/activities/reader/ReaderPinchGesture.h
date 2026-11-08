@@ -15,13 +15,10 @@ class ReaderPinchGesture {
   // math while locking out rotation well before the SDK's 20-degree action.
   static constexpr uint8_t MAX_DIRECTION_CHANGE_TANGENT_PERCENT = 21;
 
-  bool isActive() const { return active_; }
+  bool isActive() const { return phase_ != Phase::Idle; }
 
   void reset() {
-    active_ = false;
-    stepApplied_ = false;
-    translationLocked_ = false;
-    rotationLocked_ = false;
+    phase_ = Phase::Idle;
     pendingAction_ = Action::None;
     startDistanceSq_ = 0;
     startCenterXTwice_ = 0;
@@ -34,11 +31,8 @@ class ReaderPinchGesture {
   // touch controller reports fewer than two contacts.
   Action update(const int x1, const int y1, const int x2, const int y2) {
     const uint32_t distanceSq = separationSq(x1, y1, x2, y2);
-    if (!active_) {
-      active_ = true;
-      stepApplied_ = false;
-      translationLocked_ = false;
-      rotationLocked_ = false;
+    if (phase_ == Phase::Idle) {
+      phase_ = Phase::Tracking;
       pendingAction_ = Action::None;
       startDistanceSq_ = distanceSq;
       startCenterXTwice_ = static_cast<int64_t>(x1) + x2;
@@ -47,7 +41,7 @@ class ReaderPinchGesture {
       startDy_ = static_cast<int64_t>(y2) - y1;
       return Action::None;
     }
-    if (stepApplied_ || translationLocked_ || rotationLocked_) return Action::None;
+    if (phase_ == Phase::Finished) return Action::None;
 
     const int64_t currentDx = static_cast<int64_t>(x2) - x1;
     const int64_t currentDy = static_cast<int64_t>(y2) - y1;
@@ -55,7 +49,7 @@ class ReaderPinchGesture {
       // A rotation can introduce a brief separation wobble as the fingers
       // move around one another. Lock it out before that wobble can resize the
       // font; the completed rotation recognizer owns the sequence instead.
-      rotationLocked_ = true;
+      phase_ = Phase::Finished;
       pendingAction_ = Action::None;
       return Action::None;
     }
@@ -76,7 +70,7 @@ class ReaderPinchGesture {
     // right-hand side by 2^2 rather than halving (and rounding) the deltas.
     if (centerTravelTwiceSq > 4 * distanceChangeSq &&
         centerTravelTwiceSq >= 4 * static_cast<uint64_t>(MIN_DISTANCE_CHANGE_PX) * MIN_DISTANCE_CHANGE_PX) {
-      translationLocked_ = true;
+      phase_ = Phase::Finished;
       pendingAction_ = Action::None;
       return Action::None;
     }
@@ -108,7 +102,7 @@ class ReaderPinchGesture {
       pendingAction_ = candidate;
       return Action::None;
     }
-    stepApplied_ = true;
+    phase_ = Phase::Finished;
     pendingAction_ = Action::None;
     return candidate;
   }
@@ -136,10 +130,10 @@ class ReaderPinchGesture {
     return absoluteCross * 100 >= absoluteDot * MAX_DIRECTION_CHANGE_TANGENT_PERCENT;
   }
 
-  bool active_ = false;
-  bool stepApplied_ = false;
-  bool translationLocked_ = false;
-  bool rotationLocked_ = false;
+  // Finished: this two-contact sequence applied its step or was ruled out as a swipe or
+  // rotation, and stays quiet until the contacts lift.
+  enum class Phase : uint8_t { Idle, Tracking, Finished };
+  Phase phase_ = Phase::Idle;
   Action pendingAction_ = Action::None;
   uint32_t startDistanceSq_ = 0;
   int64_t startCenterXTwice_ = 0;
