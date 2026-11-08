@@ -139,7 +139,9 @@ namespace {
 //      keep the parent's emphasis; SD font widths snap per glyph like drawText.
 // v81: Word Expansion counts letters the way drawText steps them (no ligatures in small
 //      caps, shaped visual text), so justified lines with those words lay out again.
-constexpr uint8_t SECTION_FILE_VERSION = 81;
+// v82: SD TrueType fonts draw and advance .notdef for a missing character instead of
+//      dropping it (upstream #4256), so lines holding one lay out again.
+constexpr uint8_t SECTION_FILE_VERSION = 82;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

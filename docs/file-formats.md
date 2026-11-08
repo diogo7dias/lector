@@ -112,6 +112,12 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 82
+
+Layout fix; the binary layout is unchanged. A character missing from an SD TrueType font now
+draws the font's .notdef box and takes its width, where it used to vanish (upstream #4256).
+Lines holding one lay out again. The partial version is 200.
+
 ### Version 81
 
 Layout fix; the binary layout is unchanged. Word Expansion counts the letters it spaces the

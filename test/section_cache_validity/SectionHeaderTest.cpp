@@ -27,9 +27,9 @@ struct Section {
 
 TEST(SectionCacheValidity, OldHeadersRejectedBeforeSpecReadAndNewHeadersRoundTrip) {
   const ReaderRenderSpec spec;
-  for (uint8_t oldVersion : {61, 221, 80, 202}) {
-    // v61 finalized and suspended headers were 47 bytes, including the retired toggle; v80
-    // (and its partial 202) is the layout just before the Word Expansion count fix.
+  for (uint8_t oldVersion : {61, 221, 81, 201}) {
+    // v61 finalized and suspended headers were 47 bytes, including the retired toggle; v81
+    // (and its partial 201) is the layout just before TrueType .notdef fallbacks.
     Storage.bytes.assign(47, 0xFF);
     Storage.bytes[0] = oldVersion;
     Section section;
@@ -39,8 +39,8 @@ TEST(SectionCacheValidity, OldHeadersRejectedBeforeSpecReadAndNewHeadersRoundTri
     EXPECT_FALSE(section.file.opened);
   }
 
-  EXPECT_EQ(81, SECTION_FILE_VERSION);
-  EXPECT_EQ(201, SECTION_FILE_PARTIAL_VERSION);
+  EXPECT_EQ(82, SECTION_FILE_VERSION);
+  EXPECT_EQ(200, SECTION_FILE_PARTIAL_VERSION);
   for (uint8_t version : {SECTION_FILE_VERSION, SECTION_FILE_PARTIAL_VERSION}) {
     Section writer;
     writer.writeSectionFileHeader(spec);
