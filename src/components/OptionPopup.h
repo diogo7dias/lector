@@ -61,7 +61,7 @@ class OptionPopup {
   // routes its own contacts rather than going through UiAppHost, so the exemption is
   // the code path itself; this note is here so it stays a decision, not an oversight.
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
-    if (!active) return swallowClosingRelease(input);
+    if (phase != Phase::Open) return swallowClosingRelease(input);
 
     // The keys walk off the end of a page by themselves; a touch reader flicks to the next.
     const auto scroll = input.wasListScrollSwipe();
@@ -97,7 +97,7 @@ class OptionPopup {
           // inside the dialog, so the pop-up simply stays open.
           if (isDisabled(i)) return true;
           selectedIndex = i;
-          active = false;
+          phase = Phase::Closed;
           if (onSelectCallback) onSelectCallback(selectedIndex);
           requestUpdate();
           return true;
@@ -105,7 +105,7 @@ class OptionPopup {
       }
       // Taps on the dialog chrome (title, padding) keep the popup open; taps outside dismiss it
       if (contains(hitLayout.dialog, tx, ty)) return true;
-      active = false;
+      phase = Phase::Closed;
       requestUpdate();
       return true;
     }
@@ -134,7 +134,7 @@ class OptionPopup {
   }
 
   bool processRender(GfxRenderer& renderer, const MappedInputManager& input) const {
-    if (!active) return false;
+    if (phase != Phase::Open) return false;
     const auto popupLabels = input.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, popupLabels.btn1, popupLabels.btn2, popupLabels.btn3, popupLabels.btn4);
     render(renderer);
@@ -143,11 +143,11 @@ class OptionPopup {
   }
 
   void render(const GfxRenderer& renderer) const {
-    if (!active) return;
+    if (phase != Phase::Open) return;
     GUI.drawOptionPopup(renderer, title.c_str(), ownedStrings, selectedIndex, leftAligned);
   }
 
-  bool isActive() const { return active; }
+  bool isActive() const { return phase == Phase::Open; }
 
  private:
   // Every show() ends here, so no overload can leave the previous list's disabled rows
@@ -163,8 +163,7 @@ class OptionPopup {
     selectedIndex = count > 0 ? std::clamp(currentIndex, 0, count - 1) : 0;
     onSelectCallback = std::move(onSelect);
     layoutValid = false;
-    closing = false;
-    active = true;
+    phase = Phase::Open;
   }
 
   // The selection decides the page, so the tap targets go with it.
@@ -175,8 +174,7 @@ class OptionPopup {
   }
 
   void closeOnPress(const std::function<void()>& requestUpdate) {
-    active = false;
-    closing = true;
+    phase = Phase::ClosingPressHeld;
     requestUpdate();
   }
 
@@ -186,11 +184,11 @@ class OptionPopup {
   // left the screen, Confirm re-activated the row that had opened the pop-up. Held
   // here until it has gone by, once, for every host.
   bool swallowClosingRelease(const MappedInputManager& input) {
-    if (!closing) return false;
+    if (phase != Phase::ClosingPressHeld) return false;
     if (input.isPressed(MappedInputManager::Button::Back) || input.isPressed(MappedInputManager::Button::Confirm)) {
       return true;  // closing press still held
     }
-    closing = false;
+    phase = Phase::Closed;
     return input.wasReleased(MappedInputManager::Button::Back) ||
            input.wasReleased(MappedInputManager::Button::Confirm);
   }
@@ -242,9 +240,9 @@ class OptionPopup {
     return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
   }
 
-  bool active = false;
-  // See swallowClosingRelease().
-  bool closing = false;
+  // ClosingPressHeld: closed, with the release of the closing press still to swallow.
+  enum class Phase : uint8_t { Closed, Open, ClosingPressHeld };
+  Phase phase = Phase::Closed;
   std::string title;
   std::vector<std::string> ownedStrings;
   // Empty when every row is selectable, which is every caller except the Quick Menu.
