@@ -13,7 +13,7 @@ test('a toggled setting survives a reboot', async ({ app, screen }) => {
     }
   };
   // The value column of "Show Favorite Badge" in Settings > Display: OFF or ON.
-  const value = async () => (await (await fetch(`${app.baseUrl}/ink/400/523/76/22`)).json()).ink as number;
+  const value = async () => (await (await fetch(`${app.baseUrl}/ink/400/613/76/22`)).json()).ink as number;
   const openDisplay = async () => {
     await expect(activity).not.toHaveText('', { timeout: 120_000 });
     if ((await activity.textContent()) !== 'Home') {
@@ -26,8 +26,10 @@ test('a toggled setting survives a reboot', async ({ app, screen }) => {
   };
 
   await openDisplay();
+  const log = await (await fetch(`${app.baseUrl}/log`)).text();
+  expect(log, 'every Settings row is in a group map').not.toContain('not in a group map');
   const off = await value();
-  await tapTwice(150, 533); // Show Favorite Badge
+  await tapTwice(150, 623); // Show Favorite Badge
   await expect.poll(value, { timeout: 30_000 }).not.toBe(off);
   const on = await value();
 

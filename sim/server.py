@@ -183,6 +183,8 @@ def handler(device):
                 self.send(200, device.png(), "image/png")
             elif path == "/state":
                 self.send(200, json.dumps(device.state()).encode(), "application/json")
+            elif path == "/log":
+                self.send(200, device.sim.log_text().encode(errors="replace"), "text/plain; charset=utf-8")
             elif path.startswith("/ink/"):
                 try:
                     x, y, w, h = map(int, path.split("/")[2:])
