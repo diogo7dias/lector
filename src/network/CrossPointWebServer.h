@@ -93,7 +93,7 @@ class CrossPointWebServer {
   // one; the transfer itself runs from handleClient(), outside any request, so
   // the server keeps answering while it is in flight.
   struct FetchStatus {
-    enum class State : uint8_t { Idle, Running, Done, Failed };
+    enum class State : uint8_t { Idle, Queued, Running, Done, Failed };
     State state = State::Idle;
     std::string url;
     std::string filename;
@@ -153,9 +153,10 @@ class CrossPointWebServer {
   // URL fetch state. Only one job exists at a time: a second POST while one is
   // queued or running is refused rather than replacing it.
   FetchStatus fetch;
-  bool fetchQueued = false;
-  bool fetchRunning = false;
   bool fetchCancelRequested = false;
+  bool fetchActive() const {
+    return fetch.state == FetchStatus::State::Queued || fetch.state == FetchStatus::State::Running;
+  }
   unsigned long lastFetchPumpAt = 0;
   unsigned long lastRequestAt = 0;
   // Polled between chunks of a running fetch and on each chunk of an HTTP upload
