@@ -9,6 +9,7 @@
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderActivity.h"
 #include "EpubReaderSearchActivity.h"
+#include "EpubReaderUtils.h"
 #include "QuoteSelectActivity.h"
 #include "ReaderPresetStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -31,6 +32,7 @@ void EpubReaderActivity::recordJumpOrigin(const bool accepted) {
     returnHistory.recordJump({currentPageSpineIndex, *currentPageVisibleOffset}, accepted);
   }
   if (!accepted) return;
+  clearLinkStack();
   returnHistory.finishReturn(false);
   pendingOrdinalAnchor_.reset();
   pendingParagraphScan_.reset();
@@ -42,6 +44,7 @@ void EpubReaderActivity::recordJumpOrigin(const bool accepted) {
 
 void EpubReaderActivity::jumpToContentOffset(const int spineIndex, const uint32_t offset, const int pageHint) {
   // Caller holds RenderLock. Bookmarks and Return share the same incremental landing path.
+  clearLinkStack();
   clearDeferredReposition();
   pendingOrdinalAnchor_.reset();
   pendingParagraphScan_.reset();
@@ -272,22 +275,19 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
     return;
   }
 
-  if (savePosition) {
-    // Full: drop the oldest entry so Back always returns from the newest jump.
-    if (footnoteDepth == MAX_FOOTNOTE_DEPTH) {
-      std::copy(savedPositions + 1, savedPositions + MAX_FOOTNOTE_DEPTH, savedPositions);
-      footnoteDepth--;
-    }
-    // A child screen (menu, footnote list) may have released the section;
-    // nextPageNumber then holds the page it was on.
-    const int page = section ? section->currentPage : nextPageNumber;
-    savedPositions[footnoteDepth] = {currentSpineIndex, page};
-    footnoteDepth++;
-    LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteDepth, currentSpineIndex, page);
-  }
-
   {
     RenderLock lock(*this);
+    // The previous link's landing may have been published after this pass applied it.
+    applyLinkLanding();
+    if (savePosition) {
+      // A child screen (menu, footnote list) may have released the section;
+      // nextPageNumber then holds the page it was on.
+      const int page = section ? section->currentPage : nextPageNumber;
+      link_stack::push(savedPositions, footnoteDepth, MAX_FOOTNOTE_DEPTH, {currentSpineIndex, page});
+      LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteDepth, currentSpineIndex, page);
+    }
+    cancelLinkLanding();
+    linkLandingPending = savePosition;
     returnHistory.finishReturn(false);
     pendingOffsetJump.reset();
     clearDeferredReposition();
@@ -313,12 +313,12 @@ void EpubReaderActivity::saveLinkStack() const {
     data[size++] = (pos.pageNumber >> 8) & 0xFF;
   }
   HalFile f;
-  if (!Storage.openFileForWrite("ERS", epub->getCachePath() + "/links.bin", f)) return;
+  if (!Storage.openFileForWrite("ERS", EpubReaderUtils::linkStackPath(epub->getCachePath()), f)) return;
   if (f.write(data, size) != size) LOG_ERR("ERS", "Failed to write link stack");
 }
 
 void EpubReaderActivity::loadLinkStack() {
-  const std::string path = epub->getCachePath() + "/links.bin";
+  const std::string path = EpubReaderUtils::linkStackPath(epub->getCachePath());
   if (!Storage.exists(path.c_str())) return;
   {
     HalFile f;
@@ -346,14 +346,30 @@ void EpubReaderActivity::loadLinkStack() {
   Storage.remove(path.c_str());
 }
 
-void EpubReaderActivity::restoreSavedPosition() {
-  if (footnoteDepth <= 0) return;
-  footnoteDepth--;
-  const auto& pos = savedPositions[footnoteDepth];
-  LOG_DBG("ERS", "Restoring position [%d]: spine %d, page %d", footnoteDepth, pos.spineIndex, pos.pageNumber);
+void EpubReaderActivity::applyLinkLanding() {
+  if (!linkLandingReady.exchange(false, std::memory_order_acq_rel)) return;
+  footnoteDepth = link_stack::depthAfterLanding(savedPositions, footnoteDepth, linkLanding);
+}
 
+void EpubReaderActivity::cancelLinkLanding() {
+  linkLandingPending = false;
+  linkLandingReady.store(false, std::memory_order_relaxed);
+}
+
+void EpubReaderActivity::clearLinkStack() {
+  footnoteDepth = 0;
+  cancelLinkLanding();
+}
+
+void EpubReaderActivity::restoreSavedPosition() {
   {
     RenderLock lock(*this);
+    applyLinkLanding();
+    if (footnoteDepth <= 0) return;
+    footnoteDepth--;
+    const auto& pos = savedPositions[footnoteDepth];
+    LOG_DBG("ERS", "Restoring position [%d]: spine %d, page %d", footnoteDepth, pos.spineIndex, pos.pageNumber);
+    cancelLinkLanding();
     returnHistory.finishReturn(false);
     pendingOffsetJump.reset();
     clearDeferredReposition();

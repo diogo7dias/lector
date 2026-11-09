@@ -70,6 +70,7 @@ void KOReaderSyncActivity::applyRemoteProgress(int spineIndex, int page) {
     requestUpdate(true);
     return;
   }
+  Storage.remove(EpubReaderUtils::linkStackPath(epub->getCachePath()).c_str());
   // Moving the reader's position is the one destructive thing a sync does, so
   // it is never silent: say it happened, then return to the book the way an
   // upload does.

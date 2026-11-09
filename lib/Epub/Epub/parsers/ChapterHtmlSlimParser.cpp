@@ -330,8 +330,8 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
     if (!breakPage()) return;
   }
 
-  // Record deferred anchor after previous block is flushed (and any TOC page break)
-  anchorData.push_back({*pendingAnchorId, static_cast<uint16_t>(completedPageCount)});
+  // Its page is the page of the block's first content, known only once that is placed.
+  anchors.waitForContent(*pendingAnchorId);
   pendingAnchorId.reset();
 }
 
@@ -783,6 +783,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle, cons
 
     lastBlockWasHeading_ = currentTextBlock->getIsHeading();
     makePages(true, paragraphEnd);
+    anchors.blockEnded(static_cast<uint16_t>(completedPageCount));
   }
   breakBeforeHeading();
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
@@ -865,9 +866,10 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
   currentPageNextY = static_cast<int16_t>(currentPageNextY + ruleThickness + bottomSpacing);
 
   if (pendingAnchorId) {
-    anchorData.push_back({*pendingAnchorId, static_cast<uint16_t>(completedPageCount)});
+    anchors.waitForContent(*pendingAnchorId);
     pendingAnchorId.reset();
   }
+  anchors.contentPlaced(static_cast<uint16_t>(completedPageCount));
 }
 
 void ChapterHtmlSlimParser::fallbackTableRowToStacked() {
@@ -1348,13 +1350,19 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         const uint64_t idHash = arxHash64(idValue);
         const bool isTocAnchor =
             std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idHash) != self->tocAnchors.end();
-        if (isPageBreak && !isTocAnchor && self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER) {
+        if (isPageBreak && !isTocAnchor && self->anchors.count() < MAX_ANCHORS_PER_CHAPTER) {
           // A printed-page marker sits inside running text, so waiting for the next block
           // would file it a paragraph late. The page being filled now is where its paragraph
           // lands: at most a paragraph early, which Go to Page reads forward from.
-          self->anchorData.push_back({idHash, static_cast<uint16_t>(self->completedPageCount)});
+          self->anchors.place(idHash, static_cast<uint16_t>(self->completedPageCount));
         } else if (isTocAnchor ||
-                   (!isNonNavigableInlineElement(name) && self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER)) {
+                   (!isNonNavigableInlineElement(name) && self->anchors.count() < MAX_ANCHORS_PER_CHAPTER)) {
+          // A target inside running text belongs to the line holding its offset.
+          if (!isTocAnchor && self->tableDepth == 0 && self->currentTextBlock && !isHeaderOrBlock(name) &&
+              !isTableStructuralTag(name) && !matches(name, IMAGE_TAGS, std::size(IMAGE_TAGS))) {
+            self->anchors.waitForLine(idHash, self->visibleTextOffset);
+            continue;
+          }
           // Flush a displaced anchor before overwriting. Consecutive non-block elements
           // (e.g. <aside id="fn1">text</aside><aside id="fn2">) with no intervening block
           // never trigger startNewTextBlock, so fn1 gets silently overwritten. That leaves
@@ -1462,6 +1470,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
       self->makePages();
+      self->anchors.blockEnded(static_cast<uint16_t>(self->completedPageCount));
     }
     self->flushPendingAnchor();
     self->inlineSize = InlineSizeState{};
@@ -1908,6 +1917,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 self->currentPage->elements.push_back(std::move(pageImage));
                 self->setCurrentPageVisibleOffset(self->visibleTextOffset);
                 self->noteContent(self->currentPageNextY, self->currentPageNextY + displayHeight);
+                self->anchors.contentPlaced(static_cast<uint16_t>(self->completedPageCount));
                 self->keepWithNextLines = 0;
                 self->currentPageNextY += displayHeight + imageMarginBottom;
 
@@ -2933,9 +2943,10 @@ bool ChapterHtmlSlimParser::finishParse() {
   if (currentTextBlock) {
     makePages();
     if (pendingAnchorId) {
-      anchorData.push_back({*pendingAnchorId, static_cast<uint16_t>(completedPageCount)});
+      anchors.waitForContent(*pendingAnchorId);
       pendingAnchorId.reset();
     }
+    anchors.finish(static_cast<uint16_t>(completedPageCount));
     setCurrentPageVisibleOffset(visibleTextOffset);
     if (currentPage) emitCurrentPage();
     completedPageCount++;
@@ -3055,6 +3066,7 @@ void ChapterHtmlSlimParser::breakPageCarryingLines(const size_t carry, const siz
   setCurrentPageVisibleOffset(visibleOffset);
   emitCurrentPage();
   completedPageCount++;
+  anchors.linesCarried(carry, static_cast<uint16_t>(completedPageCount));
   currentPage = std::move(nextPage);
   currentPageNextY = 0;
   currentPageVisibleOffsetSet = false;
@@ -3095,6 +3107,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const
     currentPageVisibleOffsetSet = false;
   }
 
+  anchors.lineStarting(visibleOffset, static_cast<uint16_t>(completedPageCount));
   if (currentPageNextY + lineHeight > viewportHeight) {
     size_t paragraphLines = 0;
     const size_t carry = linesToCarry(paragraphLines);
@@ -3142,6 +3155,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const
     }
     currentPage->elements.push_back(std::move(pageImage));
   }
+  anchors.lineAdded(static_cast<uint16_t>(completedPageCount));
   noteContent(currentPageNextY, currentPageNextY + lineHeight);
   currentPageNextY += lineHeight;
   if (layoutParagraph && paragraphLinesOnPage < UINT8_MAX) paragraphLinesOnPage++;

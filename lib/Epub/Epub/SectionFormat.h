@@ -141,7 +141,9 @@ namespace {
 //      caps, shaped visual text), so justified lines with those words lay out again.
 // v82: SD TrueType fonts draw and advance .notdef for a missing character instead of
 //      dropping it (upstream #4256), so lines holding one lay out again.
-constexpr uint8_t SECTION_FILE_VERSION = 82;
+// v83: A link target's page is the page of its first line, and it moves with that line
+//      when the orphan rule carries it (upstream #4328). Same layout, new anchor map.
+constexpr uint8_t SECTION_FILE_VERSION = 83;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

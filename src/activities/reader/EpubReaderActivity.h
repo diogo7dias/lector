@@ -20,6 +20,9 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // still returns to where a followed link was tapped.
   void saveLinkStack() const;
   void loadLinkStack();
+  void applyLinkLanding();
+  void cancelLinkLanding();
+  void clearLinkStack();
 
   // Returns nullptr when the allocation fails, exactly as the old per-page allocation did.
   uint8_t* acquireGrayscaleStripScratch(size_t bytes);

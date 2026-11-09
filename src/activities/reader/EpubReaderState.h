@@ -11,6 +11,7 @@
 
 #include "BookmarkEntry.h"
 #include "EndOfBookOptions.h"
+#include "LinkBackStack.h"
 #include "ReaderPinchGesture.h"
 #include "ReaderPrefs.h"
 #include "ReaderProgressSaveDebouncer.h"
@@ -210,13 +211,14 @@ struct EpubReaderState {
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
-  struct SavedPosition {
-    int spineIndex;
-    int pageNumber;
-  };
+  using SavedPosition = link_stack::Position;
   static constexpr int MAX_FOOTNOTE_DEPTH = 3;
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
   int footnoteDepth = 0;
+  // The page a followed link lands on is known only on the render task; the loop applies it.
+  bool linkLandingPending = false;
+  std::atomic<bool> linkLandingReady{false};
+  SavedPosition linkLanding = {};
   // Viewport of the last render(), captured so loop()'s lazy partial-extension start
   // builds with IDENTICAL layout parameters to the pages already rendered (a mismatch
   // would paginate differently than the partial being extended). 0 = no render yet.
