@@ -8,6 +8,7 @@
 
 #include <cassert>
 
+#include "BatteryPercentPoll.h"
 #include "HalGPIO.h"
 
 class HalPowerManager;
@@ -19,8 +20,7 @@ class HalPowerManager {
   int normalFreq = 0;  // MHz
   bool isLowPower = false;
 
-  mutable int _batteryCachedPercent = 0;         // Last read battery percentage (0-100)
-  mutable unsigned long _batteryLastPollMs = 0;  // Timestamp of last battery read in milliseconds
+  mutable BatteryPercentPoll _batteryPoll;
 
   enum LockMode { None, NormalSpeed };
   LockMode currentLockMode = None;
@@ -38,8 +38,6 @@ class HalPowerManager {
   // them back up costs a PON wait on the very next paint. Two seconds is long enough that
   // ordinary reading never pays it. See the call site in loop() for the failure it fixes.
   static constexpr unsigned long IDLE_PANEL_POWER_OFF_MS = 2000;
-
-  static constexpr unsigned long BATTERY_POLL_MS = 1500;  // ms
 
   void begin();
 

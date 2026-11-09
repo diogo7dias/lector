@@ -914,7 +914,8 @@ Lector reads StarDict dictionaries from `/dictionaries/<name>/` on the card. Pic
 
 Look a word up from the in-book menu's **Look Up** row, or bind a hold to **Dictionary** in
 **Settings > Controls**. On a touch screen, hold the word itself for half a second: its
-definition opens straight away, and Back returns to the page. A word with several entries in
+definition opens straight away, and Back returns to the page. A long definition turns pages
+with the same taps and side swipes as a book page, under **Touch Reader Controls**. A word with several entries in
 the dictionary shows all of them, each under its own headword. Every successful lookup is remembered: **Lookup History**, in the
 same menu, lists the last 100 words newest first and reopens any of them. Setup and usage
 are covered in [docs/dictionary.md](./docs/dictionary.md).
