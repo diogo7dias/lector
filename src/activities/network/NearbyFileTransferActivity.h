@@ -61,8 +61,9 @@ class NearbyFileTransferActivity final : public UiStatusActivity {
   void onEnter() override;
   void onExit() override;
   // A transfer stops the moment this screen sleeps, which would strand the other
-  // reader waiting on chunks that never come.
-  bool preventAutoSleep() override { return true; }
+  // reader waiting on chunks that never come. A screen only looking or listening has
+  // no timeout of its own, so it must stay on the reader's Time to Sleep.
+  bool preventAutoSleep() override { return session.peerIsWaiting(); }
   // Chunks arrive as fast as the radio and the card allow; a loop delay here
   // would throttle the whole transfer.
   bool skipLoopDelay() override;

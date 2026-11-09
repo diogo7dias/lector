@@ -178,6 +178,8 @@ class TransferSession {
   void cancel(uint32_t nowMs);
 
   TransferState state() const { return state_; }
+  /** A transfer is under way, so sleeping now would strand the other reader. */
+  bool peerIsWaiting() const;
   size_t peerCount() const { return peers_.size(); }
   const DiscoveredPeer& peerAt(const size_t index) const { return peers_[index]; }
   const std::string& peerName() const { return peerName_; }

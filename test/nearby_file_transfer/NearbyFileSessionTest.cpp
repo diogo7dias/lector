@@ -266,6 +266,33 @@ TEST(NearbyFileSession, ReceiverWaitsForTheReaderBeforeAcceptingAnOffer) {
   EXPECT_EQ(session.destinationPath(), "/books/Book.epub");
 }
 
+TEST(NearbyFileSession, OnlyAnOtherReaderCountingOnThisOneHoldsItAwake) {
+  uint32_t now = 1000;
+  TransferSession sender;
+  sender.beginSend("Book.epub", 4096, now);
+  EXPECT_FALSE(sender.peerIsWaiting()) << "looking for readers";
+  drain(sender, now);
+  sender.onEvent(event(TransferEventKind::ADVERTISE), now);
+  EXPECT_FALSE(sender.peerIsWaiting()) << "a reader answered, nobody chose it";
+  sender.choosePeer(PEER_MAC, now);
+  EXPECT_TRUE(sender.peerIsWaiting()) << "offer out";
+  sender.onEvent(event(TransferEventKind::ACCEPT), now);
+  EXPECT_TRUE(sender.peerIsWaiting()) << "bytes moving";
+  sender.cancel(now);
+  EXPECT_FALSE(sender.peerIsWaiting()) << "result screen";
+
+  TransferSession receiver;
+  receiver.beginReceive(now);
+  EXPECT_FALSE(receiver.peerIsWaiting()) << "waiting to be found";
+  TransferEvent offer = event(TransferEventKind::OFFER);
+  offer.fileName = "Book.epub";
+  offer.fileSize = 4096;
+  receiver.onEvent(offer, now);
+  EXPECT_FALSE(receiver.peerIsWaiting()) << "an unanswered offer times out on the sender";
+  receiver.acceptOffer("/books/Book.epub", now);
+  EXPECT_TRUE(receiver.peerIsWaiting()) << "bytes moving";
+}
+
 TEST(NearbyFileSession, ReceiverCanTurnAnOfferDown) {
   uint32_t now = 1000;
   TransferSession session;
