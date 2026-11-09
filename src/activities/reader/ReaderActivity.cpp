@@ -73,6 +73,7 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
     loaded = epub->load(true, skipCss);
   }
   if (loaded) {
+    epub->indexZipEntries();
     return epub;
   }
 
