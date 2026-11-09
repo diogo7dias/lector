@@ -110,9 +110,11 @@ nothing collapsed and the input path is serialising on the panel, one refresh pe
 ## Judging Fast Page Turns (X4)
 
 Settings > System > Fast Page Turns picks the panel's cheap partial waveform for FAST
-refreshes. On by default, and only on the X4: the X3's UC8253 has no second fast path,
-and the Seeed Sticky and the X4 Pro keep their own configs, where `0x22 = 0x1C` does not
-select the partial waveform at all and would run the full one on every page.
+refreshes. On by default on the X4. Off by default on the X4 Pro (its own row on the main
+Settings page, with the test steps on it), where it reaches only
+SSD1677 units and has never been measured: a panel that does not honour `0x22 = 0x1C` as a
+partial runs the full waveform on every page. The X3's UC8253 has no second fast path, and
+the Seeed Sticky keeps its own config, where `0x1C` does not select the partial waveform.
 
 The trade is ghosting for speed, so it needs eyes rather than numbers. Before trusting it:
 

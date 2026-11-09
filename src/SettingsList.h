@@ -644,8 +644,15 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
   // on the one board validated for it; the row is here so a panel that turns out to
   // ghost can be put back on the vendor sequence without a reflash. See
   // CrossPointSettings::fastPageTurns.
+#if FREEINK_DEVICE_X4PRO
+  // Its own key: settings saved while this row did nothing here hold "fastPageTurns": 1,
+  // which would switch an unmeasured waveform on for every reader who updates. No category:
+  // the switch lives on its own page (FastPageTurnsTestActivity), beside what to test.
+  emit(SettingInfo::Toggle(StrId::STR_FAST_PAGE_TURNS, &CrossPointSettings::fastPageTurns, "x4ProFastPageTurns"));
+#else
   emit(SettingInfo::Toggle(StrId::STR_FAST_PAGE_TURNS, &CrossPointSettings::fastPageTurns, "fastPageTurns",
                            StrId::STR_CAT_SYSTEM));
+#endif
 
   // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
   emit(SettingInfo::DynamicString(
