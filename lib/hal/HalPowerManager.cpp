@@ -136,28 +136,12 @@ uint16_t HalPowerManager::getBatteryMillivolts() const {
 
 uint16_t HalPowerManager::getBatteryPercentage() const {
   static const BatteryMonitor battery;
-  if (BoardConfig::ACTIVE.batteryGauge.gaugeAddr != 0) {
-    const unsigned long now = millis();
-    if (_batteryLastPollMs != 0 && (now - _batteryLastPollMs) < BATTERY_POLL_MS) {
-      return _batteryCachedPercent;
-    }
-
-    _batteryLastPollMs = now;
-    uint16_t percent = 0;
-    if (!battery.readPercentageChecked(percent)) {
-      return _batteryCachedPercent;
-    }
-    _batteryCachedPercent = percent;
-    return _batteryCachedPercent;
-  }
-
-  // smooth the battery %.
-  if (_batteryCachedPercent == 0) {
-    _batteryCachedPercent = 10 * battery.readPercentage();
-  } else {
-    _batteryCachedPercent = (_batteryCachedPercent * 9 + battery.readPercentage() * 10) / 10;
-  }
-  return _batteryCachedPercent / 10;
+  const bool hasGauge = BoardConfig::ACTIVE.batteryGauge.gaugeAddr != 0;
+  return _batteryPoll.get(hasGauge, millis(), [hasGauge](uint16_t& percent) {
+    if (hasGauge) return battery.readPercentageChecked(percent);
+    percent = battery.readPercentage();
+    return true;
+  });
 }
 
 HalPowerManager::Lock::Lock() {
