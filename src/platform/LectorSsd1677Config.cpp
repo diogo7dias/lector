@@ -58,6 +58,7 @@ Ssd1677Config buildLectorX4Config() {
 Ssd1677Config buildLectorX4ProConfig() {
   Ssd1677Config cfg = ssd1677DefaultConfig();
   cfg.grayPowerUpFirst = true;
+  cfg.allowFastTurbo = true;  // experimental build only, see lector.exp.85
   return cfg;
 }
 
