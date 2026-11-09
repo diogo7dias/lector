@@ -124,6 +124,7 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   void openReaderMenu();
   // Reading margins plus status bar bands: where render() puts the page.
   void pageMargins(int& top, int& right, int& bottom, int& left);
+  ChapterLabel currentChapterLabel() const;
   void openDictionaryWordSelect(int anchorX = -1, int anchorY = -1);
   // Opens the Grab Quote word-range picker on the current page.
   void openQuoteGrab();
