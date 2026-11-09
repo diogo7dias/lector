@@ -669,9 +669,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // ghosting -- a shorter drive leaves more behind -- so the anti-ghost budget charges
   // these passes double and cleans more often, and every eighth pass runs the standard
   // sequence so the panel re-reads its own temperature. Inert on panels without a
-  // second fast path (the X3, the Seeed Sticky, the X4 Pro). Off restores the vendor
-  // sequence exactly, with no reflash.
+  // second fast path (the X3, the Seeed Sticky, X4 Pro units with a UC8279). Off restores
+  // the vendor sequence exactly, with no reflash.
+#if FREEINK_DEVICE_X4PRO
+  uint8_t fastPageTurns = 0;  // never measured on this panel: a reader has to opt in
+#else
   uint8_t fastPageTurns = 1;
+#endif
   // Power button return from footnotes (1 = enabled, 0 = disabled)
   uint8_t pwrBtnFootnoteBack = 1;
   // The book's own CSS, split into two switches the reader honours independently.

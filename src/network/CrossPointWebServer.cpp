@@ -1608,6 +1608,8 @@ void CrossPointWebServer::handleGetSettings() const {
 
   for (const auto& s : settings) {
     if (!s.key) continue;  // Skip ACTION-only entries
+    // The X4 Pro trial: its switch sits on the device, beside the instructions for it.
+    if (s.valuePtr == &CrossPointSettings::fastPageTurns && s.category == StrId::STR_NONE_OPT) continue;
 
     doc.clear();
     doc["key"] = s.key;
