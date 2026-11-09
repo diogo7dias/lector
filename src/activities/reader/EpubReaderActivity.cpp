@@ -237,6 +237,7 @@ void EpubReaderActivity::onExit() {
 
   // Leaving after a followed link loses the in-RAM return stack; persist it so the
   // book reopens on the viewed page and Back still returns to the link origin.
+  applyLinkLanding();
   if (footnoteDepth > 0 && epub) saveLinkStack();
 
   // Auto Sync pushes only a book whose page moved since it opened.

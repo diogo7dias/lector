@@ -326,6 +326,12 @@ bool EpubReaderActivity::openSectionForRender(const ReaderRenderSpec& renderSpec
     pendingAnchor.clear();
   }
 
+  if (linkLandingPending) {
+    linkLandingPending = false;
+    linkLanding = {currentSpineIndex, section->currentPage};
+    linkLandingReady.store(true, std::memory_order_release);
+  }
+
   if (pendingPercentJump && section->pageCount > 0) {
     // Apply the pending percent jump now that we know the new section's page count.
     section->currentPage = reader_landing::percentPage(pendingSpineProgress, section->pageCount);

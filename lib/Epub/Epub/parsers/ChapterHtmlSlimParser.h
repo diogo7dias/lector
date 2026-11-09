@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "AnchorPlacement.h"
 #include "ArxHash.h"
 #include "Epub/FootnoteEntry.h"
 #include "Epub/PageCallbacks.h"
@@ -242,7 +243,8 @@ class ChapterHtmlSlimParser {
   // small chunks, so a long chapter never needs one large free block (a vector doubling past
   // 512 anchors needs 16 KB contiguous, and a failed allocation aborts).
   int completedPageCount = 0;
-  std::deque<std::pair<uint64_t, uint16_t>> anchorData;
+  AnchorPlacement anchors;
+  static_assert(AnchorPlacement::RECENT_LINES == MAX_CARRIED_LINES, "anchors follow the lines that can be carried");
   // Deferred until after the previous text block is flushed. Optional rather than a
   // sentinel value: 0 is a legal hash, so "no anchor pending" needs its own state.
   std::optional<uint64_t> pendingAnchorId;
@@ -403,7 +405,7 @@ class ChapterHtmlSlimParser {
   void abortParse();   // tear down without flushing (error / abandon)
 
   void addLineToPage(std::unique_ptr<TextBlock> line, uint32_t visibleOffset);
-  const std::deque<std::pair<uint64_t, uint16_t>>& getAnchors() const { return anchorData; }
+  const std::deque<std::pair<uint64_t, uint16_t>>& getAnchors() const { return anchors.placed(); }
 
   // Byte progress of the in-flight parse, used to estimate a still-building section's total page
   // count (a giant single-spine book never fully lays out, so its real count is unknown). Valid
