@@ -75,18 +75,21 @@ std::string KOReaderDocumentId::calculate(const std::string& filePath) {
 
     // Seek to offset
     if (!file.seekSet(offset)) {
-      LOG_DBG("KODoc", "Failed to seek to offset %zu", offset);
-      continue;
+      LOG_ERR("KODoc", "Failed to seek to offset %zu", offset);
+      return "";
     }
 
     const size_t bytesToRead = std::min(CHUNK_SIZE, fileSize - offset);
     // int, not size_t: a read error is -1, which as size_t hashed SIZE_MAX bytes.
     const int bytesRead = file.read(buffer, bytesToRead);
 
-    if (bytesRead > 0) {
-      md5.add(buffer, static_cast<size_t>(bytesRead));
-      totalBytesRead += static_cast<size_t>(bytesRead);
+    // A partial hash would name a different book on the server, so there is no id at all.
+    if (bytesRead != static_cast<int>(bytesToRead)) {
+      LOG_ERR("KODoc", "Incomplete read at offset %zu", offset);
+      return "";
     }
+    md5.add(buffer, bytesToRead);
+    totalBytesRead += bytesToRead;
   }
 
   md5.calculate();
