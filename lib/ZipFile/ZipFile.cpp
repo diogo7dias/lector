@@ -92,6 +92,12 @@ bool ZipFile::readCentralDirEntry(CentralDirEntry& entry, const uint16_t onlyNam
 }
 
 bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
+  if (entryIndex) {
+    const FileStatSlim* found = entryIndex->find({filename, strlen(filename)});
+    if (found) *fileStat = *found;
+    return found != nullptr;
+  }
+
   // Extraction follows a size query for the same entry while the archive stays open.
   if (lastLookupValid && lastLookupName == filename) {
     *fileStat = lastLookup;
@@ -142,6 +148,47 @@ bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
       return true;
     }
   }
+}
+
+const ZipFile::FileStatSlim* ZipFile::EntryIndex::find(const std::string_view name) const {
+  const uint64_t hash = fnv1a::hash64(name);
+  const auto nameLen = static_cast<uint16_t>(name.size());
+  const Entry* const begin = entries.get();
+  const Entry* const end = begin + count;
+  const Entry* it = std::lower_bound(begin, end, std::make_pair(hash, nameLen), [](const Entry& e, const auto& key) {
+    return std::make_pair(e.hash, e.nameLen) < key;
+  });
+  return it != end && it->hash == hash && it->nameLen == nameLen ? &it->stat : nullptr;
+}
+
+bool ZipFile::buildEntryIndex(EntryIndex& index) {
+  const ScopedOpenClose zip{*this};
+  if (!zip || !loadZipDetails()) return false;
+  if (zipDetails.totalEntries * sizeof(EntryIndex::Entry) < EntryIndex::MIN_BYTES) return false;
+
+  auto entries = makeUniqueNoThrow<EntryIndex::Entry[]>(zipDetails.totalEntries);
+  if (!entries) {
+    LOG_ERR("ZIP", "OOM: entry index for %u entries", zipDetails.totalEntries);
+    return false;
+  }
+
+  file.seek(zipDetails.centralDirOffset);
+  size_t seen = 0;
+  size_t count = 0;
+  CentralDirEntry entry;
+  while (seen < zipDetails.totalEntries && readCentralDirEntry(entry)) {
+    seen++;
+    if (entry.nameLen >= sizeof(entry.name)) continue;
+    entries[count++] = {fnv1a::hash64({entry.name, entry.nameLen}), entry.nameLen, entry.stat};
+  }
+  if (seen != zipDetails.totalEntries) return false;
+
+  std::sort(entries.get(), entries.get() + count, [](const EntryIndex::Entry& a, const EntryIndex::Entry& b) {
+    return std::make_pair(a.hash, a.nameLen) < std::make_pair(b.hash, b.nameLen);
+  });
+  index.entries = std::move(entries);
+  index.count = count;
+  return true;
 }
 
 long ZipFile::getDataOffset(const FileStatSlim& fileStat) {

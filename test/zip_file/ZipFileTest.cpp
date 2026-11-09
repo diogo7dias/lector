@@ -248,6 +248,47 @@ TEST_F(ZipFileTest, ExtractAfterSizeQuerySkipsTheCentralDirectory) {
   EXPECT_TRUE(touchedCentralDirectory());
 }
 
+TEST_F(ZipFileTest, AnIndexedArchiveFindsEntriesWithoutTheCentralDirectory) {
+  ZipBuilder builder;
+  for (int i = 0; i < 200; i++) builder.addStored("item" + std::to_string(i) + ".txt", "value" + std::to_string(i));
+  install(builder);
+
+  ZipFile::EntryIndex index;
+  ASSERT_TRUE(ZipFile(path).buildEntryIndex(index));
+
+  ZipFile zip(path, &index);
+  HalFile::readOffsets.clear();
+  EXPECT_EQ(extract(zip, "item150.txt"), "value150");
+  EXPECT_EQ(extract(zip, "item3.txt"), "value3");
+  EXPECT_FALSE(touchedCentralDirectory());
+}
+
+TEST_F(ZipFileTest, AnIndexAnswersMissingNamesWithoutReading) {
+  ZipBuilder builder;
+  for (int i = 0; i < 200; i++) builder.addStored("item" + std::to_string(i) + ".txt", "v");
+  install(builder);
+
+  ZipFile::EntryIndex index;
+  ASSERT_TRUE(ZipFile(path).buildEntryIndex(index));
+  EXPECT_NE(index.find("item7.txt"), nullptr);
+  EXPECT_EQ(index.find("nope.txt"), nullptr);
+
+  ZipFile zip(path, &index);
+  HalFile::readOffsets.clear();
+  size_t size = 0;
+  EXPECT_FALSE(zip.getInflatedFileSize("nope.txt", &size));
+  EXPECT_TRUE(HalFile::readOffsets.empty());
+}
+
+TEST_F(ZipFileTest, ASmallArchiveIsNotIndexed) {
+  ZipBuilder builder;
+  builder.addStored("a.txt", "aaaa").addStored("b.txt", "bb");
+  install(builder);
+
+  ZipFile::EntryIndex index;
+  EXPECT_FALSE(ZipFile(path).buildEntryIndex(index));
+}
+
 TEST_F(ZipFileTest, AlternatingLookupsWrapAroundTheDirectoryCursor) {
   ZipBuilder builder;
   builder.addStored("one", "1").addStored("two", "22").addStored("three", "333").addStored("four", "4444");

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Print.h>
+#include <ZipFile.h>
 
 #include <memory>
 #include <string>
@@ -26,6 +27,7 @@ class Epub {
   std::string cachePath;
   // Spine and TOC cache
   std::unique_ptr<BookMetadataCache> bookMetadataCache;
+  std::unique_ptr<ZipFile::EntryIndex> zipEntryIndex;
   // CSS parser for styling
   std::unique_ptr<CssParser> cssParser;
   // CSS files
@@ -57,6 +59,8 @@ class Epub {
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
+  // After load, for the book being read: finds every item without rescanning the card.
+  void indexZipEntries();
   // For a book that skipped its stylesheet at load and now wants it: parses the CSS into
   // its cache when the cache is missing or stale, and drops the section caches laid out
   // without it. Only valid after a successful load().
