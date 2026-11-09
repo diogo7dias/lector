@@ -47,9 +47,7 @@ void EpubReaderActivity::pageMargins(int& top, int& right, int& bottom, int& lef
   int sbTitleExtraPx = 0;
   bool sbTitleTop = false;
   if (sb.textOn() && sb.titleSlot(true).anchor != CrossPointSettings::SB_ANCHOR_OFF) {
-    std::string chapterTitle;
-    const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
-    if (tocIndex != -1) chapterTitle = epub->getTocItem(tocIndex).title;
+    std::string chapterTitle = currentChapterLabel().title;
     if (chapterTitle.empty()) chapterTitle = tr(STR_UNNAMED);
     const int lines = UITheme::getStatusBarV2TitleLines(sb, renderer, true, chapterTitle.c_str(),
                                                         epub->getTitle().c_str(), &sbTitleTop);
@@ -59,6 +57,22 @@ void EpubReaderActivity::pageMargins(int& top, int& right, int& bottom, int& lef
   const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(sb, true, sbTitleTop ? 0 : sbTitleExtraPx);
   top += sbTop;
   bottom += sbBottom;
+}
+
+EpubReaderActivity::ChapterLabel EpubReaderActivity::currentChapterLabel() const {
+  const auto read = [this] {
+    ChapterLabel label;
+    label.tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+    if (label.tocIndex != -1) label.title = epub->getTocItem(label.tocIndex).title;
+    return label;
+  };
+  // The main task lays out the dictionary and quote overlays without the lock.
+  if (!RenderLock::heldByCurrentTask()) return read();
+  if (chapterLabelSpine_ != currentSpineIndex) {
+    chapterLabel_ = read();
+    chapterLabelSpine_ = currentSpineIndex;
+  }
+  return chapterLabel_;
 }
 
 void EpubReaderActivity::showPendingSyncSaveError() {

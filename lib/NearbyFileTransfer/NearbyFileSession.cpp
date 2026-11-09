@@ -27,6 +27,11 @@ void TransferSession::beginReceive(const uint32_t nowMs) {
   lastPeerPacketMs_ = nowMs;
 }
 
+bool TransferSession::peerIsWaiting() const {
+  return state_ == TransferState::OFFER_SENT || state_ == TransferState::TRANSFERRING ||
+         state_ == TransferState::VERIFYING;
+}
+
 bool TransferSession::isFinished() const {
   switch (state_) {
     case TransferState::DONE:

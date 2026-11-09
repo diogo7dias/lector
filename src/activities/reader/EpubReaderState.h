@@ -47,6 +47,14 @@ struct EpubReaderState {
   // as a member rather than a vector: fixed, and read on the stack-tight render task.
   uint16_t chapterMarks_[statusbar::kMaxChapterMarks] = {};
   int chapterMarkCount_ = 0;
+  // The status bar's chapter, kept per spine: each read is a seek pair in book.bin, and a
+  // page turn asks up to four times. Touched only under the RenderLock.
+  struct ChapterLabel {
+    int tocIndex = -1;
+    std::string title;
+  };
+  mutable ChapterLabel chapterLabel_;
+  mutable int chapterLabelSpine_ = -1;
   // Printed-page labels of the current spine and the page each one starts on (page-list
   // books only), rebuilt for each new section and once more when its build settles. Read by the status
   // bar, which appends the label to the page item.

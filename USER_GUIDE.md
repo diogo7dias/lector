@@ -606,6 +606,9 @@ Two Lector devices can pass a file directly, with no network in between.
    or use the same row in the in-book menu's Device tab to send the open book.
 3. The receiving device asks before accepting, and reports the name and size.
 
+A device stays awake only while a transfer is running. While it is still looking for the other
+reader or waiting for you to answer, **Time to Sleep** applies as usual.
+
 A transfer that is interrupted, by walking out of range or by pressing Back, keeps what
 arrived. Send the same file again and it carries on from there rather than starting over. Both
 devices check the whole file against the sender's checksum before it is kept, so a resumed file

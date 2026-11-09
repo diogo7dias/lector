@@ -313,10 +313,10 @@ void EpubReaderActivity::renderStatusBar() const {
   d.chapterTotal = epub->getTocItemsCount();
   d.printedPage = printedPageLabel();
 
-  const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
-  if (tocIndex != -1) {
-    d.chapterTitle = epub->getTocItem(tocIndex).title;
-    d.chapterNum = tocIndex + 1;
+  const ChapterLabel chapter = currentChapterLabel();
+  if (chapter.tocIndex != -1) {
+    d.chapterTitle = chapter.title;
+    d.chapterNum = chapter.tocIndex + 1;
   }
   if (d.chapterTitle.empty()) d.chapterTitle = tr(STR_UNNAMED);
   // Read from the chapter's paragraph table, and only when the item is on: it costs
