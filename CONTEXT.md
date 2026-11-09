@@ -35,3 +35,19 @@ _Avoid_: progress upload, KOSync (the protocol, not the act)
 **Auto Sync**:
 The single opt-in switch for all unattended sync work: Position sync when a book opens or the device sleeps, and the check for Missing books.
 _Avoid_: background sync
+
+### Moving through a book
+
+**Link stack**:
+The places Back can return to, one for each followed link the reader has not yet returned from.
+_Avoid_: footnote depth, back history
+
+**Deliberate jump**:
+A move the reader chose that does not come from following a link: table of contents, Go to Page or Paragraph, a search result, or applying a synced position. It empties the Link stack.
+_Avoid_: explicit jump, navigation
+
+### File Transfer
+
+**Protected file**:
+A file on the card that is never served over the network, whatever the reader's settings: stored Wi-Fi, OPDS and sync credentials, and pinned server certificates.
+_Avoid_: hidden file, sensitive path
