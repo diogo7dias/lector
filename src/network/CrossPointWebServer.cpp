@@ -25,6 +25,7 @@
 #include "FontInstaller.h"
 #include "HttpDownloader.h"
 #include "OpdsServerStore.h"
+#include "ProtectedPaths.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "SettingsList.h"
@@ -825,8 +826,9 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
     auto fileName = String(name);
 
     // Dot names show only when the reader opted in; system folders never do.
-    const bool shouldHide =
-        WebDAVHandler::isProtectedPath(fileName) && !(SETTINGS.showHiddenFiles && fileName.startsWith("."));
+    const bool hiddenName = protected_paths::isProtectedName(std::string_view{fileName.c_str(), fileName.length()}) &&
+                            !(SETTINGS.showHiddenFiles && fileName.startsWith("."));
+    const bool shouldHide = hiddenName || protected_paths::isProtectedFile(std::string(path) + "/" + name);
 
     if (!shouldHide) {
       FileInfo info;

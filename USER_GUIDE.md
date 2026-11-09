@@ -225,7 +225,8 @@ first boot; any other book read long ago gets one the next time you close it.
 
 **Settings > System > Show Hidden Files** decides whether entries beginning with `.` appear. The
 `System Volume Information` and `XTCache` folders never appear, and their contents are never
-picked as books.
+picked as books. The files holding your Wi-Fi, OPDS and sync passwords and your trusted server
+certificates are never shown or served over the network, even with this setting on.
 **File Browser Order** lists a folder alphabetically, in random order, by the date each file
 was added, or by when you last read it. Both date orders put the newest first and leave the
 folders at the top; books you have never opened sit at the bottom of Last Read, in name
