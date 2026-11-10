@@ -85,6 +85,12 @@ def make_sd(path, books=SD_BOOKS, size_mb=256):
                    check=True, stdout=subprocess.DEVNULL, env=env)
     if books:
         subprocess.run(["mcopy", "-i", f"{path}@@1M", *books, "::/"], check=True)
+    # LECTOR_SD_EXTRA: a host folder whose contents go onto the card root as they are
+    # (wallpapers in sleep/, a settings.json under .crosspoint/), for a run that needs them.
+    extra = os.environ.get("LECTOR_SD_EXTRA")
+    if extra:
+        entries = [os.path.join(extra, name) for name in sorted(os.listdir(extra))]
+        subprocess.run(["mcopy", "-s", "-i", f"{path}@@1M", *entries, "::/"], check=True)
     return path
 
 

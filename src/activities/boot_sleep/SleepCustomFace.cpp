@@ -25,6 +25,54 @@ constexpr HalDisplay::RefreshMode kPxcOneBitRefresh = HalDisplay::HALF_REFRESH;
 
 }  // namespace
 
+// One wallpaper file, .pxc or .bmp, onto the panel. Returns false when the file cannot be
+// opened or parsed, which is also how a name that the index still lists but the folder no
+// longer holds is discovered: the pick does not probe for liveness (a probe costs a full
+// directory lookup, 1271 ms measured on a real wallpaper folder) and the open here
+// already answers the same question.
+bool SleepActivity::renderWallpaperFile(const std::string& filename, const PxcRenderOptions* const pxcOptions,
+                                        const uint32_t linePosition, const uint32_t lineTotal) const {
+  LOG_INF("SLP", "Loading wallpaper: %s", filename.c_str());
+  const SleepInfoOverlayScope overlayScope(filename, linePosition, lineTotal);
+  if (hasPxcExtension(filename)) {
+    if (renderPxcSleepScreen(renderer, filename, display.profile().panelHasGray, kPxcOneBitRefresh,
+                             &drawSleepInfoOverlay, pxcOptions)) {
+      APP_STATE.lastSleepWallpaperPath = filename;
+      return true;
+    }
+    return false;
+  }
+  // Storage.open rather than openFileForRead: the latter calls exists() before
+  // open(), which is a second full directory lookup for the same name and measured
+  // as half of a 2543 ms wallpaper open. A failed open is reported here instead.
+  HalFile file = Storage.open(filename.c_str(), O_RDONLY);
+  if (!file) {
+    LOG_INF("SLP", "wallpaper open failed: %s", filename.c_str());
+    return false;
+  }
+  // Stretch the tone range only when the user has asked for no cover filter, so a
+  // filtered image still looks the way they set it. .bmp only; a .pxc is already
+  // quantised to four levels when the file is written.
+  const bool adaptiveTone = SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+  Bitmap bitmap(file, true, adaptiveTone ? BitmapToneMapping::Adaptive : BitmapToneMapping::None);
+  if (bitmap.parseHeaders() != BmpReaderError::Ok) return false;
+  renderBitmapSleepScreen(bitmap, sleep_face::Face::Wallpaper);
+  APP_STATE.lastSleepWallpaperPath = filename;
+  return true;
+}
+
+// Refresh Wallpaper: the picture the last lock left, drawn again over itself. No popup,
+// no pre-clear and no new pick: the panel already holds this image, the second drive is
+// what clears the traces the first one left.
+bool SleepActivity::repaintWallpaper(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& path) {
+  const SleepActivity painter(renderer, mappedInput);
+  display.setInverted(false);
+  prepareSleepReadingLine();
+  const bool painted = painter.renderWallpaperFile(path, nullptr, 0, 0);
+  clearSleepReadingLine();
+  return painted;
+}
+
 void SleepActivity::renderCustomSleepScreen() const {
 #ifdef LECTOR_LOCK_LAB
   // A Full lock run has to draw what the bench draws, or the number it reports belongs to
@@ -97,48 +145,8 @@ void SleepActivity::renderCustomSleepScreen() const {
     const bool pickedFromIndex = pick.pickedFromIndex;
     const uint32_t linePosition = pick.linePosition;
     const uint32_t lineTotal = pick.lineTotal;
-    // Rendering a picked wallpaper. Returns false when the file cannot be opened or
-    // parsed, which is also how a name that the index still lists but the folder no
-    // longer holds is discovered: the pick no longer probes for liveness (see the index
-    // block in pickWallpaper), because a probe costs a full directory lookup -- 1271 ms measured on
-    // a real wallpaper folder -- and the open that follows already answers the same
-    // question.
     const auto renderChosen = [&](const std::string& name) {
-      const auto filename = std::string(sleepDir) + "/" + name;
-      LOG_INF("SLP", "Randomly loading: %s", filename.c_str());
-      const SleepInfoOverlayScope overlayScope(filename, linePosition, lineTotal);
-      if (hasPxcExtension(name)) {
-        if (renderPxcSleepScreen(renderer, filename, pxcGrayscale, kPxcOneBitRefresh, &drawSleepInfoOverlay,
-                                 pxcOptions)) {
-          APP_STATE.lastSleepWallpaperPath = filename;
-          return true;
-        }
-        return false;
-      }
-      HalFile randFile;
-      // Storage.open rather than openFileForRead: the latter calls exists() before
-      // open(), which is a second full directory lookup for the same name and measured
-      // as half of a 2543 ms wallpaper open. A failed open is reported here instead.
-      randFile = Storage.open(filename.c_str(), O_RDONLY);
-      if (!randFile) {
-        LOG_INF("SLP", "wallpaper open failed: %s", filename.c_str());
-        return false;
-      }
-      // Same rule the /sleep.bmp path above uses: stretch the tone range only when
-      // the user has asked for no cover filter, so a filtered image still looks the
-      // way they set it. Applies to .bmp wallpapers only; .pxc took the branch above
-      // and is already quantised to four levels when the file is written.
-      const bool adaptiveTone =
-          SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
-      Bitmap bitmap(randFile, true, adaptiveTone ? BitmapToneMapping::Adaptive : BitmapToneMapping::None);
-      if (bitmap.parseHeaders() != BmpReaderError::Ok) {
-        randFile.close();
-        return false;
-      }
-      renderBitmapSleepScreen(bitmap, sleep_face::Face::Wallpaper);
-      APP_STATE.lastSleepWallpaperPath = filename;
-      randFile.close();
-      return true;
+      return renderWallpaperFile(std::string(sleepDir) + "/" + name, pxcOptions, linePosition, lineTotal);
     };
 
     if (!chosen.empty()) {

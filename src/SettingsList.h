@@ -274,6 +274,12 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
                          {StrId::STR_CENTER, StrId::STR_ALIGN_LEFT, StrId::STR_ALIGN_RIGHT}, "sleepReadingStatsAlign",
                          StrId::STR_CAT_DISPLAY));
 
+#if FREEINK_DEVICE_X4PRO
+  // Only the X4 Pro has the timed wake behind it (main.cpp), so only it has the row.
+  emit(SettingInfo::Toggle(StrId::STR_REFRESH_SLEEP_WALLPAPER, &CrossPointSettings::refreshSleepWallpaper,
+                           "refreshSleepWallpaper", StrId::STR_CAT_DISPLAY));
+#endif
+
   // "Never" (index 5) is back, matching upstream: the reader skips its own cadence, and
   // DisplayRefreshPolicy still forces a clean after its consecutive-FAST cap.
   emit(SettingInfo::Enum(StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,

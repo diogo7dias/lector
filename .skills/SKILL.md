@@ -584,12 +584,15 @@ with exact checks (activity, frame count, panel ink).
 pio run -e x4pro && pio run -e default            # the firmware under test
 (cd sim && npm install && npm run test:e2e)       # all boards; or test:e2e:x4pro|x3|x3uc8279|x4
 python3 sim/soak.py x4pro 10 600                  # 10 boots + 600 s idle; exit 1 on hang/reset/crash report
+python3 sim/wallpaper_refresh.py                  # X4 Pro Refresh Wallpaper: timed wake repaints, sleeps, arms once
 ```
 
 To prove one change by hand mid-task, any agent: `.claude/skills/verify/bin/lv start x4pro`,
 then `lv doctor`, `lv tap|press|swipe|pinch|reboot`, `lv shot <name>`, `lv stop`. Recipes per
 feature and the proof rules: `.claude/skills/verify/SKILL.md` and its `features/`.
 
+- `LECTOR_SD_EXTRA=<folder>` copies that folder's contents onto the fresh card (wallpapers,
+  a `.crosspoint/settings.json`); `sim/fixtures/` holds the ones the scripts use.
 - QEMU changes live only as patches in `sim/qemu-patches/` (base tag in `build-qemu.sh`).
 - Time is instruction-counted (`-icount`). The QEMU patches still model light sleep
   (clock jumps to its next event, lag dropped at each sleep), but since 0.46 the

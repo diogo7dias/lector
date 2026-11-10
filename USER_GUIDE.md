@@ -963,6 +963,11 @@ belongs to, so the rows here appear in the same order as on the device.
   Reading Stats** — what is drawn over the wallpaper. All off by default.
 - **Reading Stats Position** — Center, Left or Right.
 - **Shuffle Wallpapers** — reshuffle the rotation now.
+- **Refresh Wallpaper** (X4 Pro) — off by default. A gray wallpaper drawn straight after a page or
+  a menu can keep faint outlines of it. On, the reader wakes by itself one minute after locking,
+  draws the same wallpaper again and goes back to sleep, which clears them. Only wallpapers are
+  redrawn, not book covers, and not when the battery is under 15%. A short Power press during
+  that redraw (a few seconds) is missed: press again.
 
 **Frontlight** (boards with a frontlight)
 

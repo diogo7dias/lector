@@ -19,6 +19,7 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <esp_random.h>
+#include <esp_sleep.h>
 #include <esp_system.h>
 #include <esp_timer.h>
 
@@ -43,6 +44,7 @@
 #include "WakeTiming.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/boot_sleep/SleepActivity.h"
 #include "activities/settings/ReleaseNotesActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "activities/util/LowBatteryNoticeActivity.h"
@@ -53,6 +55,7 @@
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WakeFacePolicy.h"
 #include "sleep/WakeSequence.h"
+#include "sleep/WallpaperRefreshPolicy.h"
 #include "util/BookProgressFile.h"
 #include "util/ButtonNavigator.h"
 #include "util/ButtonReplay.h"
@@ -71,6 +74,11 @@ FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts
 // A wake hold must never become an in-app power-button action.  Boot may continue
 // while the button is held; swallow the one release that ends that wake gesture.
 static bool wakePowerReleasePending = false;
+#if FREEINK_DEVICE_X4PRO
+// Refresh Wallpaper: set when a lock arms the timed second drive, read by the boot it
+// causes. RTC memory, because deep sleep is a chip reset.
+RTC_DATA_ATTR static bool wallpaperRefreshArmed = false;
+#endif
 
 // How the device is coming back to life, resolved once at boot. Both resume
 // flows suppress the splash and leave the panel holding its pre-boot frame; a
@@ -179,6 +187,13 @@ static void finishDeepSleep(const unsigned long sleepT0, const unsigned long sle
   // INF, not DBG: a release kit runs at LOG_LEVEL 1 and this is the one line that says
   // what a lock cost.
   LOG_INF("SLP", "Lock %lu ms total (%s panel=%lu)", sleepTPanel - sleepT0, sleepNote, sleepTPanel - sleepTBudget);
+#if FREEINK_DEVICE_X4PRO
+  wallpaperRefreshArmed =
+      wallpaper_refresh::shouldArm({SETTINGS.refreshSleepWallpaper != 0, !APP_STATE.lastSleepWallpaperPath.empty(),
+                                    powerManager.getBatteryPercentage()}) &&
+      esp_sleep_enable_timer_wakeup(wallpaper_refresh::DELAY_US) == ESP_OK;
+  if (wallpaperRefreshArmed) LOG_INF("SLP", "Wallpaper refresh armed");
+#endif
   LOG_INF("MAIN", "Entering deep sleep");
   // Last chance: startDeepSleep() does not return, and the USB-CDC link dies with the
   // chip, so anything still buffered here is lost.
@@ -522,6 +537,29 @@ void setup() {
     WakeTiming::formatDiagnostic(wakeDiag, sizeof(wakeDiag));
     LOG_INF("SLP", "Unlock %s", wakeDiag);
   }
+
+#if FREEINK_DEVICE_X4PRO
+  // Refresh Wallpaper: nobody asked for this wake. Draw the lock's wallpaper over itself
+  // and sleep again, before the light, the fonts on the card or any screen come up.
+  // ponytail: a Power click that starts and ends during the repaint is lost and has to
+  // be repeated; catch it with an edge interrupt (upstream #4376) if that proves annoying.
+  {
+    const bool armed = wallpaperRefreshArmed;
+    wallpaperRefreshArmed = false;
+    const bool timerWake = armed && esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER;
+    if (wallpaper_refresh::isRefreshWake(armed, timerWake, timerWake && gpio.verifyPowerButtonWakeup())) {
+      LOG_INF("SLP", "Wallpaper refresh wake");
+      setupDisplay(/*seamless=*/true, HalGPIO::WakeupReason::PowerButton);
+      setupBuiltinFonts();
+      if (!SleepActivity::repaintWallpaper(renderer, mappedInputManager, APP_STATE.lastSleepWallpaperPath)) {
+        LOG_ERR("SLP", "Wallpaper refresh: could not draw %s", APP_STATE.lastSleepWallpaperPath.c_str());
+      }
+      display.deepSleep();
+      LOG_INF("MAIN", "Entering deep sleep");
+      sleepAgain();
+    }
+  }
+#endif
 
   // Brightness and warmth always come back; whether the light itself does is
   // FrontlightBootPolicy's call. Inert on a board without a frontlight.
