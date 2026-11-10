@@ -190,6 +190,7 @@ add_subdirectory(watermark_build_bail)
 
 add_subdirectory(collapsible_sections)
 add_subdirectory(ligature_guard)
+add_subdirectory(space_fallback)
 add_subdirectory(word_spacing)
 add_subdirectory(text_block_fonts)
 add_subdirectory(book_metadata_cache)

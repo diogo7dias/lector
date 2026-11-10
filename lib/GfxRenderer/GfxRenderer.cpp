@@ -477,10 +477,7 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
                            const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
                            const bool pixelState, const EpdFontFamily::Style style) {
   const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
-  if (!glyph) {
-    LOG_ERR("GFX", "No glyph for codepoint %d", cp);
-    return;
-  }
+  if (!glyph) return;  // a zero-width character the font lacks, or a font with no fallback box
 
   const EpdFontData* fontData = fontFamily.getData(style);
   const bool is2Bit = fontData->is2Bit;
