@@ -112,6 +112,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 85
+
+Adds a `bool fillPages` after `characterSpacing` in the header (upstream #4247). On, no
+line is carried to the next page to avoid a lone first or last line or a heading at the
+page bottom; page breaks the book asks for still apply. Changing it rebuilds the section.
+The partial version is 197.
+
 ### Version 84
 
 Layout fix; the binary layout is unchanged. A Unicode space the font lacks (U+00A0,

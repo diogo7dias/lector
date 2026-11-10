@@ -146,7 +146,9 @@ namespace {
 // v84: A Unicode space the font lacks takes the plain space's width, and a missing
 //      zero-width character takes none, instead of the replacement box's (CrossInk
 //      20d74368b). Lines holding one lay out again.
-constexpr uint8_t SECTION_FILE_VERSION = 84;
+// v85: the Fill Pages switch enters the header; on keeps lines on the page instead of
+//      carrying orphans, widows and headings to the next (upstream #4247).
+constexpr uint8_t SECTION_FILE_VERSION = 85;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -169,7 +171,7 @@ constexpr uint32_t HEADER_SIZE =
     sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) +
     sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(bool) + sizeof(bool) + sizeof(bool) +
     sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint8_t) +
-    sizeof(uint8_t) + sizeof(uint8_t) + sizeof(int8_t);
+    sizeof(uint8_t) + sizeof(uint8_t) + sizeof(int8_t) + sizeof(bool);
 // The header ends with the patched-later fields, in this order. Named once so a seek
 // never re-derives its offset from the end of the header by hand.
 constexpr uint32_t PAGE_LUT_FIELD = HEADER_SIZE - sizeof(uint32_t) * 5;

@@ -39,12 +39,12 @@ TEST(SectionCacheValidity, OldHeadersRejectedBeforeSpecReadAndNewHeadersRoundTri
     EXPECT_FALSE(section.file.opened);
   }
 
-  EXPECT_EQ(84, SECTION_FILE_VERSION);
-  EXPECT_EQ(198, SECTION_FILE_PARTIAL_VERSION);
+  EXPECT_EQ(85, SECTION_FILE_VERSION);
+  EXPECT_EQ(197, SECTION_FILE_PARTIAL_VERSION);
   for (uint8_t version : {SECTION_FILE_VERSION, SECTION_FILE_PARTIAL_VERSION}) {
     Section writer;
     writer.writeSectionFileHeader(spec);
-    ASSERT_EQ(53u, writer.file.size());  // v76 added the characterSpacing byte
+    ASSERT_EQ(54u, writer.file.size());  // v85 added the fillPages byte
     writer.file.seek(0);
     serialization::writePod(writer.file, version);
     if (version == SECTION_FILE_PARTIAL_VERSION) {

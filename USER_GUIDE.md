@@ -1079,6 +1079,10 @@ is centred.
 - **Break Before Headings** — off by default. On starts every top-level heading (h1, h2) on a
   fresh page, for books that run chapters or sections together. A heading straight after another
   heading ("Part One" then "Chapter 1") stays on the same page.
+- **Fill Pages** — off by default. Lector normally moves a line to the next page so a paragraph's
+  first or last line never sits alone, and so a heading stays with the text under it; that leaves
+  a gap at the bottom of some pages. On keeps every line that fits, so pages end full. Page breaks
+  the book asks for still apply.
 - **Word Expansion** — Off by default. On a justified line whose gaps would grow past one and
   a half spaces, **Some** adds up to 1 pixel between letters and **More** up to 2, so the slack
   spreads into the words instead of opening wide holes. Lines with Focus Reading, Guide Dots,

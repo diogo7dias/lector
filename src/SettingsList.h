@@ -451,6 +451,9 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
                            StrId::STR_CAT_READER)
            .withTextSettings());
 
+  emit(SettingInfo::Toggle(StrId::STR_FILL_PAGES, &CrossPointSettings::fillPages, "fillPages", StrId::STR_CAT_READER)
+           .withTextSettings());
+
   emit(
       SettingInfo::Enum(StrId::STR_WORD_EXPANSION, &CrossPointSettings::wordExpansion,
                         {StrId::STR_WORD_EXPANSION_OFF, StrId::STR_WORD_EXPANSION_SOME, StrId::STR_WORD_EXPANSION_MORE},
