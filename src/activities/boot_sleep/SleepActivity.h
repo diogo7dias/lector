@@ -5,12 +5,16 @@
 #include "activities/Activity.h"
 
 class Bitmap;
+struct PxcRenderOptions;
 
 class SleepActivity final : public Activity {
  public:
   explicit SleepActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool fromTimeout = false)
       : Activity(activity_name::kSleep, renderer, mappedInput), fromTimeout(fromTimeout) {}
   void onEnter() override;
+  // Draws the wallpaper at `path` again, for the timed Refresh Wallpaper wake. False when
+  // the file is gone or will not decode; nothing was drawn then.
+  static bool repaintWallpaper(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& path);
 
  private:
   // Everything onEnter() does apart from bookkeeping. Split out so onEnter() can wrap it
@@ -30,6 +34,8 @@ class SleepActivity final : public Activity {
   // faces share this renderer and therefore share those rows; the parameter exists so the
   // call site states its intent and the plan is asked the right question.
   void renderBitmapSleepScreen(Bitmap& bitmap, sleep_face::Face face) const;
+  bool renderWallpaperFile(const std::string& filename, const PxcRenderOptions* pxcOptions, uint32_t linePosition,
+                           uint32_t lineTotal) const;
 
   bool fromTimeout = false;
   // The wallpaper the previous sleep left on the panel. onEnter clears the shared
