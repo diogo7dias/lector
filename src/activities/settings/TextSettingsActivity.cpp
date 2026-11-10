@@ -191,6 +191,7 @@ constexpr RowSpec ROW_SPECS[] = {
     {&CrossPointSettings::bookMargins, StrId::STR_NONE_OPT, false},             // BookMargins
     {&CrossPointSettings::linkUnderline, StrId::STR_NONE_OPT, false},           // LinkUnderline
     {&CrossPointSettings::headingPageBreak, StrId::STR_NONE_OPT, false},        // HeadingPageBreak
+    {&CrossPointSettings::fillPages, StrId::STR_NONE_OPT, false},               // FillPages
     {&CrossPointSettings::wordExpansion, StrId::STR_NONE_OPT, false},           // WordExpansion
     {&CrossPointSettings::textAntiAliasing, StrId::STR_NONE_OPT, false},        // AntiAliasing
     {&CrossPointSettings::textContrast, StrId::STR_NONE_OPT, false},            // TextContrast
@@ -245,7 +246,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   // The section headings the list used to carry are gone: a cell shows its own name, and
   // four bands would have cost two grid rows to say what the pairing already says.
   std::vector<Row> rows;
-  rows.reserve(32);
+  rows.reserve(33);
 
   rows.push_back(Row::Font);
   rows.push_back(Row::Size);
@@ -300,6 +301,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   if (look_.embeddedLayoutStyle) rows.push_back(Row::BookMargins);
   rows.push_back(Row::LinkUnderline);
   rows.push_back(Row::HeadingPageBreak);
+  rows.push_back(Row::FillPages);
   rows.push_back(Row::WordExpansion);
   // Kept at the end so it coming and going only reflows the last pair of cells.
   if (look_.textAntiAliasing) rows.push_back(Row::TextContrast);

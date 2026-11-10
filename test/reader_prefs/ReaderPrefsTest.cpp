@@ -59,6 +59,7 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.textContrast, b.textContrast);
   EXPECT_EQ(a.bookMargins, b.bookMargins);
   EXPECT_EQ(a.headingPageBreak, b.headingPageBreak);
+  EXPECT_EQ(a.fillPages, b.fillPages);
   EXPECT_EQ(a.wordExpansion, b.wordExpansion);
   EXPECT_EQ(a.sbBookTitlePos, b.sbBookTitlePos);
   EXPECT_EQ(a.screenMargin, b.screenMargin);
@@ -561,7 +562,9 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V20_SIZE + 1, READER_PREFS_V21_SIZE);
   EXPECT_EQ(READER_PREFS_V21_SIZE + 1, READER_PREFS_V22_SIZE);
   EXPECT_EQ(READER_PREFS_V22_SIZE + 1, READER_PREFS_V23_SIZE);
-  EXPECT_EQ(READER_PREFS_V23_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V23_SIZE + 1, READER_PREFS_V24_SIZE);
+  EXPECT_EQ(READER_PREFS_V24_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V24_SIZE, readerPrefsRecordSize(24));
   EXPECT_EQ(READER_PREFS_V23_SIZE, readerPrefsRecordSize(23));
   EXPECT_EQ(READER_PREFS_V22_SIZE, readerPrefsRecordSize(22));
   EXPECT_EQ(READER_PREFS_V21_SIZE, readerPrefsRecordSize(21));
@@ -577,7 +580,7 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(24, ReaderPrefs::VERSION);
+  EXPECT_EQ(25, ReaderPrefs::VERSION);
 }
 
 // A v23 record stops before Character Spacing: it reads back as the font as designed,
@@ -993,6 +996,30 @@ TEST(ReaderPrefs, HeadingPageBreakFlippedRoundTrips) {
   ASSERT_TRUE(readReaderPrefs(file, loaded));
   expectEqual(original, loaded);
   EXPECT_EQ(true, makeRenderSpec(loaded, 1, 480, 800).headingPageBreak);
+}
+
+TEST(ReaderPrefs, AV24RecordLeavesFillPagesAtItsDefault) {
+  auto old = makeSample();
+  old.fillPages = 1;  // outside the v24 record, must not be read
+  std::stringstream file;
+  file.put(static_cast<char>(24));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(24));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(0, loaded.fillPages);
+}
+
+TEST(ReaderPrefs, FillPagesFlippedRoundTrips) {
+  auto original = makeSample();
+  original.fillPages = 1;
+  std::stringstream file;
+  writeReaderPrefs(file, original);
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(file, loaded));
+  expectEqual(original, loaded);
+  EXPECT_EQ(true, makeRenderSpec(loaded, 1, 480, 800).fillPages);
 }
 
 TEST(ReaderPrefs, AV21RecordLeavesWordExpansionAtItsDefault) {

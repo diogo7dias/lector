@@ -83,6 +83,7 @@ class ChapterHtmlSlimParser {
   bool bookMargins;
   uint8_t wordExpansion;              // Word Expansion cap, px between letters
   bool headingPageBreak;              // h1/h2 start a new page
+  bool fillPages;                     // no orphan, widow or heading carry
   bool lastBlockWasHeading_ = false;  // the last block laid out was a heading
   bool breakBeforeBlock_ = false;     // the block being opened is an h1/h2 to break before
   uint8_t imageRendering;
@@ -383,6 +384,7 @@ class ChapterHtmlSlimParser {
         bookMargins(spec.bookMargins),
         wordExpansion(spec.wordExpansion),
         headingPageBreak(spec.headingPageBreak),
+        fillPages(spec.fillPages),
         imageRendering(spec.imageRendering),
         contentBase(contentBase),
         imageBasePath(imageBasePath),

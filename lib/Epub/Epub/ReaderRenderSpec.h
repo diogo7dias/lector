@@ -78,6 +78,9 @@ struct ReaderRenderSpec {
   // word changes width, so part of the cache key; the renderer applies it
   // (GfxRenderer::setCharacterSpacing).
   int8_t characterSpacing = 0;
+  // Fill Pages: never carry lines to the next page to avoid a lone first or last line or
+  // a heading at the page bottom. Moves page breaks, so part of the cache key.
+  bool fillPages = false;
 
   // Memberwise: padding is ignored and float equality keeps its usual semantics.
   constexpr bool operator==(const ReaderRenderSpec&) const = default;

@@ -51,6 +51,7 @@
   X(headingPageBreak)                \
   X(wordExpansion)                   \
   X(characterSpacing)                \
+  X(fillPages)                       \
   X(imageRendering)
 
 // Per-book toggles that live in the in-book menu, not on the Reader Settings screen.
