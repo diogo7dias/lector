@@ -112,6 +112,14 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 84
+
+Layout fix; the binary layout is unchanged. A Unicode space the font lacks (U+00A0,
+U+2000 to U+200A, U+202F, U+205F, U+3000) takes the plain space's glyph and width, and a
+missing zero-width character (U+200B to U+200F, U+2060 to U+2064, U+FEFF) takes none.
+Both used to draw the replacement box. Lines holding one lay out again. The partial
+version is 198.
+
 ### Version 82
 
 Layout fix; the binary layout is unchanged. A character missing from an SD TrueType font now

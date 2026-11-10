@@ -143,7 +143,10 @@ namespace {
 //      dropping it (upstream #4256), so lines holding one lay out again.
 // v83: A link target's page is the page of its first line, and it moves with that line
 //      when the orphan rule carries it (upstream #4328). Same layout, new anchor map.
-constexpr uint8_t SECTION_FILE_VERSION = 83;
+// v84: A Unicode space the font lacks takes the plain space's width, and a missing
+//      zero-width character takes none, instead of the replacement box's (CrossInk
+//      20d74368b). Lines holding one lay out again.
+constexpr uint8_t SECTION_FILE_VERSION = 84;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
