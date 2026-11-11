@@ -72,6 +72,8 @@ struct ThemeMetrics {
   int homeMenuTopOffset;
 
   int buttonHintsHeight;
+  // In landscape the button hints stay on the panel's bottom edge, which is a side of
+  // the page. A screen that lays its own text out keeps this strip clear of it.
   int sideButtonHintsWidth;
 
   int progressBarHeight;
