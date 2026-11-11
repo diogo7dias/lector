@@ -212,7 +212,5 @@ When editing related source assets, regenerate via normal build steps/scripts.
 
 ## Scope guardrails
 
-Before implementing larger ideas, check:
-
-- [SCOPE.md](../../SCOPE.md)
-- [GOVERNANCE.md](../../GOVERNANCE.md)
+Before implementing larger ideas, run the scope gate in
+`.claude/skills/scope-discipline/SKILL.md`.
