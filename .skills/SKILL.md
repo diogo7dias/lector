@@ -105,9 +105,9 @@ Run `./bin/install-git-hooks` once per clone. The pre-commit hook rejects commit
 **PlatformIO is BOTH a VS Code extension AND a CLI tool**:
 
 1. **VS Code Extension** (Recommended):
-   * Extension ID: `platformio.platformio-ide` (see `.vscode/extensions.json`)
+   * Extension ID: `platformio.platformio-ide`
    * Provides: Toolbar buttons, IntelliSense, integrated build/upload/monitor
-   * Configuration: `.vscode/c_cpp_properties.json`, `.vscode/tasks.json`
+   * `.vscode/` is gitignored: its files are generated per machine
    * Usage: Click Build (✓), Upload (→), or Monitor (🔌) buttons
 
 2. **CLI Tool** (`pio` command):
