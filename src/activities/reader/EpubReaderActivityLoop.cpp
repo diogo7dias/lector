@@ -13,6 +13,7 @@
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
 #include "NearbyPositionSyncActivity.h"
+#include "QueuedTurns.h"
 #include "QuoteSelectActivity.h"
 #include "QuotesViewerActivity.h"
 #include "ReaderMargins.h"
@@ -249,6 +250,7 @@ void EpubReaderActivity::loop() {
   prevTriggered = prevTriggered || touch.prev;
   nextTriggered = nextTriggered || touch.next;
   if (!prevTriggered && !nextTriggered) {
+    applyQueuedTurns();
     return;
   }
 
@@ -279,9 +281,6 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  if (prevTriggered) {
-    pageTurn(false);
-  } else {
-    pageTurn(true);
-  }
+  queuedTurns = queueTurn(queuedTurns, !prevTriggered);
+  applyQueuedTurns();
 }
