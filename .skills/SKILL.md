@@ -1,6 +1,6 @@
 # CrossPoint Reader Development Guide
 
-Project: Open-source e-reader firmware for Xteink X4 (ESP32-C3)
+Project: Lector, open-source e-reader firmware for the Xteink X3 and X4 (ESP32-C3) and X4 Pro (ESP32-S3), forked from CrossPoint Reader
 Mission: Provide a lightweight, high-performance reading experience focused on EPUB rendering on constrained hardware.
 
 ## Project memory (Notion)
@@ -137,7 +137,7 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 -DEINK_DISPLAY_SINGLE_BUFFER_MODE=1  // Single framebuffer (saves 48KB RAM!)
 -DARDUINO_USB_MODE=1                 // Enable USB CDC
 -DARDUINO_USB_CDC_ON_BOOT=1          // Serial available immediately at boot
--DXML_CONTEXT_BYTES=1024             // XML parser memory limit (EPUB parsing)
+-DXML_CONTEXT_BYTES=0                // expat keeps no parse context (~1KB/parser saved)
 -DUSE_UTF8_LONG_NAMES=1              // SD card long filename support
 -DMINIZ_NO_ZLIB_COMPATIBLE_NAMES=1   // Avoid zlib name conflicts
 -DXML_GE=0                           // Disable XML general entities (security)
@@ -156,7 +156,7 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 - Only ONE framebuffer exists (not double-buffered)
 - Grayscale rendering requires temporary buffer allocation (`renderer.storeBwBuffer()`)
 - Must call `renderer.restoreBwBuffer()` to free temporary buffers
-- See [lib/GfxRenderer/GfxRenderer.cpp:439-440](../lib/GfxRenderer/GfxRenderer.cpp) for malloc usage
+- See `GfxRenderer::storeBwBuffer()` in [lib/GfxRenderer/GfxRenderer.cpp](../lib/GfxRenderer/GfxRenderer.cpp) for malloc usage
 
 ### Directory Structure
 * lib/: Internal libraries (Epub engine, GfxRenderer, UITheme, I18n)
@@ -298,8 +298,6 @@ When a template is necessary, limit instantiations: use explicit template instan
 
 ### Error Handling Philosophy
 
-**Source**: [src/main.cpp:132-143](../src/main.cpp), [lib/GfxRenderer/GfxRenderer.cpp:10](../lib/GfxRenderer/GfxRenderer.cpp)
-
 **Pattern Hierarchy**:
 1. **LOG_ERR + return false** (90%): `LOG_ERR("MOD", "Failed: %s", reason); return false;`
 2. **LOG_ERR + fallback**: `LOG_ERR("MOD", "Unavailable"); useDefault();`
@@ -343,8 +341,7 @@ sdkApiThatTakesOwnership(buffer, bufferSize);  // SDK calls free() / delete[]
 
 **Examples in codebase**:
 - Memory utilities: [Memory.h](../lib/Memory/Memory.h) (`makeUniqueNoThrow`)
-- Cover image buffers: [HomeActivity.cpp:166](../src/activities/home/HomeActivity.cpp)
-- Bitmap rendering: [GfxRenderer.cpp:439-440](../lib/GfxRenderer/GfxRenderer.cpp)
+- Bitmap rendering: `rowScratch` in [GfxRenderer.cpp](../lib/GfxRenderer/GfxRenderer.cpp)
 
 ### Heap Allocation with `new`: Always Use `makeUniqueNoThrow`
 
@@ -391,7 +388,7 @@ sdkApiThatTakesOwnership(obj);  // SDK calls delete
 
 ### Logical Button Mapping
 
-**Source**: [src/MappedInputManager.cpp:20-55](../src/MappedInputManager.cpp)
+**Source**: `MappedInputManager::mapButton()` in [src/MappedInputManager.cpp](../src/MappedInputManager.cpp)
 
 Constraint: Physical button positions are fixed on hardware, but their logical functions change based on user settings and screen orientation.
 
@@ -438,28 +435,21 @@ Constraint: Physical button positions are fixed on hardware, but their logical f
 
 ### Activity Lifecycle and Memory Management
 
-**Source**: [src/main.cpp:132-143](../src/main.cpp)
+**Source**: `ActivityManager::exitActivity()` in [src/activities/ActivityManager.cpp](../src/activities/ActivityManager.cpp)
 
-**CRITICAL**: Activities are **heap-allocated** and **deleted on exit**.
+**CRITICAL**: Activities are **heap-allocated** (`std::unique_ptr<Activity>`) and **destroyed on exit**.
 
 ```cpp
-// main.cpp navigation pattern
-void exitActivity() {
+void ActivityManager::exitActivity(const RenderLock& lock) {
   if (currentActivity) {
     currentActivity->onExit();
-    delete currentActivity;  // Activity deleted here!
-    currentActivity = nullptr;
+    currentActivity.reset();  // Activity destroyed here!
   }
-}
-
-void enterNewActivity(Activity* activity) {
-  currentActivity = activity;  // Heap-allocated activity
-  currentActivity->onEnter();
 }
 ```
 
 **Memory Implications**:
-- Activity navigation = `delete` old activity + `new` create next activity
+- Activity navigation = destroy the old activity + allocate the next one
 - Any memory allocated in `onEnter()` MUST be freed in `onExit()`
 - FreeRTOS tasks MUST be deleted in `onExit()` before activity destruction
 - Member `FsFile` handles MUST be closed in `onExit()` (local `FsFile` variables auto-close via destructor)
@@ -475,9 +465,9 @@ void onExit()   { /* free: vTaskDelete, free buffer, close member FsFiles */ Act
 
 ### FreeRTOS Task Guidelines
 
-**Source**: [src/activities/util/KeyboardEntryActivity.cpp:45-50](../src/activities/util/KeyboardEntryActivity.cpp)
+**Source**: `DeferredFavorite::` worker in [src/util/DeferredFavorite.cpp](../src/util/DeferredFavorite.cpp). Activities do not own render tasks: `ActivityManager` runs the one render task.
 
-**Pattern**: See Activity Lifecycle above. `xTaskCreate(&taskTrampoline, "Name", stackSize, this, 1, &handle)`
+**Pattern**: `xTaskCreate(&workerLoop, "Name", stackSize, nullptr, priority, &handle)`
 
 **Stack Sizing** (in BYTES, not words):
 - **2048**: Simple rendering (most activities)
@@ -488,34 +478,25 @@ void onExit()   { /* free: vTaskDelete, free buffer, close member FsFiles */ Act
 
 ### Global Font Loading
 
-**Source**: [src/main.cpp:40-115](../src/main.cpp)
+**Source**: [src/UiFont.cpp](../src/UiFont.cpp)
 
-**All fonts are loaded as global static objects** at firmware startup:
-- Noto Serif: 12, 14, 16, 18pt (4 styles each: regular, bold, italic, bold-italic)
-- Noto Sans: 12, 14, 16, 18pt (4 styles each)
-- Ubuntu UI fonts: 10, 12pt (2 styles)
+**Built-in fonts are global static objects**, bound by `bindBuiltinFonts()` at startup:
+- ChareInk 14pt, the one built-in reading font (regular, bold, italic, bold-italic)
+- Cozette 10, 12, 14pt (regular), the UI font for every language except Arabic and Hebrew
+- Ubuntu 10, 12, 14pt (regular), the UI font for Arabic and Hebrew and the language list
 
-**Total**: ~80+ global `EpdFont` and `EpdFontFamily` objects
-
-**Compilation Flag**:
-```cpp
-#ifndef OMIT_FONTS
-  // Most fonts loaded here
-#endif
-```
+Every other reading font and size is an SD card font (`src/SdCardFontSystem.cpp`).
 
 **Implications**:
-- Fonts stored in **Flash** (marked as `static const` in `lib/EpdFont/builtinFonts/`)
+- Fonts stored in **Flash** (`static const` in `lib/EpdFont/builtinFonts/`)
 - Font rendering data cached in **DRAM** when first used
-- `OMIT_FONTS` can reduce binary size for minimal builds
 - Font IDs defined in [src/fontIds.h](../src/fontIds.h)
 
 **Usage**:
 ```cpp
 #include "fontIds.h"
 
-renderer.insertFont(FONT_UI_MEDIUM, ui12FontFamily);
-renderer.drawText(FONT_UI_MEDIUM, x, y, "Hello", true);
+renderer.drawText(UI_10_FONT_ID, x, y, tr(STR_LOADING), true);
 ```
 
 ---
@@ -849,9 +830,9 @@ renderer.drawText(FONT_UI, x, y, tr(STR_LOADING), true);
 ```
 
 **To add custom fonts**:
-1. Place source fonts in `lib/EpdFont/fontsrc/` (gitignored)
-2. Run conversion script (see `lib/EpdFont/README`)
-3. Update global font objects in `src/main.cpp:40-115`
+1. Place source fonts in `lib/EpdFont/builtinFonts/source/`
+2. Run the conversion script, `lib/EpdFont/scripts/convert-builtin-fonts.sh`
+3. Update global font objects in `src/UiFont.cpp`
 4. Add font ID constant to `src/fontIds.h`
 
 ---
