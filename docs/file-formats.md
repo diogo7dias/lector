@@ -112,6 +112,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 87
+
+Layout fix; the binary layout is unchanged (upstream #4431). A TrueType advance is read at
+1/64 px and truncated to the 12.4 `advanceX`, so only the renderer's pixel snap rounds it
+(it was rounded to 1/16 px first, which could push a width up a pixel). Bitmap fonts and
+`.cpfont` files are unchanged. The partial version is 195.
+
 ### Version 86
 
 Layout fix; the binary layout is unchanged. `<hgroup>` is a block (CrossInk cb58ab50d), so
