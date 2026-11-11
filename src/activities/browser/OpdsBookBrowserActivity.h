@@ -50,6 +50,7 @@ class OpdsBookBrowserActivity final : public UiStatusActivity {
  private:
   BrowserState state = BrowserState::LOADING;
   BrowserState sleepClockState = BrowserState::LOADING;
+  bool backArmed = false;  // a Back press began on this screen; its release acts
   // The rows borrow the entries' strings, so they are rebuilt whenever the feed
   // is, and cleared whenever it is released.
   std::vector<freeink::ui::ListItem> rows;
