@@ -190,8 +190,6 @@ void HalGPIO::update() {
 
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
-bool HalGPIO::isDebouncePending() const { return inputMgr.isDebouncePending(); }
-
 bool HalGPIO::rawInputActive() {
   if (inputMgr.isPowerButtonPhysicallyPressed()) return true;
   InputManager::ButtonAdcSample g1{}, g2{};
@@ -231,8 +229,6 @@ bool HalGPIO::wasTouchReleased() const { return inputMgr.wasTouchReleased(); }
 void HalGPIO::suppressTouchContact() { inputMgr.suppressTouchContact(); }
 
 void HalGPIO::setTouchAsleep(const bool asleep) { inputMgr.setTouchAsleep(asleep); }
-
-bool HalGPIO::isTouchAsleep() const { return inputMgr.isTouchAsleep(); }
 
 bool HalGPIO::hasHomeKey() const { return BoardConfig::hasHomeKey(); }
 
