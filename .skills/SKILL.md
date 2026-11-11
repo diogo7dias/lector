@@ -128,7 +128,6 @@ Run `./bin/install-git-hooks` once per clone. The pre-commit hook rejects commit
   * `default`: Development (LOG_LEVEL=2, serial enabled)
   * `gh_release`: Production (LOG_LEVEL=0)
   * `gh_release_rc`: Release candidate (LOG_LEVEL=1)
-  * `slim`: Minimal build (no serial logging)
 
 ### Critical Build Flags
 These flags in `platformio.ini` fundamentally affect firmware behavior:
