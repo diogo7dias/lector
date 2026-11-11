@@ -287,6 +287,11 @@ page when you read in landscape.
 With **Short Power Button Click** set to **Page Turn**, a short press of **Power** also turns
 the page.
 
+In EPUB books, page turns pressed while the screen is still refreshing are counted, up to four
+either way, and applied together once it is free: the reader goes straight to that page and
+draws only it. A run stops one page past the end of the chapter (or past the pages laid out so
+far); the extra presses are dropped.
+
 EPUB, TXT and XTC batch position saves every ten page turns, or on the next page redraw
 after five minutes. Leaving the book or putting the reader to sleep saves any pending
 position; explicit progress sync saves immediately.

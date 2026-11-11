@@ -198,7 +198,9 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   void drawParagraphNumbers(const Page& page, int marginLeft, int marginTop, int fontId);
   void loadQuoteAnchors();
   void drawQuoteUnderlines(const Page& page, int marginLeft, int marginTop, int fontId);
-  void pageTurn(bool isForwardTurn);
+  // repaint=false leaves the requestUpdate to the caller, so queued turns paint once.
+  void pageTurn(bool isForwardTurn, bool repaint = true);
+  void applyQueuedTurns();
   // Leave the End-of-Book screen for the book's last page.
   void returnToLastPage();
   void loadCachedBookmarks();

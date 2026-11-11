@@ -10,6 +10,7 @@
 #include "EpubReaderActivity.h"
 #include "EpubReaderSearchActivity.h"
 #include "EpubReaderUtils.h"
+#include "QueuedTurns.h"
 #include "QuoteSelectActivity.h"
 #include "ReaderPresetStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -125,7 +126,7 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   }
 }
 
-void EpubReaderActivity::pageTurn(bool isForwardTurn) {
+void EpubReaderActivity::pageTurn(bool isForwardTurn, const bool repaint) {
   // A chapter that failed to load (or was dropped for a relayout) leaves no section. Bound
   // long-press actions reach here without the loop's check, so retry the render as it does.
   if (!section) {
@@ -179,6 +180,22 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
     }
   }
   lock.unlock();
+  if (repaint) requestUpdate();
+}
+
+void EpubReaderActivity::applyQueuedTurns() {
+  // While a refresh holds the render lock, pageTurn would block the loop and the presses made
+  // meanwhile would never be polled; they wait in queuedTurns until the panel is free.
+  if (queuedTurns == 0 || RenderLock::peek()) return;
+  const bool forward = queuedTurns > 0;
+  const int queued = forward ? queuedTurns : -queuedTurns;
+  queuedTurns = 0;
+  if (!section) {
+    requestUpdate();
+    return;
+  }
+  const int turns = queuedTurnsNow(queued, forward, section->currentPage, section->pageCount);
+  for (int i = 0; i < turns && section; ++i) pageTurn(forward, false);
   requestUpdate();
 }
 
