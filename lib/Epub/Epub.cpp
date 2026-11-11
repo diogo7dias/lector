@@ -818,17 +818,21 @@ bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, con
 }
 
 bool Epub::extractItemToFile(const std::string& itemHref, const std::string& destPath) const {
+  // Written under .part and renamed when whole: ImageBlock extracts only when the
+  // file does not exist, so a reset mid-write would leave a cut image trusted forever.
+  const std::string partPath = FsHelpers::partialPathFor(destPath);
   HalFile out;
-  if (!Storage.openFileForWrite("EBP", destPath, out)) {
+  if (!Storage.openFileForWrite("EBP", partPath, out)) {
     return false;
   }
   // Large images dominate lazy extraction. Match the section streamer size to
   // halve SD read/write calls while adding only 8 KB of transient ZIP buffers.
-  const bool ok = readItemContentsToStream(itemHref, out, 8192);
+  bool ok = readItemContentsToStream(itemHref, out, 8192);
   out.flush();
   out.close();
+  ok = ok && Storage.rename(partPath.c_str(), destPath.c_str());
   if (!ok) {
-    Storage.remove(destPath.c_str());
+    Storage.remove(partPath.c_str());
   }
   return ok;
 }
