@@ -194,6 +194,18 @@ bool isSystemFolderName(const std::string_view name) {
   return name == "System Volume Information" || name == "XTCache";
 }
 
+bool isLibrarySkippedRootFolder(const std::string_view name) {
+  static constexpr std::string_view ROOTS[] = {"fonts",       "dictionaries",  "plugins", "sleep",
+                                               "sleep pause", "sleep-overlay", "stats",   "perf"};
+  for (const auto root : ROOTS) {
+    if (std::equal(name.begin(), name.end(), root.begin(), root.end(),
+                   [](const char a, const char b) { return std::tolower(static_cast<unsigned char>(a)) == b; })) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool hasCssExtension(std::string_view fileName) { return checkFileExtension(fileName, ".css"); }
 
 std::string partialPathFor(const std::string_view finalPath) { return std::string(finalPath) + PARTIAL_SUFFIX; }

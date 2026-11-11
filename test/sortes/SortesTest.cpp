@@ -54,12 +54,17 @@ TEST_F(SortesTest, EmptyOrUnfinishedLibraryNeverProducesABook) {
   EXPECT_TRUE(selected.empty());
 }
 TEST_F(SortesTest, ScansEveryFolderAndNeverSelectsUnfinishedBooks) {
-  const std::set<std::string> eligible = {"/a.epub", "/books/nested/b.epub", "/read/c.epub", "/z.epub"};
+  const std::set<std::string> eligible = {"/a.epub", "/books/nested/b.epub", "/read/c.epub", "/z.epub",
+                                          "/books/fonts/c2.epub"};
   for (const auto& path : eligible) book(path, 100);
   book("/read/unfinished.epub", 20);
   book("/.crosspoint/ignored.epub", 100);
   book("/System Volume Information/ignored.epub", 100);
   book("/books/XTCache/ignored.epub", 100);
+  book("/fonts/ignored.epub", 100);
+  book("/Sleep/ignored.epub", 100);
+  book("/sleep pause/ignored.epub", 100);
+  book("/books/fonts/c2.epub", 100);  // only root-level folders are skipped
   std::set<std::string> seen;
   for (int i = 0; i < 100; ++i) {
     seed = static_cast<uint32_t>(i);

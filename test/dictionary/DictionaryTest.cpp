@@ -222,6 +222,20 @@ TEST(DictionaryCleanWord, KeepsWordsAndInnerPunctuation) {
   EXPECT_EQ(Dictionary::cleanWord("garage\xE2\x80\x9D"), "garage");
 }
 
+TEST(DictionaryCleanWord, StripsHebrewNiqqudAndArabicVowelMarks) {
+  EXPECT_EQ(Dictionary::cleanWord("\xD7\xA9\xD6\xB8\xD7\x9C\xD7\x95\xD6\xB9\xD7\x9D"),
+            "\xD7\xA9\xD7\x9C\xD7\x95\xD7\x9D");
+  // Cantillation and the Unicode 18.0 marks U+05C8/U+05C9 go too.
+  EXPECT_EQ(Dictionary::cleanWord("\xD7\x90\xD6\x91\xD7\x91"), "\xD7\x90\xD7\x91");
+  EXPECT_EQ(Dictionary::cleanWord("\xD7\x90\xD7\x88\xD7\x89\xD7\x91"), "\xD7\x90\xD7\x91");
+  // Fatha, kasra, sukun and superscript alef go; shaddah stays significant.
+  EXPECT_EQ(Dictionary::cleanWord("\xD8\xB4\xD9\x8E\xD9\x83\xD9\x90\xD9\x84"), "\xD8\xB4\xD9\x83\xD9\x84");
+  EXPECT_EQ(Dictionary::cleanWord("\xD8\xB4\xD9\xB0\xD9\x83"), "\xD8\xB4\xD9\x83");
+  EXPECT_EQ(Dictionary::cleanWord("\xD8\xB4\xD9\x91\xD9\x83"), "\xD8\xB4\xD9\x91\xD9\x83");
+  // A mark between a letter and trailing punctuation must not hide the punctuation.
+  EXPECT_EQ(Dictionary::cleanWord("\xD7\x90\xD6\xB8."), "\xD7\x90");
+}
+
 TEST_F(DictionaryTest, InlineTextFieldIsDecodedAndEscaped) {
   writeDictionary({{"bank", std::string("m<a&b>\0", 7)}}, "");
   openAndIndex();

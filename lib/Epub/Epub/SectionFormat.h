@@ -151,7 +151,8 @@ namespace {
 // v86: <hgroup> is a block, so a heading group gets the book's margins, and its subtitle
 //      keeps the group's alignment under a reader override (CrossInk cb58ab50d). A container's
 //      closing spacing sits above the next paragraph, not below it (CrossInk 63a682578).
-constexpr uint8_t SECTION_FILE_VERSION = 86;
+// v87: TrueType advances defer rounding until pixel placement (upstream #4431).
+constexpr uint8_t SECTION_FILE_VERSION = 87;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

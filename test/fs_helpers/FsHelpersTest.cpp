@@ -132,3 +132,13 @@ TEST(FsHelpersTest, SystemFolderNamesAreExact) {
   EXPECT_FALSE(FsHelpers::isSystemFolderName("XTCache2"));
   EXPECT_FALSE(FsHelpers::isSystemFolderName("books"));
 }
+
+TEST(FsHelpersTest, LibrarySkippedRootFoldersAreCaseInsensitiveAndExact) {
+  for (const char* name :
+       {"fonts", "Fonts", "SLEEP", "sleep pause", "sleep-overlay", "dictionaries", "plugins", "stats", "perf"}) {
+    EXPECT_TRUE(FsHelpers::isLibrarySkippedRootFolder(name)) << name;
+  }
+  for (const char* name : {"books", "fonts2", "my fonts", "read", "recents", ""}) {
+    EXPECT_FALSE(FsHelpers::isLibrarySkippedRootFolder(name)) << name;
+  }
+}

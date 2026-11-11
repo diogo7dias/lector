@@ -83,6 +83,11 @@ bool hasBookExtension(std::string_view fileName);
 // "XTCache"): never a book folder, and never listed or walked.
 bool isSystemFolderName(std::string_view name);
 
+// A visible root-level folder that holds Lector's own files (fonts, sleep wallpapers,
+// dictionaries, stats, perf logs), never books. Library walks skip it at the card root
+// (case-insensitive); the file browser still lists it.
+bool isLibrarySkippedRootFolder(std::string_view name);
+
 // Check for .css extension (case-insensitive)
 bool hasCssExtension(std::string_view fileName);
 inline bool hasCssExtension(const String& fileName) {
