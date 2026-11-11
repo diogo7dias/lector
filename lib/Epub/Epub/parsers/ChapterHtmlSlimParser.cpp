@@ -60,7 +60,7 @@ constexpr uint8_t TABLE_ROW_SEPARATOR_THICKNESS = 1;
 constexpr int16_t TABLE_MIN_CELL_WIDTH_LINE_HEIGHTS = 3;
 
 constexpr const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
-constexpr const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote", "ul", "ol", "pre", "figure"};
+constexpr const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote", "ul", "ol", "pre", "figure", "hgroup"};
 constexpr const char* BOLD_TAGS[] = {"b", "strong"};
 constexpr const char* ITALIC_TAGS[] = {"i", "em"};
 constexpr const char* UNDERLINE_TAGS[] = {"u", "ins"};
@@ -2111,6 +2111,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       if (self->partWordBufferIndex > 0) self->flushPartWordBuffer();
       self->currentCssStyle = cssStyle;
       auto blockStyle = userAlignmentBlockStyle;
+      // A heading group keeps the book's alignment, like the headings in it, so its subtitle
+      // lines up with the title under a reader alignment override (CrossInk cb58ab50d).
+      if (cssStyle.hasTextAlign() && strcmp(name, "hgroup") == 0) blockStyle.alignment = cssStyle.textAlign;
       self->applyBlockFontScale(blockStyle, cssStyle, name);
       self->openBoxScope(blockStyle, cssStyle);
       const auto accumulated =
@@ -2771,6 +2774,17 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       if (self->currentTextBlock) {
         const auto style = self->currentTextBlock->getBlockStyle();
         self->currentTextBlock->setBlockStyle(style.addBottom(self->blockStyleStack.back()));
+        // A child already flushed leaves this block empty, and it is about to be reused for the
+        // next paragraph, whose bottom the spacing would become. Spend it here, above that
+        // paragraph (CrossInk 63a682578). An empty border box keeps its own for closeBoxScope().
+        auto& pending = self->currentTextBlock->getBlockStyle();
+        const bool emptyBox = !self->boxScopes.empty() && self->boxScopes.back().depth == self->depth &&
+                              self->boxScopes.back().top < 0 && !self->boxScopes.back().continued;
+        if (self->currentTextBlock->isEmpty() && self->wordsExtractedInBlock == 0 && pending.topInset() == 0 &&
+            !emptyBox) {
+          self->currentPageNextY = static_cast<int16_t>(self->currentPageNextY + pending.bottomInset());
+          pending.marginBottom = pending.paddingBottom = 0;
+        }
       }
       const bool breakAfter = self->blockStyleStack.back().pageBreakAfter;
       self->blockStyleStack.pop_back();

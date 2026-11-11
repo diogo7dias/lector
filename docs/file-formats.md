@@ -112,6 +112,14 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 86
+
+Layout fix; the binary layout is unchanged. `<hgroup>` is a block (CrossInk cb58ab50d), so
+a heading group gets the book's margins, and a subtitle in it keeps the group's alignment
+when the reader overrides paragraph alignment. A container's bottom margin, such as a chapter
+wrapper's, now comes before the next paragraph instead of after it (CrossInk 63a682578). The
+partial version is 196.
+
 ### Version 85
 
 Adds a `bool fillPages` after `characterSpacing` in the header (upstream #4247). On, no
