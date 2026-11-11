@@ -893,7 +893,7 @@ build_flags =
 ### CI/CD Pipeline Awareness
 
 The gate is local: `default` and `x4pro` build, ctest, and the sim e2e suites on all
-four boards. The build and release workflows start only by hand (`workflow_dispatch`):
+four boards. Every workflow starts only by hand (`workflow_dispatch`):
 
 | Workflow | File | Purpose |
 |----------|------|---------|
@@ -904,7 +904,6 @@ four boards. The build and release workflows start only by hand (`workflow_dispa
 
 **Rules**:
 - Run the local gate before merging; a hosted run is optional
-- `pr-formatting-check.yml` still runs when a pull request is opened or edited
 - `release.yml` must be started on the release tag; it replaces the release's assets
 
 ---
