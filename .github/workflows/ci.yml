@@ -1,9 +1,9 @@
 name: CI (build)
 
+# Manual only: lector merges on the local gate (both builds, ctest, sim e2e on all
+# four boards). Run this by hand from the Actions tab when a hosted run is wanted.
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read

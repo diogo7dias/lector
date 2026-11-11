@@ -581,7 +581,7 @@ feature and the proof rules: `.claude/skills/verify/SKILL.md` and its `features/
 - The GT911 holds a frame until the firmware clears 0x814E, like the chip: a lift that
   lands while a press frame is being read is reported next, never dropped. Dropping it
   left a contact that never ended, and the next tap never completed (CI-only, slow hosts).
-- CI runs the sims on every PR: `sim-x4pro` (3 shards, split by file in `ci.yml`) on the `build-x4pro` image,
+- `ci.yml` (manual trigger only) runs the sims: `sim-x4pro` (3 shards, split by file in `ci.yml`) on the `build-x4pro` image,
   `sim-c3` (one job per board: x3, x3uc8279, x4) on the `build` image.
 - The page's Reboot (`POST /reboot`) power-cycles with the same flash and card, so
   settings and reading position must survive it. Emulated boot is slower than the
@@ -882,7 +882,7 @@ build_flags =
 1. ✅ **Build**: `pio run -t clean && pio run` (0 errors/warnings)
 2. ✅ **Quality**: `pio check` + `find src -name "*.cpp" -o -name "*.h" | xargs clang-format -i`
 3. ✅ **Format**: Commit messages (`feat:`/`fix:`), no `.gitignore`-excluded files staged (e.g., `*.generated.h`, `.pio/`, `platformio.local.ini`)
-4. ✅ **CI**: Fix GitHub Actions failures before review
+4. ✅ **Gate**: both builds, ctest and the sim suites pass locally
 5. ✅ **Code review**: Ensure orientation-aware logic is correct in all 4 modes by inspecting switch/case coverage
 
 **Human tester scope** (flag these for the user):
@@ -893,20 +893,20 @@ build_flags =
 
 ### CI/CD Pipeline Awareness
 
-**GitHub Actions** run automatically on pull requests:
+The gate is local: `default` and `x4pro` build, ctest, and the sim e2e suites on all
+four boards. The build and release workflows start only by hand (`workflow_dispatch`):
 
 | Workflow | File | Purpose |
 |----------|------|---------|
-| Build Check | `.github/workflows/ci.yml` | Verifies code compiles |
-| Format Check | `.github/workflows/pr-formatting-check.yml` | Validates clang-format |
+| Build Check | `.github/workflows/ci.yml` | Format, builds, host tests, sims |
+| Title Check | `.github/workflows/pr-formatting-check.yml` | Validates the pull request title |
 | Release Build | `.github/workflows/release.yml` | Production releases |
 | RC Build | `.github/workflows/release_candidate.yml` | Release candidates |
 
 **Rules**:
-- **Fix CI failures BEFORE** requesting review
-- CI runs on: Push to PR, PR updates
-- Format check fails → Run clang-format locally
-- Build check fails → Fix compile errors
+- Run the local gate before merging; a hosted run is optional
+- `pr-formatting-check.yml` still runs when a pull request is opened or edited
+- `release.yml` must be started on the release tag; it replaces the release's assets
 
 ---
 

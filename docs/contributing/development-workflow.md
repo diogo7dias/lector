@@ -24,8 +24,8 @@ pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 pio run
 ```
 
-CI enforces formatting, static analysis, and build checks.
-Use clang-format 21+ locally to match CI.
+Hosted CI starts only by hand, so these local checks are the gate.
+Use clang-format 21+ locally.
 If `clang-format` is missing or too old locally, see [Getting Started](./getting-started.md).
 
 ## 4) Open the PR
