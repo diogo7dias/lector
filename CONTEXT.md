@@ -51,3 +51,19 @@ _Avoid_: explicit jump, navigation
 **Protected file**:
 A file on the card that is never served over the network, whatever the reader's settings: stored Wi-Fi, OPDS and sync credentials, and pinned server certificates.
 _Avoid_: hidden file, sensitive path
+
+### Origins
+
+**CrossPoint**:
+The firmware Lector is forked from. Its name stays on the settings, on the device state and on the card folder, so that a reader's card keeps working.
+_Avoid_: the fork, upstream (alone), the old name
+
+### Files on the card
+
+**Reading cache**:
+What the device builds on the card from a book so that it opens fast: the parsed book, its laid-out sections and its extracted images. Clearing it loses nothing the reader made; the reading position is not part of it.
+_Avoid_: cache (alone), .crosspoint, book data
+
+**Part file**:
+A generated file under a temporary name while it is being written. A file under its final name is always whole.
+_Avoid_: temp file, partial download

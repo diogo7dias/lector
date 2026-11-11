@@ -72,6 +72,8 @@ struct ThemeMetrics {
   int homeMenuTopOffset;
 
   int buttonHintsHeight;
+  // In landscape the button hints stay on the panel's bottom edge, which is a side of
+  // the page. A screen that lays its own text out keeps this strip clear of it.
   int sideButtonHintsWidth;
 
   int progressBarHeight;
@@ -227,7 +229,6 @@ class BaseTheme {
   // lines rather than overflowing when it's too wide to fit.
   static void drawHintLabel(GfxRenderer& renderer, int fontId, const char* label, int x, int boxWidth, int boxTop,
                             int boxHeight);
-  void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
   // Paints the focused-row highlight in the style the user picked and returns true
   // when the row's own text has to be drawn white to stay legible. Every list, menu,
   // popup and tab goes through this rather than filling a rectangle itself, so one

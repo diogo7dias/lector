@@ -138,7 +138,6 @@ bool isActive() { return g_pool != nullptr; }
 
 uint32_t heapFallbackCount() { return g_fallbackCount; }
 uint32_t heapFallbackBytes() { return g_fallbackBytes; }
-uint32_t heapFallbackLargest() { return g_fallbackLargest; }
 
 size_t poolFreeBytes() { return g_pool ? multi_heap_free_size(g_pool) : 0; }
 size_t poolLargestBlock() {

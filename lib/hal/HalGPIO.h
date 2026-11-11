@@ -47,11 +47,6 @@ class HalGPIO {
  public:
   HalGPIO() = default;
 
-  // True while a raw button-state change is still inside the debounce window.
-  // The idle loop polls fast while this is set so the confirming sample lands
-  // ~10 ms after the first; at the 50 ms light-sleep cadence a short tap can
-  // otherwise appear in a single sample and never commit (dropped press).
-  bool isDebouncePending() const;
   // True when any button contact is closed right now, read straight from the
   // hardware (ADC ladder off its idle rail, or the power GPIO asserted), without
   // going through the debounced state. Cheap enough to call every few ms.
@@ -96,7 +91,6 @@ class HalGPIO {
   void suppressTouchContact();
   // Touch controller sleep (GT911 only; see InputManager::setTouchAsleep).
   void setTouchAsleep(bool asleep);
-  bool isTouchAsleep() const;
   bool isTouchHeldAt(float& nx, float& ny) const;
   // Exactly two contacts down (GT911 only): both positions, normalized like isTouchHeldAt.
   bool getTwoTouchContacts(float& nx1, float& ny1, float& nx2, float& ny2) const;

@@ -1,8 +1,8 @@
 name: Compile Release
+# Manual only: releases are built locally and uploaded by hand, and this job would
+# overwrite those assets. To use it, run it by hand on the release tag.
 on:
-  push:
-    tags:
-      - '*'
+  workflow_dispatch:
 
 jobs:
   build-release:

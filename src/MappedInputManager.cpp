@@ -227,25 +227,6 @@ bool MappedInputManager::isScreenTouchHeld(int& x, int& y) const {
   return true;
 }
 
-MappedInputManager::RowTouch MappedInputManager::rowTouch(int& row, const int top, const int rowStep,
-                                                          const int rowCount, const int xStart, const int xEnd,
-                                                          const int rowHeight) const {
-  if (rowStep <= 0 || rowCount <= 0) return RowTouch::None;
-  const auto hit = [&](const int x, const int y) {
-    if (x < xStart || x >= xEnd || y < top) return false;
-    const int r = (y - top) / rowStep;
-    if (r >= rowCount) return false;
-    if (rowHeight > 0 && (y - top) % rowStep >= rowHeight) return false;
-    row = r;
-    return true;
-  };
-  int x = 0;
-  int y = 0;
-  if (wasScreenTouchDown(x, y) && hit(x, y)) return RowTouch::Down;
-  if (wasScreenTapped(x, y) && hit(x, y)) return RowTouch::Tap;
-  return RowTouch::None;
-}
-
 bool MappedInputManager::decodeSwipe(int& sx, int& sy, int& ex, int& ey) const {
   float nxs = 0.0f;
   float nys = 0.0f;

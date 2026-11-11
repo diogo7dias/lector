@@ -39,7 +39,6 @@ bool isActive();
  */
 uint32_t heapFallbackCount();
 uint32_t heapFallbackBytes();
-uint32_t heapFallbackLargest();
 
 /**
  * Free bytes in the lent block right now, and the least it ever held during

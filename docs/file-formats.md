@@ -39,7 +39,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 12
+#define EXPECTED_VERSION 13
 #define MAX_STRING_LENGTH 65535
 
 struct String {

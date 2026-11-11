@@ -77,12 +77,6 @@ for size in ${UI_FONT_SIZES[@]}; do
   done
 done
 
-python fontconvert.py notosans_8_regular 8 \
-  ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf \
-  ../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-Regular.ttf \
-  ../builtinFonts/source/NotoSansArabic/NotoSansArabic-Regular.ttf \
-  --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > ../builtinFonts/notosans_8_regular.h
-
 echo ""
 echo "Running compression verification..."
 python verify_compression.py ../builtinFonts/

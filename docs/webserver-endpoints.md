@@ -19,6 +19,7 @@ the IP address shown on the device screen.
 | `GET` | `/files` | File manager page |
 | `GET` | `/settings` | Web settings page |
 | `GET` | `/fonts` | SD-card font manager page |
+| `GET` | `/stats` | Reading stats page |
 | `GET` | `/js/jszip.min.js` | JavaScript asset used by the file manager |
 
 ## Device Status

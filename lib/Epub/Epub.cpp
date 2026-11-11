@@ -818,17 +818,21 @@ bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, con
 }
 
 bool Epub::extractItemToFile(const std::string& itemHref, const std::string& destPath) const {
+  // Written under .part and renamed when whole: ImageBlock extracts only when the
+  // file does not exist, so a reset mid-write would leave a cut image trusted forever.
+  const std::string partPath = FsHelpers::partialPathFor(destPath);
   HalFile out;
-  if (!Storage.openFileForWrite("EBP", destPath, out)) {
+  if (!Storage.openFileForWrite("EBP", partPath, out)) {
     return false;
   }
   // Large images dominate lazy extraction. Match the section streamer size to
   // halve SD read/write calls while adding only 8 KB of transient ZIP buffers.
-  const bool ok = readItemContentsToStream(itemHref, out, 8192);
+  bool ok = readItemContentsToStream(itemHref, out, 8192);
   out.flush();
   out.close();
+  ok = ok && Storage.rename(partPath.c_str(), destPath.c_str());
   if (!ok) {
-    Storage.remove(destPath.c_str());
+    Storage.remove(partPath.c_str());
   }
   return ok;
 }
@@ -886,27 +890,6 @@ int Epub::getTocItemsCount() const {
   }
 
   return bookMetadataCache->getTocCount();
-}
-
-// work out the section index for a toc index
-int Epub::getSpineIndexForTocIndex(const int tocIndex) const {
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    LOG_ERR("EBP", "getSpineIndexForTocIndex called but cache not loaded");
-    return 0;
-  }
-
-  if (tocIndex < 0 || tocIndex >= bookMetadataCache->getTocCount()) {
-    LOG_ERR("EBP", "getSpineIndexForTocIndex: tocIndex %d out of range", tocIndex);
-    return 0;
-  }
-
-  const int spineIndex = bookMetadataCache->getTocEntry(tocIndex).spineIndex;
-  if (spineIndex < 0) {
-    LOG_DBG("EBP", "Section not found for TOC index %d", tocIndex);
-    return 0;
-  }
-
-  return spineIndex;
 }
 
 int Epub::getTocIndexForSpineIndex(const int spineIndex) const { return getSpineItem(spineIndex).tocIndex; }

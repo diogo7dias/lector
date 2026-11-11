@@ -297,62 +297,6 @@ hint_band::Band BaseTheme::hintBand(const GfxRenderer& renderer) const {
                          UITheme::getInstance().getMetrics().buttonHintsHeight, gpio.hasTouch(), gpio.deviceIsX3()};
 }
 
-void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
-  const int screenWidth = renderer.getScreenWidth();
-  constexpr int buttonWidth = BaseMetrics::values.sideButtonHintsWidth;  // Width on screen (height when rotated)
-  constexpr int buttonHeight = 80;                                       // Height on screen (width when rotated)
-  constexpr int buttonMargin = 4;
-
-  if (gpio.deviceIsX3()) {
-    // X3 layout: Up on left side, Down on right side, positioned higher
-    constexpr int x3ButtonY = 155;
-
-    if (topBtn != nullptr && topBtn[0] != '\0') {
-      const int leftX = buttonMargin;
-      renderer.drawRect(leftX, x3ButtonY, buttonWidth, buttonHeight, kLine, true);
-      const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, topBtn);
-      const int textHeight = renderer.getTextHeight(UI_10_FONT_ID);
-      const int textX = leftX + (buttonWidth - textHeight) / 2;
-      const int textY = x3ButtonY + (buttonHeight + textWidth) / 2;
-      renderer.drawTextRotated90CW(UI_10_FONT_ID, textX, textY, topBtn);
-    }
-
-    if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
-      const int rightX = screenWidth - buttonMargin - buttonWidth;
-      renderer.drawRect(rightX, x3ButtonY, buttonWidth, buttonHeight, kLine, true);
-      const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, bottomBtn);
-      const int textHeight = renderer.getTextHeight(UI_10_FONT_ID);
-      const int textX = rightX + (buttonWidth - textHeight) / 2;
-      const int textY = x3ButtonY + (buttonHeight + textWidth) / 2;
-      renderer.drawTextRotated90CW(UI_10_FONT_ID, textX, textY, bottomBtn);
-    }
-  } else {
-    // X4 layout: Both buttons stacked on right side
-    constexpr int topButtonY = 345;
-    const char* labels[] = {topBtn, bottomBtn};
-    const int x = screenWidth - buttonMargin - buttonWidth;
-
-    // Two stacked boxes; where both show, they share one line between them.
-    if (topBtn != nullptr && topBtn[0] != '\0') {
-      renderer.drawRect(x, topButtonY, buttonWidth, buttonHeight, kLine, true);
-    }
-    if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
-      renderer.drawRect(x, topButtonY + buttonHeight - kLine, buttonWidth, buttonHeight + kLine, kLine, true);
-    }
-
-    for (int i = 0; i < 2; i++) {
-      if (labels[i] != nullptr && labels[i][0] != '\0') {
-        const int y = topButtonY + i * buttonHeight;
-        const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[i]);
-        const int textHeight = renderer.getTextHeight(UI_10_FONT_ID);
-        const int textX = x + (buttonWidth - textHeight) / 2;
-        const int textY = y + (buttonHeight + textWidth) / 2;
-        renderer.drawTextRotated90CW(UI_10_FONT_ID, textX, textY, labels[i]);
-      }
-    }
-  }
-}
-
 bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, const bool armed) const {
   // One highlight: the row filled, its text knocked out white.
   if (armed) {

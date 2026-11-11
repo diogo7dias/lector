@@ -8,12 +8,12 @@ This page defines the expected local workflow before opening a pull request.
 - Clone your fork locally and add the upstream repository if needed
 - Enable repo hooks once per clone: `./bin/install-git-hooks` (sets `core.hooksPath` to `.githooks`). The pre-commit hook fails the commit if staged C/C++ files are not clang-format 21 clean; fix with `./bin/clang-format-fix -g` and re-stage.
 
-- Branch from `master`
+- Branch from `main`
 - Keep each PR focused on one fix or feature area
 
 ## 2) Implement with scope in mind
 
-- Confirm your idea is in project scope: [SCOPE.md](../../SCOPE.md)
+- Confirm your idea is in project scope: `.claude/skills/scope-discipline/SKILL.md`
 - Prefer incremental changes over broad refactors
 
 ## 3) Run local checks
@@ -24,14 +24,13 @@ pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 pio run
 ```
 
-CI enforces formatting, static analysis, and build checks.
-Use clang-format 21+ locally to match CI.
+Hosted CI starts only by hand, so these local checks are the gate.
+Use clang-format 21+ locally.
 If `clang-format` is missing or too old locally, see [Getting Started](./getting-started.md).
 
 ## 4) Open the PR
 
 - Use a semantic title (example: `fix: avoid crash when opening malformed epub`)
-- Fill out `.github/PULL_REQUEST_TEMPLATE.md`
 - Describe the problem, approach, and any tradeoffs
 - Include reproduction and verification steps for bug fixes
 
@@ -40,5 +39,3 @@ If `clang-format` is missing or too old locally, see [Getting Started](./getting
 - Be explicit and concise in responses
 - Keep discussions technical and respectful
 - Assume good intent and focus on code-level feedback
-
-For community expectations, see [GOVERNANCE.md](../../GOVERNANCE.md).
