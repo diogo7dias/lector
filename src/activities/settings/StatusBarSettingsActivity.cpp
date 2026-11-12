@@ -20,8 +20,8 @@ enum ItemId {
   ITEM_OFF_BAR,         // Off / Slim / Medium / Fat (cycle) — only while ENABLED is off
   ITEM_BATTERY,         // anchor
   ITEM_CLOCK,           // anchor (X3 only)
-  ITEM_TITLE,           // anchor
-  ITEM_TITLE_SOURCE,    // Book / Chapter (cycle)
+  ITEM_TITLE,           // anchor (chapter title)
+  ITEM_BOOK_TITLE,      // anchor
   ITEM_TITLE_TRUNCATE,  // On / Off (toggle)
   ITEM_PAGE,            // anchor
   ITEM_PAGE_FORMAT,     // N/M | N left (cycle)
@@ -49,11 +49,11 @@ StrId itemLabel(int id) {
     case ITEM_CLOCK:
       return StrId::STR_CLOCK;
     case ITEM_TITLE:
-      return StrId::STR_TITLE;
-    case ITEM_TITLE_SOURCE:
-      return StrId::STR_TITLE_SOURCE;
+      return StrId::STR_CHAPTER_TITLE;
     case ITEM_TITLE_TRUNCATE:
       return StrId::STR_TRUNCATE_TITLE;
+    case ITEM_BOOK_TITLE:
+      return StrId::STR_BOOK_TITLE;
     case ITEM_PAGE:
       return StrId::STR_PAGE_IN_CHAPTER;
     case ITEM_PAGE_FORMAT:
@@ -113,6 +113,8 @@ uint8_t* StatusBarSettingsActivity::anchorFieldFor(int itemId) {
       return &sb.clockPos;
     case ITEM_TITLE:
       return &sb.titlePos;
+    case ITEM_BOOK_TITLE:
+      return &sb.bookTitlePos;
     case ITEM_PAGE:
       return &sb.pagePos;
     case ITEM_BOOK_PCT:
@@ -163,7 +165,7 @@ void StatusBarSettingsActivity::onEnter() {
   clampField(sb.paraPagesPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
   clampField(sb.chapterTimePos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
   clampField(sb.bookTimePos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
-  clampField(sb.titleSource, CrossPointSettings::STATUS_BAR_TITLE_SOURCE_COUNT);
+  clampField(sb.bookTitlePos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
   clampField(sb.pageFormat, CrossPointSettings::STATUS_BAR_PAGE_FORMAT_COUNT);
   clampField(sb.bookBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);
   clampField(sb.chapterBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);
@@ -215,9 +217,6 @@ void StatusBarSettingsActivity::handleSelection(const int index) {
     case ITEM_OFF_BAR:
       sb.offBar = cycle(sb.offBar, CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT);
       break;
-    case ITEM_TITLE_SOURCE:
-      sb.titleSource = cycle(sb.titleSource, CrossPointSettings::STATUS_BAR_TITLE_SOURCE_COUNT);
-      break;
     case ITEM_TITLE_TRUNCATE:
       sb.titleTruncate = cycle(sb.titleTruncate, 2);
       break;
@@ -258,8 +257,6 @@ std::string StatusBarSettingsActivity::rowValue(const int id) const {
       return sb.enabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case ITEM_OFF_BAR:
       return I18N.get(offBarNames[sb.offBar < CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT ? sb.offBar : 0]);
-    case ITEM_TITLE_SOURCE:
-      return sb.titleSource == CrossPointSettings::SB_TITLE_CHAPTER ? tr(STR_CHAPTER) : tr(STR_BOOK);
     case ITEM_TITLE_TRUNCATE:
       return sb.titleTruncate ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case ITEM_PAGE_FORMAT:

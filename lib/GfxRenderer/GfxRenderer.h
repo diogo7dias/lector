@@ -14,6 +14,8 @@ class SdCardFont;
 #include <vector>
 
 #include "Bitmap.h"
+#include "FontVariantProvider.h"
+#include "ViewableInsets.h"
 
 namespace glyphBitmap {
 struct Frame;
@@ -36,6 +38,8 @@ class GfxRenderer {
   };
 
  private:
+  gfx::ViewableInsets calibratedInsets;
+  bool hasCalibratedInsets = false;
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
 
   HalDisplay& display;
@@ -58,6 +62,15 @@ class GfxRenderer {
   // Same, for the reader's Ligatures switch.
   int ligaturesOffFontId = NO_FONT;
   bool ligates(const int fontId) const { return fontId != ligaturesOffFontId; }
+  // The reader's Character Spacing: extra space between that font's letters, in 12.4
+  // fixed point (16 = one pixel), negative to tighten. Every other font draws as designed.
+  int trackingFontId = NO_FONT;
+  int trackingFP = 0;
+  int trackingFor(const int fontId) const { return fontId == trackingFontId ? trackingFP : 0; }
+  // Pixels the first `steps` letter gaps add at stepFP each. drawText advances by the
+  // difference between consecutive counts, so a fractional step lands as whole pixels
+  // spread along the word, and a word measures exactly what it draws.
+  static int spacingPixels(const int steps, const int stepFP) { return fp4::toPixel(steps * stepFP); }
   // Mutable because ensureSdCardFontReady() is const (called from layout code
   // that holds a const GfxRenderer&) but triggers SD card reads and heap
   // allocation inside the SdCardFont objects. Same pragmatic compromise as
@@ -106,6 +119,7 @@ class GfxRenderer {
   // appears at the same point size as the surrounding UI text. Populated by the
   // app-level SD font setup when an SD family is loaded. See resolveTextFontId().
   std::map<int, int> fallbackFontMap_;
+  FontVariantProvider fontVariantProvider_;
 
   // If `text` contains a CJK codepoint that `fontId` cannot render and `fontId`
   // has a registered fallback, returns the fallback id; otherwise returns
@@ -124,8 +138,6 @@ class GfxRenderer {
   // fonts.
   void ensureSdGlyphsResident(int fontId, const char* text, EpdFontFamily::Style style, bool metadataOnly) const;
 
-  void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
-                  EpdFontFamily::Style style) const;
   void freeBwBufferChunks();
   template <Color color>
   void fillArc(int maxRadius, int cx, int cy, int xDir, int yDir) const;
@@ -149,7 +161,7 @@ class GfxRenderer {
   // Bezel-covered edge insets come from the running board profile
   // (BoardConfig::ACTIVE.viewableInsets), so a board whose bezel covers less than
   // the X4's keeps its chrome flush with the screen edge. See
-  // getOrientedViewableTRBL().
+  // getOrientedViewableTRBL(). Screen Calibration can override them per device.
 
   // Setup
   void begin();  // must be called right after display.begin()
@@ -188,11 +200,24 @@ class GfxRenderer {
   // setFallbackFont maps a primary UI font id to an SD font id of the same size.
   void setFallbackFont(int primaryFontId, int fallbackFontId) { fallbackFontMap_[primaryFontId] = fallbackFontId; }
   void clearFallbackFonts() { fallbackFontMap_.clear(); }
+
+  void setFontVariantProvider(const FontVariantProvider& provider) { fontVariantProvider_ = provider; }
+  int resolveFontVariant(const int fontId, const float scale) const {
+    return fontVariantProvider_.resolveFont(fontId, scale);
+  }
+  // True when fontId is registered, loading it through the variant provider if needed.
+  bool ensureFontLoaded(const int fontId) const {
+    if (fontMap.count(fontId) != 0) return true;
+    return fontVariantProvider_.load && fontVariantProvider_.load(fontVariantProvider_.ctx, fontId) &&
+           fontMap.count(fontId) != 0;
+  }
   // Ensure SD card font glyph data is loaded for the given text. Called from layout code
   // (which holds a const GfxRenderer&) before measuring word widths. Safe to call on non-SD fonts (no-op).
   // styleMask: bitmask of styles to prepare (bit 0=regular, 1=bold, 2=italic, 3=bold-italic).
   void ensureSdCardFontReady(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F) const;
-  void ensureSdCardFontReady(int fontId, const std::deque<std::string>& words, uint8_t styleMask = 0x0F) const;
+  // includeSmallCaps also prepares the uppercase forms small caps draw with.
+  void ensureSdCardFontReady(int fontId, const std::deque<std::string>& words, uint8_t styleMask = 0x0F,
+                             bool includeSmallCaps = false) const;
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }
@@ -220,6 +245,12 @@ class GfxRenderer {
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
+  // The reader's own calibration, when there is one, stands in for the board's measurements.
+  gfx::ViewableInsets portraitViewableInsets() const;
+  void setViewableInsets(const gfx::ViewableInsets& insets) {
+    calibratedInsets = insets;
+    hasCalibratedInsets = true;
+  }
 
   // Tiled grayscale strip target. While active, drawPixel() and clearScreen()
   // operate on `scratch` (panelWidthBytes * stripRows bytes, holding physical
@@ -302,12 +333,20 @@ class GfxRenderer {
   // marks or SD fallback. 100 is drawText(). y is the top of the scaled ascender box.
   void drawTextScaled(int fontId, int x, int y, const char* text, int percent, bool black = true) const;
   // letterSpacing: extra pixels after every glyph but the last (Word Expansion). Each word
-  // gains letterSpacing * (spacedGlyphCount - 1).
+  // gains letterSpacing * (spacedGlyphCount - 1), on top of the font's Character Spacing.
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                 BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO, int letterSpacing = 0) const;
-  // Glyphs drawText steps between for `text`: ligatures applied, combining marks not counted.
-  int spacedGlyphCount(int fontId, const char* text, EpdFontFamily::Style style) const;
+  // Glyphs drawText steps between for `text`: the one count every letter-spacing width uses.
+  int spacedGlyphCount(int fontId, const char* text, EpdFontFamily::Style style,
+                       BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
+  // Draws one glyph at scale256/256 of its size with its baseline at baselineY (drop caps).
+  // Outlines are bilinearly resampled from the font bitmap, so no larger font is loaded.
+  // Returns the scaled advance in pixels.
+  int drawScaledCodepoint(int fontId, uint32_t cp, EpdFontFamily::Style style, int x, int baselineY,
+                          int scale256) const;
+  // Unscaled metrics for laying out drawScaledCodepoint: advance (12.4 fixed point) and top bearing.
+  bool getCodepointMetrics(int fontId, uint32_t cp, EpdFontFamily::Style style, int32_t& advanceFP, int& top) const;
   int getSpaceWidth(int fontId, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   /// Returns the total inter-word advance: fp4::toPixel(spaceAdvance + kern(leftCp,' ') + kern(' ',rightCp)).
   /// Using a single snap avoids the +/-1 px rounding error that arises when space advance and kern are
@@ -320,6 +359,12 @@ class GfxRenderer {
   void setKerning(const int fontId, const bool on) { kerningOffFontId = on ? NO_FONT : fontId; }
   /// Same for ligatures (fi, fl, ff ...): off draws and measures the letters one by one.
   void setLigatures(const int fontId, const bool on) { ligaturesOffFontId = on ? NO_FONT : fontId; }
+  /// Character Spacing for one font, in half pixels per letter gap (-5..5); 0 clears it.
+  /// Measuring (getTextAdvanceX, getTextWidth) and drawing both honour it.
+  void setCharacterSpacing(const int fontId, const int halfPixels) {
+    trackingFontId = halfPixels != 0 ? fontId : NO_FONT;
+    trackingFP = halfPixels * 8;
+  }
   int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style) const;
   int getFontAscenderSize(int fontId) const;
   /// Distance in pixels from the baseline up to the top of \p codepoint's ink.

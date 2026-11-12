@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Fails if src/ uses calls that keep causing memory or storage bugs:
+#   - bare `new` allocations that can throw (use `new (std::nothrow)` and check for null)
+#   - Serial.print* (use the LOG_* macros)
+#   - direct SdFat / FsFile / SD access (go through lib/hal/HalStorage)
+# Comments and string literals are ignored. To allow a single line, add a
+# `// lint-allow` marker to it. To allow a whole file, list its path in
+# bin/forbidden-calls-allowlist.txt (one path per line, # for comments).
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+ALLOWLIST="bin/forbidden-calls-allowlist.txt"
+allowed() {
+  [[ -f "$ALLOWLIST" ]] && grep -v -E '^\s*(#|$)' "$ALLOWLIST" | grep -qxF "$1"
+}
+
+declare -a RULES=(
+  'bare new allocation (use new (std::nothrow) and check for null)|\bnew\b(?!\s*\(\s*std::nothrow\s*\))\s*(\([^)]*\)\s*)?[A-Za-z_:][A-Za-z0-9_:<>]*\s*[\[({;]'
+  'Serial.print (use LOG_* macros)|(^|[^A-Za-z0-9_])Serial\.print'
+  'direct SdFat/FsFile/SD use (use HalStorage)|\b(SdFat|SdFs|SdExFat|SdFat32|FsFile|SdFile|File32|ExFile)\b|(^|[^A-Za-z0-9_])SD\.|#\s*include\s*[<"]SdFat\.h[>"]'
+)
+
+fail=0
+while IFS= read -r -d '' f; do
+  allowed "$f" && continue
+  # Blank out comments and string/char literals, keep line numbers and lint-allow markers.
+  stripped="$(perl -0777 -pe '
+    s{(//[^\n]*lint-allow[^\n]*)}{"\x01LINTALLOW"}ge;
+    s{//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\\n])*"|'"'"'(?:\\.|[^'"'"'\\\n])*'"'"'}{ my $m=$&; $m=~s/[^\n]//g; $m }gse;
+  ' "$f")"
+  for rule in "${RULES[@]}"; do
+    name="${rule%%|*}"; re="${rule#*|}"
+    while IFS= read -r hit; do
+      [[ -z "$hit" ]] && continue
+      [[ "$hit" == *$'\x01LINTALLOW'* ]] && continue
+      echo "$f:${hit%%:*}: $name"
+      fail=1
+    done < <(printf '%s\n' "$stripped" | grep -nP "$re" || true)
+  done
+done < <(git ls-files -z -- 'src/*.c' 'src/*.cpp' 'src/*.h' 'src/*.hpp')
+
+if [[ $fail -ne 0 ]]; then
+  echo "Forbidden calls found. Fix them, or add '// lint-allow' / an allowlist entry with a reason."
+  exit 1
+fi
+echo "No forbidden calls in src/."

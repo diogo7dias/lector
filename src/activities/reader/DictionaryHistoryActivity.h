@@ -52,7 +52,4 @@ class DictionaryHistoryActivity final : public UiListActivity {
   // One dictionary handle for the whole screen: opening it is the expensive part, and a
   // reader looking up several words in a row would otherwise pay it every time.
   Dictionary dict;
-  bool dictOpenAttempted = false;
-  bool dictOpenOk = false;
-  bool dictNeedsIndex = false;
 };

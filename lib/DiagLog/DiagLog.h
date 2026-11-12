@@ -49,6 +49,8 @@ constexpr uint32_t kRetainSeconds = 2u * 24u * 3600u;
 constexpr uint32_t kClockValidFrom = 1577836800u;
 // Prefix of every entry's first line; retention splits the file on it.
 constexpr const char* kEntryPrefix = "=== ";
+// Kind of the Wi-Fi join checkpoints: the first entries the byte cap drops.
+constexpr const char* kWifiEntryKind = "wifi connect";
 
 // A moment, as the firmware knows it. utc == 0 means the clock is unset.
 struct Clock {
@@ -100,7 +102,9 @@ void beginEntry(const char* kind, const char* fields, Clock now);
 //      file a user is about to send. An entry with no utc, or a `now` that is
 //      unset, cannot be judged and is kept; an entry from the future (the clock
 //      went backward) is not old and is kept. Rule 3 bounds all of those.
-//   3. Oldest entries are dropped until the kept bytes fit in `cap`.
+//   3. Oldest entries are dropped until the kept bytes fit in `cap`, Wi-Fi
+//      checkpoints before any other kind: one connect writes dozens of them,
+//      and they must not push out the crash or failure the file is sent for.
 size_t retain(char* file, size_t len, uint32_t nowUtc, size_t cap);
 
 // --- privacy ---------------------------------------------------------------

@@ -8,6 +8,8 @@
 #include <XteinkDetect.h>
 #include <esp_sleep.h>
 
+#include <algorithm>
+
 // Global HalGPIO instance
 HalGPIO gpio;
 
@@ -188,7 +190,21 @@ void HalGPIO::update() {
 
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
-bool HalGPIO::isDebouncePending() const { return inputMgr.isDebouncePending(); }
+bool HalGPIO::rawInputActive() {
+  if (inputMgr.isPowerButtonPhysicallyPressed()) return true;
+  InputManager::ButtonAdcSample g1{}, g2{};
+  inputMgr.readButtonAdc(g1, g2);
+  // The Xteink ladder idles at the ADC full-scale rail (~4095); every button band sits below 3900.
+  constexpr int kIdleRailMin = 4000;
+  return (g1.raw >= 0 && g1.raw < kIdleRailMin) || (g2.raw >= 0 && g2.raw < kIdleRailMin);
+}
+
+void HalGPIO::readButtonAdc(int& raw1, int& raw2) {
+  InputManager::ButtonAdcSample group1, group2;
+  inputMgr.readButtonAdc(group1, group2);
+  raw1 = group1.raw;
+  raw2 = group2.raw;
+}
 
 bool HalGPIO::isPressed(uint8_t buttonIndex) const { return inputMgr.isPressed(buttonIndex); }
 
@@ -214,8 +230,6 @@ void HalGPIO::suppressTouchContact() { inputMgr.suppressTouchContact(); }
 
 void HalGPIO::setTouchAsleep(const bool asleep) { inputMgr.setTouchAsleep(asleep); }
 
-bool HalGPIO::isTouchAsleep() const { return inputMgr.isTouchAsleep(); }
-
 bool HalGPIO::hasHomeKey() const { return BoardConfig::hasHomeKey(); }
 
 bool HalGPIO::wasHomeKeyTapped() const { return inputMgr.wasHomeKeyTapped(); }
@@ -229,6 +243,21 @@ bool HalGPIO::isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) c
 }
 
 bool HalGPIO::isTouchHeldAt(float& nx, float& ny) const { return inputMgr.isTouchHeldAt(nx, ny); }
+
+bool HalGPIO::getTwoTouchContacts(float& nx1, float& ny1, float& nx2, float& ny2) const {
+  if (!inputMgr.supportsMultiTouch()) return false;
+  const auto snapshot = inputMgr.getTouchSnapshot();
+  if (snapshot.count != 2 || snapshot.reportedCount != 2) return false;
+  const auto& touch = BoardConfig::ACTIVE.touch;
+  const float width = touch.rawMaxX > touch.rawMinX ? touch.rawMaxX - touch.rawMinX : 1;
+  const float height = touch.rawMaxY > touch.rawMinY ? touch.rawMaxY - touch.rawMinY : 1;
+  const auto clamp01 = [](const float v) { return std::clamp(v, 0.0f, 1.0f); };
+  nx1 = clamp01(snapshot.points[0].point.x / width);
+  ny1 = clamp01(snapshot.points[0].point.y / height);
+  nx2 = clamp01(snapshot.points[1].point.x / width);
+  ny2 = clamp01(snapshot.points[1].point.y / height);
+  return true;
+}
 
 unsigned long HalGPIO::lastTouchHeldMs() const { return inputMgr.lastTouchHeldMs(); }
 

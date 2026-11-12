@@ -19,6 +19,15 @@ struct ViewableInsets {
   }
 };
 
+// The most a reader may calibrate any one edge to, in pixels (Settings > Display > Screen
+// Calibration). A stored value past it is treated as no calibration at all.
+inline constexpr int MAX_CALIBRATED_INSET = 32;
+inline constexpr bool validCalibration(const ViewableInsets& insets) {
+  return insets.top >= 0 && insets.top <= MAX_CALIBRATED_INSET && insets.right >= 0 &&
+         insets.right <= MAX_CALIBRATED_INSET && insets.bottom >= 0 && insets.bottom <= MAX_CALIBRATED_INSET &&
+         insets.left >= 0 && insets.left <= MAX_CALIBRATED_INSET;
+}
+
 // Orientation index matching GfxRenderer::Orientation.
 enum class InsetOrientation { Portrait = 0, LandscapeClockwise, PortraitInverted, LandscapeCounterClockwise };
 

@@ -6,9 +6,9 @@
 #include <set>
 
 #include "activities/reader/EpubReaderUtils.h"
-#include "activities/reader/ProgressFile.h"
 #include "util/BookFilingNames.h"
 #include "util/BookProgressFile.h"
+#include "util/ProgressFile.h"
 #include "util/Sortes.h"
 
 std::string bookCacheDirForPath(const std::string& path) { return bookfiling::cacheDirFor(path); }
@@ -54,10 +54,17 @@ TEST_F(SortesTest, EmptyOrUnfinishedLibraryNeverProducesABook) {
   EXPECT_TRUE(selected.empty());
 }
 TEST_F(SortesTest, ScansEveryFolderAndNeverSelectsUnfinishedBooks) {
-  const std::set<std::string> eligible = {"/a.epub", "/books/nested/b.epub", "/read/c.epub", "/z.epub"};
+  const std::set<std::string> eligible = {"/a.epub", "/books/nested/b.epub", "/read/c.epub", "/z.epub",
+                                          "/books/fonts/c2.epub"};
   for (const auto& path : eligible) book(path, 100);
   book("/read/unfinished.epub", 20);
   book("/.crosspoint/ignored.epub", 100);
+  book("/System Volume Information/ignored.epub", 100);
+  book("/books/XTCache/ignored.epub", 100);
+  book("/fonts/ignored.epub", 100);
+  book("/Sleep/ignored.epub", 100);
+  book("/sleep pause/ignored.epub", 100);
+  book("/books/fonts/c2.epub", 100);  // only root-level folders are skipped
   std::set<std::string> seen;
   for (int i = 0; i < 100; ++i) {
     seed = static_cast<uint32_t>(i);
@@ -144,7 +151,17 @@ TEST(SortesRandom, RejectsBiasedTailAndReturnsRealPageIndices) {
 // The hardware activity cannot run on the host. Check that it actually passes the
 // tested mode into the production writer and doesn't reach the exit/history sinks.
 TEST(SortesWiring, EntryExitSleepAndMenuWritesAreGated) {
-  const auto source = bytes(std::string(SORTES_REPO) + "/src/activities/reader/EpubReaderActivity.cpp");
+  // The class is split across EpubReaderActivity*.cpp; onExit stays in the first file.
+  const std::filesystem::path dir = std::string(SORTES_REPO) + "/src/activities/reader";
+  std::set<std::filesystem::path> parts;
+  for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+    const auto name = entry.path().filename().string();
+    if (name.rfind("EpubReaderActivity", 0) == 0 && entry.path().extension() == ".cpp") parts.insert(entry.path());
+  }
+  ASSERT_GT(parts.size(), 1u);
+  std::string source = bytes(dir / "EpubReaderActivity.cpp");
+  for (const auto& part : parts)
+    if (part.filename() != "EpubReaderActivity.cpp") source += bytes(part);
   EXPECT_NE(source.find("pageCount, offset, sortesMode)"), std::string::npos);
   EXPECT_NE(source.find("if (!sortesMode && SETTINGS.removeReadBooksFromRecents)"), std::string::npos);
   const auto exit = source.substr(source.find("void EpubReaderActivity::onExit()"));

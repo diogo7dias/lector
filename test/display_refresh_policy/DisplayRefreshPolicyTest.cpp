@@ -286,3 +286,29 @@ TEST(DisplayRefreshPolicy, ResetClearsTheReloadCadence) {
   policy.reset();
   EXPECT_TRUE(policy.useTurbo(true));
 }
+
+// ── Cleans the caller asked for ─────────────────────────────────────────────
+//
+// A reader on Refresh Frequency 1 asks for a Clean on every page and never sends a FAST,
+// so the budget only the FASTs spent never reached the FULL it exists to schedule.
+
+TEST(DisplayRefreshPolicy, AnExplicitCleanSpendsTheFullRefreshBudget) {
+  DisplayRefreshPolicy policy;
+  policy.choose(Mode::Clean);
+  policy.choose(Mode::Clean);
+  EXPECT_EQ(policy.fastSinceFull(), 2);
+}
+
+TEST(DisplayRefreshPolicy, CleansAloneLeaveTheNextFastToEarnAFull) {
+  DisplayRefreshPolicy policy;
+  for (uint8_t i = 0; i < DisplayRefreshPolicy::MAX_FAST_BEFORE_FULL; ++i) policy.choose(Mode::Clean);
+  EXPECT_EQ(policy.choose(Mode::Fast), Mode::Full);
+}
+
+TEST(DisplayRefreshPolicy, APromotedCleanIsNotCountedTwice) {
+  DisplayRefreshPolicy policy;
+  for (uint8_t i = 0; i < DisplayRefreshPolicy::MAX_CONSECUTIVE_FAST; ++i) policy.choose(Mode::Fast);
+  const uint8_t before = policy.fastSinceFull();
+  EXPECT_EQ(policy.choose(Mode::Fast), Mode::Clean);
+  EXPECT_EQ(policy.fastSinceFull(), before);
+}

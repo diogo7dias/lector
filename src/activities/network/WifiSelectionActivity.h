@@ -79,6 +79,7 @@ class WifiSelectionActivity final : public UiStatusActivity {
 
   // Whether to attempt auto-connect on entry
   const bool allowAutoConnect;
+  const bool autoOnly;
 
   // Which network to try, how long to wait, what to remember. Everything this
   // screen decides lives here; the activity only works the radio and the panel.
@@ -130,8 +131,12 @@ class WifiSelectionActivity final : public UiStatusActivity {
   void onComplete(bool connected);
 
  public:
-  explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool autoConnect = false)
-      : UiStatusActivity(activity_name::kWifiSelection, renderer, mappedInput), allowAutoConnect(autoConnect) {}
+  // autoOnly: join a saved network or finish unconnected, never showing the list.
+  explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool autoConnect = false,
+                                 bool autoOnly = false)
+      : UiStatusActivity(activity_name::kWifiSelection, renderer, mappedInput),
+        allowAutoConnect(autoConnect || autoOnly),
+        autoOnly(autoOnly) {}
   void onEnter() override;
   void onExit() override;
 

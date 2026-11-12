@@ -8,6 +8,12 @@
 // (EPUB, XTC, or TXT). Does nothing for other file types.
 void clearBookCache(const std::string& path);
 
+// Deletes a book the reader was holding: the file, its cache directory (keyed on the
+// path, so nothing would ever open it again), its Recents entry, and the resume pointer
+// if it named this book. Call only after every handle on the file is released.
+// Returns false, changing nothing else, when the file could not be removed.
+bool deleteOpenedBook(const std::string& path);
+
 // Returns true if the directory name matches a book cache entry.
 bool isBookCacheDirectoryName(const char* name);
 

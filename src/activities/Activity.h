@@ -59,6 +59,9 @@ class Activity {
   virtual bool appliesNightMode() const { return false; }
   // Returns true when the activity schedules its own forced refresh.
   virtual bool handleForcedRefresh() { return false; }
+  // A child screen just closed over this one. Readers clean the next paint so the child
+  // (menu, keyboard, popup) does not stay ghosted under the page.
+  virtual void onRevealed() {}
 
   // Turn the screen. False means this screen does not own an orientation, and the host
   // persists the setting instead: only the readers lay out against it, so everywhere else
@@ -97,11 +100,6 @@ class Activity {
   // re-sort what it drew: Last Read reads a key per book off the card.
   virtual void onBookOrderChanged() {}
   virtual bool isHomeActivity() const { return false; }
-  // The Home gesture (the capacitive Home key, or a bottom-edge up-swipe on boards
-  // without one) pops to Home from anywhere. An activity that must do something
-  // else first — save, confirm, leave a sub-mode — overrides this and returns true
-  // to keep the pop from happening.
-  virtual bool handleHomeGesture() { return false; }
   virtual ScreenshotInfo getScreenshotInfo() const { return {}; }
 
   // Start a new activity without destroying the current one
@@ -114,8 +112,7 @@ class Activity {
   // Finish this activity and return to the previous one on the stack (if any)
   void finish();
 
-  // Convenience method to facilitate API transition to ActivityManager
-  // TODO: remove this in near future
+  // Shorthands for the two jumps most activities make.
   void onGoHome(HomeMenuItem item = HomeMenuItem::NONE);
   void onSelectBook(const std::string& path);
 };

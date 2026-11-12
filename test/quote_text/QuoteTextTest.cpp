@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "GrowthBounds.h"
-#include "QuoteText.h"
+#include "util/QuoteText.h"
 
 using namespace quote_text;
 

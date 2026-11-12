@@ -47,6 +47,10 @@ class HalClock {
   // NTP sync has set since the last power-off.
   bool hasDate() const;
 
+  // Minutes since local midnight (0-1439). Takes the same offset and zone as formatTime.
+  // Returns false if RTC is not available.
+  bool localMinutes(uint16_t& minutes, uint8_t utcOffsetQuarterHoursBiased = 48, uint8_t zone = 0) const;
+
   // Format time into a caller-provided buffer.
   // 24h mode produces "HH:MM" (needs >=6 bytes); 12h mode produces "H:MM AM"/"HH:MM PM" (needs >=9 bytes).
   // utcOffsetQuarterHoursBiased: biased quarter-hour offset (48 = UTC+0, 0 = UTC-12, 104 = UTC+14).

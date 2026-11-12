@@ -51,6 +51,11 @@ DisplayRefreshPolicy::Mode DisplayRefreshPolicy::choose(const Mode requested, co
     addDebt(inkScore);
   } else {
     consecutiveFast_ = 0;
+    // A Clean the caller asked for is a pass like any other that does not discharge the
+    // panel, so it spends the same budget. Without this, a reader who asks for a clean
+    // every page (Refresh Frequency 1) never advances towards the FULL a FAST would earn.
+    // A Clean promoted out of a FAST is not counted: the FAST it replaced never ran.
+    if (requested == Mode::Clean && fastSinceFull_ < MAX_FAST_BEFORE_FULL) ++fastSinceFull_;
     if (chosen == Mode::Full) {
       fastSinceFull_ = 0;
       // A full waveform discharges the panel: nothing is left owing.

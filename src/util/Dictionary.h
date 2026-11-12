@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,33 @@ struct DictLocation {
   // Set when the search was cut short by an .idx open or seek failure rather than
   // reaching a verdict, so a failed search isn't reported as a genuine miss.
   bool readError = false;
+};
+
+// Every definition one word maps to: a headword listed once per part of speech, or a .syn
+// pointing at several headwords. Fixed size so a lookup never grows a container on the heap;
+// entries past either limit are left out.
+class DictEntryList {
+ public:
+  void clear() { count = namesUsed = 0; }
+  // Skips empty entries and a .dict range already held: the same range is the same definition.
+  void add(const char* headword, uint32_t offset, uint32_t size);
+  bool empty() const { return count == 0; }
+  size_t size() const { return count; }
+  DictLocation location(size_t index) const;
+  const char* headword(size_t index) const { return names + entries[index].nameAt; }
+
+ private:
+  static constexpr size_t MAX_ENTRIES = 64;
+  static constexpr size_t NAME_BYTES = 1024;
+  struct Entry {
+    uint32_t offset;
+    uint32_t size;
+    uint16_t nameAt;
+  };
+  Entry entries[MAX_ENTRIES] = {};
+  char names[NAME_BYTES] = {};
+  size_t count = 0;
+  size_t namesUsed = 0;
 };
 
 // Slim StarDict reader: exact-match lookup with a synonym and mini stemming
@@ -48,12 +76,25 @@ class Dictionary {
   bool open(const char* folderName);
   bool isOpen() const { return !basePath.empty(); }
 
+  // How far this object has got towards answering a lookup.
+  enum class Readiness : uint8_t {
+    Unopened,
+    Unavailable,  // open() failed; stays failed for this object's life
+    NeedsIndex,   // open, but buildIndex() must succeed first
+    Ready,
+  };
+
+  // open() and needsIndex() once, then the remembered answer: needsIndex() validates a
+  // sidecar on the card, too slow to repeat per word. Only buildIndex() moves it on, and
+  // a failed build stays at NeedsIndex so the next lookup retries.
+  Readiness prepare(const char* folderName);
+
   // True when the .qidx sidecar (or the .sidx sidecar of a present .syn) is
   // missing or stale — call buildIndex() first so the UI can show an
   // "Indexing…" message for the slow first pass.
 
-  // True when the .ifo declares sametypesequence=h — definitions are HTML and
-  // the viewer may lay them out through the EPUB rendering pipeline.
+  // True when the .ifo declares sametypesequence=h, or tags each entry's fields with their type
+  // (decoded to HTML here): the viewer may lay definitions out through the EPUB pipeline.
   bool definitionsAreHtml() const { return htmlDefinitions; }
 
   bool needsIndex();
@@ -69,16 +110,18 @@ class Dictionary {
 
   // One streaming pass over .idx writing the .qidx sidecar, plus a pass over
   // .syn writing the .sidx sidecar when a synonym file is present. Each sidecar
-  // is rebuilt only when actually stale. yieldFn (optional) is called every
-  // ~64KB consumed to feed the watchdog / repaint the UI. *outResult (if
+  // is rebuilt only when actually stale. Yields to the scheduler every ~64KB
+  // consumed: a build runs long enough to starve the watchdog. *outResult (if
   // provided) reports why a failed build failed; only the mandatory .idx pass
   // can fail the build (a failed .syn pass just disables synonyms).
-  bool buildIndex(void (*yieldFn)(void*) = nullptr, void* ctx = nullptr, IndexResult* outResult = nullptr);
+  bool buildIndex(IndexResult* outResult = nullptr);
 
   // Clean the word, look it up, and on a miss retry dictionary-authored
   // synonyms then mini stem variants (-'s/-s/-es/-ies/-ed/-ing). On a hit fills
   // the definition text (capped at MAX_DEFINITION_BYTES) and the headword as
-  // stored in the index. Returns true on a hit. *outResult (if provided)
+  // stored in the index. Several entries for the word are combined, each under its
+  // own headword; if they came from a .syn, the headword out is the cleaned word.
+  // Returns true on a hit. *outResult (if provided)
   // reports the precise outcome so the UI can distinguish a genuine miss from a
   // decompression / low-memory / read failure.
   bool lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
@@ -126,11 +169,14 @@ class Dictionary {
     uint32_t entryCount = 0;   // .idx entries the sidecar was built over; 0 = unknown
     uint32_t synSize = 0;
     uint32_t synSampleCount = 0;
-    bool synOpened = false;  // openSynonyms() has run (success or failure)
-    // A .syn exists but couldn't be searched (open failure, or no usable .sidx),
-    // so a miss is an unfinished search rather than a verdict. Distinct from
-    // "this dictionary has no .syn", which is a legitimate miss.
-    bool synFailed = false;
+    // openSynonyms() decides this once per lookup session.
+    enum class SynonymIndex : uint8_t {
+      Unopened,
+      Absent,  // this dictionary has no .syn: a miss is a verdict
+      Failed,  // a .syn exists but couldn't be searched: a miss is an unfinished search
+      Ready,
+    };
+    SynonymIndex synonyms = SynonymIndex::Unopened;
   };
 
   // Open .idx (required) and .qidx (optional — locate() falls back to a full
@@ -140,33 +186,35 @@ class Dictionary {
   // Open .syn / .sidx into the session on first use. Idempotent; returns false
   // when there is no usable synonym index — either because no .syn exists, or
   // because it couldn't be opened / its .sidx is unusable, which sets
-  // session.synFailed and releases both handles (an unindexed .syn is never
+  // session.synonyms to Failed and releases both handles (an unindexed .syn is never
   // scanned linearly).
   bool openSynonyms(LookupSession& session);
 
   // Bisect a sampled-offset sidecar (.qidx over .idx, .sidx over .syn) to the
-  // byte offset of the last sampled entry whose word is <= target, so the caller
-  // only has to linear-scan at most SAMPLE_INTERVAL entries from there. Returns
+  // byte offset of the last sampled entry whose word is below target, so the caller's scan
+  // starts before a run of entries sharing the word and sees all of them. Returns
   // 0 — scan source from the start — when sampleCount is 0 or a sample is
   // unreadable. Clobbers wordBuf.
   uint32_t bisectSamples(HalFile& sidecar, HalFile& source, uint32_t sampleCount, const char* target);
 
-  DictLocation locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut);
+  // Add every .idx entry for target to out. False when the search failed before a verdict.
+  bool locateAll(LookupSession& session, const char* target, DictEntryList& out);
 
   // Resolve an ordinal (the N-th .idx entry, 0-based) to its .dict location via
-  // the .qidx samples. Used to follow a .syn synonym back to its headword.
-  DictLocation locateByOrdinal(LookupSession& session, uint32_t ordinal, std::string* matchedHeadwordOut);
+  // the .qidx samples, leaving its headword in wordBuf. Used to follow a .syn
+  // synonym back to its headword.
+  DictLocation locateByOrdinal(LookupSession& session, uint32_t ordinal);
 
-  // Bisect the .syn/.sidx synonym index for target; on a hit follow its ordinal
-  // through locateByOrdinal(). Returns not-found when no .syn exists.
-  DictLocation locateSynonym(LookupSession& session, const char* target, std::string* matchedHeadwordOut);
+  // Bisect the .syn/.sidx synonym index for target and add the entry behind each hit to out.
+  // False when the search failed before a verdict; no .syn at all is a verdict.
+  bool locateSynonyms(LookupSession& session, const char* target, DictEntryList& out);
 
   // One streaming pass over sourcePath writing a sampled-offset sidecar. Each
   // source entry is a NUL-terminated word followed by suffixBytes fixed bytes
   // (8 for .idx: offset+size; 4 for .syn: ordinal). magic tags the sidecar.
   // *outResult (if provided) reports why a failed pass failed.
   bool buildSidecar(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic, uint32_t suffixBytes,
-                    void (*yieldFn)(void*), void* ctx, IndexResult* outResult);
+                    IndexResult* outResult);
 
   // True when sidecarPath must be (re)built from sourcePath: missing/unreadable/
   // wrong-version sidecar, or a source-size mismatch. Shared by needsIndex() and
@@ -175,7 +223,13 @@ class Dictionary {
 
   // Read the definition at location. On failure returns false and, if outResult
   // is given, sets it to the specific reason (Decompress / LowMemory / ReadError).
-  bool readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult = nullptr);
+  // With append, the definition follows what out already holds.
+  bool readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult = nullptr,
+                      bool append = false);
+
+  // Read every entry of a list into out, each under its headword. Entries that do not fit
+  // MAX_DEFINITION_BYTES are left out.
+  bool readCombined(const DictEntryList& list, std::string& out, LookupResult* outResult);
   static void stemVariants(const std::string& word, std::vector<std::string>& out);
 
   // Read a null-terminated word from an open file into buf (max bufSize-1
@@ -184,9 +238,15 @@ class Dictionary {
   static int readWordInto(HalFile& file, char* buf, size_t bufSize);
 
   std::string basePath;  // "/dictionaries/<folder>/<stem>", empty when not open
+  Readiness readiness = Readiness::Unopened;
   bool hasPlainDict = false;
   bool hasSyn = false;  // a <stem>.syn synonym index exists next to the .idx
   bool htmlDefinitions = false;
+  bool inlineTypes = false;  // the .ifo has no sametypesequence: entries tag their own fields
+
+  // About 1.8 KB, too big for the stack. Allocated on the first lookup and kept, so it cannot
+  // leave a hole under the definition buffer that outlives it.
+  std::unique_ptr<DictEntryList> entryList;
 
   // Shared scan buffer: lookups are single-threaded and this avoids a
   // 256-byte array on the stack of every locate() call.

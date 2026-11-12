@@ -73,6 +73,21 @@ inline bool hasTxtExtension(const String& fileName) {
 // Check for .md extension (case-insensitive)
 bool hasMarkdownExtension(std::string_view fileName);
 
+// A book the text reader opens: .txt, or .md (there is no markdown reader).
+bool hasTextBookExtension(std::string_view fileName);
+
+// Any file the reader opens as a book: EPUB, XTC or text.
+bool hasBookExtension(std::string_view fileName);
+
+// A folder the OS or another reader writes on the card ("System Volume Information",
+// "XTCache"): never a book folder, and never listed or walked.
+bool isSystemFolderName(std::string_view name);
+
+// A visible root-level folder that holds Lector's own files (fonts, sleep wallpapers,
+// dictionaries, stats, perf logs), never books. Library walks skip it at the card root
+// (case-insensitive); the file browser still lists it.
+bool isLibrarySkippedRootFolder(std::string_view name);
+
 // Check for .css extension (case-insensitive)
 bool hasCssExtension(std::string_view fileName);
 inline bool hasCssExtension(const String& fileName) {

@@ -26,3 +26,10 @@ TEST(ViewableInsetsTest, ABoardWithoutATopCropStaysFlush) {
   EXPECT_EQ(orientInsets(kX3, InsetOrientation::PortraitInverted).bottom, 0);
   EXPECT_EQ(orientInsets(kX3, InsetOrientation::LandscapeCounterClockwise).left, 0);
 }
+
+TEST(ViewableInsetsTest, CalibrationStaysInItsRange) {
+  EXPECT_TRUE(gfx::validCalibration({0, 0, 0, 0}));
+  EXPECT_TRUE(gfx::validCalibration({32, 32, 32, 32}));
+  EXPECT_FALSE(gfx::validCalibration({33, 0, 0, 0}));
+  EXPECT_FALSE(gfx::validCalibration({0, 0, 0, 255}));
+}

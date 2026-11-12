@@ -124,7 +124,8 @@ void BmpViewerActivity::onEnter() {
       // drawHints(), not a private label set: a .png sitting in a sleep folder must
       // offer the same favourite/pause/delete triage a .bmp or .pxc does there.
       drawHints();
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      // HALF: the image replaces the loading popup, the list or the previous image.
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     } else {
       GUI.drawHelpText(renderer, Rect{0, pageHeight / 2, renderer.getScreenWidth(), lineHeightForHelp(renderer)},
                        tr(STR_FILE_OPEN_FAILED));
@@ -142,6 +143,8 @@ void BmpViewerActivity::onEnter() {
 
     // 2. Parse headers to get dimensions
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+      // Shrink while decoding, as the sleep screen does, so a wallpaper previews the way it sleeps.
+      bitmap.ditherToFit(pageWidth, pageHeight);
       int x, y;
 
       if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > pageHeight) {
@@ -172,12 +175,10 @@ void BmpViewerActivity::onEnter() {
 
       // Draw UI hints on the base layer
       drawHints();
-      // Single pass for non-grayscale images
-
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      // Single HALF pass for non-grayscale images, for the same reason as the PNG branch.
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 
     } else {
-      // Handle file parsing error
       renderer.clearScreen();
       GUI.drawHelpText(renderer, Rect{0, pageHeight / 2, renderer.getScreenWidth(), lineHeightForHelp(renderer)},
                        tr(STR_INVALID_BMP_FILE));
@@ -188,7 +189,6 @@ void BmpViewerActivity::onEnter() {
 
     file.close();
   } else {
-    // Handle file open error
     renderer.clearScreen();
     GUI.drawHelpText(renderer, Rect{0, pageHeight / 2, renderer.getScreenWidth(), lineHeightForHelp(renderer)},
                      tr(STR_FILE_OPEN_FAILED));

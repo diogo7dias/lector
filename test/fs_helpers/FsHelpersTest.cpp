@@ -36,6 +36,7 @@ TEST(FsHelpers, PartialFilesAreInvisibleToEveryBookScanner) {
   EXPECT_FALSE(FsHelpers::hasXtcExtension(partial));
   EXPECT_FALSE(FsHelpers::hasTxtExtension(partial));
   EXPECT_FALSE(FsHelpers::hasMarkdownExtension(partial));
+  EXPECT_FALSE(FsHelpers::hasBookExtension(partial));
   EXPECT_FALSE(FsHelpers::hasBmpExtension(partial));
   EXPECT_FALSE(FsHelpers::hasPngExtension(partial));
   EXPECT_FALSE(FsHelpers::checkFileExtension(partial, ".cpfont"));
@@ -45,6 +46,19 @@ TEST(FsHelpers, PartialFilesAreInvisibleToEveryBookScanner) {
   const std::string facePartial = FsHelpers::partialPathFor("/.fonts/Literata/Literata_14.cpfont");
   EXPECT_TRUE(FsHelpers::hasPartialExtension(std::string_view{facePartial}));
   EXPECT_FALSE(FsHelpers::checkFileExtension(std::string_view{facePartial}, ".cpfont"));
+}
+
+// .md has no reader of its own: every caller that asks "is this a text book" must say
+// yes for it, or the sleep cover and the title quietly treat it as unknown.
+TEST(FsHelpers, MarkdownIsATextBookAndImagesAreNotBooks) {
+  EXPECT_TRUE(FsHelpers::hasTextBookExtension(std::string_view{"/notes/Plan.MD"}));
+  EXPECT_TRUE(FsHelpers::hasTextBookExtension(std::string_view{"/a.txt"}));
+  EXPECT_FALSE(FsHelpers::hasTextBookExtension(std::string_view{"/a.epub"}));
+  EXPECT_TRUE(FsHelpers::hasBookExtension(std::string_view{"/a.md"}));
+  EXPECT_TRUE(FsHelpers::hasBookExtension(std::string_view{"/a.xtch"}));
+  EXPECT_TRUE(FsHelpers::hasBookExtension(std::string_view{"/a.epub"}));
+  EXPECT_FALSE(FsHelpers::hasBookExtension(std::string_view{"/a.bmp"}));
+  EXPECT_FALSE(FsHelpers::hasBookExtension(std::string_view{"/a.png"}));
 }
 
 TEST(FsHelpers, PartialNamesRoundTripBackToTheRealOne) {
@@ -109,4 +123,22 @@ TEST(FsHelpers, SanitizeDoesNotSplitLetterAtBufferLimit) {
   // Each letter is 2 bytes; 7 bytes of room hold "Жиз" and half of "н".
   EXPECT_EQ(sanitize("Жизнь", 8), "Жиз");
   EXPECT_EQ(sanitize(kLongTitle), "Богиня-глюкозы.-Нормализуйте-уров");
+}
+
+TEST(FsHelpersTest, SystemFolderNamesAreExact) {
+  EXPECT_TRUE(FsHelpers::isSystemFolderName("System Volume Information"));
+  EXPECT_TRUE(FsHelpers::isSystemFolderName("XTCache"));
+  EXPECT_FALSE(FsHelpers::isSystemFolderName("system volume information"));
+  EXPECT_FALSE(FsHelpers::isSystemFolderName("XTCache2"));
+  EXPECT_FALSE(FsHelpers::isSystemFolderName("books"));
+}
+
+TEST(FsHelpersTest, LibrarySkippedRootFoldersAreCaseInsensitiveAndExact) {
+  for (const char* name :
+       {"fonts", "Fonts", "SLEEP", "sleep pause", "sleep-overlay", "dictionaries", "plugins", "stats", "perf"}) {
+    EXPECT_TRUE(FsHelpers::isLibrarySkippedRootFolder(name)) << name;
+  }
+  for (const char* name : {"books", "fonts2", "my fonts", "read", "recents", ""}) {
+    EXPECT_FALSE(FsHelpers::isLibrarySkippedRootFolder(name)) << name;
+  }
 }

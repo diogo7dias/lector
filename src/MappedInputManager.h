@@ -93,16 +93,9 @@ class MappedInputManager {
   void spendTouchContact();
   bool isScreenTouchHeld(int& x, int& y) const;
   bool wasScreenLongPress(int& x, int& y) const;
+  // Two fingers on the panel, in logical (oriented) coordinates.
+  bool getTwoFingerTouch(int& x1, int& y1, int& x2, int& y2) const;
   bool wasScreenTouchReleased() const;
-  // Combined touch interaction for a band of equal rows with caller-supplied
-  // geometry — the shared hit-test for lists the theme helpers above do not
-  // cover (custom row heights, option prompts, menus). Down = a held
-  // tap-candidate is on a row (update the selection highlight); Tap = a tap
-  // released on one (activate). rowHeight limits the hit to the top rowHeight
-  // px of each step (0 = the full step, no gap band).
-  enum class RowTouch : uint8_t { None, Down, Tap };
-  RowTouch rowTouch(int& row, int top, int rowStep, int rowCount, int xStart = 0, int xEnd = INT32_MAX,
-                    int rowHeight = 0) const;
   SwipeDir wasSwipe() const;
   bool wasHomeGesture() const;
   bool wasBottomEdgeUpSwipe() const;
@@ -216,12 +209,13 @@ class MappedInputManager {
   // with no time limit at all. -1 = not armed.
   mutable int menuDragStartX_ = -1;
   mutable int menuDragStartY_ = -1;
-  mutable bool menuDragFired_ = false;
-  // True while a contact is live. The start point is taken on the pass this turns true,
-  // which is the only way to catch a finger that is already moving: the tap-candidate
-  // query (wasScreenTouchDown) is false for anything past tap slop, so a swipe never
-  // reports a "down" at all.
-  mutable bool menuDragTracking_ = false;
+  // Idle: no contact. Tracking: a contact is live and the drag has not fired. Fired: it
+  // already fired for this contact and stays quiet until the contact lifts. The start point
+  // is taken on the pass Tracking begins, which is the only way to catch a finger that is
+  // already moving: the tap-candidate query (wasScreenTouchDown) is false for anything past
+  // tap slop, so a swipe never reports a "down" at all.
+  enum class MenuDrag : uint8_t { Idle, Tracking, Fired };
+  mutable MenuDrag menuDrag_ = MenuDrag::Idle;
 
   // List scroll drag (see wasListScrollSwipe): the same per-pass tracking, so a slow drag
   // pages a list the way a flick does. One page per contact.

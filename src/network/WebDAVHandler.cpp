@@ -6,12 +6,12 @@
 #include <Memory.h>
 
 #include "CrossPointWebServer.h"
+#include "ProtectedPaths.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "util/BookCacheUtils.h"
 #include "util/TaskWatchdog.h"
 
 namespace {
-constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 
 // RFC 1123 date format helper: "Sun, 06 Nov 1994 08:49:37 GMT"
 // ESP32 doesn't have real-time clock set by default, so we use a fixed epoch date
@@ -193,7 +193,11 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
 
   LOG_DBG("DAV", "PROPFIND %s depth=%d", path.c_str(), depth);
 
-  // Check if path exists
+  if (isProtectedPath(path)) {
+    s.send(403, "text/plain", "Forbidden");
+    return;
+  }
+
   if (!Storage.exists(path.c_str()) && path != "/") {
     s.send(404, "text/plain", "Not Found");
     return;
@@ -244,8 +248,7 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
       file.getName(name, sizeof(name));
       String fileName(name);
 
-      // Skip hidden/protected items
-      const bool shouldHide = isProtectedPath(fileName);
+      const bool shouldHide = protected_paths::isProtectedName(std::string_view{fileName.c_str(), fileName.length()});
 
       if (!shouldHide) {
         String childPath = path;
@@ -445,7 +448,6 @@ void WebDAVHandler::handleDelete(WebServer& s) {
   }
 
   if (file.isDirectory()) {
-    // Check if directory is empty
     HalFile entry = file.openNextFile();
     if (entry) {
       entry.close();
@@ -803,29 +805,7 @@ bool WebDAVHandler::busyWithFetch(WebServer& s, const String& path) const {
 }
 
 bool WebDAVHandler::isProtectedPath(const String& path) {
-  // Check every segment of the path, not just the last one.
-  // This prevents access to e.g. /.hidden/somefile or /System Volume Information/foo
-  int start = 0;
-  while (start < (int)path.length()) {
-    if (path.charAt(start) == '/') {
-      start++;
-      continue;
-    }
-    int end = path.indexOf('/', start);
-    if (end == -1) end = path.length();
-
-    String segment = path.substring(start, end);
-
-    if (segment.startsWith(".")) return true;
-
-    for (const auto* item : HIDDEN_ITEMS) {
-      if (segment.equals(item)) return true;
-    }
-
-    start = end + 1;
-  }
-
-  return false;
+  return protected_paths::isProtectedPath(std::string_view{path.c_str(), path.length()});
 }
 
 int WebDAVHandler::getDepth(WebServer& s) const {

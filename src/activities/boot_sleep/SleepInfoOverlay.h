@@ -21,7 +21,7 @@ void drawSleepInfoOverlay(GfxRenderer& renderer);
 
 // A thin band across the foot of every wallpaper and cover face: the last seven days of
 // reading, from the journal. Read from the card here, once, so the per-pass overlay only draws it; nothing
-// when the clock is unset or no session falls in the week. clearSleepReadingLine() after
+// when showSleepReadingStats is off, the clock is unset or no session falls in the week. clearSleepReadingLine() after
 // the render.
 void prepareSleepReadingLine();
 void clearSleepReadingLine();

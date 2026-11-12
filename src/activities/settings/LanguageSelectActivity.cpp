@@ -32,9 +32,7 @@ int LanguageSelectActivity::listFontId() const { return UBUNTU_10_FONT_ID; }
 
 void LanguageSelectActivity::buildScreen(UiScreen& screen) {
   // The base paints the header and the button hints itself, outside the app.
-  // Built on the render task, one screen at a time; the label pointers are
-  // I18n statics, so the array only holds borrowed strings.
-  static fui::ListItem items[totalItems];
+  // The label pointers are I18n statics, so the array only holds borrowed strings.
   const auto currentLang = static_cast<uint8_t>(I18N.getLanguage());
   for (int i = 0; i < totalItems; ++i) {
     const uint8_t lang = SORTED_LANGUAGE_INDICES[i];

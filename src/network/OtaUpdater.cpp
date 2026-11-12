@@ -88,8 +88,6 @@ const char* OtaUpdater::errorName(const OtaUpdaterError error) {
       return "WRONG_DEVICE_ERROR";
     case INVALID_IMAGE_ERROR:
       return "INVALID_IMAGE_ERROR";
-    case UNSIGNED_ERROR:
-      return "UNSIGNED_ERROR";
   }
   return "?";
 }
@@ -401,16 +399,12 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   }
 
   // Validates the image where it landed, then points otadata at it with the
-  // rollback left disarmed. A lector update must carry the release signature;
-  // "install other firmware" (allowAnyVersion) installs someone else's on purpose.
-  const firmware_flash::Result commitRes = installer.commit(/*requireSignature=*/!allowAnyVersion);
+  // rollback left disarmed.
+  const firmware_flash::Result commitRes = installer.commit();
   if (commitRes != firmware_flash::Result::OK) {
     LOG_ERR("OTA", "commit failed: %s", firmware_flash::resultName(commitRes));
     if (commitRes == firmware_flash::Result::BAD_CHIP) return WRONG_DEVICE_ERROR;
     if (commitRes == firmware_flash::Result::OOM) return OOM_ERROR;
-    if (commitRes == firmware_flash::Result::UNSIGNED || commitRes == firmware_flash::Result::BAD_SIGNATURE) {
-      return UNSIGNED_ERROR;
-    }
     if (commitRes == firmware_flash::Result::BAD_MAGIC || commitRes == firmware_flash::Result::BAD_CHECKSUM ||
         commitRes == firmware_flash::Result::BAD_SHA || commitRes == firmware_flash::Result::BAD_SEGMENTS ||
         commitRes == firmware_flash::Result::BAD_SIZE) {

@@ -17,12 +17,12 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
-#include "ProgressFile.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "XtcReaderChapterSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/ProgressFile.h"
 #include "util/ReadingJournalStore.h"
 #include "util/ReadingPercent.h"
 
@@ -35,7 +35,6 @@ void XtcReaderActivity::onEnter() {
 
   xtc->setupCacheDir();
 
-  // Load saved progress
   loadProgress();
 
   // Save current XTC as last opened book and add to recent books
@@ -44,7 +43,6 @@ void XtcReaderActivity::onEnter() {
   RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor());
   journal.clock.touch(millis());
 
-  // Trigger first update
   requestUpdate();
 }
 
@@ -319,7 +317,6 @@ void XtcReaderActivity::renderPage() {
     pageBufferSize = ((pageWidth + 7) / 8) * pageHeight;
   }
 
-  // Allocate page buffer
   uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(pageBufferSize));
   if (!pageBuffer) {
     LOG_ERR("XTR", "Failed to allocate page buffer (%lu bytes)", pageBufferSize);
@@ -329,7 +326,6 @@ void XtcReaderActivity::renderPage() {
     return;
   }
 
-  // Load page data
   size_t bytesRead = xtc->loadPage(currentPage, pageBuffer, pageBufferSize);
   // A page whose header declares smaller dimensions than the book leaves the tail uninitialized.
   if (bytesRead < pageBufferSize) {
@@ -342,7 +338,6 @@ void XtcReaderActivity::renderPage() {
     return;
   }
 
-  // Clear screen first
   renderer.clearScreen();
 
   // Copy page bitmap using GfxRenderer's drawPixel

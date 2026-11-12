@@ -130,9 +130,6 @@ bool SdFirmwareUpdateActivity::validateFirmware() {
     } else if (vr == firmware_flash::Result::BAD_CHECKSUM) {
       errorMessage = tr(STR_INVALID_FIRMWARE);
       detailMessage = "Corrupt image: checksum mismatch";
-    } else if (vr == firmware_flash::Result::BAD_SIGNATURE) {
-      errorMessage = tr(STR_INVALID_FIRMWARE);
-      detailMessage = "Tampered: signature does not verify";
     } else if (vr == firmware_flash::Result::BAD_SHA) {
       errorMessage = tr(STR_INVALID_FIRMWARE);
       detailMessage = "Corrupt image: SHA256 mismatch";
@@ -155,11 +152,8 @@ void SdFirmwareUpdateActivity::promptConfirmation() {
     RenderLock lock(*this);
     state = State::CONFIRMING;
   }
-  // Show "Update firmware?" with the file path as the body line. Any firmware may come
-  // from the card (stock, upstream, another fork), so an unsigned one is allowed, but
-  // the question says so.
-  std::string heading =
-      firmware_flash::lastImageSigned() ? tr(STR_FIRMWARE_UPDATE_PROMPT) : tr(STR_FIRMWARE_UNSIGNED_PROMPT);
+  // Show "Update firmware?" with the file path as the body line.
+  std::string heading = tr(STR_FIRMWARE_UPDATE_PROMPT);
   // Use the basename only to keep the body short.
   std::string body = firmwarePath;
   const auto pos = body.find_last_of('/');

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Epub/blocks/TextBlock.h>
 #include <SdCardFontManager.h>
 #include <SdCardFontRegistry.h>
 
@@ -90,6 +91,25 @@ class SdCardFontSystem {
   // Leaves the registry PARTIAL: only callers that need the whole family list
   // (the settings UI, FontInstaller) must use ensureDiscovered() instead.
   void ensureFamilyResolved(const char* familyName) const;
+
+  // --- Sized variants of the reader font (CSS font-size, headings, drop caps) ---
+  // Served to the renderer through FontVariantProvider. Variant ids derive from the
+  // reader font id and point size, so ids cached in section files can be reloaded after
+  // eviction or a reboot. Least recently used variants are evicted at the cap below.
+  int resolveVariant(int fontId, float scale);
+  bool loadVariant(int fontId);
+  bool loadCpfontVariant(const SdCardFontFamilyInfo& family, uint8_t pointSize, int fontId);
+  void unloadCpfonts(GfxRenderer& renderer);
+  static int variantFontId(int readerFontId, uint8_t pointSize);
+
+  struct CpfontVariant {
+    int fontId;
+    uint32_t lastUse;
+  };
+  static constexpr size_t MAX_CPFONT_VARIANTS = TextBlock::MAX_WORD_FONTS + 2;  // Inline, block, and drop-cap fonts.
+  std::vector<CpfontVariant> cpfontVariants_;
+  uint32_t variantClock_ = 0;
+  GfxRenderer* renderer_ = nullptr;
 
   mutable SdCardFontRegistry registry_;
   mutable bool discovered_ = false;

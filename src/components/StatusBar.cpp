@@ -102,18 +102,34 @@ void bumpCluster(BarLayout& layout, int src, bool destBandReserved, int bandWidt
 
 }  // namespace
 
+int clipRoom(const BarLayout& layout, int anchor, int bandWidth, int sepW) {
+  const int base = anchor - anchor % 3;
+  const int col = anchor % 3;
+  if (col == 1) {
+    const int l = clusterWidth(layout, base, sepW);
+    const int r = clusterWidth(layout, base + 2, sepW);
+    const int side = (l > r ? l : r);
+    return side > 0 ? bandWidth - 2 * (side + sepW) : bandWidth;
+  }
+  const int centre = clusterWidth(layout, base + 1, sepW);
+  if (centre > 0) return (bandWidth - centre) / 2 - sepW;
+  const int far = clusterWidth(layout, base + 2 - col, sepW);
+  return far > 0 ? bandWidth - far - sepW : bandWidth;
+}
+
 void reflowTitle(BarLayout& layout, int titleAnchor, int titleSegIndex, bool titleTruncate, int bandWidth, int sepW,
-                 bool destBandReserved) {
+                 bool destBandReserved, bool stacked) {
   if (titleAnchor < 0 || titleAnchor >= kAnchorCount) return;
-  if (titleTruncate) return;                    // clipping title never reflows
+  if (titleTruncate && !stacked) return;        // clipping title never reflows
   if (layout.counts[titleAnchor] == 0) return;  // no title placed
 
   // Anything sharing the title's own anchor goes first, and only if the cluster is too
-  // wide for the band: a short title beside a page count is left as it is. The title is
+  // wide for the band or the title is stacked: a short title beside a page count is left
+  // as it is. The title is
   // lifted out, the rest is relocated by the same rule a bumped neighbour follows, and the
   // title is put back alone — which is what returns it to the wrap-or-ellipsis path.
   if (layout.counts[titleAnchor] > 1 && titleSegIndex >= 0 && titleSegIndex < layout.counts[titleAnchor] &&
-      clusterWidth(layout, titleAnchor, sepW) > bandWidth) {
+      (stacked || clusterWidth(layout, titleAnchor, sepW) > bandWidth)) {
     const Seg title = layout.buckets[titleAnchor][titleSegIndex];
     int kept = 0;
     for (int i = 0; i < layout.counts[titleAnchor]; i++) {
@@ -125,6 +141,8 @@ void reflowTitle(BarLayout& layout, int titleAnchor, int titleSegIndex, bool tit
     layout.buckets[titleAnchor][0] = title;
     layout.counts[titleAnchor] = 1;
   }
+
+  if (titleTruncate) return;  // a clipping stack only needed its anchor to itself
 
   const int tband = titleAnchor / 3;
   const int tcol = titleAnchor % 3;

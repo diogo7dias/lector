@@ -220,9 +220,11 @@ const EpdGlyph* TtfSdFont::onGlyphMiss(void* ctx, const uint32_t codepoint) {
   EpdGlyph& e = slot.glyph;
   e.width = static_cast<uint8_t>(g->width);
   e.height = static_cast<uint8_t>(g->height);
-  // 12.4 fixed-point advance: TtfFont scales linearly with the pixel height,
-  // so asking for 16x the height yields the advance in sixteenths of a pixel.
-  e.advanceX = static_cast<uint16_t>(face->ttf.advance(codepoint, static_cast<uint16_t>(face->sizePx * 16), 0));
+  // 12.4 fixed-point advance: TtfFont scales linearly with the pixel height, so 64x the
+  // height yields the advance in 26.6. Truncating that to 12.4 (not rounding at 1/16 px)
+  // leaves the renderer's pixel snap as the only rounding step (upstream #4431).
+  e.advanceX = static_cast<uint16_t>(
+      fp4::truncate26_6_to_4(face->ttf.advance(codepoint, static_cast<uint16_t>(face->sizePx * 64), 0)));
   e.left = g->xoff;
   e.top = static_cast<int16_t>(-g->yoff);
   e.dataLength = static_cast<uint16_t>(bytes);

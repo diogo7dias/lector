@@ -9,6 +9,7 @@
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
+#include <HalScreenCalibration.h>
 #include <HalStorage.h>
 #include <HalSystem.h>
 #include <I18n.h>
@@ -17,8 +18,8 @@
 #include <PerfStats.h>
 #include <SPI.h>
 #include <WiFi.h>
-#include <builtinFonts/all.h>
 #include <esp_random.h>
+#include <esp_sleep.h>
 #include <esp_system.h>
 #include <esp_timer.h>
 
@@ -29,6 +30,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "Diagnostics.h"
+#include "KOReaderAutoSync.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
@@ -36,12 +38,14 @@
 #include "ReaderPresetStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "SilentRestart.h"
 #include "SleepTiming.h"
 #include "UiFont.h"
 #include "WakeTiming.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
-#include "activities/boot_sleep/PxcSleepRenderer.h"
+#include "activities/boot_sleep/SleepActivity.h"
+#include "activities/settings/ReleaseNotesActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "activities/util/LowBatteryNoticeActivity.h"
 #include "components/UITheme.h"
@@ -51,6 +55,7 @@
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WakeFacePolicy.h"
 #include "sleep/WakeSequence.h"
+#include "sleep/WallpaperRefreshPolicy.h"
 #include "util/BookProgressFile.h"
 #include "util/ButtonNavigator.h"
 #include "util/ButtonReplay.h"
@@ -69,146 +74,11 @@ FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts
 // A wake hold must never become an in-app power-button action.  Boot may continue
 // while the button is held; swallow the one release that ends that wake gesture.
 static bool wakePowerReleasePending = false;
-
-// Fonts
-// ChareInk is lector's single built-in reading family (an e-ink tuned Charis derivative).
-// It is compiled in at 14 pt only: its glyph set is far larger than the Vollkorn it
-// replaced, and four sizes would not fit the app partition. Every other size, and every
-// other family, is installed from the SD card. Noto Sans survives only as the 8 pt small
-// font (below) and Ubuntu as the UI font.
-EpdFont chareink14RegularFont(&chareink_14_regular);
-EpdFont chareink14BoldFont(&chareink_14_bold);
-EpdFont chareink14ItalicFont(&chareink_14_italic);
-EpdFont chareink14BoldItalicFont(&chareink_14_bolditalic);
-EpdFontFamily chareink14FontFamily(&chareink14RegularFont, &chareink14BoldFont, &chareink14ItalicFont,
-                                   &chareink14BoldItalicFont);
-
-EpdFont smallFont(&notosans_8_regular);
-EpdFontFamily smallFontFamily(&smallFont);
-
-// The UI families ship REGULAR ONLY, and the regular face fills the family's bold slot
-// so a stray BOLD request resolves to regular instead of nullptr. This is the old-Lector
-// arrangement: menu weight hierarchy comes from SIZE, not from a second cut. Emphasis in
-// the UI, if ever wanted, is the Paperback Look smear (GfxRenderer::setPaperbackLook),
-// which thickens whatever face is loaded and costs no flash.
-
-// Ubuntu UI family — the FULL-coverage fallback (Latin + Arabic + Hebrew + Vietnamese,
-// baked with the extra script intervals). Bound permanently to UBUNTU_10/12_FONT_ID and
-// used for Arabic/Hebrew UI and for the language-picker native-name list.
-EpdFont ubuntu10RegularFont(&ubuntu_10_regular);
-EpdFontFamily ubuntu10FontFamily(&ubuntu10RegularFont, &ubuntu10RegularFont);
-
-EpdFont ubuntu12RegularFont(&ubuntu_12_regular);
-EpdFontFamily ubuntu12FontFamily(&ubuntu12RegularFont, &ubuntu12RegularFont);
-
-EpdFont ubuntu14RegularFont(&ubuntu_14_regular);
-EpdFontFamily ubuntu14FontFamily(&ubuntu14RegularFont, &ubuntu14RegularFont);
-
-// Cozette UI family — lector's default menu font (Latin + Cyrillic + Greek + Vietnamese;
-// no Arabic/Hebrew). Sizes match the previous mature Lector: 10 = SMALL_FONT_ID,
-// 12 = UI_10_FONT_ID (list rows), 14 = UI_12_FONT_ID (header title). Bound for every
-// language except Arabic/Hebrew (which use the Ubuntu family at the same sizes).
-EpdFont cozette10RegularFont(&cozette_10_regular);
-EpdFontFamily cozette10FontFamily(&cozette10RegularFont, &cozette10RegularFont);
-
-EpdFont cozette12RegularFont(&cozette_12_regular);
-EpdFontFamily cozette12FontFamily(&cozette12RegularFont, &cozette12RegularFont);
-
-EpdFont cozette14RegularFont(&cozette_14_regular);
-EpdFontFamily cozette14FontFamily(&cozette14RegularFont, &cozette14RegularFont);
-
-// Cozette cannot draw Arabic or Hebrew, so those two UI languages use the Ubuntu
-// family. Every other language (incl. Cyrillic + Vietnamese, verified in Cozette's
-// cmap) uses Cozette. Called at boot and on every in-app language change (declared
-// in UiFont.h so LanguageSelectActivity can rebind after a change).
-static bool uiLanguageNeedsUbuntu() {
-  const Language lang = I18n::getInstance().getLanguage();
-  return lang == Language::AR || lang == Language::HE;
-}
-
-void bindUiFontsForLanguage(GfxRenderer& renderer) {
-  const bool useUbuntu = uiLanguageNeedsUbuntu();
-  // insertFont() ignores an already-registered id, so drop the old binding first.
-  // Sizes mirror the previous mature Lector (2px larger than the CrossPoint base):
-  // SMALL = 10, UI_10 (list rows) = 12, UI_12 (header title) = 14. Arabic/Hebrew use the
-  // Ubuntu family at the same sizes so their small text renders too (Cozette lacks AR/HE).
-  renderer.removeFont(SMALL_FONT_ID);
-  renderer.removeFont(UI_10_FONT_ID);
-  renderer.removeFont(UI_12_FONT_ID);
-  renderer.insertFont(SMALL_FONT_ID, useUbuntu ? ubuntu10FontFamily : cozette10FontFamily);
-  renderer.insertFont(UI_10_FONT_ID, useUbuntu ? ubuntu12FontFamily : cozette12FontFamily);
-  renderer.insertFont(UI_12_FONT_ID, useUbuntu ? ubuntu14FontFamily : cozette14FontFamily);
-}
-
-// Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
-RTC_NOINIT_ATTR uint32_t silentRebootMagic;
-RTC_NOINIT_ATTR uint32_t silentRebootTarget;
-RTC_NOINIT_ATTR uint32_t silentRebootPayload;
-constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
-constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
-constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
-constexpr uint32_t SILENT_REBOOT_LIGHT_ON = 1U << 0;
-
-// Breadcrumbs for the heap-defrag reboot, in RTC memory because the card is one of the
-// suspects: an X3 that left a WiFi screen sat on "Loading" until Power was held, and
-// nothing said which step it stopped at. The trail names the last step passed; the
-// rescue timer reboots a restart that has not reached its first frame in time, and
-// the next boot writes where it stopped to the diagnostics file.
-RTC_NOINIT_ATTR uint32_t restartTrail;
-RTC_NOINIT_ATTR uint32_t restartRescuedAt;
-constexpr uint32_t RESTART_TRAIL_MAGIC = 0x7EA11000;
-constexpr uint32_t RESTART_TRAIL_MASK = 0xFFFFFF00;
-enum RestartStage : uint8_t {
-  STAGE_ENTERED = 1,
-  STAGE_POPUP_DRAWN,
-  STAGE_STATE_SAVED,
-  STAGE_RESTART_CALLED,
-  STAGE_BOOT_SILENT,
-  STAGE_DISPLAY_UP,
-  STAGE_LOOP_RUNNING,
-};
-constexpr const char* kRestartStageNames[] = {"none",           "entered",       "popup drawn", "state saved",
-                                              "restart called", "boot (silent)", "display up",  "loop running"};
-constexpr uint64_t RESTART_RESCUE_US = 30ULL * 1000 * 1000;
-static esp_timer_handle_t restartRescueTimer = nullptr;
-
-static void markRestartStage(const RestartStage stage) {
-  restartTrail = RESTART_TRAIL_MAGIC | stage;
-  debug_trace::note("restart stage: %s", kRestartStageNames[stage]);
-}
-
-// Decodes a breadcrumb word; 0 when it is cold-boot garbage or cleared.
-static uint8_t restartStageOf(const uint32_t word) {
-  if ((word & RESTART_TRAIL_MASK) != RESTART_TRAIL_MAGIC) return 0;
-  const uint8_t stage = word & 0xFF;
-  return stage <= STAGE_LOOP_RUNNING ? stage : 0;
-}
-
-// esp_timer task context: no card, no display, no mutex. Only the RTC word and a reset.
-// The magic goes too, so the rescue boot is a plain one: if the seamless path is what
-// hangs, a silent rescue would only hang again, every 30 s.
-static void restartRescueFired(void*) {
-  restartRescuedAt = restartTrail;
-  silentRebootMagic = 0;
-  esp_restart();
-}
-
-static void armRestartRescue() {
-  if (!restartRescueTimer) {
-    const esp_timer_create_args_t args = {.callback = restartRescueFired, .name = "rstrescue"};
-    if (esp_timer_create(&args, &restartRescueTimer) != ESP_OK) return;
-  }
-  esp_timer_stop(restartRescueTimer);  // harmless when not running
-  esp_timer_start_once(restartRescueTimer, RESTART_RESCUE_US);
-}
-
-// The restart landed its first frame: the trail has nothing left to say.
-static void finishRestartTrail() {
-  if (restartTrail == 0) return;
-  if (restartRescueTimer) esp_timer_stop(restartRescueTimer);
-  restartTrail = 0;
-  debug_trace::note("restart stage: first frame");
-}
+#if FREEINK_DEVICE_X4PRO
+// Refresh Wallpaper: set when a lock arms the timed second drive, read by the boot it
+// causes. RTC memory, because deep sleep is a chip reset.
+RTC_DATA_ATTR static bool wallpaperRefreshArmed = false;
+#endif
 
 // How the device is coming back to life, resolved once at boot. Both resume
 // flows suppress the splash and leave the panel holding its pre-boot frame; a
@@ -217,64 +87,6 @@ enum class BootResume : uint8_t {
   Splash,  // cold boot, flash, panic, or plain reboot
   Silent,  // heap-defrag ESP.restart() (RTC flag; lost on power loss)
 };
-
-// Latched true once enterDeepSleep() commits to sleeping, before it tears down
-// the current activity. WiFi activities call silentRestart() in onExit() to
-// clear heap fragmentation on the way out, but deep sleep is a full chip reset
-// on wake and already clears the heap, so rebooting here would just power the
-// device back up against the user's sleep gesture. Never cleared:
-// startDeepSleep() does not return, so a set latch only ends at the wakeup reset.
-static bool deepSleepInProgress = false;
-
-// The anti-ghost budget lives in RAM, and every reboot is a reset, so it has to be
-// written down before the device goes away. Deep sleep does this in enterDeepSleep();
-// the heap-defrag reboots below are the other routine way a session ends, and without
-// this a reader who trips one (returning from KOReader sync, leaving a WiFi screen)
-// hands the next session a budget of zero and delays the panel's next discharge.
-void persistAntiGhostBudget() {
-  APP_STATE.fastRefreshesSinceFull = display.fastRefreshesSinceFull();
-  APP_STATE.inkDebt = display.inkDebt();
-  APP_STATE.saveToFile();
-}
-
-// SETTINGS.frontlightOn is the saved preference, not the live state: a wake with
-// Restore Light on Wake off leaves the light dark while "was on" stays saved. The
-// live state rides across the reboot so the light comes back exactly as it was.
-static void armSilentReboot(const uint32_t target) {
-  silentRebootTarget = target;
-  silentRebootPayload = Frontlight.isOn() ? SILENT_REBOOT_LIGHT_ON : 0;
-  silentRebootMagic = SILENT_REBOOT_MAGIC;
-}
-
-static void silentRestartTo(const uint32_t target) {
-  if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
-  armRestartRescue();
-  markRestartStage(STAGE_ENTERED);
-  armSilentReboot(target);
-  LOG_DBG("MAIN", "Silent restart (target=%s)", target == SILENT_REBOOT_TARGET_READER ? "reader" : "home");
-  // E-ink retains the previous frame until Home's first paint lands (~2-3s).
-  // Without an overlay, users don't see the reboot and fire input through to
-  // Home. Select on the default selectorIndex=0 then opens the most-recent
-  // book, looking like a trampoline back to the reader they just exited.
-  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-  markRestartStage(STAGE_POPUP_DRAWN);
-  persistAntiGhostBudget();
-  markRestartStage(STAGE_STATE_SAVED);
-  delay(50);
-  markRestartStage(STAGE_RESTART_CALLED);
-  ESP.restart();
-}
-
-void silentRestart() { silentRestartTo(SILENT_REBOOT_TARGET_HOME); }
-
-void silentRestartToReader() { silentRestartTo(SILENT_REBOOT_TARGET_READER); }
-
-void teardownWifiAndRestart() {
-  if (WiFi.getMode() == WIFI_MODE_NULL) return;  // WiFi never came up: nothing to defrag
-  WiFi.disconnect(false);
-  delay(30);
-  silentRestart();
-}
 
 // Defined below setup()'s helpers.
 static std::string pickRandomRecentBookPath();
@@ -316,9 +128,11 @@ static std::string pickBootBookPath();
 
   // Commit to sleeping before goToSleep() runs the outgoing activity's onExit():
   // a WiFi activity would otherwise silentRestart() here and reboot instead.
-  deepSleepInProgress = true;
+  markDeepSleepCommitted();
   activityManager.goToSleep(fromTimeout);
   sleepTPaint = millis();
+  // Behind the sleep face: the reader's onExit above has saved the position it pushes.
+  ko_auto_sync::onSleep();
 
   sleepTFrame = millis();
 
@@ -373,7 +187,14 @@ static void finishDeepSleep(const unsigned long sleepT0, const unsigned long sle
   // INF, not DBG: a release kit runs at LOG_LEVEL 1 and this is the one line that says
   // what a lock cost.
   LOG_INF("SLP", "Lock %lu ms total (%s panel=%lu)", sleepTPanel - sleepT0, sleepNote, sleepTPanel - sleepTBudget);
-  LOG_DBG("MAIN", "Entering deep sleep");
+#if FREEINK_DEVICE_X4PRO
+  wallpaperRefreshArmed =
+      wallpaper_refresh::shouldArm({SETTINGS.refreshSleepWallpaper != 0, !APP_STATE.lastSleepWallpaperPath.empty(),
+                                    powerManager.getBatteryPercentage()}) &&
+      esp_sleep_enable_timer_wakeup(wallpaper_refresh::DELAY_US) == ESP_OK;
+  if (wallpaperRefreshArmed) LOG_INF("SLP", "Wallpaper refresh armed");
+#endif
+  LOG_INF("MAIN", "Entering deep sleep");
   // Last chance: startDeepSleep() does not return, and the USB-CDC link dies with the
   // chip, so anything still buffered here is lost.
   logFlush();
@@ -425,6 +246,12 @@ bool recoveryChordHeld(const unsigned long inputStartedMs) {
 static void setupDisplay(const bool seamless, const HalGPIO::WakeupReason wakeupReason) {
   display.begin(seamless, wakeupReason);
   renderer.begin();
+  uint8_t calibratedEdges[4];
+  if (HalScreenCalibration::load(calibratedEdges)) {
+    const gfx::ViewableInsets calibrated{calibratedEdges[0], calibratedEdges[1], calibratedEdges[2],
+                                         calibratedEdges[3]};
+    if (gfx::validCalibration(calibrated)) renderer.setViewableInsets(calibrated);
+  }
   // Only this file can put the device down, so the light panel's Sleep button is handed
   // the same entry point every other sleep route uses.
   activityManager.setSleepAction([] { enterDeepSleep(); });
@@ -439,14 +266,7 @@ static void setupBuiltinFonts() {
   fontDecompressor.init();
   fontCacheManager.setFontDecompressor(&fontDecompressor);
   renderer.setFontCacheManager(&fontCacheManager);
-  renderer.insertFont(CHAREINK_14_FONT_ID, chareink14FontFamily);
-  // Permanent Ubuntu ids (full Latin/Arabic/Hebrew/Vietnamese coverage) for the
-  // language-select native-name list and the Arabic/Hebrew UI.
-  renderer.insertFont(UBUNTU_10_FONT_ID, ubuntu10FontFamily);
-  renderer.insertFont(UBUNTU_12_FONT_ID, ubuntu12FontFamily);
-  // Active UI ids (SMALL / UI_10 / UI_12): Cozette by default, Ubuntu for Arabic/Hebrew
-  // (honors the persisted SETTINGS.language already loaded at this point).
-  bindUiFontsForLanguage(renderer);
+  bindBuiltinFonts(renderer);
 }
 
 void setupDisplayAndFonts(const bool seamless, const HalGPIO::WakeupReason wakeupReason) {
@@ -570,25 +390,8 @@ void setup() {
   WakeTiming::mark(WakeTiming::Stage::SysReady);
   const bool rebootedFromPanic = HalSystem::isRebootFromPanic();
 
-  // Read-and-clear so a panic later in setup() doesn't loop into silent reboot.
-  // Bound the target range too — RTC_NOINIT memory is uninitialized on cold boot.
-  const bool isSilentReboot = (silentRebootMagic == SILENT_REBOOT_MAGIC);
-  const uint32_t snapshotTarget =
-      (isSilentReboot && silentRebootTarget <= SILENT_REBOOT_TARGET_READER) ? silentRebootTarget : 0;
-  const bool litBeforeSilentReboot = isSilentReboot && (silentRebootPayload & SILENT_REBOOT_LIGHT_ON) != 0;
-  silentRebootMagic = 0;
-  silentRebootTarget = 0;
-  silentRebootPayload = 0;
-  // Where the last restart stopped, read before the silent boot below overwrites it.
-  const uint8_t trailStage = restartStageOf(restartTrail);
-  const uint8_t rescuedStage = restartStageOf(restartRescuedAt);
-  restartRescuedAt = 0;
-  if (isSilentReboot) {
-    armRestartRescue();
-    restartTrail = RESTART_TRAIL_MAGIC | STAGE_BOOT_SILENT;
-  } else {
-    restartTrail = 0;
-  }
+  const RestartBoot restartBoot = takeRestartBoot();
+  const bool isSilentReboot = restartBoot.silent;
 
 #if FREEINK_DEVICE_X4PRO
   sdMountJoiner = xTaskGetCurrentTaskHandle();
@@ -603,12 +406,6 @@ void setup() {
   powerManager.begin();
   halClock.begin();
   WakeTiming::mark(WakeTiming::Stage::HalReady);
-
-  // Light-sleep through the render task's e-ink BUSY wait (0.3-2 s of pure pin
-  // polling) in short slices, waking exactly on the BUSY pin's completion level
-  // (falls back to plain polling when WiFi/USB blocks light sleep)
-  display.setBusyWaitSliceHook(
-      [](int8_t busyPin, uint8_t busyLevel) { return powerManager.onEinkBusyWaitSlice(busyPin, busyLevel); });
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
@@ -668,10 +465,10 @@ void setup() {
   diag::recordAbnormalBoot();
   // A restart the rescue timer had to finish, or one that ended some other way (Power
   // held, a crash) before its first frame. A clean restart leaves no trail.
-  if (rescuedStage) {
-    diag::recordRestartTrail(kRestartStageNames[rescuedStage], true);
-  } else if (trailStage && !(isSilentReboot && trailStage == STAGE_RESTART_CALLED)) {
-    diag::recordRestartTrail(kRestartStageNames[trailStage], false);
+  if (restartBoot.rescued) {
+    diag::recordRestartTrail(restartBoot.rescuedStage, true);
+  } else if (restartBoot.trailWorthRecording) {
+    diag::recordRestartTrail(restartBoot.trailStage, false);
   }
   diag::flushIfPending();
 
@@ -691,7 +488,9 @@ void setup() {
 
   const uint32_t configStartedMs = millis();
   SETTINGS.loadFromFile();
-  APP_STATE.loadFromFile();
+  // A card that has never held state is a fresh install: nothing on it is new to its
+  // reader, so What's New waits for the next update. The badge seeding below saves it.
+  if (!APP_STATE.loadFromFile()) APP_STATE.releaseNotesSeen = ReleaseNotesActivity::REVISION;
   // Restore the anti-ghost budget the last session spent. Without this the count starts
   // at zero on every wake — and since waking is a chip reset, that is every lock — so a
   // device used in short sessions never reaches the full discharge and ghosts forever.
@@ -722,7 +521,7 @@ void setup() {
   const uint32_t logsStartedMs = millis();
   debug_trace::begin();
   debug_trace::note("boot: reset=%d silent=%d trail=%s rescued=%s", static_cast<int>(esp_reset_reason()),
-                    isSilentReboot ? 1 : 0, kRestartStageNames[trailStage], kRestartStageNames[rescuedStage]);
+                    isSilentReboot ? 1 : 0, restartBoot.trailStage, restartBoot.rescuedStage);
   {
     const DeviceProfile dev = deviceProfileFromHardware();
     startPerfLogSink(dev.isX3 ? "x3" : dev.isX4Pro ? "x4pro" : "x4");
@@ -739,12 +538,46 @@ void setup() {
     LOG_INF("SLP", "Unlock %s", wakeDiag);
   }
 
+#if FREEINK_DEVICE_X4PRO
+  // Refresh Wallpaper: nobody asked for this wake. Draw the lock's wallpaper over itself
+  // and sleep again, before the light, the fonts on the card or any screen come up.
+  // ponytail: a Power click that starts and ends during the repaint is lost and has to
+  // be repeated; catch it with an edge interrupt (upstream #4376) if that proves annoying.
+  {
+    const bool armed = wallpaperRefreshArmed;
+    wallpaperRefreshArmed = false;
+    const bool timerWake = armed && esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER;
+    if (wallpaper_refresh::isRefreshWake(armed, timerWake, timerWake && gpio.verifyPowerButtonWakeup())) {
+      LOG_INF("SLP", "Wallpaper refresh wake");
+      setupDisplay(/*seamless=*/true, HalGPIO::WakeupReason::PowerButton);
+      setupBuiltinFonts();
+      if (!SleepActivity::repaintWallpaper(renderer, mappedInputManager, APP_STATE.lastSleepWallpaperPath)) {
+        LOG_ERR("SLP", "Wallpaper refresh: could not draw %s", APP_STATE.lastSleepWallpaperPath.c_str());
+      }
+      display.deepSleep();
+      LOG_INF("MAIN", "Entering deep sleep");
+      sleepAgain();
+    }
+  }
+#endif
+
   // Brightness and warmth always come back; whether the light itself does is
   // FrontlightBootPolicy's call. Inert on a board without a frontlight.
   SETTINGS.clampFrontlightBrightness();
+  // A clock that does not answer leaves the schedule out rather than guessing.
+  bool scheduledOn = false;
+  uint16_t nowMinutes = 0;
+  if (SETTINGS.frontlightScheduleEnabled != 0 &&
+      halClock.localMinutes(nowMinutes, SETTINGS.clockUtcOffsetQ, SETTINGS.clockTimeZone)) {
+    scheduledOn =
+        frontlight::insideSchedule(SETTINGS.frontlightScheduleOn * frontlight::SCHEDULE_STEP_MINUTES,
+                                   SETTINGS.frontlightScheduleOff * frontlight::SCHEDULE_STEP_MINUTES, nowMinutes);
+    LOG_INF("MAIN", "Light schedule: %02d:%02d local, %s", nowMinutes / 60, nowMinutes % 60,
+            scheduledOn ? "inside" : "outside");
+  }
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth,
                    frontlight::restoreLightOnAtBoot({SETTINGS.frontlightOn != 0, SETTINGS.frontlightRestoreOnWake != 0,
-                                                     isSilentReboot, litBeforeSilentReboot}));
+                                                     isSilentReboot, restartBoot.lightOn, scheduledOn}));
 
   const uint32_t classifyStartedMs = millis();
   const auto wakeupReason = gpio.getWakeupReason();
@@ -791,7 +624,7 @@ void setup() {
   wakeInputs.fastUnlock = SETTINGS.fastUnlock != 0;
 
   setupDisplay(resume != BootResume::Splash || paintedFaceWake, wakeupReason);
-  if (restartTrail) markRestartStage(STAGE_DISPLAY_UP);
+  noteRestartDisplayUp();
   setupBuiltinFonts();
 
   // How the page gets over the painted sleep face; see wake_sequence::clearStrategy.
@@ -903,7 +736,7 @@ void setup() {
   wakeInputs.recoveryFirmwareMode = recoveryFirmwareMode;
   wakeInputs.panic = rebootedFromPanic;
   wakeInputs.silentReboot = resume == BootResume::Silent;
-  wakeInputs.silentTargetIsReader = snapshotTarget == SILENT_REBOOT_TARGET_READER;
+  wakeInputs.silentTarget = restartBoot.target;
   wakeInputs.openEpubPathEmpty = APP_STATE.openEpubPath.empty();
   wakeInputs.lastSleepFromReader = APP_STATE.lastSleepFromReader;
   wakeInputs.backHeld = mappedInputManager.isPressed(MappedInputManager::Button::Back);
@@ -958,6 +791,9 @@ void setup() {
     case wake_sequence::Target::SilentReader:
       enterReader(APP_STATE.openEpubPath, /*withWakeFlags=*/false);
       break;
+    case wake_sequence::Target::SilentSettings:
+      activityManager.goToSettings();
+      break;
     case wake_sequence::Target::SilentHome:
       // target == home (or reader with no open book): land on home — don't fall
       // through to the sleep-wake "resume reader" logic, which fires on stale
@@ -1005,41 +841,6 @@ void setup() {
     delay(10);
     gpio.update();
   }
-}
-
-// delay() counts ticks, and the tick stops while onEinkBusyWaitSlice() light-sleeps
-// the chip (millis() is RTC-corrected on wake; the tick is not). A delay(10) mid-refresh
-// would stretch to ~210 ms and starve button sampling. millis() stays honest.
-static void delayWallClock(const unsigned long ms) {
-  const unsigned long deadline = millis() + ms;
-  while (static_cast<long>(millis() - deadline) < 0) {
-    vTaskDelay(1);
-  }
-}
-
-// The main loop's idle wait, and the whole reason the IDF power manager has
-// anything to work with.
-//
-// FreeRTOS only reaches tickless light sleep when no task needs to run for
-// CONFIG_FREERTOS_IDLE_TIME_BEFORE_SLEEP ticks. delayWallClock() spins on
-// vTaskDelay(1), so it never leaves a window longer than a single tick and the
-// idle task never once qualifies — the chip would stay awake for every
-// millisecond of a reading session with PM enabled and look, from the outside,
-// exactly like PM doing nothing. One blocking wait is what opens the window.
-//
-// The spin is still right in one case: while a render holds the performance
-// lock, the render task's BUSY-wait slice light-sleeps the chip by hand and
-// stops the FreeRTOS tick while it does (millis() is RTC-corrected on wake, the
-// tick is not). A single vTaskDelay through that would overshoot by the whole
-// frozen window and starve button sampling mid-refresh, which is the bug
-// delayWallClock was written to fix. Nothing is lost by spinning there: a held
-// perf lock already keeps the power manager out of light sleep.
-static void idlePoll(const unsigned long ms) {
-  if (powerManager.isPerfLockHeld()) {
-    delayWallClock(ms);
-    return;
-  }
-  vTaskDelay(pdMS_TO_TICKS(ms));
 }
 
 // Polls the battery and shows the low-battery notice the first time the charge drops to
@@ -1101,12 +902,7 @@ void loop() {
   // wasReleased() in the firmware went dead and Back could never leave a book.
   mappedInputManager.update();
 
-  if (restartTrail) {
-    if (restartStageOf(restartTrail) < STAGE_LOOP_RUNNING) markRestartStage(STAGE_LOOP_RUNNING);
-    uint64_t wireUs = 0, waveUs = 0, totalUs = 0;
-    PerfStats::splitTotals(wireUs, waveUs, totalUs);
-    if (totalUs > 0) finishRestartTrail();  // a refresh has completed since boot
-  }
+  noteRestartLoopPass();
 
   // Cleared here, once, so that every early return below (the screenshot combo, the sleep
   // paths) leaves the power release ungated. The double-click block further down is the
@@ -1118,12 +914,16 @@ void loop() {
   // USB Drive has lent the SD card to a computer. Everything below can reach for the
   // card (sleep, screenshots, bindings, screen changes), so only the activity runs.
   if (activityManager.requiresExclusiveStorageLoop()) {
-    // The host link dies in light sleep. Both sleepers read this flag (the PM skip
-    // callback and the e-ink BUSY-wait slices), and updateLocks() below, which
-    // normally republishes it from the USB-detect line, never runs in this mode.
-    powerManager.setUsbConsoleUp(true);
     activityManager.loop();
-    delay(10);
+    if (activityManager.preventAutoSleep()) {
+      powerManager.setPowerSaving(false);
+      delay(10);
+    } else {
+      // No host is active, so a slower loop is safe. The activity itself times
+      // out the raw-storage handoff rather than entering deep sleep detached.
+      powerManager.setPowerSaving(true);
+      delay(50);
+    }
     return;
   }
 
@@ -1159,18 +959,17 @@ void loop() {
   static unsigned long lastActivityTime = millis();
   // Touch counts: before Touch Sleep it did not, so a touch-only session never
   // reset the auto-sleep clock or took the post-input activity lock.
-  if (mappedInputManager.isInputActive() || activityManager.preventAutoSleep()) {
-    lastActivityTime = millis();  // Reset inactivity timer
+  // A locked device in a bag is pressed against all day and must still go to sleep.
+  const bool quickLocked = activityManager.isQuickLocked();
+  if ((mappedInputManager.isInputActive() && !quickLocked) || activityManager.preventAutoSleep()) {
+    lastActivityTime = millis();         // Reset inactivity timer
+    powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
-  // Publishes the USB console state and takes or releases the WiFi and
-  // recent-activity PM locks. The clock itself needs no poke here any more: DFS
-  // raises it whenever a lock is taken, and the recent-activity lock is what used
-  // to be the explicit setPowerSaving(false) on input.
-  powerManager.updateLocks(gpio, millis() - lastActivityTime);
   // Any input wakes touch (only a button can, while it sleeps); the wake itself
   // finishes over the next few polls.
   const unsigned long touchSleepMs = SETTINGS.touchSleepMs();
-  gpio.setTouchAsleep(touchSleepMs > 0 && millis() - lastActivityTime >= touchSleepMs);
+  // Not while locked: the timer no longer tracks input, and the Home key may be what unlocks.
+  gpio.setTouchAsleep(!quickLocked && touchSleepMs > 0 && millis() - lastActivityTime >= touchSleepMs);
   // The press, not the release, and not "any activity": this is the instant the reader's
   // thumb acted, and the refresh that answers it closes the measurement. A release-driven
   // action (a short power click) still lands within the same press-to-paint window.
@@ -1184,28 +983,19 @@ void loop() {
     return;
   }
 
-  static bool screenshotButtonsReleased = true;
   static bool screenshotComboActive = false;
-  if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
-    screenshotComboActive = true;
-    if (screenshotButtonsReleased) {
-      screenshotButtonsReleased = false;
-      {
-        RenderLock lock;
-        ScreenshotUtil::takeScreenshot(renderer);
-      }
+  if (!quickLocked && gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
+    if (!screenshotComboActive) {
+      screenshotComboActive = true;
+      RenderLock lock;
+      ScreenshotUtil::takeScreenshot(renderer);
     }
     return;
   }
   if (screenshotComboActive) {
     if (gpio.isPressed(HalGPIO::BTN_POWER)) return;
-    if (gpio.wasReleased(HalGPIO::BTN_POWER)) {
-      screenshotButtonsReleased = true;
-      screenshotComboActive = false;
-      return;
-    }
-    screenshotButtonsReleased = true;
     screenshotComboActive = false;
+    if (gpio.wasReleased(HalGPIO::BTN_POWER)) return;
   }
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
@@ -1285,6 +1075,11 @@ void loop() {
 
     // Sleep goes straight down from here: this file owns the device.
     const auto runBoundFunction = [&](const uint8_t function) {
+      if (function == CrossPointSettings::LP_MENU_QUICK_LOCK) {
+        activityManager.toggleQuickLock();
+        return;
+      }
+      if (activityManager.isQuickLocked()) return;
       if (function == CrossPointSettings::LP_MENU_SLEEP) {
         enterDeepSleep();
       }
@@ -1375,9 +1170,6 @@ void loop() {
   activityManager.loop();
   const unsigned long activityDuration = millis() - activityStartTime;
 
-  // Body complete: releases the slice hook's yield (see onEinkBusyWaitSlice).
-  powerManager.noteMainLoopIteration();
-
   const unsigned long loopDuration = millis() - loopStartTime;
   if (loopDuration > maxLoopDuration) {
     maxLoopDuration = loopDuration;
@@ -1393,7 +1185,8 @@ void loop() {
   {
     RenderLock lock(RenderLock::TryOnly{});
     if (!lock.owns()) {
-      idlePoll(HalPowerManager::IDLE_POLL_MS);
+      // Let rendering advance without treating lock contention as idle.
+      delay(10);
       return;
     }
     skipLoopDelay = activityManager.skipLoopDelay();
@@ -1403,13 +1196,11 @@ void loop() {
   // When an activity requests skip loop delay (e.g., webserver running), use yield() for faster response
   // Otherwise, use longer delay to save power
   if (skipLoopDelay) {
-    // No delay and no sleep: an activity with a web server up wants the loop back
-    // immediately. The clock looks after itself — a running web server means WiFi
-    // is up, and updateLocks() holds the WiFi lock at full speed for that.
-    yield();  // Give FreeRTOS a chance to run tasks, but return immediately
+    powerManager.setPowerSaving(false);  // Make sure we're at full performance when skipLoopDelay is requested
+    yield();                             // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
     const unsigned long idleMs = millis() - lastActivityTime;
-    // Drop the panel's rails before the chip starts light-sleeping.
+    // Drop the panel's rails once the device sits.
     //
     // The image is bistable and needs no power to stay put, but the paint path never asked
     // the controller to power down (every displayBuffer/refreshDisplay call in this fork
@@ -1423,32 +1214,20 @@ void loop() {
     // here — the driver holds that state and returns immediately when it is already down.
     if (idleMs >= HalPowerManager::IDLE_PANEL_POWER_OFF_MS) display.powerOffPanel();
 
-    // One 100 Hz cadence at every idle depth now (see IDLE_POLL_MS for why the old
-    // 50 ms stage could not survive the switch to tickless idle). What changed is
-    // what happens during the wait: the loop task blocks for the whole period in
-    // one go, so the FreeRTOS idle task can light-sleep the chip for almost all of
-    // it. The 0 to 1000 ms window used to busy-poll at full attention, and that is
-    // the gap this closes.
-    if (gpio.isDebouncePending()) {
-      // A raw button-state change is mid-debounce: committing needs a second
-      // matching sample, so stay awake and poll again quickly rather than hand
-      // the window to light sleep. Costs one poll period of awake time per
-      // button press, and is the difference between a tap committing and a tap
-      // being dropped.
-      delayWallClock(HalPowerManager::IDLE_POLL_MS);
-    } else if (gpio.isTouchAsleep() && !powerManager.isPerfLockHeld() &&
-               powerManager.waitForButtons(HalPowerManager::IDLE_BUTTON_WAIT_MS)) {
-      // Touch is asleep, so the buttons are the only input left and they wake
-      // the chip themselves: one wake a second for the slow chores instead of
-      // a hundred.
-    } else if (idleMs >= HalPowerManager::IDLE_PANEL_POWER_OFF_MS && !powerManager.isPerfLockHeld() &&
-               powerManager.waitForButtons(HalPowerManager::IDLE_TOUCH_POLL_MS)) {
-      // Touch is awake but the device is sitting: buttons still wake the chip at
-      // once, and the touch controller holds each frame until it is read, so
-      // polling it less often delays a tap instead of dropping it. No-op on the
-      // ADC-ladder boards, where waitForButtons() has no pins to arm.
+    if (idleMs >= HalPowerManager::IDLE_POWER_SAVING_MS) {
+      // If we've been inactive for a while, increase the delay to save power
+      powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
+      // Sleep in short slices and wake the poll as soon as a button contact closes.
+      // InputManager commits a press only when two consecutive polls agree, so a
+      // press shorter than one 50 ms sleep could land in a single sample and be lost.
+      const unsigned long idleStart = millis();
+      while (millis() - idleStart < 50) {
+        delay(10);
+        if (gpio.rawInputActive()) break;
+      }
     } else {
-      idlePoll(HalPowerManager::IDLE_POLL_MS);
+      // Short delay to prevent tight loop while still being responsive
+      delay(10);
     }
   }
 }

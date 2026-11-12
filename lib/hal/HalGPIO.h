@@ -47,11 +47,13 @@ class HalGPIO {
  public:
   HalGPIO() = default;
 
-  // True while a raw button-state change is still inside the debounce window.
-  // The idle loop polls fast while this is set so the confirming sample lands
-  // ~10 ms after the first; at the 50 ms light-sleep cadence a short tap can
-  // otherwise appear in a single sample and never commit (dropped press).
-  bool isDebouncePending() const;
+  // True when any button contact is closed right now, read straight from the
+  // hardware (ADC ladder off its idle rail, or the power GPIO asserted), without
+  // going through the debounced state. Cheap enough to call every few ms.
+  bool rawInputActive();
+
+  // Raw readings of the two button-ladder ADC pins now, -1 on boards without one.
+  void readButtonAdc(int& raw1, int& raw2);
 
   // USB state as sampled by the last update() call.
   // Prefer this in per-loop polling: isUsbConnected() performs a fresh I2C read on X3.
@@ -89,8 +91,9 @@ class HalGPIO {
   void suppressTouchContact();
   // Touch controller sleep (GT911 only; see InputManager::setTouchAsleep).
   void setTouchAsleep(bool asleep);
-  bool isTouchAsleep() const;
   bool isTouchHeldAt(float& nx, float& ny) const;
+  // Exactly two contacts down (GT911 only): both positions, normalized like isTouchHeldAt.
+  bool getTwoTouchContacts(float& nx1, float& ny1, float& nx2, float& ny2) const;
   unsigned long lastTouchHeldMs() const;
   bool wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const;
   bool wasTouchActivity() const;
@@ -101,7 +104,6 @@ class HalGPIO {
   // Should only be called when wakeup reason is PowerButton.
   bool verifyPowerButtonWakeup();
 
-  // Check if USB is connected
   bool isUsbConnected() const;
 
   // Whether a cold boot with no USB detected can be trusted to mean a held

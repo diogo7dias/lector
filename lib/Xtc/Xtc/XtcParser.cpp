@@ -30,20 +30,17 @@ XtcParser::XtcParser()
 XtcParser::~XtcParser() { close(); }
 
 XtcError XtcParser::open(const char* filepath) {
-  // Close if already open
   if (m_isOpen) {
     close();
   }
 
   m_filepath = filepath;
 
-  // Open file
   if (!Storage.openFileForRead("XTC", filepath, m_file)) {
     m_lastError = XtcError::FILE_NOT_FOUND;
     return m_lastError;
   }
 
-  // Read header
   m_lastError = readHeader();
   if (m_lastError != XtcError::OK) {
     LOG_DBG("XTC", "Failed to read header: %s", errorToString(m_lastError));
@@ -52,7 +49,6 @@ XtcError XtcParser::open(const char* filepath) {
     return m_lastError;
   }
 
-  // Read title & author if available
   if (m_header.hasMetadata) {
     m_lastError = readTitle();
     if (m_lastError != XtcError::OK) {
@@ -124,7 +120,6 @@ void XtcParser::closeFile() {
 }
 
 XtcError XtcParser::readHeader() {
-  // Read first 56 bytes of header
   size_t bytesRead = m_file.read(reinterpret_cast<uint8_t*>(&m_header), sizeof(XtcHeader));
   if (bytesRead != sizeof(XtcHeader)) {
     return XtcError::READ_ERROR;
@@ -446,7 +441,6 @@ size_t XtcParser::loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSiz
     return 0;
   }
 
-  // Read bitmap data
   size_t bytesRead = m_file.read(buffer, bitmapSize);
   if (bytesRead != bitmapSize) {
     LOG_DBG("XTC", "Page read error: expected %u, got %u", bitmapSize, bytesRead);

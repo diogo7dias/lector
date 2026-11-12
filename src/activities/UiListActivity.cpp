@@ -22,7 +22,7 @@ void UiListActivity::onEnter() {
   // fonts, so a screen-specific body font has to be bound first.
   const int fontId = listFontId();
   if (fontId >= 0) uiTarget.setFont(fui::GfxRendererTarget::FONT_BODY, fontId);
-  activeNav().reset();
+  nav.reset();
   resetUi();
   app.on(ACTION_ROW, &UiListActivity::rowActionTrampoline, this);
   setArmHook(&UiListActivity::rowArmTrampoline, this);
@@ -54,11 +54,11 @@ void UiListActivity::rowArmTrampoline(const fui::ActionEvent& event, void* user)
   auto* self = static_cast<UiListActivity*>(user);
   if (event.action != ACTION_ROW) return;
   if (event.value < 0 || event.value >= self->listCount()) return;
-  self->activeNav().selected = event.value;
+  self->nav.selected = event.value;
 }
 
 void UiListActivity::onRowAction(const fui::ActionEvent& event) {
-  activeNav().selected = event.value;
+  nav.selected = event.value;
   if (event.longPress) {
     onRowLongPress(event.value);
     return;
@@ -72,7 +72,7 @@ bool UiListActivity::handleButtons() {
     return true;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    const int selected = activeNav().selected;
+    const int selected = nav.selected;
     if (selected >= 0 && selected < listCount()) activateIndex(selected);
     return true;
   }
@@ -97,7 +97,7 @@ void UiListActivity::moveSelectionTo(const int index) {
   // e-ink refresh, and the buttons are sampled once per loop pass from level
   // state with no queue, so a press that started and ended inside that window
   // was never seen at all.
-  auto& n = activeNav();
+  auto& n = nav;
   n.selected = index;
   n.followOnBuild = true;  // the next build pulls the viewport to it
   requestUpdate();
@@ -115,7 +115,7 @@ void UiListActivity::loop() {
       // Same nav-vs-render race as moveSelectionTo: the render task writes
       // pageRows/top mid-build, so read and mutate under one lock.
       RenderLock lock(*this);
-      auto& n = activeNav();
+      auto& n = nav;
       const int delta = swipe == MappedInputManager::SwipeDir::Up ? n.pageRows() : -n.pageRows();
       moved = n.scrollBy(delta, listCount());
     }
@@ -127,7 +127,7 @@ void UiListActivity::loop() {
 }
 
 void UiListActivity::navigateButtons() {
-  auto& n = activeNav();
+  auto& n = nav;
   buttonNavigator.onListNav(n.selected, listCount(), n.pageRows(), [this](const int index) { moveSelectionTo(index); });
 }
 
@@ -155,7 +155,7 @@ void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, c
   // actually laid out.
   const fui::Rect body = screen.body();
   listBand = Rect{body.x, body.y, body.width, body.height};
-  activeNav().syncToProps(body, rowHeight, screen.theme().listRowGap, listCount(), props);
+  nav.syncToProps(body, rowHeight, screen.theme().listRowGap, listCount(), props);
 }
 
 void UiListActivity::drawScrollArrows() {
@@ -163,7 +163,7 @@ void UiListActivity::drawScrollArrows() {
   // vertical spacing the chrome leaves above and below the rows, so they never
   // land on a row, selected or not. drawnRows is what list() really fitted, so
   // the predicate is right when wrapped rows fit fewer than the estimate.
-  const auto& n = activeNav();
+  const auto& n = nav;
   const list_scrollbar::Arrows arrows = list_scrollbar::forWindow(listCount(), n.top, n.pageRows());
   if (!arrows.up && !arrows.down) return;
   GUI.drawScrollArrows(
@@ -176,26 +176,28 @@ ListChrome UiListActivity::chrome() const {
   return chrome;
 }
 
-void UiListActivity::drawChrome() { drawListChromeTop(renderer, chrome()); }
-
-void UiListActivity::drawFooter() { drawListChromeBottom(renderer, mappedInput, chrome()); }
-
 void UiListActivity::render(RenderLock&&) {
   renderer.clearScreen();
-  drawChrome();
+  drawListChromeTop(renderer, chrome());
   renderUi();
   // Wrapped labels grow rows, so fewer rows can fit than the fixed-height
   // estimate ListNav plans with. list() reports the real layout back
   // (ListNav::onListRendered); when the selection landed past the drawn rows
   // the nav advanced the viewport and asked for another build. Bounded: top
   // strictly advances toward the selection each pass.
-  for (int pass = 0; activeNav().consumeRebuildNeeded() && pass < 8; ++pass) {
+  for (int pass = 0; nav.consumeRebuildNeeded() && pass < 8; ++pass) {
     renderer.clearScreen();
-    drawChrome();
+    drawListChromeTop(renderer, chrome());
     renderUi();
   }
   drawScrollArrows();
-  drawFooter();
+  drawListChromeBottom(renderer, mappedInput, chrome());
   if (drawOverlay()) return;
-  renderer.displayBuffer(refreshMode());
+  // A popup or banner painted over this screen leaves its band on the panel, so the
+  // first paint after it leaves is a clean one. drawOverlay() returning above means
+  // this screen painted the overlay itself, and that clean pass is still owed.
+  const bool overlayDirty = UITheme::consumeOverlayPainted();
+  const bool clean = cleanPaint_ || overlayDirty;
+  renderer.displayBuffer(clean ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+  cleanPaint_ = false;
 }

@@ -166,7 +166,25 @@ size_t retain(char* file, size_t len, const uint32_t nowUtc, const size_t cap) {
   }
   len = out;
 
-  // Rule 3: byte cap, oldest first.
+  // Rule 3: byte cap, Wi-Fi checkpoints first (oldest first), then anything oldest first.
+  const size_t wifiPrefix = strlen(kEntryPrefix) + strlen(kWifiEntryKind);
+  size_t excess = len > cap ? len - cap : 0;
+  out = 0;
+  at = 0;
+  while (at < len) {
+    const size_t next = nextEntry(file, len, at + 1);
+    const bool wifi =
+        next - at > wifiPrefix && memcmp(file + at + strlen(kEntryPrefix), kWifiEntryKind, strlen(kWifiEntryKind)) == 0;
+    if (excess > 0 && wifi) {
+      excess = next - at < excess ? excess - (next - at) : 0;
+    } else {
+      memmove(file + out, file + at, next - at);
+      out += next - at;
+    }
+    at = next;
+  }
+  len = out;
+
   size_t start = 0;
   while (len - start > cap && start < len) {
     start = nextEntry(file, len, start + 1);

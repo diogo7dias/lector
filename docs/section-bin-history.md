@@ -1,0 +1,413 @@
+# `section.bin` history
+
+Older entries of [file-formats.md](file-formats.md); newer versions are listed there.
+
+## Version 67
+
+Ordered lists number their items (`1.`, `2.`, ...) instead of drawing bullets, nested lists
+restart their own count, `list-style-type: none` on a `<ul>`/`<ol>` drops the marker, and list
+containers add their own margins and padding to their items' inset. Cached marker text and list
+layout change; the binary layout is unchanged since version 62. The derived partial version
+changes from 216 to 215. The CSS rules cache moves to version 11: each style record gains a
+`listStyleType` byte (66 to 67 bytes) and defined-property bit 18.
+
+## Version 66
+
+A word holding Hangul, Hanja included, stays one token: a boundary touching Hangul is no longer
+a gap-less break, so Korean wraps at spaces (CSS `word-break: keep-all`) and justification
+stretches only word spaces. A Korean word wider than the line or table cell is the exception:
+it splits between syllables into zero-width, non-stretching pieces.
+Cached line breaks and word positions change; the binary layout is unchanged since version 62.
+The derived partial version changes from 217 to 216.
+
+## Version 62
+
+Hyphenation is removed. The section header loses its one-byte toggle (47 → 46 bytes),
+shifting every later field and LUT offset. Finalized version 61 and partial version 221
+are rejected before reading the render spec; new files use 62 and 220 respectively.
+Sections rebuild on demand, including those previously built with hyphenation off
+(the oversized-word fallback is also removed). Book metadata stays at version 12.
+
+Global settings and reader presets use JSON keys; old hyphenation keys are ignored.
+Per-book `readerprefs` remain binary version 14: byte offset 14 is reserved and zeroed
+on read, keeping all following fields and older supported record lengths unchanged.
+
+## Version 61
+
+Adds the `wordSpacing` header byte after `paragraphSpacing` (100 = unchanged natural
+space advance). The header grows by one byte; pagination uses the adjusted baseline.
+Finalized sections use version 61; the derived partial version changes from 222 to 221.
+Old full and partial sections rebuild once on next open.
+
+## Version 60
+
+Already-shaped Arabic presentation forms bypass font ligature substitution.
+Text measurements and line breaks can change; the binary layout is unchanged.
+
+## Version 59
+
+Inline direction changes no longer replace the paragraph's base direction.
+Cached alignment and word positions change; the binary layout is unchanged.
+
+## Version 58
+
+Closing a child block no longer reapplies its parent's vertical margins and padding.
+The binary layout is unchanged; changed paragraph spacing requires cached pages to rebuild.
+
+## Version 57
+
+Justification now distributes the integer-division remainder across eligible gaps.
+The binary layout is unchanged; cached word positions must be rebuilt.
+
+## Version 56
+
+Version 56 balances full text pages vertically within the reading viewport.
+The binary layout is unchanged; cached line positions change, so old sections
+are rebuilt automatically. Short pages, images, rules and ruby keep their layout.
+This balances line boxes, not individual glyph ink; font bearings can still
+produce small optical differences. User margins and status-bar bands are preserved.
+
+## Version 53
+
+Each file in `sections/*.bin` stores one laid-out spine section. The header is
+also the cache-busting key: if any layout-affecting setting differs from the
+current reader settings, the section is discarded and rebuilt.
+
+Version 53 lays a table row holding a `colspan` or `rowspan` cell out stacked at
+full width instead of as grid columns, and cell text now inherits `text-align`,
+weight, style and decoration from the enclosing `<table>`, `<tr>` or `<tbody>`
+(upstream #2654 as merged, which numbered it v41). Cells land in different
+places, so cached pages no longer match.
+
+Version 52 splits the `embeddedStyle` header byte into `embeddedTextStyle` and
+`embeddedLayoutStyle`, one byte each. This is the only header layout change
+since version 45: the header grew by one byte and every field after it moved.
+
+Version 51 makes Focus Reading emphasis a byte annotation on a whole word rather
+than a separate suffix token, and treats a visible hyphen or dash inside a word
+as a break opportunity (upstream #2892, which numbered it v38). Both change
+where lines break.
+
+Version 50 stops a flush inside a `<ruby>` group from splitting the group, so
+the annotated word keeps its ruby text (upstream #3102, which numbered it v40).
+Word positions move on ruby books.
+
+Version 49 keeps the version 48 serialized layout unchanged. It was bumped
+because an image's top margin is now clamped so a full-viewport-height image
+cannot overflow the page bottom (upstream #2959, which numbered it v39): older
+caches can hold placements that panels with no bottom inset refuse to draw.
+
+Version 47 changes `AnchorEntry` from a length-prefixed string to a `u64`
+`arxHash64` of the anchor. Anchors are only compared for equality, never
+displayed, so the text is dead weight; fixed-width keys drop up to
+`MAX_ANCHORS_PER_CHAPTER` separate heap allocations out of a chapter parse and
+make anchor lookup allocation-free. Pagination is unchanged. The hash function
+in `ChapterHtmlSlimParser.h` is part of this format: changing it requires
+another version bump.
+
+Version 46 keeps the version 45 serialized layout unchanged. It was bumped
+because simple HTML table rows are now laid out as positioned columns rather
+than flattened paragraphs with synthetic row/cell labels (upstream #2654, which
+numbered it v36).
+
+Version 45 adds a header offset and a `uint32_t` entry per page for the
+visible-text offset LUT, so reading positions are anchored to content rather
+than to a page number and survive a re-layout (upstream #2805, which numbered
+it v35). The other section LUTs are unchanged.
+
+Version 43 is binary-identical to version 42. The version was bumped because
+word-gap suppression was narrowed to tokens glued together in the source
+(upstream #2768, which numbered it v34): earlier versions dropped the gap
+between any two words meeting at a CJK break opportunity, which collapsed the
+spaces between Hangul words, so cached word positions no longer match what the
+layout engine now produces.
+
+Version 33 adds a `uint16 paragraphOrdinal` to each serialized `PageLine`
+(written after `yPos`, before the `TextBlock`): the visible-paragraph number of a
+paragraph's first line (0 = not a paragraph start), consumed by the paragraph-numbers
+reader feature. Pagination is byte-identical to v32; only the extra per-line field
+forces the one-time rebuild. (v31/v32 were the lazy-image-extraction changes; v30
+was binary-identical to v29, bumped for the Arabic-shaping measurement change.)
+
+Version 30 is binary-identical to version 29. The version was bumped because
+Arabic contextual shaping changed text measurement (`getTextAdvanceX` now
+measures the shaped visual text), so word positions cached by v29 no longer
+match what `drawText` renders.
+
+Version 28 introduced serialized word style bits for underline, strikethrough,
+superscript, and subscript. The format also includes:
+
+- cache-busting fields for paragraph alignment, embedded CSS,
+  image rendering mode, and Focus Reading
+- page offset LUT
+- per-page visible-text offset LUT (zero-based Unicode codepoints in `<body>`)
+- anchor-to-page map for fragment and footnote navigation
+- paragraph and list-item LUTs retained for navigation and legacy sync fallback
+- optional per-word Focus Reading split metadata
+- per-page footnote entries
+- serialized word style bits for underline, strikethrough, superscript, and
+  subscript
+- flat TextBlock word storage (v29): per-word arrays plus one shared
+  NUL-terminated text blob, replacing v28's length-prefixed word strings. The
+  on-disk order mirrors the in-RAM arena so the firmware reads a whole block
+  payload with a single allocation and a single SD read
+
+ImHex pattern:
+
+```c++
+import std.mem;
+import std.string;
+import std.core;
+
+#define EXPECTED_VERSION 75
+#define MAX_STRING_LENGTH 65535
+#define FOOTNOTE_NUMBER_LEN 32
+#define FOOTNOTE_HREF_LEN 256
+
+struct String {
+    u32 length [[hidden, comment("String byte length")]];
+    if (length > MAX_STRING_LENGTH) {
+        std::warning(std::format("Unusually large string length: {} bytes", length));
+    }
+    char data[length] [[comment("UTF-8 string data")]];
+} [[sealed, format("format_string"), comment("Length-prefixed UTF-8 string")]];
+
+fn format_string(String s) {
+    return s.data;
+};
+
+enum PageElementTag : u8 {
+    TAG_PageLine = 1,
+    TAG_PageImage = 2,
+    TAG_PageHorizontalRule = 3,
+    TAG_PageDropCap = 4,
+    TAG_PageBorderBox = 5
+};
+
+enum WordStyle : u8 {
+    REGULAR = 0,
+    BOLD = 1,
+    ITALIC = 2,
+    BOLD_ITALIC = 3,
+    UNDERLINE = 4,
+    STRIKETHROUGH = 8,
+    SUP = 16,
+    SUB = 32,
+    DISCRETIONARY_HYPHEN = 128  // trailing hyphen inserted by line breaking
+};
+
+enum TextAlign : u8 {
+    JUSTIFIED = 0,
+    LEFT_ALIGN = 1,
+    CENTER_ALIGN = 2,
+    RIGHT_ALIGN = 3,
+    NONE = 4
+};
+
+struct BlockStyle {
+    TextAlign alignment;
+    bool textAlignDefined;
+    s16 marginTop;
+    s16 marginBottom;
+    s16 marginLeft;
+    s16 marginRight;
+    s16 paddingTop;
+    s16 paddingBottom;
+    s16 paddingLeft;
+    s16 paddingRight;
+    s16 textIndent;
+    bool textIndentDefined;
+    bool isRtl;
+    bool directionDefined;
+};
+
+struct TextBlock {
+    u16 wordCount;
+    u8 hasFocus;
+    u16 textBytes [[comment("Total size of text[], including one NUL per word")]];
+
+    if (wordCount > 0) {
+        u16 textOff[wordCount] [[comment("Byte offset of word i's text within text[]")]];
+        s16 wordXPos[wordCount];
+        if (hasFocus != 0) {
+            u16 wordFocusSuffixX[wordCount] [[comment("Suffix x offset from word start")]];
+        }
+        WordStyle wordStyle[wordCount];
+        if (hasFocus != 0) {
+            u8 wordFocusBoundary[wordCount] [[comment("UTF-8 byte boundary between bold prefix and suffix")]];
+        }
+        char text[textBytes] [[comment("All words back to back, each NUL-terminated")]];
+    }
+
+    BlockStyle blockStyle;
+    u8 hasWordFonts;
+    if (hasWordFonts != 0) {
+        s32 wordFonts[3];
+        u8 wordFontSlot[wordCount] [[comment("0 = block font, n = wordFonts[n - 1]; bit 0x80 = small caps")]];
+    }
+};
+
+struct ImageBlock {
+    String imagePath;
+    s16 width;
+    s16 height;
+};
+
+struct PageLine {
+    s16 xPos;
+    s16 yPos;
+    TextBlock block;
+};
+
+struct PageImage {
+    s16 xPos;
+    s16 yPos;
+    ImageBlock image;
+};
+
+struct PageHorizontalRule {
+    s16 xPos;
+    s16 yPos;
+    u16 width;
+    u8 thickness;
+};
+
+struct PageDropCap {
+    s16 xPos;
+    s16 yPos;  // baseline of the last spanned line
+    s32 fontId;
+    u16 scale256;
+    WordStyle style;
+    u8 length;
+    char text[length];
+};
+
+struct BorderSide {
+    u8 width;
+    u8 style;  // 0 none, 1 solid, 2 double, 3 dotted, 4 dashed
+};
+
+struct PageBorderBox {
+    s16 xPos;
+    s16 yPos;
+    u16 width;
+    u16 height;
+    BorderSide sides[4];  // top, right, bottom, left
+    bool shaded;
+};
+
+struct PageElement {
+    PageElementTag pageElementType;
+    if (pageElementType == TAG_PageLine) {
+        PageLine pageLine [[inline]];
+    } else if (pageElementType == TAG_PageImage) {
+        PageImage pageImage [[inline]];
+    } else if (pageElementType == TAG_PageHorizontalRule) {
+        PageHorizontalRule horizontalRule [[inline]];
+    } else if (pageElementType == TAG_PageDropCap) {
+        PageDropCap dropCap [[inline]];
+    } else if (pageElementType == TAG_PageBorderBox) {
+        PageBorderBox borderBox [[inline]];
+    } else {
+        std::error(std::format("Unknown page element type: {}", pageElementType));
+    }
+};
+
+struct FootnoteEntry {
+    char number[FOOTNOTE_NUMBER_LEN];
+    char href[FOOTNOTE_HREF_LEN];
+};
+
+struct Page {
+    u16 elementCount;
+    PageElement elements[elementCount] [[inline]];
+
+    u16 footnoteCount;
+    FootnoteEntry footnotes[footnoteCount];
+};
+
+struct AnchorEntry {
+    u64 anchorHash [[comment("arxHash64 of the HTML id, not the id text")]];
+    u16 page;
+};
+
+struct AnchorMap {
+    u16 count;
+    AnchorEntry entries[count];
+};
+
+struct ParagraphLut {
+    u16 count;
+    u16 paragraphIndex[count];
+};
+
+struct SectionBin {
+    u8 version;
+    if (version != EXPECTED_VERSION) {
+        std::error(std::format("Unsupported version: {} (expected {})", version, EXPECTED_VERSION));
+    }
+
+    s32 fontId;
+    float lineCompression;
+    bool extraParagraphSpacing;
+    u8 paragraphSpacing [[comment("Extra block gap after a paragraph, percent of line height")]];
+    u8 wordSpacing [[comment("Baseline space advance percent, 100 = unchanged")]];
+    u8 paragraphAlignment;
+    u16 viewportWidth;
+    u16 viewportHeight;
+    bool embeddedTextStyle [[comment("Weight, slant, decoration, super/sub, direction, display:none")]];
+    bool embeddedLayoutStyle [[comment("Alignment, indent, margins, padding, book-set image sizes")]];
+    u8 imageRendering;
+    bool focusReadingEnabled;
+    u8 guideDotsMode [[comment("0 = off, 1 = shown, 2 = hidden gap")]];
+    u8 firstLineIndentMode [[comment("0 = respect the CSS indent, 1 = custom percent")]];
+    u8 firstLineIndentPercent [[comment("Percent of column width, applies in mode 1")]];
+    bool kerning [[comment("Pair kerning for the reading font")]];
+    bool ligatures [[comment("Font ligatures for the reading font")]];
+    bool linkUnderline [[comment("Link Underline switch")]];
+    bool bookMargins [[comment("Book Margins switch")]];
+    bool headingPageBreak [[comment("Break Before Headings switch")]];
+    bool wordExpansion [[comment("Word Expansion switch")]];
+    s8 characterSpacing [[comment("Character Spacing, half pixels between letters, -5..5")]];
+
+    u16 pageCount;
+    u32 pageLutOffset;
+    u32 anchorMapOffset;
+    u32 paragraphLutOffset;
+    u32 listItemLutOffset;
+    u32 visibleTextLutOffset;
+
+    Page pages[pageCount];
+
+    u32 currentOffset = $;
+    if (currentOffset != pageLutOffset) {
+        std::warning(std::format("Page LUT offset mismatch: expected 0x{:X}, got 0x{:X}", pageLutOffset, currentOffset));
+    }
+
+    u32 pageLut[pageCount] [[comment("Page data offsets")]];
+
+    if (anchorMapOffset != 0) {
+        AnchorMap anchorMap @ anchorMapOffset;
+    }
+
+    if (paragraphLutOffset != 0) {
+        ParagraphLut paragraphLut @ paragraphLutOffset;
+    }
+
+    if (listItemLutOffset != 0 && paragraphLutOffset != 0) {
+        u16 listItemIndex[paragraphLut.count] @ listItemLutOffset;
+    }
+
+    if (visibleTextLutOffset != 0) {
+	u32 visibleTextOffset[pageCount] @ visibleTextLutOffset;
+    }
+};
+
+SectionBin section @ 0x00;
+
+u32 fileSize = std::mem::size();
+u32 parsedSize = $;
+if (parsedSize != fileSize) {
+    std::warning(std::format("Unparsed data detected: {} bytes remaining at offset 0x{:X}", fileSize - parsedSize, parsedSize));
+}
+```

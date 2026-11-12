@@ -19,10 +19,6 @@ namespace fui = freeink::ui;
 
 namespace {
 constexpr unsigned long POPUP_DURATION_MS = 1500;
-
-// Same yield the page-side lookup passes: an index build runs long enough to starve the
-// watchdog without it.
-void indexBuildYield(void*) { vTaskDelay(1); }
 }  // namespace
 
 void DictionaryHistoryActivity::onEnter() {
@@ -48,21 +44,15 @@ bool DictionaryHistoryActivity::isClearRow(const size_t index) const { return wo
 
 void DictionaryHistoryActivity::lookUp(const std::string& word) {
   popup = Popup::Busy;
-  if (!dictOpenAttempted) {
-    dictOpenAttempted = true;
-    dictOpenOk = dict.open(SETTINGS.dictionaryName);
-    // needsIndex() opens and validates the .qidx sidecar, so ask it once per open rather
-    // than once per word: the answer only changes when the sidecar is built below.
-    dictNeedsIndex = dictOpenOk && dict.needsIndex();
-  }
-  popupMsg = dictNeedsIndex ? StrId::STR_DICT_INDEXING : StrId::STR_DICT_LOOKING_UP;
+  const Dictionary::Readiness readiness = dict.prepare(SETTINGS.dictionaryName);
+  const bool needsIndex = readiness == Dictionary::Readiness::NeedsIndex;
+  popupMsg = needsIndex ? StrId::STR_DICT_INDEXING : StrId::STR_DICT_LOOKING_UP;
   requestUpdateAndWait();  // paint the list + busy popup before blocking on SD
 
-  bool ok = dictOpenOk;
+  bool ok = readiness != Dictionary::Readiness::Unavailable;
   Dictionary::IndexResult indexResult = Dictionary::IndexResult::Ok;
-  if (ok && dictNeedsIndex) {
-    ok = dict.buildIndex(&indexBuildYield, nullptr, &indexResult);
-    dictNeedsIndex = !ok;  // a successful build leaves the sidecar fresh; a failed one retries
+  if (needsIndex) {
+    ok = dict.buildIndex(&indexResult);
     if (ok) {
       // The build is over; the wait that remains is the lookup, so say so.
       popupMsg = StrId::STR_DICT_LOOKING_UP;

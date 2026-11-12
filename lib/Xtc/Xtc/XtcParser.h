@@ -56,7 +56,6 @@ class XtcParser {
    */
   size_t loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize);
 
-  // Get title/author from metadata
   std::string getTitle() const { return m_title; }
   std::string getAuthor() const { return m_author; }
 

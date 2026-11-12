@@ -132,18 +132,15 @@ void KeyboardEntryActivity::onEnter() {
   // language.
   layoutId = inputType == InputType::Url ? fui::KeyboardLayoutId::QwertyEn : layoutForLanguage(I18N.getLanguage());
   shifted = false;
-  symbols = false;
-  urlPanel = false;
-  cursorMode = false;
-  togglePos = false;
+  keyLayer = KeyLayer::Letters;
+  focus = Focus::Keys;
   passwordVisible = false;
   selRow = 0;
   selCol = 0;
   delPressCount = 0;
   hintVisible = false;
   hintShowTime = 0;
-  rightHeld = false;
-  rightLongHandled = false;
+  rightPress = KeyPress::None;
   savedCursorPos = 0;
   rightStartCursorPos = 0;
   touchRouter.reset();
@@ -155,9 +152,9 @@ void KeyboardEntryActivity::onEnter() {
 void KeyboardEntryActivity::onExit() { Activity::onExit(); }
 
 const fui::KeyboardLayout& KeyboardEntryActivity::currentLayout() const {
-  if (symbols) return fui::builtinKeyboardLayout(layoutId, shifted, true);
+  if (keyLayer == KeyLayer::Symbols) return fui::builtinKeyboardLayout(layoutId, shifted, true);
   if (inputType == InputType::Url) {
-    if (urlPanel) return URL_SNIPPET_LAYOUT;
+    if (keyLayer == KeyLayer::UrlPanel) return URL_SNIPPET_LAYOUT;
     return shifted ? URL_SHIFT_LAYOUT : URL_LAYOUT;
   }
   return fui::builtinKeyboardLayout(layoutId, shifted, false, /*numberRow=*/true);
@@ -259,10 +256,10 @@ bool KeyboardEntryActivity::activateValue(const int16_t value, const bool longPr
     case fui::QWERTY_KEY_MODE:
       delPressCount = 0;
       hintVisible = false;
-      if (urlPanel) {
-        urlPanel = false;
+      if (keyLayer == KeyLayer::UrlPanel) {
+        keyLayer = KeyLayer::Letters;
       } else {
-        symbols = !symbols;
+        keyLayer = keyLayer == KeyLayer::Symbols ? KeyLayer::Letters : KeyLayer::Symbols;
         shifted = false;
       }
       clampSelection();
@@ -270,8 +267,7 @@ bool KeyboardEntryActivity::activateValue(const int16_t value, const bool longPr
     case URL_PANEL_KEY:
       delPressCount = 0;
       hintVisible = false;
-      urlPanel = !urlPanel;
-      symbols = false;
+      keyLayer = keyLayer == KeyLayer::UrlPanel ? KeyLayer::Letters : KeyLayer::UrlPanel;
       shifted = false;
       clampSelection();
       return true;
@@ -300,7 +296,7 @@ bool KeyboardEntryActivity::activateValue(const int16_t value, const bool longPr
       if (!out) out = fui::keyboardOutputFor(layer, value);
       if (!out) return false;
       insertUtf8(out);
-      if (shifted && !symbols) {
+      if (shifted && keyLayer != KeyLayer::Symbols) {
         shifted = false;  // shift auto-releases after one character
         clampSelection();
       }
@@ -332,14 +328,11 @@ std::string KeyboardEntryActivity::displayTextForCurrentState() const {
     return displayText;
   }
 
-  size_t revealPos;
-  if (cursorMode) {
-    revealPos = text.length();  // no reveal in displayText; block draws actual char directly
-  } else {
-    revealPos = (text.length() > 0 && cursorPos > 0) ? cursorPos - 1 : std::string::npos;
-  }
+  // Keep byte offsets aligned with text, but never reveal a lone UTF-8 byte.
+  const size_t revealEnd = focus != Focus::Keys ? 0 : std::min(cursorPos, text.length());
+  const size_t revealStart = utf8Prev(text, revealEnd);
   for (size_t i = 0; i < displayText.length(); i++) {
-    if (i != revealPos) {
+    if (i < revealStart || i >= revealEnd) {
       displayText[i] = '*';
     }
   }
@@ -420,63 +413,58 @@ fui::Rect KeyboardEntryActivity::keyboardRect() const {
 void KeyboardEntryActivity::loop() {
   if (routeKeyTouch()) return;
 
-  if (!cursorMode && mappedInput.wasPressed(MappedInputManager::Button::Up)) {
-    upHeld = true;
-    upLongHandled = false;
+  if (focus == Focus::Keys && mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+    upPress = KeyPress::Down;
   }
 
-  if (upHeld && !upLongHandled && mappedInput.isPressed(MappedInputManager::Button::Up) &&
+  if (upPress == KeyPress::Down && mappedInput.isPressed(MappedInputManager::Button::Up) &&
       mappedInput.getHeldTime() > LONG_PRESS_MS) {
-    cursorMode = true;
-    upLongHandled = true;
+    focus = Focus::Cursor;
+    upPress = KeyPress::Spent;
     hintVisible = true;
     hintShowTime = millis();
     requestUpdate();
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
-    if (upHeld && !upLongHandled && !cursorMode) {
+    if (upPress == KeyPress::Down && focus == Focus::Keys) {
       moveSelectionRow(-1);
       requestUpdate();
     }
-    upHeld = false;
-    upLongHandled = false;
+    upPress = KeyPress::None;
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-    downHeld = true;
-    if (cursorMode) {
-      togglePos = false;
+    if (focus != Focus::Keys) {
       passwordVisible = false;
-      cursorMode = false;
+      focus = Focus::Keys;
       hintVisible = false;
-      downLongHandled = true;
+      downPress = KeyPress::Spent;
       requestUpdate();
     } else {
-      downLongHandled = false;
+      downPress = KeyPress::Down;
     }
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
-    if (downHeld && !downLongHandled && !cursorMode) {
+    if (downPress == KeyPress::Down && focus == Focus::Keys) {
       moveSelectionRow(1);
       requestUpdate();
     }
-    downHeld = false;
-    downLongHandled = false;
+    downPress = KeyPress::None;
   }
 
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] {
-    if (cursorMode) return;
+    if (focus != Focus::Keys) return;
     moveSelectionCol(-1);
     requestUpdate();
   });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    if (cursorMode) {
-      if (togglePos) {
+    if (focus != Focus::Keys) {
+      if (focus == Focus::PasswordToggle) {
         cursorPos = savedCursorPos;
-        togglePos = false;
+        focus = Focus::Cursor;
         requestUpdate();
       } else if (cursorPos > 0) {
         cursorPos = utf8Prev(text, cursorPos);
@@ -486,84 +474,76 @@ void KeyboardEntryActivity::loop() {
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-    if (cursorMode && inputType == InputType::Password && !togglePos) {
-      rightHeld = true;
-      rightLongHandled = false;
+    if (focus == Focus::Cursor && inputType == InputType::Password) {
+      rightPress = KeyPress::Down;
       rightStartCursorPos = cursorPos;
     }
   }
 
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] {
-    if (cursorMode) return;
+    if (focus != Focus::Keys) return;
     moveSelectionCol(1);
     requestUpdate();
   });
 
-  if (rightHeld && !rightLongHandled && mappedInput.isPressed(MappedInputManager::Button::Right) &&
+  if (rightPress == KeyPress::Down && mappedInput.isPressed(MappedInputManager::Button::Right) &&
       mappedInput.getHeldTime() > LONG_PRESS_MS) {
-    if (cursorMode && inputType == InputType::Password && !togglePos) {
+    if (focus == Focus::Cursor && inputType == InputType::Password) {
       savedCursorPos = rightStartCursorPos;
-      togglePos = true;
-      rightLongHandled = true;
+      focus = Focus::PasswordToggle;
+      rightPress = KeyPress::Spent;
       requestUpdate();
     }
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    if (cursorMode && inputType == InputType::Password) {
-      rightHeld = false;
-      rightLongHandled = false;
-    }
-    if (cursorMode && !togglePos && cursorPos < text.length()) {
+    rightPress = KeyPress::None;
+    if (focus == Focus::Cursor && cursorPos < text.length()) {
       cursorPos = utf8Next(text, cursorPos);
       requestUpdate();
     }
-    if (cursorMode) return;
-    rightHeld = false;
-    rightLongHandled = false;
+    if (focus != Focus::Keys) return;
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    confirmHeld = true;
-    confirmLongHandled = false;
+    confirmPress = KeyPress::Down;
   }
 
   const fui::KeyboardKey* selKey = selectedKey();
   const bool selectedDel = selKey && selKey->value == fui::QWERTY_KEY_BACKSPACE;
 
-  if (confirmHeld && !confirmLongHandled && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+  if (confirmPress == KeyPress::Down && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
       mappedInput.getHeldTime() > DEL_LONG_PRESS_MS && selectedDel) {
     clearAllOrAltOnSelected();
-    confirmLongHandled = true;
+    confirmPress = KeyPress::Spent;
     requestUpdate();
   }
 
-  if (confirmHeld && !confirmLongHandled && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+  if (confirmPress == KeyPress::Down && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
       mappedInput.getHeldTime() > LONG_PRESS_MS) {
     if (!selectedDel && clearAllOrAltOnSelected()) {
       requestUpdate();
-      confirmLongHandled = true;
+      confirmPress = KeyPress::Spent;
     }
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (confirmHeld && !confirmLongHandled && !cursorMode) {
+    if (confirmPress == KeyPress::Down && focus == Focus::Keys) {
       if (selKey && activateValue(selKey->value, false)) {
         requestUpdate();
       }
-    } else if (confirmHeld && !confirmLongHandled && cursorMode && inputType == InputType::Password && togglePos) {
+    } else if (confirmPress == KeyPress::Down && focus == Focus::PasswordToggle) {
       passwordVisible = !passwordVisible;
       requestUpdate();
     }
-    confirmHeld = false;
-    confirmLongHandled = false;
+    confirmPress = KeyPress::None;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onCancel();
   }
 
-  if (hintVisible && !cursorMode && millis() - hintShowTime > 4000) {
+  if (hintVisible && focus == Focus::Keys && millis() - hintShowTime > 4000) {
     hintVisible = false;
     requestUpdate();
   }
@@ -609,7 +589,7 @@ bool KeyboardEntryActivity::routeKeyTouch() {
     selRow = cursor.row();
     selCol = cursor.col();
   }
-  cursorMode = false;
+  focus = Focus::Keys;
   if (activateValue(result.event.value, result.event.longPress)) requestUpdate();
   return true;
 }
@@ -697,7 +677,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
       if (!cursorDrawn && cursorPos >= lineStartIdx &&
           (isLastLine ? cursorPos <= lineEndIdx : cursorPos < lineEndIdx)) {
         std::string beforeCursor;
-        if (isPassword && !passwordVisible && cursorMode) {
+        if (isPassword && !passwordVisible && focus != Focus::Keys) {
           beforeCursor = std::string(cursorPos - lineStartIdx, '*');
         } else {
           beforeCursor = displayText.substr(lineStartIdx, cursorPos - lineStartIdx);
@@ -718,7 +698,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
       }
 
       const int lineStartX = keyboard_field::lineStartX(field, textWidth, centerText);
-      if (isCursorLine && cursorMode && isPassword && !passwordVisible && !togglePos) {
+      if (isCursorLine && focus == Focus::Cursor && isPassword && !passwordVisible) {
         // Draw text in 3 parts to avoid block cursor overflowing onto next char.
         // displayText uses '*' for all chars; actual char may be wider than '*'.
         // Part 1: chars before cursor position
@@ -746,8 +726,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   const int fieldWidth = (inputHeight > 0) ? maxLineWidth : textWidth;
   const int lineMargin = effectiveMargin;
-  GUI.drawTextField(renderer, Rect{0, inputStartY, pageWidth, inputHeight}, fieldWidth, cursorMode, lineMargin,
-                    pageWidth - 2 * lineMargin);
+  GUI.drawTextField(renderer, Rect{0, inputStartY, pageWidth, inputHeight}, fieldWidth, focus != Focus::Keys,
+                    lineMargin, pageWidth - 2 * lineMargin);
 
   const auto fillRect = [&](const int x, const int y, const int w, const int h) {
     target.fill(
@@ -755,7 +735,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
         fui::Paint::solid(fui::Color::Black));
   };
 
-  if (cursorMode && !togglePos && cursorPos <= displayText.length()) {
+  if (focus == Focus::Cursor && cursorPos <= displayText.length()) {
     const keyboard_field::Rect block =
         keyboard_field::blockCursor(cursorPixelX, cursorLineY, cursorCharWidth, lineHeight);
     fillRect(block.x, block.y, block.width, block.height);
@@ -788,7 +768,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     const int toggleWidth = renderer.getTextWidth(UI_10_FONT_ID, toggleLabel);
     const int toggleLeft = keyboard_field::toggleX(field, toggleWidth);
     const int toggleY = inputStartY + inputHeight;
-    const bool toggleSelected = cursorMode && togglePos;
+    const bool toggleSelected = focus == Focus::PasswordToggle;
 
     if (toggleSelected) {
       // Hugs the label on all four sides, one pixel out.
@@ -808,11 +788,11 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   // Edit Entry lives with the tips below, so these rows appear only in cursor mode and
   // nothing shifts when the entry goes from empty to non-empty (upstream #3863).
-  if (hintVisible && cursorMode && !text.empty()) {
+  if (hintVisible && focus != Focus::Keys && !text.empty()) {
     const int hintLh = renderer.getLineHeight(UI_10_FONT_ID);
     const int underlineY = inputStartY + inputHeight + lineHeight + metrics.verticalSpacing;
     int hintLineY = underlineY + 4;
-    if (inputType == InputType::Password && togglePos) {
+    if (focus == Focus::PasswordToggle) {
       drawCentredSmall(passwordVisible ? tr(STR_KB_HINT_TOGGLE_HIDE_PASSWORD) : tr(STR_KB_HINT_TOGGLE_SHOW_PASSWORD),
                        hintLineY);
       hintLineY += hintLh;
@@ -846,13 +826,13 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   addTip(tr(STR_KB_TIPS));
   // Clear Text keeps its rows even while the entry is empty, so nothing moves on the
   // first keystroke.
-  if (cursorMode) {
+  if (focus != Focus::Keys) {
     addTip(tr(STR_KB_HINT_RETURN_KEYBOARD));
   } else {
     addTip(tr(STR_KB_HINT_EDIT_ENTRY));
-    if (urlPanel) {
+    if (keyLayer == KeyLayer::UrlPanel) {
       addTip(tr(STR_KB_HINT_EXIT_URL_MODE));
-    } else if (!symbols) {
+    } else if (keyLayer == KeyLayer::Letters) {
       if (inputType == InputType::Url) {
         addTip(tr(STR_KB_HINT_SECONDARY_CHAR));
         addTip(tr(STR_KB_HINT_URL_SNIPPETS));
@@ -869,7 +849,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     tipsHeight += tipHeights[i];
   }
   // Reserve cursor instructions even for an empty field; passwords need a second row.
-  const int tipsTop = underlineBottom + (cursorMode ? (inputType == InputType::Password ? 2 : 1) * tipsLh : 0);
+  const int tipsTop =
+      underlineBottom + (focus != Focus::Keys ? (inputType == InputType::Password ? 2 : 1) * tipsLh : 0);
 
   if (kbRect.y - tipsTop >= tipsHeight) {
     int y = tipsTop + (kbRect.y - tipsTop - tipsHeight) / 2;
@@ -893,10 +874,9 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   props.shiftLabel = tr(STR_KEY_SHIFT);
   // Match the label to the layer the mode key leads back from: the symbols
   // layer and the URL snippet panel both label it "abc" in the static tables.
-  props.modeLabel =
-      (symbols || (inputType == InputType::Url && urlPanel)) ? tr(STR_KEY_MODE_ABC) : tr(STR_KEY_MODE_SYMBOLS);
+  props.modeLabel = keyLayer != KeyLayer::Letters ? tr(STR_KEY_MODE_ABC) : tr(STR_KEY_MODE_SYMBOLS);
   props.inputMask = static_cast<uint16_t>(fui::InputTouch | fui::InputLongPress);
-  props.selectedIndex = cursorMode ? -1 : static_cast<int16_t>(selectedLogicalIndex());
+  props.selectedIndex = focus != Focus::Keys ? -1 : static_cast<int16_t>(selectedLogicalIndex());
   props.labelText.font = fui::GfxRendererTarget::FONT_BODY;
   props.altText.font = fui::GfxRendererTarget::FONT_SMALL;
   props.gap = static_cast<int16_t>(metrics.keyboardKeySpacing);

@@ -32,6 +32,7 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   DocumentMatchMethod matchMethod = DocumentMatchMethod::FILENAME;  // Default to filename for compatibility
   bool sendMetadata = false;                                        // Send document metadata with progress sync
   KOReaderSyncBehavior syncBehavior = KOReaderSyncBehavior::SMART;
+  bool autoSync = false;  // Pull when a book opens, push when the device sleeps
 
   // Private constructor for singleton
   KOReaderCredentialStore() = default;
@@ -52,7 +53,6 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   // Get MD5 hash of password for API authentication
   std::string getMd5Password() const;
 
-  // Check if credentials are set
   bool hasCredentials() const;
 
   // Server URL management
@@ -69,13 +69,16 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   void setMatchMethod(DocumentMatchMethod method);
   DocumentMatchMethod getMatchMethod() const { return matchMethod; }
 
-  // Send metadata setting
   void setSendMetadata(bool enabled);
   bool getSendMetadata() const { return sendMetadata; }
 
   // Sync behavior
   void setSyncBehavior(KOReaderSyncBehavior behavior);
   KOReaderSyncBehavior getSyncBehavior() const { return syncBehavior; }
+
+  // Auto sync: pull when a book opens, push behind the sleep screen
+  void setAutoSync(bool enabled) { autoSync = enabled; }
+  bool getAutoSync() const { return autoSync; }
 };
 
 // Helper macro to access credential store

@@ -5,7 +5,7 @@
 
 #include <cstdint>
 
-#include "activities/reader/ReaderPrefs.h"
+#include "ReaderPrefs.h"
 #include "util/BoundMenuActions.h"
 #include "util/MarginLink.h"
 
@@ -240,6 +240,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr auto LP_MENU_SETTINGS = bound_action::LP_MENU_SETTINGS;
   static constexpr auto LP_MENU_ROTATE = bound_action::LP_MENU_ROTATE;
   static constexpr auto LP_MENU_READING_STATS = bound_action::LP_MENU_READING_STATS;
+  static constexpr auto LP_MENU_ALIGN_LEFT = bound_action::LP_MENU_ALIGN_LEFT;
+  static constexpr auto LP_MENU_ALIGN_JUSTIFY = bound_action::LP_MENU_ALIGN_JUSTIFY;
+  static constexpr auto LP_MENU_TOGGLE_PARAGRAPH_SPACING = bound_action::LP_MENU_TOGGLE_PARAGRAPH_SPACING;
+  static constexpr auto LP_MENU_QUICK_LOCK = bound_action::LP_MENU_QUICK_LOCK;
   static constexpr auto LONG_PRESS_MENU_FUNCTION_COUNT = bound_action::LONG_PRESS_MENU_FUNCTION_COUNT;
 
   // The three buttons the Buttons screen binds, in the order it lists them. Left and
@@ -334,6 +338,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // current loop. Only drawn for index picks — the jump-pick fallback has no
   // position to report.
   uint8_t showSleepWallpaperPosition = 0;
+  // Draw the last 7 days of reading in a band across the foot of the sleep screen.
+  uint8_t showSleepReadingStats = 0;
+  // Where that band's text sits: centred, or held to the left or right edge.
+  enum SLEEP_READING_STATS_ALIGN { SLEEP_STATS_CENTER = 0, SLEEP_STATS_LEFT = 1, SLEEP_STATS_RIGHT = 2 };
+  uint8_t sleepReadingStatsAlign = SLEEP_STATS_CENTER;
   // Hold the current wallpaper instead of picking a new one at every sleep.
   // Applies only to the /sleep folder rotation; a fixed /sleep.pxc or /sleep.bmp
   // never rotates in the first place.
@@ -355,8 +364,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sbEnabled = 1;
   uint8_t sbBatteryPos = SB_ANCHOR_OFF;      // battery anchor
   uint8_t sbClockPos = SB_ANCHOR_OFF;        // clock anchor (X3 RTC only)
-  uint8_t sbTitlePos = SB_ANCHOR_TL;         // title anchor
-  uint8_t sbTitleSource = SB_TITLE_CHAPTER;  // book or chapter title
+  uint8_t sbTitlePos = SB_ANCHOR_TL;         // chapter title anchor
+  uint8_t sbTitleSource = SB_TITLE_CHAPTER;  // retired, no longer saved: see StatusBarBlock::foldTitleSource
   uint8_t sbTitleTruncate = 0;               // 0 = greedy, no ellipsis (drives reflow); 1 = clip with ellipsis
   uint8_t sbPagePos = SB_ANCHOR_BL;          // page-in-chapter anchor
   uint8_t sbPageFormat = SB_PAGE_FRACTION;   // "3/40" vs "8 left"
@@ -367,6 +376,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sbParaPagesPos = SB_ANCHOR_BC;     // pages left in this paragraph (>P.N) anchor
   uint8_t sbChapterTimePos = SB_ANCHOR_OFF;  // time left in this chapter (C:12m) anchor
   uint8_t sbBookTimePos = SB_ANCHOR_OFF;     // time left in the book (B:3h05) anchor
+  uint8_t sbBookTitlePos = SB_ANCHOR_OFF;    // book title anchor; on the chapter title's, stacked above it
   uint8_t sbBookBar = SB_EDGE_OFF;           // book progress bar edge (Off/Top/Bottom)
   uint8_t sbChapterBar = SB_EDGE_BOTTOM;     // chapter progress bar edge
   uint8_t sbBarThickness = SB_BAR_MEDIUM;    // progress bar thickness slim/med/fat
@@ -416,6 +426,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t bookMargins = 1;       // keep the book's CSS margins and padding (0 = drop them)
   uint8_t headingPageBreak = 0;  // start h1/h2 headings on a new page (1 = on)
   uint8_t wordExpansion = 0;     // letter spacing allowed on loose justified lines: 0 off, 1 some, 2 more
+  // Half pixels between letters, offset: 5 is the font as designed, 0..10 shows as -5..+5.
+  uint8_t characterSpacing = reader_defaults::CHARACTER_SPACING;
+  // X4 Pro: draw the lock wallpaper a second time a minute after locking (1 = on).
+  uint8_t refreshSleepWallpaper = 0;
+  uint8_t fillPages = 0;  // keep lines on the page, no orphan/widow/heading carry (1 = on)
   // Swipe by default: it works the same wherever the thumb lands, and it leaves the
   // whole page free of invisible tap targets.
   uint8_t touchReaderControls = TOUCH_READER_SWIPE;
@@ -657,9 +672,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // ghosting -- a shorter drive leaves more behind -- so the anti-ghost budget charges
   // these passes double and cleans more often, and every eighth pass runs the standard
   // sequence so the panel re-reads its own temperature. Inert on panels without a
-  // second fast path (the X3, the Seeed Sticky, the X4 Pro). Off restores the vendor
-  // sequence exactly, with no reflash.
+  // second fast path (the X3, the Seeed Sticky, X4 Pro units with a UC8279). Off restores
+  // the vendor sequence exactly, with no reflash.
+#if FREEINK_DEVICE_X4PRO
+  uint8_t fastPageTurns = 0;  // never measured on this panel: a reader has to opt in
+#else
   uint8_t fastPageTurns = 1;
+#endif
   // Power button return from footnotes (1 = enabled, 0 = disabled)
   uint8_t pwrBtnFootnoteBack = 1;
   // The book's own CSS, split into two switches the reader honours independently.
@@ -790,6 +809,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // switches itself on in a bright room is worse than one you turn on.
   // Brightness and warmth are remembered either way. See FrontlightBootPolicy.h.
   uint8_t frontlightRestoreOnWake = 0;
+  // Daily schedule, read at each wake: quarter hours since local midnight (see
+  // FrontlightBootPolicy.h). Needs a clock, so it is only offered on a board with one.
+  uint8_t frontlightScheduleEnabled = 0;
+  uint8_t frontlightScheduleOn = 80;   // 20:00
+  uint8_t frontlightScheduleOff = 28;  // 07:00
 
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
   static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;

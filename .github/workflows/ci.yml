@@ -1,9 +1,9 @@
 name: CI (build)
 
+# Manual only: lector merges on the local gate (both builds, ctest, sim e2e on all
+# four boards). Run this by hand from the Actions tab when a hosted run is wanted.
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -32,6 +32,14 @@ jobs:
         run: |
           PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix
           git diff --exit-code || (echo "Please run 'bin/clang-format-fix' to fix formatting issues" && exit 1)
+
+  forbidden-calls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check src/ for forbidden calls
+        run: ./bin/check-forbidden-calls
 
   cppcheck:
     runs-on: ubuntu-latest
@@ -90,14 +98,23 @@ jobs:
           key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-${{ runner.os }}-
 
+      - name: Cache compiled objects
+        # SCons CacheDir keyed by source+flag signatures, so a hit is only ever an identical
+        # object. A fresh key per run (actions/cache never overwrites one) restores the newest.
+        # prune-object-caches keeps only the newest per branch. v2: fresh start after #412.
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/pio-build-cache
+          key: pio-obj-v2-default-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-${{ github.run_id }}
+          restore-keys: pio-obj-v2-default-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-
+
       - name: Build CrossPoint
-        # Both envs in ONE pio invocation: a second `pio run` can wipe the whole
-        # .pio/build tree (project-checksum mismatch after the S3 toolchain
-        # installs into the restored cache), deleting the default firmware.bin
-        # before the artifact upload.
+        env:
+          PLATFORMIO_BUILD_CACHE_DIR: ${{ runner.temp }}/pio-build-cache
         run: |
           set -euo pipefail
-          pio run -e default -e sticky | tee pio.log
+          # Retry once: the platform re-downloads its Python dependencies on every run and a failed fetch stops the build before it compiles.
+          pio run -e default | tee pio.log || { sleep 60; pio run -e default | tee pio.log; }
 
       - name: Extract firmware stats
 
@@ -126,6 +143,52 @@ jobs:
           name: sim-default
           path: .pio/build/default/*.bin
           if-no-files-found: error
+
+  # Compile-only coverage for the Sticky board, beside the other builds: in the default
+  # build job it added ~7 min before the C3 sims could start.
+  build-sticky:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+      - name: Cache PlatformIO packages
+        # Own key, like x4pro: its custom_sdkconfig framework rebuild must not leak into the others.
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-sticky-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-sticky-${{ runner.os }}-
+
+      - name: Cache compiled objects
+        # SCons CacheDir keyed by source+flag signatures, so a hit is only ever an identical
+        # object. A fresh key per run (actions/cache never overwrites one) restores the newest.
+        # prune-object-caches keeps only the newest per branch. v2: fresh start after #412.
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/pio-build-cache
+          key: pio-obj-v2-sticky-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-${{ github.run_id }}
+          restore-keys: pio-obj-v2-sticky-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-
+
+      - name: Build Sticky
+        env:
+          PLATFORMIO_BUILD_CACHE_DIR: ${{ runner.temp }}/pio-build-cache
+        # Retry once: the platform re-downloads its Python dependencies on every run and a failed fetch stops the build before it compiles.
+        run: pio run -e sticky || { sleep 60; pio run -e sticky; }
 
   build-x4pro:
     runs-on: ubuntu-latest
@@ -156,8 +219,21 @@ jobs:
           key: pio-x4pro-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-x4pro-${{ runner.os }}-
 
+      - name: Cache compiled objects
+        # SCons CacheDir keyed by source+flag signatures, so a hit is only ever an identical
+        # object. A fresh key per run (actions/cache never overwrites one) restores the newest.
+        # prune-object-caches keeps only the newest per branch. v2: fresh start after #412.
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/pio-build-cache
+          key: pio-obj-v2-x4pro-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-${{ github.run_id }}
+          restore-keys: pio-obj-v2-x4pro-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-
+
       - name: Build X4 Pro
-        run: pio run -e x4pro
+        env:
+          PLATFORMIO_BUILD_CACHE_DIR: ${{ runner.temp }}/pio-build-cache
+        # Retry once: the platform re-downloads its Python dependencies on every run and a failed fetch stops the build before it compiles.
+        run: pio run -e x4pro || { sleep 60; pio run -e x4pro; }
 
       - name: Upload images for the simulator
         uses: actions/upload-artifact@v6
@@ -167,57 +243,81 @@ jobs:
           if-no-files-found: error
 
   # The real firmware of every board in QEMU (sim/): boots, touch and keys, reading.
-  sim-e2e:
-    needs: [build, build-x4pro]
+  # Each board waits only on its own image. The x4pro suite runs in shards, one QEMU each,
+  # cut by measured time: quick-lock ~130 s, screen-calibration + sleep ~135 s, the rest ~125 s.
+  # The last shard takes every file the others do not name, so a new suite always runs.
+  sim-x4pro:
+    needs: build-x4pro
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: 1
+            files: quick-lock
+          - shard: 2
+            files: screen-calibration sleep
+          - shard: 3
+            files: rest
     steps:
       - uses: actions/checkout@v6
-
-      - name: Install tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build libglib2.0-dev libpixman-1-dev libgcrypt20-dev \
-            libslirp-dev python3-venv mtools dosfstools fdisk
-          pip install esptool pillow
-
-      - uses: actions/download-artifact@v7
-        with:
-          name: sim-default
-          path: .pio/build/default
 
       - uses: actions/download-artifact@v7
         with:
           name: sim-x4pro
           path: .pio/build/x4pro
 
-      - name: Cache QEMU
-        uses: actions/cache@v4
-        with:
-          path: sim/.qemu
-          key: qemu-${{ runner.os }}-${{ hashFiles('sim/qemu-patches/**', 'sim/build-qemu.sh') }}
+      - uses: ./.github/actions/sim-setup
 
-      - name: Build QEMU
-        run: ./sim/build-qemu.sh
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-
-      - name: Install e2e
+      - name: Run e2e (x4pro, shard ${{ matrix.shard }}/3)
         working-directory: sim
+        env:
+          FILES: ${{ matrix.files }}
         run: |
-          npm ci
-          npx playwright install --with-deps chromium
-
-      - name: Run e2e (x4pro, x3, x3uc8279, x4)
-        working-directory: sim
-        run: npm run test:e2e
+          if [ "$FILES" = rest ]; then
+            # Whole-name match: a new sleep-wake.e2e.ts must land here, not be dropped.
+            FILES=$(ls tests/x4pro/*.e2e.ts | grep -vxF -e tests/x4pro/quick-lock.e2e.ts \
+              -e tests/x4pro/screen-calibration.e2e.ts -e tests/x4pro/sleep.e2e.ts)
+          else
+            FILES=$(for f in $FILES; do echo tests/x4pro/$f.e2e.ts; done)
+          fi
+          echo "$FILES"
+          npm run test:e2e:x4pro -- $FILES
 
       - name: Upload e2e report
         if: failure()
         uses: actions/upload-artifact@v6
         with:
-          name: sim-e2e-report
+          name: sim-e2e-report-x4pro-${{ matrix.shard }}
+          path: sim/.e2e
+          include-hidden-files: true
+
+  sim-c3:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [x3, x3uc8279, x4]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: sim-default
+          path: .pio/build/default
+
+      - uses: ./.github/actions/sim-setup
+
+      - name: Run e2e (${{ matrix.board }})
+        working-directory: sim
+        run: npm run test:e2e:${{ matrix.board }}
+
+      - name: Upload e2e report
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: sim-e2e-report-${{ matrix.board }}
           path: sim/.e2e
           include-hidden-files: true
 
@@ -255,15 +355,45 @@ jobs:
       - name: Run tests
         run: ctest --test-dir build/test --output-on-failure -j
 
+  # Each run saves a new object cache per env (a key is never overwritten), and the repo
+  # cap is 10 GB, so keep only the newest per env on this ref. A main run also drops PR
+  # entries: a PR falls back to main's. Not a gate: a fork PR's token cannot delete.
+  # ponytail: the cache dir itself still grows by the objects each commit changes; bump v2 if it bloats.
+  prune-object-caches:
+    needs: [build, build-sticky, build-x4pro]
+    if: always()
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Delete older object caches
+        run: |
+          for e in default sticky x4pro; do
+            gh cache list -k "pio-obj-v2-$e-" -r "$GITHUB_REF" -S created_at -O desc -L 100 \
+              --json id -q '.[1:][].id' | xargs -r -n1 gh cache delete
+          done
+          if [ "$GITHUB_REF" = refs/heads/main ]; then
+            gh cache list -k pio-obj-v2- -L 100 --json id,ref -q '.[] | select(.ref != "refs/heads/main") | .id' \
+              | xargs -r -n1 gh cache delete
+          fi
+          gh cache list -k pio-obj-v2- -L 100
+
   # This job is used as the PR required actions check, allows for changes to other steps in the future without breaking
   # PR requirements.
   test-status:
     name: Test Status
     needs:
       - build
+      - build-sticky
       - build-x4pro
-      - sim-e2e
+      - sim-x4pro
+      - sim-c3
       - clang-format
+      - forbidden-calls
       - cppcheck
       - unit-tests
     if: always()

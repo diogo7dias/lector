@@ -1,8 +1,13 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo/lector-dark.svg">
+  <img src="docs/images/logo/lector.svg" alt="lector crow logo" width="96">
+</picture>
+
 # lector
 
-E-reader firmware for the Xteink X3 and X4.
+E-reader firmware for the Xteink X3, X4 and X4 Pro.
 
-**Install:** [browser flasher](https://diogo7dias.github.io/lector-web/#flash), or download `firmware.bin` from [Releases](https://github.com/diogo7dias/lector/releases), copy it to the SD card, and use Settings → SD Card Firmware Update.
+**Install:** [browser flasher](https://diogo7dias.github.io/lector-web/#flash), or download `firmware.bin` (X3 and X4) or `firmware-x4pro.bin` (X4 Pro) from [Releases](https://github.com/diogo7dias/lector/releases), copy it to the SD card, and use Settings → SD Card Firmware Update.
 
 ### Reading
 
@@ -10,13 +15,13 @@ E-reader firmware for the Xteink X3 and X4.
 - Reading Themes: save a set of reader looks and apply them per book.
 - Steal Look: copy another book's settings.
 - Reading position is held by paragraph, so a font change puts you back on the same paragraph.
-- Paragraph numbers: off, per chapter, or whole book, in two sizes.
+- Paragraph numbers: off or per chapter, in three sizes.
 - Go to Paragraph: jump straight to a number.
 - Granular paragraph spacing and first-line indent.
 - Paperback Look: heavier ink for reader text.
 - Bionic Reading and guide dots.
 - Lookup History: the last 100 dictionary words, reopened from the in-book menu.
-- Vollkorn as the built-in reading font, Cozette for the UI.
+- ChareInk as the built-in reading font, Cozette for the UI.
 
 ### Quotes
 

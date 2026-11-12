@@ -21,6 +21,7 @@ class RenderLock;  // forward declaration
 
 enum class HomeMenuItem {
   NONE,
+  BOOKORBIT_MISSING,
   FILE_BROWSER,
   OPDS_BROWSER,
   FILE_TRANSFER,
@@ -55,6 +56,8 @@ class ActivityManager {
   // that opens it works from every screen, and the band is drawn over whatever the last
   // render left in the framebuffer instead of replacing it.
   LightPanel lightPanel;
+  std::atomic<bool> quickLocked{false};
+  void paintQuickLockBadge();
   std::function<void()> onSleep_;
 
   void exitActivity(const RenderLock& lock);
@@ -89,12 +92,11 @@ class ActivityManager {
   std::atomic<bool> requestedUpdate{false};
 
  public:
-  explicit ActivityManager(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : renderer(renderer), mappedInput(mappedInput), renderingMutex(xSemaphoreCreateMutex()) {
-    assert(renderingMutex != nullptr && "Failed to create rendering mutex");
-    stackActivities.reserve(10);
-  }
-  ~ActivityManager() { assert(false); /* should never be called */ };
+  GfxRenderer& getRenderer() { return renderer; }
+
+  // Out of line: the unique_ptr<Activity> members need Activity complete to grow and destroy.
+  explicit ActivityManager(GfxRenderer& renderer, MappedInputManager& mappedInput);
+  ~ActivityManager();
 
   void begin();
 
@@ -130,7 +132,7 @@ class ActivityManager {
   void goToBoot(std::string wallpaperPath = {});
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goToCrashReport();
-  void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE, bool cleanInitialRefresh = false);
+  void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE);
 
   // This will move current activity to stack instead of deleting it
   void pushActivity(std::unique_ptr<Activity>&& activity);
@@ -153,6 +155,11 @@ class ActivityManager {
   // can put the device to sleep.
   bool isBookContext() const;
   bool runBoundAction(uint8_t function);
+  // Quick Lock: the screen stays up and ignores all input, only the bound gesture releases
+  // it. Lives in memory, so any sleep ends it. Refused while the screen has work its loop
+  // must keep running (a transfer) or the light panel is up.
+  bool isQuickLocked() const { return quickLocked; }
+  void toggleQuickLock();
   bool skipLoopDelay() const;
   ScreenshotInfo getScreenshotInfo() const;
 

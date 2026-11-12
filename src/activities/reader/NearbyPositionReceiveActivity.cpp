@@ -13,10 +13,10 @@
 
 #include "CrossPointSettings.h"
 #include "NearbyPositionSession.h"
-#include "ProgressFile.h"
 #include "RecentBooksStore.h"
 #include "activities/ActivityManager.h"
 #include "util/BookCacheUtils.h"
+#include "util/ProgressFile.h"
 
 using namespace nearby_position;
 
@@ -104,7 +104,7 @@ void NearbyPositionReceiveActivity::scanNext() {
     setState(State::Unavailable);
     return;
   }
-  if (entryName[0] == '.') return;
+  if (entryName[0] == '.' || FsHelpers::isSystemFolderName(entryName)) return;
   const std::string path = paths[depth] + "/" + entryName;
   if (path.size() > 1024) {
     setState(State::Unavailable);
@@ -129,8 +129,8 @@ bool NearbyPositionReceiveActivity::applyPosition(const PacketView& packet) {
   uint8_t bytes[10];
   std::optional<CachedPosition> local;
   {
-    auto file = Storage.open((cache + "/progress.bin").c_str());
-    if (!file || file.size() > sizeof(bytes)) return false;
+    HalFile file;
+    if (!ProgressFile::openForRead("NPR", cache, file) || file.size() > sizeof(bytes)) return false;
     const size_t size = file.size();
     if (file.read(bytes, size) != static_cast<int>(size)) return false;
     local = readCachedPosition(bytes, size);

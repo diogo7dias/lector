@@ -1,4 +1,4 @@
-<!-- lector-version: 0.43.3 -->
+<!-- lector-version: 0.55.0 -->
 
 # Lector User Guide
 
@@ -62,7 +62,9 @@ Three things are deliberately left on a single tap, because a confirming tap wou
 way: the on-screen keyboard, sliders (brightness, text size and the rest, which are dragged or
 stepped), and the Yes/No pop-ups, which are already a question being answered. Page turns by
 tap while reading are unchanged. Holding a word on the page for half a second looks it up in
-the dictionary.
+the dictionary. Spreading two fingers apart on the page makes the text one size
+larger, pinching them together one size smaller; one step per gesture, for this book only,
+like the size row in the light panel. It needs a font with more than one size installed.
 
 **Touch Sleep** (Settings > System, X4 Pro) is Off by default. Set to 15 s, 30 s or 1 min,
 it saves a little battery by putting the touch screen to sleep after that long without
@@ -178,7 +180,9 @@ not count as reading.
 **Stats** on Home leads with this month as a calendar: each day fills from the bottom by how
 long you read that day, the longest day full, and today has a thick outline. Under it are the
 last 7 days, this year, all time and the books finished. The sleep screen shows the last 7
-days in a thin band along its foot, on wallpapers and covers alike.
+days in a thin black band along its foot, on wallpapers and covers alike, when **Settings >
+Display > Show Reading Stats** is on (off by default). **Reading Stats Position** puts its
+text in the **Center** (default), or on the **Left** or **Right**.
 
 Days need the clock. The X3 and X4 Pro keep one; the X4 has no clock chip, so a Wi-Fi
 connection sets its clock until it next powers off. With the clock set, a sitting is dated. Without it the sitting
@@ -199,13 +203,15 @@ folders in brackets, for example `[folder-name]`.
 - **Move the cursor** — **Left** (or **Volume Up**) and **Right** (or **Volume Down**). Hold
   either one to move a whole page at a time.
 - **Open** — **Confirm** opens the folder, book or image under the cursor.
-- **File actions** — hold **Confirm** on an entry. A file another reader can accept opens a
-  small menu offering **Send to Nearby Reader** and **Delete**; anything else goes straight to
-  the delete confirmation. Nothing is deleted without confirming.
+- **File actions** — hold **Confirm** on a file to open a small menu: **Send to Nearby
+  Reader** (files another reader can accept), **Rename**, **Move to folder** and **Delete**.
+  A folder goes straight to the delete confirmation. Nothing is deleted without confirming.
+- **Rename** — edit the name on the keyboard; the extension stays. Reading position,
+  bookmarks, highlights and saved quotes follow the book, as they do when it is moved.
 - **Search** — search inside the current folder, with the results ranked by how well they
   match.
 
-Renaming and moving files is done from the web interface rather than on the device, see
+Files can also be renamed and moved from the web interface, see
 [section 9](#9-getting-books-onto-the-device).
 
 Each row shows its file type on the right, and a book you have opened before also shows how
@@ -217,7 +223,10 @@ have never opened show no badge, and comics (XTC) never carry one.
 Upgrading from an older release, the books still in your Recents list get their badge on the
 first boot; any other book read long ago gets one the next time you close it.
 
-**Settings > System > Show Hidden Files** decides whether entries beginning with `.` appear.
+**Settings > System > Show Hidden Files** decides whether entries beginning with `.` appear. The
+`System Volume Information` and `XTCache` folders never appear, and their contents are never
+picked as books. The files holding your Wi-Fi, OPDS and sync passwords and your trusted server
+certificates are never shown or served over the network, even with this setting on.
 **File Browser Order** lists a folder alphabetically, in random order, by the date each file
 was added, or by when you last read it. Both date orders put the newest first and leave the
 folders at the top; books you have never opened sit at the bottom of Last Read, in name
@@ -278,6 +287,11 @@ page when you read in landscape.
 With **Short Power Button Click** set to **Page Turn**, a short press of **Power** also turns
 the page.
 
+In EPUB books, page turns pressed while the screen is still refreshing are counted, up to four
+either way, and applied together once it is free: the reader goes straight to that page and
+draws only it. A run stops one page past the end of the chapter (or past the pages laid out so
+far); the extra presses are dropped.
+
 EPUB, TXT and XTC batch position saves every ten page turns, or on the next page redraw
 after five minutes. Leaving the book or putting the reader to sleep saves any pending
 position; explicit progress sync saves immediately.
@@ -320,6 +334,17 @@ of them can be pointed at any action.
 **Pop-up Items** decides which rows the quick pop-up those bindings can open actually
 contains.
 
+A list too long for the screen, such as the actions in **Buttons**, splits into pages and
+shows `1/2` beside its title. The side keys walk from one page to the next; on a touch screen,
+flick up or down.
+
+**Quick Lock** is on offer only in **Settings > Controls > Buttons**: bind it to a button
+gesture, in the book, outside it or both. Firing it leaves the screen as it is with a
+**Locked** badge in the corner, and touch and every button stop answering until you fire the
+same gesture again. Holding **Power** still sleeps while that hold is set to Sleep, **Time to
+Sleep** still runs (pressing things does not hold it back), and any sleep ends the lock. It
+is refused while a transfer is running or the light panel is open.
+
 Text Settings is no longer one of the actions on offer, and is no longer a pop-up row.
 It is reached from Settings, or from the in-book menu. A binding that pointed at it
 reads as Disabled after the update; pick another action for that gesture.
@@ -348,7 +373,12 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 
 - **Select Chapter** — the table of contents. Chapters the book lists but cannot actually
   open are left out, so every row here goes somewhere.
-- **Go to %** — jump by percentage.
+- **Go to %** — jump by percentage. The front buttons move it by 1, the side buttons by 10.
+  On a touch screen a number pad sits under the slider: type the number (4, 7 for 47%),
+  the delete key takes back the last digit, and **OK** jumps.
+- **Go to Page** — jump to a page number of the printed edition: type it as the book prints
+  it (`147`, or `xii` in the front matter) and **OK**. Shown only in EPUB 3 books that carry
+  the printed page numbers (a page list); Return takes you back.
 - **Search** — type a word or phrase and the book is searched chapter by chapter, straight
   from the card; hits appear as they are found, each with a line of context and its chapter.
   Case, curly quotes and line breaks do not matter. Up to 100 hits. Pick one to land on its
@@ -381,7 +411,7 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 - **Reader Settings** — text settings for this book alone.
 - **Reset Reader Settings** — drop the per-book override, shown only when one exists.
 - **Steal Look** — copy another book's look onto this one, once.
-- **Reading Themes** — apply a saved look. A theme holds the text, margin and in-book settings, the paragraph numbers and the status bar layout (which items show and where). Up to 8 themes are kept.
+- **Reading Themes** — apply a saved look. A theme holds the text, margin and in-book settings, the paragraph numbers and the status bar layout (which items show and where). A theme's bar becomes your default bar, like Customise Status Bar. Up to 8 themes are kept.
 - **Paragraph Numbers**, **Number Size**, **Paperback Look**, **Paperback Status**.
 - **Status Bar** — show or hide it. With the bar hidden, a **Progress Bar** row appears in its
   place.
@@ -437,8 +467,8 @@ device.
 
 | Mode           | Behaviour                                                                        |
 | -------------- | -------------------------------------------------------------------------------- |
-| Custom         | A wallpaper from the SD card. When none is found, the open book's cover; with no book open, a white screen reading "Lector". |
-| Cover          | The open book's cover. With no book open, the white "Lector" screen.              |
+| Custom         | A wallpaper from the SD card. When none is found, the open book's cover; with no book open, a white screen with the lector crow and the name "Lector". |
+| Cover          | The open book's cover. With no book open, the white crow and "Lector" screen.     |
 
 Custom is the default. Retired sleep-screen choices now use Custom. Inactivity uses your
 selected sleep screen.
@@ -453,15 +483,17 @@ Wallpapers are `.bmp` or `.pxc` files. The `.pxc` format is the packed 2-bit for
 - **A single wallpaper:** put `sleep.bmp` or `sleep.pxc` in the root of the card. A root file
   takes priority over the folders.
 
-Size the image to the panel: **480x800** on the X4, **528x792** on the X3.
+Size the image to the panel: **480x800** on the X4, **528x792** on the X3. A larger
+`.bmp` still works: with **Sleep Screen Cover Mode** on Fit, it is shrunk to the panel by
+averaging its pixels, so thin lines and fine detail survive (up to 2048x3072).
 
 Wallpaper rows in the in-book menu's Sleep Screen tab favourite, pause, hold and delete the
 wallpaper the device just showed. Paused wallpapers move to `/sleep pause` and stop appearing
 in the rotation. **Settings > Display > Shuffle Wallpapers** reshuffles the order.
 
-Four Display settings decide what is drawn over a wallpaper: **Show Wallpaper Name**, **Show
-Favorite Badge**, **Show Wallpaper Position** and **Sleep Footer Text** (your own line of
-text). **Sleep Image Quality** trades rendering time against how the image looks: **Fast** or
+Five Display settings decide what is drawn over a wallpaper: **Show Wallpaper Name**, **Show
+Favorite Badge**, **Show Wallpaper Position**, **Show Reading Stats** (the last 7 days in a
+band along the foot) and **Sleep Footer Text** (your own line of text). **Sleep Image Quality** trades rendering time against how the image looks: **Fast** or
 **Pretty**.
 
 ### Cover settings
@@ -580,6 +612,9 @@ Two Lector devices can pass a file directly, with no network in between.
    or use the same row in the in-book menu's Device tab to send the open book.
 3. The receiving device asks before accepting, and reports the name and size.
 
+A device stays awake only while a transfer is running. While it is still looking for the other
+reader or waiting for you to answer, **Time to Sleep** applies as usual.
+
 A transfer that is interrupted, by walking out of range or by pressing Back, keeps what
 arrived. Send the same file again and it carries on from there rather than starting over. Both
 devices check the whole file against the sender's checksum before it is kept, so a resumed file
@@ -618,7 +653,8 @@ catalog root URL (for a Calibre Content Server, usually ending in `/opds`), and 
 username and password. Authentication is HTTP Basic; set Calibre to Basic rather than Digest.
 
 Browse and download from **Home > OPDS Browser**. With more than one catalog saved it opens a
-server picker, whose last row, **Add Server**, adds another. Where downloads land (**Download folder**)
+server picker, whose last row, **Add Server**, adds another. Back goes up one level; hold Back
+for a second and let go to leave the catalog for Home. Where downloads land (**Download folder**)
 and how they are named (**Filename format**: Author - Title, Title - Author, or Title) are set
 from the OPDS screens and the web interface, not from the on-device Settings menu.
 
@@ -672,8 +708,8 @@ Lector syncs progress with KOReader-compatible sync servers, so KOReader apps an
 share a position with it.
 
 Settings live in **Settings > System > KOReader Sync**: **Username**, **Password**, **Sync
-Server URL**, **Document Matching** (Filename or Binary), **Send Document Metadata**, and
-**Sync Behavior**.
+Server URL**, **Document Matching** (Filename or Binary), **Send Document Metadata**,
+**Sync Behavior**, and **Auto Sync**.
 
 **Sync Behavior** is **Smart sync** for new configurations, which resolves the simple cases on
 its own: upload when the server has nothing, do nothing when both sides agree, apply the remote
@@ -684,6 +720,14 @@ sync. Either can be changed at any time.
 
 To sync, open the in-book menu and pick **Sync Progress** from the Device tab, or bind a hold
 to **KOSync** in **Settings > Controls**.
+
+**Auto Sync** (off by default) does it for you. When a book opens, the first time since the
+device last slept, Lector joins a saved Wi-Fi network, fetches the position and moves to it when
+the server is ahead. When the device goes to sleep after you turned pages, it sends the new
+position from behind the sleep screen. It uses saved networks only and never shows the network
+list. If no saved network answers, the book simply opens where you left it. A server whose
+certificate has not been trusted yet is skipped, so run **Sync Progress** once by hand first.
+Each pull costs a few seconds of Wi-Fi and a restart back into the book.
 
 #### Option A: the CrossPoint sync server (default)
 
@@ -700,7 +744,30 @@ the same text.
 
 Accounts are per server. An account on `sync.koreader.rocks` does not exist on this one.
 
-#### Option B: the public KOReader server
+#### Option B: BookOrbit
+
+[BookOrbit](https://bookorbit.app) speaks the KOReader sync protocol and shares the position with
+its web reader and apps, so a book continues where you stopped on either side.
+
+1. In BookOrbit, create a KOReader sync account (its KOReader settings page) and an OPDS
+   account (its OPDS settings page).
+2. Add the OPDS server `https://<your-host>/api/v1/opds` with the OPDS account, and download
+   books through it. A copied file is fine too, as long as it is the same file BookOrbit holds.
+3. Set **Sync Server URL** to `https://<your-host>/api/v1/koreader`, set **Username** and
+   **Password** to the KOReader sync account, and set **Document Matching** to **Binary**.
+   BookOrbit finds the book by its contents, not its name.
+4. Run **Authenticate**, then turn on **Auto Sync** if you want it.
+
+With **Auto Sync** on, Lector also watches for books you are reading in BookOrbit but have not
+put on the device. When it goes to sleep (after you read, or at most once every 6 hours), it
+reads the smart shelf named **Reading** in BookOrbit's OPDS catalogue. A book counts as on the
+device when the file an OPDS download would save exists, or a recent book has the same title.
+When some are missing, Home shows a row such as **2 on BookOrbit, not here**. Select it to see
+only those books. Confirm downloads one and opens it at your BookOrbit position. BookOrbit needs
+a smart shelf called **Reading** (status is Reading) for this to work. Read-along books arrive
+without their audio, so their position does not sync.
+
+#### Option C: the public KOReader server
 
 1. Set **Sync Server URL** to `https://sync.koreader.rocks`. An empty URL points at the
    CrossPoint server instead, so this one has to be typed in.
@@ -723,7 +790,7 @@ curl -i "https://sync.koreader.rocks/users/create" \
 `HTTP 402` with `{"code":2002,"message":"Username is already registered."}` means that name is
 taken.
 
-#### Option C: your own server
+#### Option D: your own server
 
 1. Start a sync server:
 
@@ -854,7 +921,9 @@ Lector reads StarDict dictionaries from `/dictionaries/<name>/` on the card. Pic
 
 Look a word up from the in-book menu's **Look Up** row, or bind a hold to **Dictionary** in
 **Settings > Controls**. On a touch screen, hold the word itself for half a second: its
-definition opens straight away, and Back returns to the page. Every successful lookup is remembered: **Lookup History**, in the
+definition opens straight away, and Back returns to the page. A long definition turns pages
+with the same taps and side swipes as a book page, under **Touch Reader Controls**. A word with several entries in
+the dictionary shows all of them, each under its own headword. Every successful lookup is remembered: **Lookup History**, in the
 same menu, lists the last 100 words newest first and reopens any of them. Setup and usage
 are covered in [docs/dictionary.md](./docs/dictionary.md).
 
@@ -896,15 +965,30 @@ belongs to, so the rows here appear in the same order as on the device.
 - **Sleep Screen Cover Mode** — Fit or Crop.
 - **Sleep Screen Cover Filter** — None, Contrast or Inverted.
 - **Sleep Image Quality** — Fast or Pretty.
-- **Show Wallpaper Name**, **Show Favorite Badge**, **Show Wallpaper Position** — what is
-  drawn over the wallpaper.
+- **Show Wallpaper Name**, **Show Favorite Badge**, **Show Wallpaper Position**, **Show
+  Reading Stats** — what is drawn over the wallpaper. All off by default.
+- **Reading Stats Position** — Center, Left or Right.
 - **Shuffle Wallpapers** — reshuffle the rotation now.
+- **Refresh Wallpaper** (X4 Pro) — off by default. A gray wallpaper drawn straight after a page or
+  a menu can keep faint outlines of it. On, the reader wakes by itself one minute after locking,
+  draws the same wallpaper again and goes back to sleep, which clears them. Only wallpapers are
+  redrawn, not book covers, and not when the battery is under 15%. A short Power press during
+  that redraw (a few seconds) is missed: press again.
 
 **Frontlight** (boards with a frontlight)
 
 - **Frontlight**, **Brightness**, **Warmth**, **Restore on Wake**.
 - **Max Brightness** — the top of the brightness range, 10 to 100 (default 30). The light
   panel's brightness track runs from 0 to this, and a brightness above it is brought down.
+- **Light Schedule**, **Light On From**, **Light On Until** (boards with a clock) — at each
+  wake inside these hours the light comes on by itself, whatever it was before sleep; 20:00
+  to 07:00 by default, in 15-minute steps. Only the wake reads it: a light you change by hand
+  stays that way until the next one, and the light does not go off by itself at the end time.
+  Outside the hours **Restore on Wake** decides as usual.
+
+In a book the light panel also has **Align Left** and **Justify**, which set the book's paragraph
+alignment (for that EPUB alone; in a TXT book, for every TXT book), and **Paragraph Spacing**,
+which turns the extra space between an EPUB's paragraphs on or off for that book.
 
 **Screen**
 
@@ -915,6 +999,12 @@ belongs to, so the rows here appear in the same order as on the device.
   default) keeps Refresh Frequency; any other value applies only to inverted pages.
 - **Refresh at Chapter Start** — off by default. On adds a full refresh on the first page of
   each chapter you enter, on top of Refresh Frequency, so every chapter opens clean. EPUB only.
+- **Screen Calibration** — if the bezel covers the edge of the page, or leaves a gap, move each
+  edge until the whole border shows: pick **Top**, **Right**, **Bottom** or **Left**, then drag the
+  slider or step it, from 0 to 32 pixels. **Save** applies it to reading pages and the status
+  bar, and each book lays itself out again the next time you open it; Back keeps what you had.
+  **Reset to Defaults** goes back to this model's measurements. It is kept on the device, not on
+  the card. Menu screens keep their own spacing.
 - **Sunlight Fading Fix** — software fix for white X4 units fading in direct sunlight.
 
 **Home**
@@ -966,18 +1056,31 @@ other numbers in Settings use the same band.
   their numbers, and a nested list counts from 1 again.
   An inline passage in another writing direction keeps the enclosing paragraph's base direction.
   Arabic and Persian text is shaped once, preserving Alef and Lam order; Latin ligatures remain supported.
+  It also honours drop caps (a large first letter spanning two to four lines), small caps,
+  text the book keeps as typed (poetry, code) and the book's relative font sizes for
+  headings, paragraphs and words. Sizes need an SD card font that has larger and smaller
+  variants; the built-in font draws every word at your size.
 - **Embedded Layout Style** — honour the book's own CSS for where blocks sit: alignment,
-  first-line indent, margins, padding and image sizes. **Paragraph Alignment: Book's Style**
+  first-line indent, margins, padding and image sizes, the boxes and shading the book draws
+  around passages, and the page breaks it asks for. **Paragraph Alignment: Book's Style**
   and **First Line Indent: Book** both read the book's CSS, so they need this on.
 - **Book Margins** — on by default, shown while Embedded Layout Style is on: the book's own
   margins and padding. Off drops them, so blocks sit flush with your page margins, and keeps the
-  book's alignment, indents and image sizes. The book's fonts, sizes and line height are never
+  book's alignment, indents and image sizes. The book's fonts and line height are never
   used: the reader's own settings always win.
+
+A paragraph's lone first or last line never sits by itself at a page edge, and a heading moves
+to the next page with the text that follows it. Tables size each column to its content.
+Small pictures in the text (icons, symbols drawn as images, up to two lines tall) stay inside
+the line; larger ones get their own centred block, and a small picture alone in its paragraph
+is centred.
 - **Bionic Reading** — bolds the first part of each word as a fixation point.
 - **Word Spacing %** — sets the baseline gap between words, from 75% to 150% in steps of 5.
   100% keeps the original spacing. Justified lines still stretch to the right margin;
   this does not limit their gaps. With Guide Dots, it adjusts the spaces on both sides
   of each dot, keeping the dot the same size. Changing it re-paginates the book.
+- **Character Spacing** — the space between letters, from -5 (tighter) to +5 (looser) in
+  half-pixel steps. 0 is the font as designed. Changing it re-paginates the book.
 - **Kerning** — on by default: the font's pair adjustments, such as tucking a V under an A.
   Off sets every letter at its plain width. Only the reading text changes; menus keep it.
 - **Ligatures** — on by default: joined letter pairs such as fi, fl and ff, where the font has them.
@@ -987,6 +1090,10 @@ other numbers in Settings use the same band.
 - **Break Before Headings** — off by default. On starts every top-level heading (h1, h2) on a
   fresh page, for books that run chapters or sections together. A heading straight after another
   heading ("Part One" then "Chapter 1") stays on the same page.
+- **Fill Pages** — off by default. Lector normally moves a line to the next page so a paragraph's
+  first or last line never sits alone, and so a heading stays with the text under it; that leaves
+  a gap at the bottom of some pages. On keeps every line that fits, so pages end full. Page breaks
+  the book asks for still apply.
 - **Word Expansion** — Off by default. On a justified line whose gaps would grow past one and
   a half spaces, **Some** adds up to 1 pixel between letters and **More** up to 2, so the slack
   spreads into the words instead of opening wide holes. Lines with Focus Reading, Guide Dots,
@@ -1020,18 +1127,28 @@ other numbers in Settings use the same band.
 
 **Customise Status Bar** places each element in one of six slots (top left, top centre, top
 right, bottom left, bottom centre, bottom right) or turns it off: **Battery**, **Clock**,
-**Title**, **Page in Chapter**, **Book %**, **Chapter %**, **Chapter Number**, **Pages This
+**Chapter Title**, **Book Title**, **Page in Chapter**, **Book %**, **Chapter %**, **Chapter Number**, **Pages This
 Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Alongside them:
 
-- **Title Source** — Book or Chapter, and **Truncate Title**.
-- **Page Format** — `N/M` or `N left`.
-- **Pages This Session** counts forward page turns in the open EPUB and resets when the book closes.
+- **Chapter Title** and **Book Title** can go in different slots, for example the book on top
+  and the chapter at the bottom. Put both on the same edge (both top or both bottom) and they
+  stack in the Chapter Title's slot: the book title on the first line, the chapter title on
+  the line below. A book without chapters (TXT) shows
+  its title in the Book Title slot, or in the Chapter Title slot when Book Title is off.
+- **Truncate Title** — off, a title wraps onto as many lines as it needs; on, it is cut short
+  with `…`. A Book Title in a slot of its own is always one line.
+- **Page Format** — `N/M` or `N left`. In a book that carries the printed page numbers the
+  printed page follows it, `8/12 p.17`.
+- **Pages This Session** counts forward page turns in the open EPUB or TXT book and resets when
+  the book closes.
 - **Pages to Paragraph** shows `>P.0` on most pages: the paragraph you are in ends before the
-  next one starts. `>P.2` means it runs two more pages.
+  next one starts. `>P.2` means it runs two more pages. In a TXT book each line break starts a
+  paragraph, so a file broken into short lines always shows `>P.0`.
 - **Chapter time left** (`C:12m`) and **Book time left** (`B:3h05`) estimate from how long you
   spend per page this sitting. They appear after three timed pages; turns under 2 seconds or
-  over 10 minutes are not counted. The book estimate scales the rest of the book by the
-  current chapter, so it settles as you read. EPUB only.
+  over 10 minutes are not counted. On EPUB the book estimate scales the rest of the book by the
+  current chapter, so it settles as you read. A TXT book has no chapters, so it shows Book time
+  left only, counted from its exact pages left.
 - **Book Bar** and **Chapter Bar** — Off, Top or Bottom, with **Bar Thickness** (Slim 3 px,
   Medium 6 px, Fat 9 px). On EPUB books the Book Bar has a small notch where each chapter
   starts. A book with more than 64 chapters shows a plain bar.
@@ -1093,8 +1210,10 @@ Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Al
 - **Move Finished Books to Read Folder**.
 - **Move Opened Books to Recents Folder**.
 
-**Fast Page Turns** — on by default on the X4, where it is validated. Page turns and menu
-moves use the panel's cheapest waveform, which is several times quicker than the standard
+**Fast Page Turns** — on by default on the X4, where it is validated. On the X4 Pro it has its
+own row on the main **Settings** page, off by default while it is being tried out. That page
+holds the switch and what to test, and it changes nothing on units with a UC8279 panel.
+Page turns and menu moves use the panel's cheapest waveform, which is several times quicker than the standard
 one. Every eighth pass runs the standard waveform anyway, so the panel never works from a
 stale temperature reading, and the first paint after a wake never uses it. Turn it off if
 you ever see ink left behind that a full refresh does not clear.
@@ -1121,6 +1240,9 @@ when you are done; it writes to the card while it is on.
 - **Clear Reading Cache**.
 - **Check for updates**, **Install Other Firmware** and **SD Card Firmware Update** — see
   [section 13](#13-updating-the-firmware).
+- **What's New** — the notes for this release. After an update they also open once by
+  themselves, the first time Home appears; **OK** or Back closes them. A fresh install skips
+  that.
 
 ---
 

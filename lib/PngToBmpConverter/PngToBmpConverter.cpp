@@ -303,7 +303,6 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
     return false;
   }
 
-  // Read IHDR chunk
   uint32_t ihdrLen;
   if (!readBE32(pngFile, ihdrLen)) return false;
 
@@ -325,7 +324,6 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
   uint8_t filter = ihdrRest[3];
   uint8_t interlace = ihdrRest[4];
 
-  // Skip IHDR CRC
   pngFile.seekCur(4);
 
   LOG_DBG("PNG", "Image: %ux%u, depth=%u, color=%u, interlace=%u", width, height, bitDepth, colorType, interlace);
@@ -449,7 +447,6 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
       ctx.paletteSize = entries;
       size_t palBytes = entries * 3;
       pngFile.read(ctx.palette, palBytes);
-      // Skip any remaining palette data
       if (chunkLen > palBytes) pngFile.seekCur(chunkLen - palBytes);
       pngFile.seekCur(4);  // CRC
     } else if (memcmp(chunkType, "tRNS", 4) == 0 && ctx.colorType == PNG_COLOR_PALETTE) {
@@ -469,7 +466,6 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
     } else if (memcmp(chunkType, "IEND", 4) == 0) {
       break;
     } else {
-      // Skip unknown chunk
       pngFile.seekCur(chunkLen + 4);
     }
   }
@@ -507,7 +503,6 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
             targetHeight);
   }
 
-  // Write BMP header
   bmp_writer::writeHeader2bit(bmpOut, outWidth, outHeight);
   const int bytesPerRow = (outWidth * 2 + 31) / 32 * 4;
 
@@ -553,7 +548,6 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
   bool success = true;
   uint8_t rowsSinceYield = 0;
 
-  // Process each scanline
   for (uint32_t y = 0; y < height; y++) {
     // Decode one scanline
     if (!decodeScanline(ctx)) {
@@ -567,8 +561,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
 
     if (!needsScaling) {
       // Direct output (no scaling)
-      packBmpRow(rowBuffer, bytesPerRow, outWidth, atkinsonDitherer.get(),
-                 [grayRow](const int x) { return grayRow[x]; });
+      packBmpRow(rowBuffer, bytesPerRow, outWidth, *atkinsonDitherer, [grayRow](const int x) { return grayRow[x]; });
       bmpOut.write(rowBuffer, bytesPerRow);
       yieldDuringDecode(rowsSinceYield);
     } else {
@@ -581,7 +574,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
       // Output all rows whose boundaries we've crossed (handles both up and downscaling)
       // For upscaling, one source row may produce multiple output rows
       while (srcY_fp >= nextOutY_srcStart && currentOutY < outHeight) {
-        packBmpRow(rowBuffer, bytesPerRow, outWidth, atkinsonDitherer.get(), [&rowAccum, &rowCount](const int x) {
+        packBmpRow(rowBuffer, bytesPerRow, outWidth, *atkinsonDitherer, [&rowAccum, &rowCount](const int x) {
           return static_cast<uint8_t>((rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0);
         });
         bmpOut.write(rowBuffer, bytesPerRow);

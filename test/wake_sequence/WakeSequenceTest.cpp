@@ -57,7 +57,7 @@ TEST(WakeSequence, PanicOutranksEverythingButRecovery) {
 TEST(WakeSequence, ASilentRebootTargetingTheReaderWithABookResumesIt) {
   WakeInputs in;
   in.silentReboot = true;
-  in.silentTargetIsReader = true;
+  in.silentTarget = RestartTarget::Reader;
   in.openEpubPathEmpty = false;
   EXPECT_EQ(plan(in).target, Target::SilentReader);
 }
@@ -65,9 +65,20 @@ TEST(WakeSequence, ASilentRebootTargetingTheReaderWithABookResumesIt) {
 TEST(WakeSequence, ASilentRebootTargetingTheReaderWithNoBookLandsOnHome) {
   WakeInputs in;
   in.silentReboot = true;
-  in.silentTargetIsReader = true;
+  in.silentTarget = RestartTarget::Reader;
   in.openEpubPathEmpty = true;
   EXPECT_EQ(plan(in).target, Target::SilentHome);
+}
+
+// Leaving Settings > Wi-Fi networks reboots to free the driver's heap; the user lands
+// back in Settings, even with a book open that a reader target would resume.
+TEST(WakeSequence, ASilentRebootTargetingSettingsLandsOnSettings) {
+  WakeInputs in = resumeWake();
+  in.silentReboot = true;
+  in.silentTarget = RestartTarget::Settings;
+  EXPECT_EQ(plan(in).target, Target::SilentSettings);
+  EXPECT_FALSE(plan(in).waitBeforeRoutePaint);
+  EXPECT_FALSE(plan(in).bumpReaderLoadCount);
 }
 
 // The regression this arm was written for: a silent reboot must NOT reach the sleep-wake
@@ -76,7 +87,7 @@ TEST(WakeSequence, ASilentRebootTargetingTheReaderWithNoBookLandsOnHome) {
 TEST(WakeSequence, ASilentRebootNeverFallsThroughToTheSleepWakeResume) {
   WakeInputs in = resumeWake();
   in.silentReboot = true;
-  in.silentTargetIsReader = false;
+  in.silentTarget = RestartTarget::Home;
   EXPECT_EQ(plan(in).target, Target::SilentHome);
 }
 
@@ -175,7 +186,7 @@ TEST(WakeSequence, NoReaderRouteWaitsBeforeDispatch) {
 TEST(WakeSequence, NeitherSilentArmWaitsBecauseASilentRebootNeverBlanks) {
   WakeInputs reader;
   reader.silentReboot = true;
-  reader.silentTargetIsReader = true;
+  reader.silentTarget = RestartTarget::Reader;
   reader.openEpubPathEmpty = false;
   EXPECT_EQ(plan(reader).target, Target::SilentReader);
   EXPECT_FALSE(plan(reader).waitBeforeRoutePaint);
@@ -205,7 +216,7 @@ TEST(WakeSequence, EveryReaderArmBumpsTheCrashLoopCounter) {
 TEST(WakeSequence, TheSilentReaderArmTouchesNeitherTheCounterNorTheOpenPath) {
   WakeInputs in;
   in.silentReboot = true;
-  in.silentTargetIsReader = true;
+  in.silentTarget = RestartTarget::Reader;
   in.openEpubPathEmpty = false;
   const auto out = plan(in);
   EXPECT_FALSE(out.bumpReaderLoadCount);

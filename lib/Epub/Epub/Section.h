@@ -1,4 +1,5 @@
 #pragma once
+#include <deque>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -55,13 +56,14 @@ class Section {
   };
   // Held only while an incremental build is in progress (see startBuild). Carries the
   // live parser plus the strings it references (the parser stores them by reference)
-  // and the in-RAM page-offset table.
+  // and the in-RAM page-offset table. The table is a deque so it grows in small chunks: a vector
+  // doubling past 1024 pages needs 24 KB contiguous, and a failed allocation aborts.
   struct BuildContext {
     // The section this build belongs to, so the page-complete trampoline can reach it
     // without a capturing lambda.
     Section* owner = nullptr;
     std::unique_ptr<ChapterHtmlSlimParser> parser;
-    std::vector<PageLutEntry> lut;
+    std::deque<PageLutEntry> lut;
     std::string parsePath;
     std::string contentBase;
     std::string imageBasePath;
@@ -105,6 +107,8 @@ class Section {
   // Builds write here and are swapped over filePath only on commit, so a prior
   // partial/finalized file stays readable while a rebuild is in progress.
   std::string binTmpPath() const { return filePath + ".part"; }
+  // Trades the live layout for the one kept from other settings when that one matches.
+  bool swapInPreviousLayout(const ReaderRenderSpec& spec, bool currentPartial) const;
   std::unique_ptr<Page> loadPageAt(int page) const;
   // Read a page already laid out by the in-progress build (page < build LUT size), from
   // the partially-written tmp .bin without disturbing the build's write cursor.

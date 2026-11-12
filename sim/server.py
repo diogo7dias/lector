@@ -7,10 +7,12 @@ Boots that board's firmware from its last `pio run` on a fresh card, then serves
   GET  /screen.png   the panel, upright
   GET  /state        {"frames", "activity", "ink", "asleep", "controller"} as JSON
   GET  /ink/<x>/<y>/<w>/<h>  {"ink", "area"}: dark pixels in that box of the upright panel
-  POST /press/<key>  the board's keys (see lector_sim.buttons); power sleeps, or wakes when asleep
+  POST /press/<key>[?ms=]  the board's keys (see lector_sim.buttons; ms = hold, default 150); power sleeps, or wakes when asleep
   POST /reboot       cut the power and switch on again (flash and card persist)
   POST /tap/<x>/<y>[?ms=N]  touch the upright panel (480x800) for N ms (300), touch boards only
   POST /swipe/<x1>/<y1>/<x2>/<y2>  slide a finger across it
+  POST /pinch/<spanStart>/<spanEnd>  two fingers on a vertical line through the centre, apart by
+       spanStart px, move to spanEnd px apart (spread when larger, pinch when smaller)
 """
 import io, json, os, re, sys, tempfile, threading
 from urllib.parse import parse_qs
@@ -132,10 +134,10 @@ class Device:
         self.sim.screen().save(buf, "PNG")
         return buf.getvalue()
 
-    def press(self, key):
+    def press(self, key, hold=0.15):
         with self.lock:
             if key != "power":
-                self.sim.press(key)
+                self.sim.press(key, hold=hold)
             elif self.sim.asleep():
                 self.sim.power_on()
                 self.sim.wait_idle()
@@ -151,6 +153,11 @@ class Device:
     def swipe(self, *points, duration=0.3):
         with self.lock:
             self.sim.swipe(*points, duration=duration)
+
+    def pinch(self, start, end):
+        with self.lock:
+            self.sim.pinch((240, 400 - start // 2), (240, 400 + start // 2), (240, 400 - end // 2),
+                           (240, 400 + end // 2))
 
 
 def handler(device):
@@ -176,6 +183,8 @@ def handler(device):
                 self.send(200, device.png(), "image/png")
             elif path == "/state":
                 self.send(200, json.dumps(device.state()).encode(), "application/json")
+            elif path == "/log":
+                self.send(200, device.sim.log_text().encode(errors="replace"), "text/plain; charset=utf-8")
             elif path.startswith("/ink/"):
                 try:
                     x, y, w, h = map(int, path.split("/")[2:])
@@ -200,8 +209,14 @@ def handler(device):
                     self.send(400, b"bad point or hold", "text/plain")
                     return
                 device.swipe(*(points * 2 if len(points) == 2 else points), duration=ms / 1000)
+            elif parts[0] == "pinch" and len(parts) == 3 and BOARDS[BOARD].get("touch"):
+                spans = [int(v) for v in parts[1:] if v.isdigit()]
+                if len(spans) != 2 or not all(20 <= v <= 700 for v in spans):
+                    self.send(400, b"spans are 20..700 px", "text/plain")
+                    return
+                device.pinch(*spans)
             elif parts[0] == "press" and len(parts) == 2 and parts[1] in KEYS:
-                device.press(parts[1])
+                device.press(parts[1], int(parse_qs(query).get("ms", ["150"])[0]) / 1000)
             elif parts == ["reboot"]:
                 device.reboot()
             else:

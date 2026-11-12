@@ -20,9 +20,7 @@ constexpr int ENTER_DELETE_MODE_MS = 700;
 void EpubReaderBookmarksActivity::onEnter() {
   UiListActivity::onEnter();
 
-  if (!BookmarkFile::load(epubPath, bookmarks)) {
-    bookmarks.shrink_to_fit();
-  }
+  BookmarkFile::load(epubPath, bookmarks);  // clears `bookmarks` first; a missing file leaves it empty
   LOG_DBG("EPB", "Loaded %d bookmarks for book: %s", static_cast<int>(bookmarks.size()), epubPath.c_str());
 
   requestUpdate();

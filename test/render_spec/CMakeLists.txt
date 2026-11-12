@@ -3,7 +3,7 @@ add_executable(RenderSpecTest
 )
 
 target_include_directories(RenderSpecTest PRIVATE
-  ${REPO_ROOT}/src/activities/reader
+  ${REPO_ROOT}/src
   ${REPO_ROOT}/lib/Epub
 )
 

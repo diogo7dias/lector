@@ -41,9 +41,11 @@ class DictionaryWordSelectActivity final : public Activity {
     int16_t x;
     int16_t y;
     int16_t width;
+    int16_t height;
     uint16_t row;
-    const char* text;
-    EpdFontFamily::Style style;
+    uint16_t index;  // into block; both live as long as the page
+    const TextBlock* block;
+    const char* text() const { return block->wordText(index); }
   };
 
   enum class Popup : uint8_t { None, Busy, NotFound, Error };
@@ -64,16 +66,12 @@ class DictionaryWordSelectActivity final : public Activity {
   const int anchorY;
   bool lookupPending = false;  // the anchor hit a word: look it up on the first loop pass
   bool heldLookup = false;     // opened by that hold: Back from its definition goes to the page
-  int lineHeight = 0;
 
   std::vector<WordBox> words;
   int selected = 0;
   uint16_t rowCount = 0;
 
   Dictionary dict;
-  bool dictOpenAttempted = false;
-  bool dictOpenOk = false;
-  bool dictNeedsIndex = false;
 
   Popup popup = Popup::None;
   StrId popupMsg = StrId::STR_DICT_NOT_FOUND;
@@ -93,4 +91,6 @@ class DictionaryWordSelectActivity final : public Activity {
   int16_t snapshotW = 0;
   int16_t snapshotH = 0;
   int snapshotIdx = -1;
+  // A popup was drawn over the page: the repaint that removes it is a HALF.
+  bool cleanAfterPopup = false;
 };

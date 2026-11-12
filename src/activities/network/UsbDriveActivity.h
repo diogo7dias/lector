@@ -24,6 +24,7 @@ class UsbDriveActivity final : public UiStatusActivity {
   static constexpr unsigned long HOST_WAIT_TIMEOUT_MS = 5UL * 60UL * 1000UL;
   static constexpr unsigned long START_FAILURE_TIMEOUT_MS = 30UL * 1000UL;
   static constexpr unsigned long FORCED_DISCONNECT_TIMEOUT_MS = 1000UL;
+  static constexpr unsigned long HOST_SUSPEND_TIMEOUT_MS = 2000UL;
 
   bool canLeave() const { return phase == Phase::Waiting || phase == Phase::StartFailed; }
   void enterPhase(Phase next);
@@ -32,4 +33,5 @@ class UsbDriveActivity final : public UiStatusActivity {
   Phase phase = Phase::Preparing;
   bool disconnectRequested = false;
   unsigned long phaseStartedAt = 0;
+  unsigned long suspendedSince = 0;  // 0 while the bus is awake
 };

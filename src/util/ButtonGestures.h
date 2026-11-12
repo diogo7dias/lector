@@ -42,36 +42,28 @@ class Detector {
   void setHoldMs(const uint32_t ms) { holdMs_ = ms; }
 
   Event onPress(const uint32_t nowMs) {
-    holdFired_ = false;
+    const bool wasAwaiting = phase_ == Phase::AwaitingSecond;
     pressedAt_ = nowMs;
-    pressed_ = true;
-    if (awaitingSecond_ && elapsed(nowMs, releasedAt_) < DOUBLE_WINDOW_MS) {
-      awaitingSecond_ = false;
-      swallowRelease_ = true;
+    phase_ = Phase::Down;
+    if (!wasAwaiting) return Event::None;
+    if (elapsed(nowMs, releasedAt_) < DOUBLE_WINDOW_MS) {
+      phase_ = Phase::SecondDown;
       return hasDouble_ ? Event::Double : Event::None;
     }
-    if (awaitingSecond_) {
-      // The window closed while the loop was busy (an e-ink refresh), so no tick() ran to
-      // report the first click. Report it now, or it is lost under this new press.
-      awaitingSecond_ = false;
-      return hasSingle_ ? Event::Single : Event::None;
-    }
-    return Event::None;
+    // The window closed while the loop was busy (an e-ink refresh), so no tick() ran to
+    // report the first click. Report it now, or it is lost under this new press.
+    return hasSingle_ ? Event::Single : Event::None;
   }
 
   Event onRelease(const uint32_t nowMs) {
-    pressed_ = false;
+    // The press already reported a gesture; its release is part of that gesture.
+    const bool gestureReported = phase_ == Phase::SecondDown || phase_ == Phase::HoldFired;
+    phase_ = Phase::Idle;
     releasedAt_ = nowMs;
-    if (swallowRelease_ || holdFired_) {
-      // The press already reported a gesture; its release is part of that gesture.
-      swallowRelease_ = false;
-      holdFired_ = false;
-      return Event::None;
-    }
-    if (!hasSingle_ && !hasDouble_) return Event::None;
+    if (gestureReported) return Event::None;
     if (hasDouble_) {
       // Hold the single back: only the window's end tells the two apart.
-      awaitingSecond_ = true;
+      phase_ = Phase::AwaitingSecond;
       return Event::None;
     }
     return hasSingle_ ? Event::Single : Event::None;
@@ -80,12 +72,12 @@ class Detector {
   // Called every loop pass, whether or not an edge arrived: hold fires while the
   // button is still down, and a deferred single fires when its window closes.
   Event tick(const uint32_t nowMs) {
-    if (pressed_ && hasHold_ && !holdFired_ && elapsed(nowMs, pressedAt_) >= holdMs_) {
-      holdFired_ = true;
+    if ((phase_ == Phase::Down || phase_ == Phase::SecondDown) && hasHold_ && elapsed(nowMs, pressedAt_) >= holdMs_) {
+      phase_ = Phase::HoldFired;
       return Event::Hold;
     }
-    if (awaitingSecond_ && elapsed(nowMs, releasedAt_) >= DOUBLE_WINDOW_MS) {
-      awaitingSecond_ = false;
+    if (phase_ == Phase::AwaitingSecond && elapsed(nowMs, releasedAt_) >= DOUBLE_WINDOW_MS) {
+      phase_ = Phase::Idle;
       return hasSingle_ ? Event::Single : Event::None;
     }
     return Event::None;
@@ -93,14 +85,9 @@ class Detector {
 
   // True while the detector owes an answer: the caller must keep the button away
   // from the rest of the firmware until then, or the press would act twice.
-  bool busy() const { return awaitingSecond_ || holdFired_; }
+  bool busy() const { return phase_ == Phase::AwaitingSecond || phase_ == Phase::HoldFired; }
 
-  void reset() {
-    pressed_ = false;
-    awaitingSecond_ = false;
-    holdFired_ = false;
-    swallowRelease_ = false;
-  }
+  void reset() { phase_ = Phase::Idle; }
 
  private:
   // Unsigned subtraction, so a millis() wrap (every 49 days) reads as a small
@@ -110,10 +97,9 @@ class Detector {
   bool hasSingle_ = true;
   bool hasDouble_ = false;
   bool hasHold_ = false;
-  bool pressed_ = false;
-  bool awaitingSecond_ = false;
-  bool holdFired_ = false;
-  bool swallowRelease_ = false;
+  // SecondDown: the press that completed a double, so its release reports nothing.
+  enum class Phase : uint8_t { Idle, Down, AwaitingSecond, SecondDown, HoldFired };
+  Phase phase_ = Phase::Idle;
   uint32_t holdMs_ = HOLD_MS;
   uint32_t pressedAt_ = 0;
   uint32_t releasedAt_ = 0;

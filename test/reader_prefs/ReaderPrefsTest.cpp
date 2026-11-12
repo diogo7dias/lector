@@ -59,7 +59,9 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.textContrast, b.textContrast);
   EXPECT_EQ(a.bookMargins, b.bookMargins);
   EXPECT_EQ(a.headingPageBreak, b.headingPageBreak);
+  EXPECT_EQ(a.fillPages, b.fillPages);
   EXPECT_EQ(a.wordExpansion, b.wordExpansion);
+  EXPECT_EQ(a.sbBookTitlePos, b.sbBookTitlePos);
   EXPECT_EQ(a.screenMargin, b.screenMargin);
   EXPECT_EQ(a.screenMarginTop, b.screenMarginTop);
   EXPECT_EQ(a.screenMarginBottom, b.screenMarginBottom);
@@ -558,7 +560,13 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V18_SIZE + 1, READER_PREFS_V19_SIZE);
   EXPECT_EQ(READER_PREFS_V19_SIZE + 1, READER_PREFS_V20_SIZE);
   EXPECT_EQ(READER_PREFS_V20_SIZE + 1, READER_PREFS_V21_SIZE);
-  EXPECT_EQ(READER_PREFS_V21_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V21_SIZE + 1, READER_PREFS_V22_SIZE);
+  EXPECT_EQ(READER_PREFS_V22_SIZE + 1, READER_PREFS_V23_SIZE);
+  EXPECT_EQ(READER_PREFS_V23_SIZE + 1, READER_PREFS_V24_SIZE);
+  EXPECT_EQ(READER_PREFS_V24_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V24_SIZE, readerPrefsRecordSize(24));
+  EXPECT_EQ(READER_PREFS_V23_SIZE, readerPrefsRecordSize(23));
+  EXPECT_EQ(READER_PREFS_V22_SIZE, readerPrefsRecordSize(22));
   EXPECT_EQ(READER_PREFS_V21_SIZE, readerPrefsRecordSize(21));
   EXPECT_EQ(READER_PREFS_V20_SIZE, readerPrefsRecordSize(20));
   EXPECT_EQ(READER_PREFS_V19_SIZE, readerPrefsRecordSize(19));
@@ -572,7 +580,21 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(22, ReaderPrefs::VERSION);
+  EXPECT_EQ(25, ReaderPrefs::VERSION);
+}
+
+// A v23 record stops before Character Spacing: it reads back as the font as designed,
+// and the spec carries the signed half pixels.
+TEST(ReaderPrefs, CharacterSpacingDefaultsToNormalAndMapsSigned) {
+  ReaderPrefs prefs;
+  EXPECT_EQ(reader_defaults::CHARACTER_SPACING, prefs.characterSpacing);
+  EXPECT_EQ(0, makeRenderSpec(prefs, 0, 480, 800).characterSpacing);
+  prefs.characterSpacing = 0;
+  EXPECT_EQ(-5, makeRenderSpec(prefs, 0, 480, 800).characterSpacing);
+  prefs.characterSpacing = 10;
+  EXPECT_EQ(5, makeRenderSpec(prefs, 0, 480, 800).characterSpacing);
+  prefs.characterSpacing = 200;  // a corrupt byte clamps rather than wrapping
+  EXPECT_EQ(5, makeRenderSpec(prefs, 0, 480, 800).characterSpacing);
 }
 
 TEST(ReaderPrefs, AV12RecordKeepsItsFieldsAndLeavesTheNewItemOff) {
@@ -759,18 +781,42 @@ TEST(ReaderPrefs, SettleSidecarFoldsRetiredWholeBookNumbering) {
   EXPECT_EQ(reader_defaults::PARAGRAPH_NUMBERING, p.paragraphNumbering);
 }
 
-TEST(ReaderPrefs, SettleSidecarSeedsStatusBarOnlyForRecordsWithoutOne) {
+TEST(ReaderPrefs, SettleSidecarSeedsWholeStatusBarForRecordsWithoutOne) {
   ReaderPrefs global;
   global.sbBatteryPos = 3;
+  global.sbOffBar = 2;
   ReaderPrefs old;
   old.sbBatteryPos = 1;
   settleSidecarPrefs(old, FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR - 1, global);
   EXPECT_EQ(3, old.sbBatteryPos);
+  EXPECT_EQ(2, old.sbOffBar);
+}
 
-  ReaderPrefs current;
-  current.sbBatteryPos = 1;
-  settleSidecarPrefs(current, FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR, global);
-  EXPECT_EQ(1, current.sbBatteryPos);
+// The bar layout is the reader's, not the book's: a book with its own look still shows
+// the global layout, so Settings > Customise Status Bar reaches it. Only the show/hide
+// switch and the hidden-bar progress bar stay the book's own.
+TEST(ReaderPrefs, SettleSidecarTakesGlobalBarLayoutKeepingBookSwitches) {
+  ReaderPrefs global;
+  global.sbBatteryPos = 4;
+  global.sbTitlePos = 5;
+  global.sbBookTitlePos = 1;
+  global.sbBookPctPos = 3;
+  global.statusBarEnabled = 1;
+  global.sbOffBar = 0;
+  ReaderPrefs book;
+  book.sbBatteryPos = 0;
+  book.sbTitlePos = 2;
+  book.sbBookTitlePos = 0;
+  book.sbBookPctPos = 6;
+  book.statusBarEnabled = 0;
+  book.sbOffBar = 2;
+  settleSidecarPrefs(book, FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR, global);
+  EXPECT_EQ(4, book.sbBatteryPos);
+  EXPECT_EQ(5, book.sbTitlePos);
+  EXPECT_EQ(1, book.sbBookTitlePos);
+  EXPECT_EQ(3, book.sbBookPctPos);
+  EXPECT_EQ(0, book.statusBarEnabled);
+  EXPECT_EQ(2, book.sbOffBar);
 }
 
 // Every status bar field survives a trip from a book's look to a block and back, so a
@@ -952,6 +998,30 @@ TEST(ReaderPrefs, HeadingPageBreakFlippedRoundTrips) {
   EXPECT_EQ(true, makeRenderSpec(loaded, 1, 480, 800).headingPageBreak);
 }
 
+TEST(ReaderPrefs, AV24RecordLeavesFillPagesAtItsDefault) {
+  auto old = makeSample();
+  old.fillPages = 1;  // outside the v24 record, must not be read
+  std::stringstream file;
+  file.put(static_cast<char>(24));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(24));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(0, loaded.fillPages);
+}
+
+TEST(ReaderPrefs, FillPagesFlippedRoundTrips) {
+  auto original = makeSample();
+  original.fillPages = 1;
+  std::stringstream file;
+  writeReaderPrefs(file, original);
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(file, loaded));
+  expectEqual(original, loaded);
+  EXPECT_EQ(true, makeRenderSpec(loaded, 1, 480, 800).fillPages);
+}
+
 TEST(ReaderPrefs, AV21RecordLeavesWordExpansionAtItsDefault) {
   auto old = makeSample();
   old.wordExpansion = 1;  // outside the v21 record, must not be read
@@ -974,4 +1044,63 @@ TEST(ReaderPrefs, WordExpansionFlippedRoundTrips) {
   ASSERT_TRUE(readReaderPrefs(file, loaded));
   expectEqual(original, loaded);
   EXPECT_EQ(1, makeRenderSpec(loaded, 1, 480, 800).wordExpansion);
+}
+
+TEST(ReaderPrefs, AV22RecordLeavesTheBookTitleItemOff) {
+  auto old = makeSample();
+  old.sbBookTitlePos = 1;  // outside the v22 record, must not be read
+  std::stringstream file;
+  file.put(static_cast<char>(22));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(22));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(0, loaded.sbBookTitlePos);
+}
+
+TEST(ReaderPrefs, ABookTitleSourceFoldsOntoTheBookTitleItem) {
+  ReaderPrefs p;
+  p.sbTitleSource = 0;  // Book, from before Title Source was retired
+  p.sbTitlePos = 2;     // TC
+  p.sbBookTitlePos = 0;
+  const StatusBarBlock b = statusBarOf(p);
+  EXPECT_EQ(0, b.titlePos);
+  EXPECT_EQ(2, b.bookTitlePos);
+  EXPECT_EQ(1, b.titleSource);
+
+  p.sbBookTitlePos = 4;  // already placed: it keeps its own anchor
+  EXPECT_EQ(4, statusBarOf(p).bookTitlePos);
+  EXPECT_EQ(0, statusBarOf(p).titlePos);
+}
+
+TEST(ReaderPrefs, TitleSlotStacksTheBookAboveTheChapterOnOneAnchor) {
+  StatusBarBlock b;
+  b.titleSource = 1;
+  b.titlePos = 1;      // TL
+  b.bookTitlePos = 1;  // TL
+  auto s = b.titleSlot(true);
+  EXPECT_EQ(1, s.anchor);
+  EXPECT_TRUE(s.chapter);
+  EXPECT_TRUE(s.bookAbove);
+  EXPECT_EQ(0, s.bookItem);
+
+  b.bookTitlePos = 2;  // TC: same edge, so it stacks at the chapter's anchor
+  s = b.titleSlot(true);
+  EXPECT_EQ(1, s.anchor);
+  EXPECT_TRUE(s.bookAbove);
+  EXPECT_EQ(0, s.bookItem);
+
+  b.bookTitlePos = 6;  // BR: other edge, its own one-line item
+  s = b.titleSlot(true);
+  EXPECT_FALSE(s.bookAbove);
+  EXPECT_EQ(6, s.bookItem);
+
+  s = b.titleSlot(false);  // chapterless: the book title takes the slot at its anchor
+  EXPECT_EQ(6, s.anchor);
+  EXPECT_FALSE(s.chapter);
+  EXPECT_EQ(0, s.bookItem);
+
+  b.bookTitlePos = 0;  // chapterless, no Book Title: the chapter anchor shows the book
+  EXPECT_EQ(1, b.titleSlot(false).anchor);
 }

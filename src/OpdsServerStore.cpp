@@ -15,11 +15,14 @@ struct BuiltInServer {
 };
 
 constexpr BuiltInServer BUILT_IN_SERVERS[] = {
-    // Calibre-Web's OPDS feed. The scheme is spelled out because UrlUtils::ensureProtocol
+    // BookOrbit's OPDS feed. The scheme is spelled out because UrlUtils::ensureProtocol
     // defaults a bare host to http://, and this host answers on HTTPS only — a plain
     // request to its TLS port fails rather than redirecting.
-    {"Kumedia Library", "https://kumedia.duckdns.org:8450/opds"},
+    {"Kumedia Library", "https://kumedia.duckdns.org:8456/api/v1/opds"},
 };
+
+// The Calibre-Web feed the built-in used to point at; that server is retired.
+constexpr char RETIRED_BUILT_IN_URL[] = "https://kumedia.duckdns.org:8450/opds";
 
 }  // namespace
 
@@ -50,6 +53,10 @@ bool OpdsServerStore::fromJson(JsonVariantConst doc) {
     OpdsServer server;
     server.name = obj["name"] | "";
     server.url = obj["url"] | "";
+    if (server.url == RETIRED_BUILT_IN_URL) {
+      server.url = BUILT_IN_SERVERS[0].url;
+      needsResave = true;
+    }
     server.username = obj["username"] | "";
     server.password = extractPassword(obj, needsResave);
     server.keepFilename = obj["keep_filename"] | false;

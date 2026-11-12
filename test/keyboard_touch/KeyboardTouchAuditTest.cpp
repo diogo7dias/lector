@@ -39,11 +39,11 @@ TEST(KeyboardTouchAudit, ThePaintPublishesItsInteractionTable) {
 
 TEST(KeyboardTouchAudit, ReleasesOwnPhysicalButtonActions) {
   const std::string source = body();
-  EXPECT_EQ(source.find("if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {\n    if (upHeld"),
+  EXPECT_EQ(source.find("if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {\n    if (upPress"),
             std::string::npos);
-  EXPECT_NE(source.find("if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {\n    if (upHeld"),
+  EXPECT_NE(source.find("if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {\n    if (upPress"),
             std::string::npos);
-  EXPECT_NE(source.find("if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {\n    if (confirmHeld"),
+  EXPECT_NE(source.find("if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {\n    if (confirmPress"),
             std::string::npos);
   EXPECT_NE(source.find("if (mappedInput.wasReleased(MappedInputManager::Button::Back))"), std::string::npos);
   EXPECT_NE(source.find("touchRouter.update("), std::string::npos);

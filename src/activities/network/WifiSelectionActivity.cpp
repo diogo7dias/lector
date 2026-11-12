@@ -156,7 +156,6 @@ void WifiSelectionActivity::onEnter() {
   }
   checkpoint("credential load returned");
 
-  // Reset state
   setListSelection(0);
   networks.clear();
   rows.clear();
@@ -191,6 +190,7 @@ void WifiSelectionActivity::onEnter() {
   // scanning; both are just actions this activity carries out.
   wifi_session::Startup startup;
   startup.allowAutoConnect = allowAutoConnect;
+  startup.autoOnly = autoOnly;
   for (const WifiCredentialSummary& saved : WIFI_STORE.getCredentialSummaries()) {
     startup.savedSsids.push_back(saved.ssid);
   }
@@ -207,7 +207,6 @@ void WifiSelectionActivity::onExit() {
 
   LOG_DBG("WIFI", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
 
-  // Stop any ongoing WiFi scan
   LOG_DBG("WIFI", "Deleting WiFi scan...");
   WiFi.scanDelete();
   LOG_DBG("WIFI", "Free heap after scanDelete: %d bytes", ESP.getFreeHeap());
@@ -540,7 +539,6 @@ void WifiSelectionActivity::pollRadio() {
 }
 
 void WifiSelectionActivity::promptPasswordEntry() {
-  // Show password entry
   state = WifiSelectionState::PASSWORD_ENTRY;
   // Don't allow screen updates while changing activity
   startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_ENTER_WIFI_PASSWORD),
@@ -584,7 +582,6 @@ void WifiSelectionActivity::promptHiddenSsid() {
 }
 
 std::string WifiSelectionActivity::getSignalStrengthIndicator(const int32_t rssi) const {
-  // Convert RSSI to signal bars representation
   if (rssi >= -50) {
     return "||||";  // Excellent
   }
@@ -829,7 +826,6 @@ void WifiSelectionActivity::onChoiceActivated(const int index) {
 void WifiSelectionActivity::onBackButton() {
   switch (state) {
     case WifiSelectionState::SAVE_PROMPT:
-      // Skip saving, complete anyway.
       session.answerSavePrompt(false, millis());
       pumpSession();
       return;

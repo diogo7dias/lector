@@ -261,3 +261,25 @@ TEST(ChapterMarks, TooManyChaptersDropsThemAll) {
   EXPECT_EQ(n, -1);
   EXPECT_EQ(statusbar::addChapterMark(marks, n, 999), -1);  // stays dropped
 }
+
+TEST(StatusBarReflow, ClipRoomStopsShortOfTheBandNeighbours) {
+  BarLayout l;
+  EXPECT_EQ(statusbar::clipRoom(l, TL, kBand, kSep), kBand);  // alone in its band
+  put(l, TR, 40);
+  EXPECT_EQ(statusbar::clipRoom(l, TL, kBand, kSep), kBand - 40 - kSep);
+  put(l, TC, 100);
+  EXPECT_EQ(statusbar::clipRoom(l, TL, kBand, kSep), (kBand - 100) / 2 - kSep);
+  EXPECT_EQ(statusbar::clipRoom(l, TC, kBand, kSep), kBand - 2 * (40 + kSep));
+  EXPECT_EQ(statusbar::clipRoom(l, BC, kBand, kSep), kBand);  // the other band is free
+}
+
+TEST(StatusBarReflow, AStackedTitleKeepsItsAnchorToItselfEvenWhenClipping) {
+  BarLayout l;
+  put(l, TL, 40);  // page count
+  put(l, TL, 80);  // the stacked titles, narrow enough to share
+  put(l, BL, 30);
+  reflowTitle(l, TL, /*titleSegIndex=*/1, /*truncate=*/true, kBand, kSep, /*destReserved=*/true, /*stacked=*/true);
+  EXPECT_EQ(l.counts[TL], 1);
+  EXPECT_EQ(l.buckets[TL][0].width, 80);
+  EXPECT_EQ(total(l), 3);  // the page count moved to the bottom band, not dropped
+}

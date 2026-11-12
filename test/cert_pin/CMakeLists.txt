@@ -1,4 +1,4 @@
-# Links the system wolfSSL (libwolfssl-dev), like firmware_signature.
+# Links the system wolfSSL (libwolfssl-dev).
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(WOLFSSL REQUIRED IMPORTED_TARGET wolfssl)
 

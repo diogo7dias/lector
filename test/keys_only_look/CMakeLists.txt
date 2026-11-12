@@ -8,6 +8,7 @@ target_compile_definitions(KeysOnlyLookTest PRIVATE
   THEME_TOKENS_HEADER="${REPO_ROOT}/src/components/UIThemeTokens.h"
   LIST_ACTIVITY_SOURCE="${REPO_ROOT}/src/activities/UiListActivity.cpp"
   STATUS_ACTIVITY_SOURCE="${REPO_ROOT}/src/activities/UiStatusActivity.cpp"
+  STATUS_CHOICES_SOURCE="${REPO_ROOT}/src/activities/UiStatusChoices.cpp"
 )
 
 target_link_libraries(KeysOnlyLookTest PRIVATE

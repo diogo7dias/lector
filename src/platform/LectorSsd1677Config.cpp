@@ -24,6 +24,13 @@
 //
 // Selected with -DFREEINK_SSD1677_CONFIG=lectorSsd1677Config, set only on the X3/X4
 // environments so the Seeed Sticky environment keeps its own SSD1677 config.
+//
+// The X4 Pro ships with either an SSD1677 or a UC8279, and the units with an SSD1677 take
+// the same HALF base, so they need the same power-up. They select lectorSsd1677X4ProConfig:
+// the SDK default plus grayPowerUpFirst and the Turbo opt-in. Without grayPowerUpFirst
+// those units paint the gray planes while the booster ramps, so the mid greys collapse
+// toward black and white (or the panel stalls until the BUSY ceiling). Turbo has not been
+// validated on the X4 Pro panel, so Fast Page Turns defaults to off there.
 
 #include "driver/Ssd1677Driver.h"
 
@@ -42,8 +49,15 @@ Ssd1677Config buildLectorX4Config() {
   //
   // Scoped to this config on purpose. The Seeed Sticky is a different SSD1677 board
   // and keeps the SDK's own config, where 0x1C does NOT select the partial waveform
-  // and would run the full one on every page. Boards that reach the SDK defaults,
-  // including the X4 Pro, are likewise untouched.
+  // and would run the full one on every page. Boards that reach the SDK defaults
+  // are likewise untouched.
+  cfg.allowFastTurbo = true;
+  return cfg;
+}
+
+Ssd1677Config buildLectorX4ProConfig() {
+  Ssd1677Config cfg = ssd1677DefaultConfig();
+  cfg.grayPowerUpFirst = true;
   cfg.allowFastTurbo = true;
   return cfg;
 }
@@ -52,6 +66,11 @@ Ssd1677Config buildLectorX4Config() {
 
 const Ssd1677Config& lectorSsd1677Config() {
   static const Ssd1677Config cfg = buildLectorX4Config();
+  return cfg;
+}
+
+const Ssd1677Config& lectorSsd1677X4ProConfig() {
+  static const Ssd1677Config cfg = buildLectorX4ProConfig();
   return cfg;
 }
 

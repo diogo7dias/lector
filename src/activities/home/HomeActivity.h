@@ -20,17 +20,22 @@ class HomeActivity final : public Activity {
   int firstVisibleBookIdx = 0;
   int lastVisibleBookIdx = 0;
   bool hasOpdsServers = false;
+  // Books reading on BookOrbit that the card lacks, from the last sleep check.
+  int bookOrbitMissing = 0;
+  char bookOrbitMissingLabel[64] = "";
   std::string sortesBook;
   sortes::ScanResult sortesResult = sortes::ScanResult::Empty;
   std::vector<RecentBook> recentBooks;
   const HomeMenuItem initialMenuItem;
-  // Cleared by the first render that consumes it, so only that paint pays for the
-  // full-clear waveform.
-  bool cleanInitialRefresh;
+  // Home is reached from the reader, a sleep face or a list: its first paint cleans
+  // whatever was there. Cleared by that render, so later paints stay FAST.
+  bool cleanInitialRefresh = true;
 
   // Convert HomeMenuItem to menu index (used in onEnter)
-  static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl) {
+  static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl, bool hasMissing) {
     int i = 0;
+    if (item == HomeMenuItem::BOOKORBIT_MISSING) return 0;
+    if (hasMissing) ++i;
     if (item == HomeMenuItem::FILE_BROWSER) return i;
     ++i;
     if (item == HomeMenuItem::OPDS_BROWSER) return hasOpdsUrl ? i : 0;
@@ -44,8 +49,9 @@ class HomeActivity final : public Activity {
   }
 
   // Convert menu index to HomeMenuItem (used in loop)
-  static HomeMenuItem indexToMenuItem(int idx, bool hasOpdsUrl) {
+  static HomeMenuItem indexToMenuItem(int idx, bool hasOpdsUrl, bool hasMissing) {
     int i = 0;
+    if (hasMissing && idx == i++) return HomeMenuItem::BOOKORBIT_MISSING;
     if (idx == i++) return HomeMenuItem::FILE_BROWSER;
     if (hasOpdsUrl && idx == i++) return HomeMenuItem::OPDS_BROWSER;
     if (idx == i++) return HomeMenuItem::FILE_TRANSFER;
@@ -59,6 +65,7 @@ class HomeActivity final : public Activity {
   void onStatsOpen();
   void onFileTransferOpen();
   void onOpdsBrowserOpen();
+  void onBookOrbitMissingOpen();
 
   int getMenuItemCount() const;
   // Menu rows only, excluding books.
@@ -67,10 +74,8 @@ class HomeActivity final : public Activity {
 
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                        HomeMenuItem initialMenuItemValue = HomeMenuItem::NONE, bool cleanInitialRefresh = false)
-      : Activity(activity_name::kHome, renderer, mappedInput),
-        initialMenuItem(initialMenuItemValue),
-        cleanInitialRefresh(cleanInitialRefresh) {}
+                        HomeMenuItem initialMenuItemValue = HomeMenuItem::NONE)
+      : Activity(activity_name::kHome, renderer, mappedInput), initialMenuItem(initialMenuItemValue) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

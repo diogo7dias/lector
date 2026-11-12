@@ -225,3 +225,22 @@ TEST(LightPanelGeometry, ANarrowScreenNarrowsTheSteppersRatherThanLosingTheTrack
 }
 
 }  // namespace
+
+TEST(LightPanelGeometry, SevenButtonsFitALandscapeScreen) {
+  // 800x480: the in-book set (seven buttons) must leave the panel shorter than the screen.
+  const auto layout = light_panel::forScreen(800, kLineHeight, kReadoutLineHeight, /*hasWarmth=*/true,
+                                             /*hasAux=*/true, /*actionCount=*/7);
+  ASSERT_EQ(layout.actionCount, 7);
+  EXPECT_EQ(layout.actions[0].y, layout.actions[2].y);  // three columns
+  EXPECT_LT(layout.height, 480);
+  const auto& last = layout.actions[6];
+  EXPECT_LE(last.x + last.width, 800 - light_panel::kSidePad);
+}
+
+TEST(LightPanelGeometry, AButtonAloneOnTheLastRowSpansIt) {
+  const auto layout = light_panel::forScreen(kScreenWidth, kLineHeight, kReadoutLineHeight, /*hasWarmth=*/true,
+                                             /*hasAux=*/true, /*actionCount=*/7);
+  EXPECT_EQ(layout.actions[6].x, light_panel::kSidePad);
+  EXPECT_EQ(layout.actions[6].width, kScreenWidth - light_panel::kSidePad * 2);
+  EXPECT_LT(layout.actions[5].width, layout.actions[6].width);
+}

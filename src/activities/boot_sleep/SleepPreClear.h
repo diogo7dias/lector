@@ -14,25 +14,28 @@ class GfxRenderer;
 // This file used to say the X3 got that for free from the requestResync() its grayscale
 // base asks for (HalDisplay.cpp:290), and so skipped the scrub there. That premise was
 // wrong, and the X3 lock screen ghosted because of it. requestResync() is a SYNC, not a
-// clear: it makes the next pass take displayStart()'s full-sync branch, which fills DTM1
-// with 0xFF and paints the target frame against that white baseline
-// (Uc8253X3Driver.cpp:222-226). With the baseline forced white, a pixel's transition cell
-// depends only on where it is going, so only two of the four fire:
+// clear: it makes the next pass take displayStart()'s full-sync branch.
 //
-//   target white -> WW -> lut_x3_ww_full (Uc8253X3Luts.h:90): 24 frames to the black
-//                         rail, then 24 back to white. A real flash.
-//   target black -> WB -> lut_x3_wb_full (Uc8253X3Luts.h:98): 28 idle frames, then 14
-//                         to black. Never visits white.
+// That branch used to fill DTM1 with 0xFF and paint the target frame against that white
+// baseline. With the baseline forced white, a pixel's transition cell depended only on where
+// it was going, so only two of the four fired, and only one of them flashed:
 //
-// The bank's excursion for pixels that end up black lives in lut_x3_bb_full (line 102,
-// 0x84: 24 frames to white before 14 to black), and the forced white baseline is exactly
-// what guarantees BB never fires.
+//   target white -> WW -> lut_x3_ww_full: 24 frames to the black rail, then 24 back to
+//                         white. A real flash.
+//   target black -> WB -> lut_x3_wb_full: 28 idle frames, then 14 to black. Never visits
+//                         white.
 //
-// So on the X3 only the pure-white part of the frame gets flashed. On a grayscale
-// wallpaper that is a small part: the BW base under the two gray planes paints every
-// level except pure white as black (DirectPixelWriter.h:152-155), so the whole mid-tone
-// area of the picture is the set of pixels that never reach the opposite rail, and the
-// reader page underneath survives into the gray nudge that follows.
+// The bank's excursion for pixels that end up black lives in lut_x3_bb_full (0x84: 24
+// frames to white before 14 to black), and the forced white baseline is exactly what
+// guaranteed BB never fired. The BW base under the two gray planes paints every level except
+// pure white as black (DirectPixelWriter.h:152-155), so the whole mid-tone area of a
+// wallpaper was the set of pixels that never reached the opposite rail.
+//
+// The full sync now writes DTM1 = the target (Uc8253X3Driver.cpp, displayStart), so every
+// pixel is an unchanged cell and both WW and BB flash. A requestResync() base therefore
+// discharges the dark part of the picture too. The scrub still runs here, because a pass
+// that has to be right about whatever the panel held is cheaper to guarantee than to
+// argue, and one white FULL is all the X3 needs of it.
 //
 // Hence: the scrub runs on every board. The X3 just needs far less of it, because its own
 // full bank carries the black excursion inside a single white pass.

@@ -63,7 +63,6 @@ inline size_t writeHeader(Print& out, const int width, const int height, const u
   return n;
 }
 
-inline void writeHeader1bit(Print& out, const int width, const int height) { writeHeader(out, width, height, 1); }
 inline void writeHeader2bit(Print& out, const int width, const int height) { writeHeader(out, width, height, 2); }
 
 }  // namespace bmp_writer

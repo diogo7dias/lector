@@ -11,8 +11,8 @@
 #include <climits>
 
 #include "QuoteSidecar.h"
-#include "QuoteText.h"
 #include "components/UITheme.h"
+#include "util/QuoteText.h"
 
 QuoteSelectActivity::QuoteSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Section* section,
                                          int startPageNumber, int marginLeft, int marginTop, Epub& epub, int spineIndex,
@@ -29,7 +29,6 @@ QuoteSelectActivity::QuoteSelectActivity(GfxRenderer& renderer, MappedInputManag
 
 void QuoteSelectActivity::onEnter() {
   Activity::onEnter();
-  lineHeight = renderer.getLineHeight(fontId);
   showPage(pageNumber);
   cursor = 0;
   requestUpdate();
@@ -58,7 +57,7 @@ bool QuoteSelectActivity::advancePage() {
 
   const uint32_t mark = static_cast<uint32_t>(committedText.size());
   for (int i = firstSelectedOnPage(); i < static_cast<int>(words.size()); i++) {
-    if (!quote_text::appendQuoteWord(committedText, words[i].text)) {
+    if (!quote_text::appendQuoteWord(committedText, words[i].text())) {
       committedText.resize(mark);  // at the cap: stop here rather than save a cut word
       return false;
     }
@@ -127,26 +126,35 @@ void QuoteSelectActivity::extractWords() {
     for (uint16_t i = 0; i < block->wordCount(); i++) {
       WordBox box;
       box.x = static_cast<int16_t>(line->xPos + block->wordXpos(i) + marginLeft);
-      box.y = static_cast<int16_t>(line->yPos + marginTop);
-      box.style = block->wordStyle(i);
-      box.width = 0;  // measured below, once the advance table is ready
+      box.y = static_cast<int16_t>(line->yPos + marginTop + block->wordBoxTop(renderer, fontId, i));
+      box.width = 0;   // measured below, once the advance table is ready
+      box.height = 0;  // likewise, with the font resolved
       box.row = rowCount;
       box.paragraphOrdinal = runningOrdinal;
-      box.text = block->wordText(i);
+      box.index = i;
+      box.block = block.get();
       words.push_back(box);
       rowHasWords = true;
 
-      pageText.append(box.text);
+      pageText.append(box.text());
       pageText.push_back(' ');
-      styleMask |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(box.style) & 0x03));
+      styleMask |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(block->wordStyle(i)) & 0x03));
     }
     if (rowHasWords) rowCount++;
   }
 
   if (styleMask == 0) styleMask = 0x01;  // REGULAR
-  renderer.ensureSdCardFontReady(fontId, pageText.c_str(), styleMask);
+  // ponytail: a page with more sizes than this measures the rest off the SD card, just slower.
+  int readied[4];
+  size_t readiedCount = 0;
   for (auto& word : words) {
-    word.width = static_cast<int16_t>(renderer.getTextAdvanceX(fontId, word.text, word.style));
+    const int font = word.block->wordRenderFont(renderer, fontId, word.index);
+    if (readiedCount < 4 && std::find(readied, readied + readiedCount, font) == readied + readiedCount) {
+      renderer.ensureSdCardFontReady(font, pageText.c_str(), styleMask);
+      readied[readiedCount++] = font;
+    }
+    word.width = static_cast<int16_t>(word.block->wordWidth(renderer, fontId, word.index));
+    word.height = static_cast<int16_t>(renderer.getLineHeight(font));
   }
 }
 
@@ -222,7 +230,7 @@ void QuoteSelectActivity::saveSelectedQuote() {
   // words from its first selected one up to the cursor.
   std::string quote = committedText;
   for (int i = firstSelectedOnPage(); i <= cursor && i < static_cast<int>(words.size()); i++) {
-    if (!quote_text::appendQuoteWord(quote, words[i].text)) break;  // at the cap
+    if (!quote_text::appendQuoteWord(quote, words[i].text())) break;  // at the cap
   }
   if (quote.empty()) return;
 
@@ -392,20 +400,24 @@ void QuoteSelectActivity::drawRangeHighlight() const {
 
   int i = a;
   while (i <= b) {
-    const int16_t y = words[i].y;
+    const uint16_t row = words[i].row;
     int minX = words[i].x;
     int maxX = words[i].x + words[i].width;
+    int top = words[i].y;
+    int bottom = words[i].y + words[i].height;
     int j = i;
-    while (j + 1 <= b && words[j + 1].y == y) {
+    while (j + 1 <= b && words[j + 1].row == row) {
       j++;
       minX = std::min<int>(minX, words[j].x);
       maxX = std::max<int>(maxX, words[j].x + words[j].width);
+      top = std::min<int>(top, words[j].y);
+      bottom = std::max<int>(bottom, words[j].y + words[j].height);
     }
     // One pixel of ink around the words, no more: the highlight marks the passage, it
     // does not band the line.
-    renderer.fillRect(minX - 1, y - 1, (maxX - minX) + 2, lineHeight + 2, true);
+    renderer.fillRect(minX - 1, top - 1, (maxX - minX) + 2, (bottom - top) + 2, true);
     for (int k = i; k <= j; k++) {
-      renderer.drawText(fontId, words[k].x, words[k].y, words[k].text, false, words[k].style);
+      words[k].block->drawWord(renderer, fontId, words[k].index, words[k].x, words[k].y, false);
     }
     i = j + 1;
   }
@@ -436,8 +448,8 @@ void QuoteSelectActivity::render(RenderLock&&) {
   if (!words.empty()) {
     if (phase == Phase::SelectStart) {
       const WordBox& w = words[cursor];
-      renderer.fillRect(w.x - 1, w.y - 1, w.width + 2, lineHeight + 2, true);
-      renderer.drawText(fontId, w.x, w.y, w.text, false, w.style);
+      renderer.fillRect(w.x - 1, w.y - 1, w.width + 2, w.height + 2, true);
+      w.block->drawWord(renderer, fontId, w.index, w.x, w.y, false);
     } else {
       drawRangeHighlight();
     }

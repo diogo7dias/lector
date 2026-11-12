@@ -24,6 +24,7 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
+  void onRevealed() override { cleanPaint_ = true; }
 
  protected:
   // The on-screen button, when a subclass offers one. Subclass actions start
@@ -37,7 +38,9 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   // One id for the whole slider row: a drag arrives with dragPermille set, a
   // step button with its delta in the event's value.
   static constexpr freeink::ui::ActionId ACTION_SLIDER = 5;
-  static constexpr freeink::ui::ActionId ACTION_USER = 6;
+  // A digit or the delete key of the number pad; the key's value says which.
+  static constexpr freeink::ui::ActionId ACTION_KEYPAD = 6;
+  static constexpr freeink::ui::ActionId ACTION_USER = 7;
 
   // At most four lines, which is what the wordiest screen (the clear-cache
   // warning) needs. The first is the headline and is drawn in the body face;
@@ -117,6 +120,11 @@ class UiStatusActivity : public Activity, protected UiAppHost {
     int sliderValue = 0;
     int sliderMin = 0;
     int sliderMax = 100;
+    // A number pad under the slider, on touch boards only: typing 4 7 lands on 47
+    // where dragging a capsule across a whole book cannot. Its digits move the same
+    // value the slider does (onSliderChanged), and its OK key is onConfirmButton().
+    // Keys-only boards already step the value by one and by ten with their buttons.
+    bool showKeypad = false;
     // A bar under the lines. Left off, the lines centre on their own.
     bool showProgress = false;
     int progressValue = 0;
@@ -219,6 +227,11 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   void buildScreen(UiScreen& screen);
 
  private:
+  // A FAST paint is promoted to HALF on entry, on a reveal and when the title
+  // changes (a new state, a new screen): the old one would ghost under it.
+  bool cleanPaint_ = true;
+  const char* lastTitle_ = nullptr;
+
   // The two body shapes. Centred lines for a screen that reports on itself;
   // left-aligned sections for one that gives instructions.
   void buildCentredLines(UiScreen& screen, const StatusView& view);
@@ -271,10 +284,17 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   static void choiceTrampoline(const freeink::ui::ActionEvent& event, void* user);
   static void listTrampoline(const freeink::ui::ActionEvent& event, void* user);
   static void sliderTrampoline(const freeink::ui::ActionEvent& event, void* user);
+  static void keypadTrampoline(const freeink::ui::ActionEvent& event, void* user);
   // Two-tap confirmation armed a row or an answer instead of running it: move
   // this screen's own selection under the highlight so the keys and the
   // hint-band Confirm cannot act on something else.
   static void armTrampoline(const freeink::ui::ActionEvent& event, void* user);
+
+  // Number pad entry: the value the pad last produced. Typing extends it while the
+  // value is still that one; a slider move or a key press elsewhere changes the
+  // value, so the next digit starts a new number instead of appending to it.
+  int keypadValue_ = -1;
+  void buildKeypad(UiScreen& screen, const freeink::ui::Rect& rect);
 
   // Set by the last build: a screen with a capsule needs the held contact
   // routed every frame, which no other shape wants.

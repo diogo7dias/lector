@@ -107,10 +107,6 @@ class UiAppHost {
   // Close the routing gate outside a render, e.g. when the data the
   // interaction table indexes is released mid-state. Reopens on renderUi().
   void closeRouting() { uiReady = false; }
-  // Whether routing is live, for a screen that must distinguish "the gate was
-  // shut" from "the gate was open and nothing was under the finger" — a slider
-  // swallowing the tail of its own drag needs that difference.
-  bool routingReady() const { return uiReady.load(std::memory_order_acquire); }
 
   // --- two-tap touch confirmation (see components/TwoTapGate.h) -------------
 

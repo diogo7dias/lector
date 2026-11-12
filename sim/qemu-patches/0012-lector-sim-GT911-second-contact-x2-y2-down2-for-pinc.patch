@@ -1,0 +1,103 @@
+From 94195ec30109469e013017e78f402ae7149b560f Mon Sep 17 00:00:00 2001
+From: Vault Keeper <diogo7dias@gmail.com>
+Date: Sat, 31 Oct 2026 00:40:15 +0000
+Subject: [PATCH] lector sim: GT911 second contact (x2/y2/down2) for pinch
+ gestures
+
+The X4 Pro firmware reads up to four 8-byte contact records per frame.
+A second finger, set over QOM beside the first, makes the status count 2
+and fills the record at 0x8158, so two-finger gestures can be driven.
+---
+ hw/misc/lector_i2c.c | 29 +++++++++++++++++++++++++++--
+ 1 file changed, 27 insertions(+), 2 deletions(-)
+
+diff --git a/hw/misc/lector_i2c.c b/hw/misc/lector_i2c.c
+index 7a18f0a..a22a388 100644
+--- a/hw/misc/lector_i2c.c
++++ b/hw/misc/lector_i2c.c
+@@ -9,6 +9,7 @@
+  * "gt911" is the touch controller: a 16-bit pointer, status at 0x814E and
+  * 8-byte contact records at 0x8150. Touch comes from QOM: set "x"/"y" (raw
+  * controller units), then "down" true or false; "home" holds the capacitive key.
++ * "x2"/"y2"/"down2" add a second contact (a pinch) while the first is down.
+  * While a finger is down every status clear produces a fresh frame, like the
+  * chip's report rate; a lift produces one empty frame. Like the chip, an
+  * unread frame is held until the host clears the status: a tap that goes down
+@@ -113,20 +114,27 @@ struct GT911State {
+     bool down, home;    /* the finger and the key now */
+     bool fdown, fhome;  /* what the frame at 0x814E reports */
+     uint32_t x, y;
++    bool down2, fdown2; /* a second finger (pinch), only beside the first */
++    uint32_t x2, y2;
+ };
+ 
+ static uint8_t gt911_reg(GT911State *s, uint16_t reg)
+ {
+     if (reg == GT911_STATUS) {
+-        return s->fresh ? 0x80 | (s->fhome ? 0x10 : 0) | (s->fdown ? 1 : 0) : 0;
++        return s->fresh ? 0x80 | (s->fhome ? 0x10 : 0) | (s->fdown ? (s->fdown2 ? 2 : 1) : 0) : 0;
+     }
+-    /* coordinates at byte 0 of the record, as on the X4 Pro */
++    /* coordinates at byte 0 of each 8-byte record, as on the X4 Pro */
+     switch (reg - GT911_POINTS) {
+     case 0: return s->x;
+     case 1: return s->x >> 8;
+     case 2: return s->y;
+     case 3: return s->y >> 8;
+     case 4: return 0x20;  /* contact size */
++    case 8: return s->x2;
++    case 9: return s->x2 >> 8;
++    case 10: return s->y2;
++    case 11: return s->y2 >> 8;
++    case 12: return 0x20;
+     }
+     if (reg >= 0x8140 && reg < 0x8144) {
+         return "911"[reg - 0x8140];  /* product id */
+@@ -159,6 +167,7 @@ static int gt911_send(I2CSlave *i2c, uint8_t data)
+             /* the next frame: the state now, or the lift of the frame just read */
+             s->fresh = s->down || s->home || s->fdown || s->fhome;
+             s->fdown = s->down;
++            s->fdown2 = s->down2;
+             s->fhome = s->home;
+         }
+         s->ptr++;
+@@ -172,6 +181,7 @@ static void gt911_changed(GT911State *s)
+ {
+     if (!s->fresh) {
+         s->fdown = s->down;
++        s->fdown2 = s->down2;
+         s->fhome = s->home;
+         s->fresh = true;
+     }
+@@ -189,6 +199,18 @@ static bool gt911_get_down(Object *obj, Error **errp)
+     return GT911(obj)->down;
+ }
+ 
++static void gt911_set_down2(Object *obj, bool value, Error **errp)
++{
++    GT911State *s = GT911(obj);
++    s->down2 = value;
++    gt911_changed(s);
++}
++
++static bool gt911_get_down2(Object *obj, Error **errp)
++{
++    return GT911(obj)->down2;
++}
++
+ static void gt911_set_home(Object *obj, bool value, Error **errp)
+ {
+     GT911State *s = GT911(obj);
+@@ -208,6 +230,9 @@ static void gt911_init(Object *obj)
+     object_property_add_bool(obj, "home", gt911_get_home, gt911_set_home);
+     object_property_add_uint32_ptr(obj, "x", &s->x, OBJ_PROP_FLAG_READWRITE);
+     object_property_add_uint32_ptr(obj, "y", &s->y, OBJ_PROP_FLAG_READWRITE);
++    object_property_add_bool(obj, "down2", gt911_get_down2, gt911_set_down2);
++    object_property_add_uint32_ptr(obj, "x2", &s->x2, OBJ_PROP_FLAG_READWRITE);
++    object_property_add_uint32_ptr(obj, "y2", &s->y2, OBJ_PROP_FLAG_READWRITE);
+ }
+ 
+ static void gt911_class_init(ObjectClass *klass, void *data)
+-- 
+2.43.0
+

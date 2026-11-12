@@ -41,9 +41,8 @@ std::string Txt::getTitle() const {
   size_t lastSlash = filepath.find_last_of('/');
   std::string filename = (lastSlash != std::string::npos) ? filepath.substr(lastSlash + 1) : filepath;
 
-  // Remove .txt extension
-  if (FsHelpers::hasTxtExtension(filename)) {
-    filename.resize(filename.length() - 4);
+  if (FsHelpers::hasTextBookExtension(filename)) {
+    filename.resize(filename.rfind('.'));
   }
 
   return filename;
@@ -119,7 +118,6 @@ bool Txt::generateCoverBmp() const {
   const std::string partPath = FsHelpers::partialPathFor(bmpPath);
   bool success = false;
   if (FsHelpers::hasBmpExtension(coverImagePath)) {
-    // Copy BMP file to cache
     LOG_DBG("TXT", "Copying BMP cover image to cache");
     HalFile src, dst;
     if (!Storage.openFileForRead("TXT", coverImagePath, src)) {

@@ -83,6 +83,8 @@ TextSettingsActivity::TextSettingsActivity(GfxRenderer& renderer, MappedInputMan
 void TextSettingsActivity::onEnter() {
   UiGridActivity::onEnter();
 
+  loadRowSettings();
+
   metrics_ = UITheme::getInstance().getMetrics();
   afterHeader = metrics_.topPadding + metrics_.headerHeight + metrics_.verticalSpacing;
   bottomReserved = metrics_.buttonHintsHeight + metrics_.verticalSpacing;
@@ -147,6 +149,7 @@ void TextSettingsActivity::drawReserved(const Rect& rect) {
   const int previewFontId = SETTINGS.getReaderFontId(look_);
   renderer.setKerning(previewFontId, look_.kerning != 0);
   renderer.setLigatures(previewFontId, look_.ligatures != 0);
+  renderer.setCharacterSpacing(previewFontId, look_.characterSpacing - reader_defaults::CHARACTER_SPACING);
   textsettings::renderPreview(renderer, previewLayout_, look_, rect.y, rect.height - metrics_.verticalSpacing);
 }
 
@@ -168,6 +171,7 @@ constexpr RowSpec ROW_SPECS[] = {
     {&CrossPointSettings::lineSpacingPercent, StrId::STR_NONE_OPT, false},      // LineSpacing
     {&CrossPointSettings::extraParagraphSpacing, StrId::STR_NONE_OPT, false},   // ExtraSpacing
     {&CrossPointSettings::wordSpacing, StrId::STR_NONE_OPT, true},              // WordSpacing
+    {&CrossPointSettings::characterSpacing, StrId::STR_NONE_OPT, false},        // CharacterSpacing
     {&CrossPointSettings::kerning, StrId::STR_NONE_OPT, false},                 // Kerning
     {&CrossPointSettings::ligatures, StrId::STR_NONE_OPT, false},               // Ligatures
     {&CrossPointSettings::paragraphAlignment, StrId::STR_ALIGNMENT, false},     // Alignment
@@ -187,6 +191,7 @@ constexpr RowSpec ROW_SPECS[] = {
     {&CrossPointSettings::bookMargins, StrId::STR_NONE_OPT, false},             // BookMargins
     {&CrossPointSettings::linkUnderline, StrId::STR_NONE_OPT, false},           // LinkUnderline
     {&CrossPointSettings::headingPageBreak, StrId::STR_NONE_OPT, false},        // HeadingPageBreak
+    {&CrossPointSettings::fillPages, StrId::STR_NONE_OPT, false},               // FillPages
     {&CrossPointSettings::wordExpansion, StrId::STR_NONE_OPT, false},           // WordExpansion
     {&CrossPointSettings::textAntiAliasing, StrId::STR_NONE_OPT, false},        // AntiAliasing
     {&CrossPointSettings::textContrast, StrId::STR_NONE_OPT, false},            // TextContrast
@@ -194,19 +199,34 @@ constexpr RowSpec ROW_SPECS[] = {
 };
 }  // namespace
 
-const SettingInfo* TextSettingsActivity::settingOf(const Row row) {
+// The settings list is not kept in heap, so the screen holds its own rows' entries while open:
+// settingOf() runs for every row on every frame, and option popups keep their label arrays.
+void TextSettingsActivity::loadRowSettings() {
+  rowSettings_.reserve(std::size(ROW_SPECS));
+  auto keep = [this](SettingInfo& info) {
+    if (!info.valuePtr) return;
+    for (const RowSpec& spec : ROW_SPECS) {
+      if (spec.setting == info.valuePtr) {
+        rowSettings_.push_back(std::move(info));
+        return;
+      }
+    }
+  };
+  forEachBaseSetting(keep);
+}
+
+const SettingInfo* TextSettingsActivity::settingOf(const Row row) const {
   static_assert(std::size(ROW_SPECS) == static_cast<size_t>(Row::Count),
                 "every Row needs exactly one ROW_SPECS line, in Row order");
   const auto member = ROW_SPECS[static_cast<size_t>(row)].setting;
   if (!member) return nullptr;
-  // The static list itself, not getSettingsList(): that copies all ~90 entries.
-  for (const SettingInfo& info : settingsBaseList()) {
+  for (const SettingInfo& info : rowSettings_) {
     if (info.valuePtr == member) return &info;
   }
   return nullptr;
 }
 
-TextSettingsActivity::RowKind TextSettingsActivity::kindOf(const Row row) {
+TextSettingsActivity::RowKind TextSettingsActivity::kindOf(const Row row) const {
   if (row == Row::Font) return RowKind::FontList;
   if (row == Row::Size) return RowKind::Picker;
   const SettingInfo* info = settingOf(row);
@@ -226,7 +246,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   // The section headings the list used to carry are gone: a cell shows its own name, and
   // four bands would have cost two grid rows to say what the pairing already says.
   std::vector<Row> rows;
-  rows.reserve(32);
+  rows.reserve(33);
 
   rows.push_back(Row::Font);
   rows.push_back(Row::Size);
@@ -238,6 +258,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   rows.push_back(Row::LineSpacing);
   rows.push_back(Row::ExtraSpacing);
   rows.push_back(Row::WordSpacing);
+  rows.push_back(Row::CharacterSpacing);
   rows.push_back(Row::Kerning);
   rows.push_back(Row::Ligatures);
 
@@ -280,6 +301,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   if (look_.embeddedLayoutStyle) rows.push_back(Row::BookMargins);
   rows.push_back(Row::LinkUnderline);
   rows.push_back(Row::HeadingPageBreak);
+  rows.push_back(Row::FillPages);
   rows.push_back(Row::WordExpansion);
   // Kept at the end so it coming and going only reflows the last pair of cells.
   if (look_.textAntiAliasing) rows.push_back(Row::TextContrast);
@@ -385,7 +407,7 @@ std::string TextSettingsActivity::rowValueText(const Row row) const {
     case RowKind::Toggle:
       return onOff(*field);
     case RowKind::Number:
-      return std::to_string(*field);
+      return std::to_string(info->shownValue(*field));
     default:
       break;
   }
@@ -465,16 +487,18 @@ void TextSettingsActivity::activateRow(const Row row) {
       // preview under the band is lost, but the row is only two taps away and
       // the number gets a finger-sized track instead of a header's worth of it.
       auto dialog = makeUniqueNoThrow<IntervalSelectionActivity>(
-          renderer, mappedInput, "TextSettingNumber", rowNameId(row), *field, range.min, range.max,
+          renderer, mappedInput, "TextSettingNumber", rowNameId(row), info->shownValue(*field),
+          info->shownValue(range.min), info->shownValue(range.max),
           /*smallStep=*/ROW_SPECS[static_cast<size_t>(row)].coarseSteps ? range.step : 1, /*largeStep=*/range.step);
       if (!dialog) {
         LOG_ERR("TXTSET", "OOM: IntervalSelectionActivity");
         return;
       }
-      startActivityForResult(std::move(dialog), [this, row](const ActivityResult& result) {
+      const int offset = info->displayOffset;
+      startActivityForResult(std::move(dialog), [this, row, offset](const ActivityResult& result) {
         const auto* chosen = std::get_if<IntervalResult>(&result.data);
         if (!result.isCancelled && chosen != nullptr) {
-          setEditedValue(row, static_cast<int>(chosen->value));
+          setEditedValue(row, static_cast<int>(chosen->value) - offset);
           commitSettings();
         }
         requestUpdate();

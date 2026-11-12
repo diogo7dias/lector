@@ -1,7 +1,9 @@
 #pragma once
 #include <HalStorage.h>
 
+#include <cstddef>
 #include <deque>
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -27,8 +29,27 @@ class ZipFile {
     uint16_t index;  // Caller's index (e.g. spine index)
   };
 
+  // Every entry's stat, sorted by name hash, so finding an entry reads nothing from the card.
+  // Only worth building where PSRAM holds it: an allocation over 4 KB lands there on the X4 Pro.
+  class EntryIndex {
+   public:
+    static constexpr size_t MIN_BYTES = 4097;
+    const FileStatSlim* find(std::string_view name) const;
+
+   private:
+    friend class ZipFile;
+    struct Entry {
+      uint64_t hash;
+      uint16_t nameLen;
+      FileStatSlim stat;
+    };
+    std::unique_ptr<Entry[]> entries;
+    size_t count = 0;
+  };
+
  private:
   const std::string& filePath;
+  const EntryIndex* entryIndex = nullptr;
   HalFile file;
   ZipDetails zipDetails = {0, 0, false};
 
@@ -61,7 +82,10 @@ class ZipFile {
   bool loadZipDetails();
 
  public:
-  explicit ZipFile(const std::string& filePath) : filePath(filePath) {}
+  explicit ZipFile(const std::string& filePath, const EntryIndex* index = nullptr)
+      : filePath(filePath), entryIndex(index) {}
+  // False when the archive is too small to be worth indexing or a read failed; lookups then scan.
+  bool buildEntryIndex(EntryIndex& index);
   ~ZipFile() = default;
   // Zip file can be opened and closed by hand in order to allow for quick calculation of inflated file size
   // It is NOT recommended to pre-open it for any kind of inflation due to memory constraints

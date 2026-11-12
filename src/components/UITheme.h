@@ -19,6 +19,18 @@ class UITheme {
 
   const ThemeMetrics& getMetrics() const;
   const BaseTheme& getTheme() const { return theme; }
+
+  // A popup or busy banner was painted on top of the screen (a message strip or an
+  // option list). The panel keeps that band after the popup goes, so the next
+  // full-screen paint of the screen underneath owes a clean pass: the list, grid
+  // and status bases promote that single paint from FAST, then consume this. Only
+  // the first paint after the popup leaves, never every later one.
+  static void noteOverlayPainted() { overlayPainted = true; }
+  static bool consumeOverlayPainted() {
+    const bool painted = overlayPainted;
+    overlayPainted = false;
+    return painted;
+  }
   Rect getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints = false,
                          bool hasSideButtonHints = false);
   static void drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text,
@@ -35,12 +47,20 @@ class UITheme {
   // status-bar horizontal margins and the oriented viewable insets). Shared by the
   // renderer and the reader's wrap-line count so both agree.
   static int getStatusBarV2BandWidth(const GfxRenderer& renderer);
-  // Number of lines the title wraps to (>= 1). Returns 1 unless the title is
-  // placed, non-empty, and "Truncate Title" is OFF (greedy), in which case it is
-  // the wrapped line count within the band width, capped for safety.
-  static int getStatusBarV2TitleLines(const StatusBarBlock& sb, const GfxRenderer& renderer, const char* title);
+  // Number of lines the title slot takes (>= 1), and in `onTop` whether that is the
+  // top band. A lone title takes 1 unless "Truncate Title" is OFF (greedy), in which
+  // case it is the wrapped line count within the band width, capped for safety. A
+  // stack (book title above chapter title) adds the book title's lines on top. Takes
+  // the same strings the bar draws, so the reserved height and the draw agree.
+  static int getStatusBarV2TitleLines(const StatusBarBlock& sb, const GfxRenderer& renderer, bool hasChapters,
+                                      const char* chapterTitle, const char* bookTitle, bool* onTop);
+  // Safety ceiling on one title's wrapped lines: real book/chapter titles never
+  // approach it, but it bounds the reserved band (and the render loop).
+  static constexpr int kMaxStatusBarTitleLines = 6;
 
  private:
+  // Written and read only under the render lock, like the framebuffer it describes.
+  static bool overlayPainted;
   const ThemeMetrics* currentMetrics;
   BaseTheme theme;
   mutable ThemeMetrics adjustedMetrics;

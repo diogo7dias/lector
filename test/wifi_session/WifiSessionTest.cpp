@@ -571,3 +571,56 @@ TEST(WifiSessionDiagnostics, ManualJoinKeepsStrongestTargetAndFailureInSnapshot)
 }
 
 }  // namespace
+
+// Auto sync joins only saved networks and never asks: every way the session would
+// fall back to the network list ends it unconnected instead.
+bool finishedUnconnected(const std::vector<wifi_session::Action>& actions) {
+  for (const auto& a : actions)
+    if (a.kind == wifi_session::ActionKind::FINISH) return !a.connected;
+  return false;
+}
+
+TEST(WifiSessionAutoOnly, FinishesAtOnceWithNoSavedNetwork) {
+  WifiSession session;
+  wifi_session::Startup startup;
+  startup.autoOnly = true;
+  session.begin(startup, 1000);
+  EXPECT_TRUE(finishedUnconnected(drain(session, 1000)));
+}
+
+TEST(WifiSessionAutoOnly, FinishesWhenNoSavedNetworkIsInRange) {
+  WifiSession session;
+  wifi_session::Startup startup;
+  startup.autoOnly = true;
+  startup.savedSsids = {"home"};
+  session.begin(startup, 1000);
+  drain(session, 1000);
+  const std::vector<Network> found = {seen("cafe", -30)};
+  session.onScanResults(found.data(), found.size(), 2000);
+  EXPECT_TRUE(finishedUnconnected(drain(session, 2000)));
+}
+
+TEST(WifiSessionAutoOnly, FinishesOnceEverySavedJoinTimedOut) {
+  WifiSession session;
+  wifi_session::Startup startup;
+  startup.autoOnly = true;
+  startup.savedSsids = {"home"};
+  startup.lastConnectedSsid = "home";
+  session.begin(startup, 1000);
+  drain(session, 1000);
+  const uint32_t now = 1000 + wifi_session::AUTO_JOIN_TIMEOUT_MS;
+  EXPECT_FALSE(finishedUnconnected(drain(session, now)));  // rescans for another saved network
+  const std::vector<Network> found = {seen("home", -40)};
+  session.onScanResults(found.data(), found.size(), now + 1);
+  EXPECT_TRUE(finishedUnconnected(drain(session, now + 1)));
+}
+
+TEST(WifiSessionAutoOnly, FinishesWhenTheScanTimesOut) {
+  WifiSession session;
+  wifi_session::Startup startup;
+  startup.autoOnly = true;
+  startup.savedSsids = {"home"};
+  session.begin(startup, 1000);
+  drain(session, 1000);
+  EXPECT_TRUE(finishedUnconnected(drain(session, 1000 + wifi_session::SCAN_TIMEOUT_MS)));
+}

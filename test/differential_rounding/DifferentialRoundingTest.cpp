@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <utility>
 
 #include "lib/EpdFont/EpdFont.h"
 #include "lib/EpdFont/EpdFontData.h"
@@ -127,6 +128,32 @@ TEST(Fp4Math, RoundingBoundaries) {
   EXPECT_EQ(fp4::toPixel(137 + (-9)), 8);  // 128 = 8.0 exact
   EXPECT_EQ(fp4::toPixel(137 + (-5)), 8);  // 132 = 8.25
   EXPECT_EQ(fp4::toPixel(137 + (-1)), 9);  // 136 = 8.5 (half rounds up)
+}
+
+TEST(Fp4Math, TtfAdvancesDoNotRoundUpBeforePixelSnapping) {
+  // 26.6 advances from upstream #4431 (Caecilia LT i/l 16pt, x 13pt, & 14pt, K/X 16pt)
+  for (const auto [advance26_6, pixels] : {std::pair{670, 10}, {1054, 16}, {1438, 22}, {1502, 23}}) {
+    EXPECT_EQ(fp4::toPixel(fp4::truncate26_6_to_4(advance26_6)), pixels);
+    EXPECT_EQ(fp4::toPixel((advance26_6 + 2) >> 2), pixels + 1);
+  }
+}
+
+TEST(Fp4Math, TtfConversionPreservesPixelAndHalfPixelBoundaries) {
+  for (int pixels = 0; pixels < 256; ++pixels) {
+    EXPECT_EQ(fp4::toPixel(fp4::truncate26_6_to_4(pixels * 64 + 31)), pixels);
+    EXPECT_EQ(fp4::toPixel(fp4::truncate26_6_to_4(pixels * 64 + 32)), pixels + 1);
+    EXPECT_EQ(fp4::truncate26_6_to_4(pixels * 64), fp4::fromPixel(pixels));
+  }
+}
+
+TEST(Fp4Math, TtfConversionMatchesSingleSnapWithEveryFp4Kern) {
+  for (int advance26_6 = 0; advance26_6 < 64 * 64; ++advance26_6) {
+    for (int kern = -128; kern <= 127; ++kern) {
+      const int singleSnap = (advance26_6 + kern * 4 + 32) >> 6;
+      EXPECT_EQ(fp4::toPixel(fp4::truncate26_6_to_4(advance26_6) + kern), singleSnap)
+          << "advance26_6=" << advance26_6 << " kern=" << kern;
+    }
+  }
 }
 
 TEST(Fp4Math, OldApproachInconsistency) {

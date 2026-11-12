@@ -1,7 +1,6 @@
 #include "HalStorage.h"
 
 #include <FS.h>  // need to be included before SdFat.h for compatibility with FS.h's File class
-#include <HalPowerManager.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <SDCardManager.h>
@@ -28,6 +27,11 @@ freeink::UsbMassStorage usbMassStorage;
 #endif
 }  // namespace
 
+#if FREEINK_CAP_USB_MSC
+extern "C" bool tud_mounted(void);
+extern "C" bool tud_suspended(void);
+#endif
+
 HalStorage::HalStorage() {
   // Recursive so the same task can re-enter StorageLock without self-deadlock.
   // openFileForRead/Write take the lock and then assign to a HalFile&
@@ -41,16 +45,7 @@ HalStorage::HalStorage() {
 
 // begin() and ready() are only called from setup, no need to acquire mutex for them
 
-// On the X3, GPIO13 is both the SD rail enable and the battery latch. SDCardManager::begin()
-// releases the latch's pad hold to drive the rail, and an automatic light sleep before the
-// hold is back isolates the pad: on battery, with nobody holding Power (a silent restart),
-// the device switches off. The perf lock keeps the idle task out of light sleep meanwhile.
-bool HalStorage::begin() {
-  HalPowerManager::Lock noLightSleep;
-  const bool mounted = SDCard.begin();
-  powerManager.rearmBatteryLatch();
-  return mounted;
-}
+bool HalStorage::begin() { return SDCard.begin(); }
 
 bool HalStorage::ready() const { return SDCard.ready(); }
 
@@ -108,6 +103,15 @@ bool HalStorage::disconnectUsbDriveHost() {
 #if FREEINK_CAP_USB_MSC
   StorageLock lock;
   return usbMassStorage.disconnectHost();
+#else
+  return false;
+#endif
+}
+
+bool HalStorage::usbDriveHostSuspended() const {
+#if FREEINK_CAP_USB_MSC
+  StorageLock lock;
+  return usbMassStorage.active() && tud_mounted() && tud_suspended();
 #else
   return false;
 #endif

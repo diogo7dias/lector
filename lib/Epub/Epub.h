@@ -1,9 +1,11 @@
 #pragma once
 
 #include <Print.h>
+#include <ZipFile.h>
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -25,6 +27,7 @@ class Epub {
   std::string cachePath;
   // Spine and TOC cache
   std::unique_ptr<BookMetadataCache> bookMetadataCache;
+  std::unique_ptr<ZipFile::EntryIndex> zipEntryIndex;
   // CSS parser for styling
   std::unique_ptr<CssParser> cssParser;
   // CSS files
@@ -44,6 +47,7 @@ class Epub {
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true);
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
+  std::string pageListPath() const;
   void discoverCssFilesFromZip();
   bool parseCssFiles() const;  // true when the CSS rules cache was (re)written
 
@@ -55,6 +59,8 @@ class Epub {
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
+  // After load, for the book being read: finds every item without rescanning the card.
+  void indexZipEntries();
   // For a book that skipped its stylesheet at load and now wants it: parses the CSS into
   // its cache when the cache is missing or stale, and drops the section caches laid out
   // without it. Only valid after a successful load().
@@ -81,9 +87,10 @@ class Epub {
   BookMetadataCache::TocEntry getTocItem(int tocIndex) const;
   int getSpineItemsCount() const;
   int getTocItemsCount() const;
-  int getSpineIndexForTocIndex(int tocIndex) const;
   int getTocIndexForSpineIndex(int spineIndex) const;
   size_t getCumulativeSpineItemSize(int spineIndex) const;
+  // First spine index whose cumulative size reaches `bytes`, or -1 past the end.
+  int getSpineIndexForSize(size_t bytes) const;
   int getSpineIndexForTextReference() const;
 
   size_t getBookSize() const;
@@ -91,4 +98,10 @@ class Epub {
   CssParser* getCssParser() const { return cssParser.get(); }
   // fromSpineIndex: the chapter the link sits in, whose folder a relative href is resolved against.
   int resolveHrefToSpineIndex(const std::string& href, int fromSpineIndex = -1) const;
+  // The printed edition's page numbers (EPUB 3 page-list), cached as pages.txt.
+  bool hasPageList() const;
+  // The href of the printed page labelled `label` ("147", "xii"), or "" if the book has none.
+  std::string findPrintedPage(const std::string& label) const;
+  // Every printed page in book order; `fn` returns false to stop.
+  void forEachPrintedPage(bool (*fn)(void* ctx, std::string_view label, const char* href), void* ctx) const;
 };

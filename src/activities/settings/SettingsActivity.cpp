@@ -2,7 +2,6 @@
 
 #include <BoardConfig.h>
 #include <GfxRenderer.h>
-#include <HalFrontlight.h>
 #include <Logging.h>
 #include <Memory.h>
 
@@ -16,6 +15,7 @@
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
 #include "Diagnostics.h"
+#include "FastPageTurnsTestActivity.h"
 #include "FontDownloadActivity.h"
 #include "InstalledFontsActivity.h"
 #include "KOReaderSettingsActivity.h"
@@ -25,9 +25,12 @@
 #include "OpdsServerStore.h"
 #include "OtaUpdateActivity.h"
 #include "PopupItemsActivity.h"
+#include "ReleaseNotesActivity.h"
+#include "ScreenCalibrationActivity.h"
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
+#include "SilentRestart.h"
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
 #include "WifiCredentialStore.h"
@@ -39,24 +42,26 @@
 #include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "frontlight/ApplyFrontlightSetting.h"
+#include "frontlight/FrontlightBootPolicy.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "util/CredentialBundle.h"
 #include "util/ReleaseStorage.h"
 
 namespace {
 
-// Push a just-changed frontlight row down to the hardware, so the light answers
-// the row instead of waiting for the next boot. No-op for every other row, and
-// on a board with no frontlight (HalFrontlight is inert there).
-void applyFrontlightSetting(uint8_t CrossPointSettings::* const valuePtr) {
-  if (valuePtr == &CrossPointSettings::frontlightOn) {
-    Frontlight.setOn(SETTINGS.frontlightOn != 0);
-  } else if (valuePtr == &CrossPointSettings::frontlightBrightness ||
-             valuePtr == &CrossPointSettings::frontlightMaxBrightness) {
-    SETTINGS.clampFrontlightBrightness();
-    Frontlight.setBrightness(SETTINGS.frontlightBrightness);
-  } else if (valuePtr == &CrossPointSettings::frontlightWarmth) {
-    Frontlight.setWarmth(SETTINGS.frontlightWarmth);
+bool isScheduleTime(const SettingInfo& setting) {
+  return setting.nameId == StrId::STR_FRONTLIGHT_SCHEDULE_ON || setting.nameId == StrId::STR_FRONTLIGHT_SCHEDULE_OFF;
+}
+
+// In the reader's clock format. Rounds down to the step, since a drag lands anywhere on the slider.
+void formatScheduleMinutes(const int minutes, char* const out, const size_t outSize) {
+  const int stepped = minutes - minutes % frontlight::SCHEDULE_STEP_MINUTES;
+  const int hour = stepped / 60;
+  if (SETTINGS.clockFormat == 1) {
+    snprintf(out, outSize, "%d:%02d %s", hour % 12 == 0 ? 12 : hour % 12, stepped % 60, hour >= 12 ? "PM" : "AM");
+  } else {
+    snprintf(out, outSize, "%02d:%02d", hour, stepped % 60);
   }
 }
 
@@ -75,7 +80,8 @@ struct SettingsGroup {
 //
 // Rows the map does not mention keep their relative order and are appended at the end
 // under no heading. That is deliberate: a setting added to SettingsList.h later stays
-// reachable on the device even if whoever added it never touched this map.
+// reachable on the device even if whoever added it never touched this map. The log line
+// is what fails the sim's Settings test when that happens.
 void applyGroups(std::vector<SettingInfo>& rows, const std::vector<SettingsGroup>& groups) {
   std::vector<SettingInfo> grouped;
   grouped.reserve(rows.size() + groups.size());
@@ -98,7 +104,9 @@ void applyGroups(std::vector<SettingInfo>& rows, const std::vector<SettingsGroup
   }
 
   for (size_t i = 0; i < rows.size(); ++i) {
-    if (!placed[i]) grouped.push_back(rows[i]);
+    if (placed[i]) continue;
+    LOG_ERR("SET", "Row not in a group map: %s", I18N.get(rows[i].nameId));
+    grouped.push_back(rows[i]);
   }
 
   rows.swap(grouped);
@@ -107,8 +115,14 @@ void applyGroups(std::vector<SettingInfo>& rows, const std::vector<SettingsGroup
 }  // namespace
 
 namespace {
-// Four settings categories, then the File Transfer activity.
+// Four settings categories, then the File Transfer activity, then on the X4 Pro the
+// Fast Page Turns trial.
+constexpr int kFastPageTurnsTestCell = 5;
+#if FREEINK_DEVICE_X4PRO
+constexpr int kCategoryCount = 6;
+#else
 constexpr int kCategoryCount = 5;
+#endif
 }  // namespace
 
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) const {
@@ -129,13 +143,18 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) const
   }
   if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     char valueBuffer[32];
+    if (isScheduleTime(setting)) {
+      formatScheduleMinutes(SETTINGS.*(setting.valuePtr) * frontlight::SCHEDULE_STEP_MINUTES, valueBuffer,
+                            sizeof(valueBuffer));
+      return valueBuffer;
+    }
     if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
       if (SETTINGS.sleepTimeoutMinutes >= CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES) return tr(STR_SLEEP_NEVER);
       snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT),
                static_cast<unsigned int>(SETTINGS.*(setting.valuePtr)));
       return valueBuffer;
     }
-    return std::to_string(SETTINGS.*(setting.valuePtr));
+    return std::to_string(setting.shownValue(SETTINGS.*(setting.valuePtr)));
   }
   if (setting.type == SettingType::STRING) {
     if (setting.stringGetter) return setting.stringGetter();
@@ -148,6 +167,8 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) const
 
 StrId SettingsActivity::categoryName(const int index) const {
   switch (index) {
+    case kFastPageTurnsTestCell:
+      return StrId::STR_FAST_PAGE_TURNS;
     case 4:
       return StrId::STR_FILE_TRANSFER;
     case 0:
@@ -208,6 +229,7 @@ const char* SettingsActivity::cellValue(const int index) const {
   if (mode == Mode::Hub) {
     if (index == 4) return nullptr;
     if (index < 0 || index >= kCategoryCount) return nullptr;
+    if (index == kFastPageTurnsTestCell) return SETTINGS.fastPageTurns ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     // Settings only: the group headings applyGroups inserts are rows too.
     const auto& rows = const_cast<SettingsActivity*>(this)->categoryRows(index);
     const auto settingCount =
@@ -286,6 +308,7 @@ void SettingsActivity::rebuildSettingsList() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SHARE_CREDENTIALS, SettingAction::ShareCredentials));
   displaySettings.push_back(SettingInfo::Action(StrId::STR_SHUFFLE_WALLPAPERS, SettingAction::ShuffleWallpapers));
+  displaySettings.push_back(SettingInfo::Action(StrId::STR_SCREEN_CALIBRATION, SettingAction::ScreenCalibration));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAN_STORAGE, SettingAction::CleanStorage));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
@@ -296,6 +319,7 @@ void SettingsActivity::rebuildSettingsList() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_INSTALL_OTHER_FIRMWARE, SettingAction::InstallOtherFirmware));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_WHATS_NEW, SettingAction::ReleaseNotes));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_INSTALLED_FONTS, SettingAction::InstalledFonts));
@@ -312,13 +336,17 @@ void SettingsActivity::rebuildSettingsList() {
                   // heading for a group whose rows are all missing.
                   {StrId::STR_GRP_FRONTLIGHT,
                    {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS, StrId::STR_FRONTLIGHT_MAX_BRIGHTNESS,
-                    StrId::STR_FRONTLIGHT_WARMTH, StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE}},
-                  {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},
-                  {StrId::STR_GRP_SLEEP_SCREEN, {StrId::STR_SLEEP_SCREEN}},
+                    StrId::STR_FRONTLIGHT_WARMTH, StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE, StrId::STR_FRONTLIGHT_SCHEDULE,
+                    StrId::STR_FRONTLIGHT_SCHEDULE_ON, StrId::STR_FRONTLIGHT_SCHEDULE_OFF}},
+                  {StrId::STR_GRP_SCREEN,
+                   {StrId::STR_REFRESH_FREQ, StrId::STR_NIGHT_REFRESH_FREQ, StrId::STR_CHAPTER_START_REFRESH,
+                    StrId::STR_SUNLIGHT_FADING_FIX, StrId::STR_SCREEN_CALIBRATION}},
+                  {StrId::STR_GRP_SLEEP_SCREEN, {StrId::STR_SLEEP_SCREEN, StrId::STR_FAST_UNLOCK}},
                   {StrId::STR_GRP_WALLPAPER,
                    {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER, StrId::STR_SHOW_SLEEP_IMAGE_FILENAME,
                     StrId::STR_SHOW_SLEEP_FAVORITE_BADGE, StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION,
-                    StrId::STR_SHUFFLE_WALLPAPERS}},
+                    StrId::STR_SHOW_SLEEP_READING_STATS, StrId::STR_SLEEP_READING_STATS_ALIGN,
+                    StrId::STR_SHUFFLE_WALLPAPERS, StrId::STR_REFRESH_SLEEP_WALLPAPER}},
                   {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
               });
 
@@ -362,7 +390,7 @@ void SettingsActivity::rebuildSettingsList() {
   applyGroups(
       systemSettings,
       {
-          {StrId::STR_GRP_POWER, {StrId::STR_TIME_TO_SLEEP}},
+          {StrId::STR_GRP_POWER, {StrId::STR_TIME_TO_SLEEP, StrId::STR_TOUCH_SLEEP}},
           {StrId::STR_GRP_LIBRARY,
            {StrId::STR_SHOW_HIDDEN_FILES, StrId::STR_BOOK_BROWSER_ORDER, StrId::STR_OPEN_BOOK_ON_BOOT,
             StrId::STR_REMOVE_READ_FROM_RECENTS, StrId::STR_MOVE_FINISHED_TO_READ, StrId::STR_MOVE_OPENED_TO_RECENTS}},
@@ -374,7 +402,7 @@ void SettingsActivity::rebuildSettingsList() {
             StrId::STR_SHARE_CREDENTIALS}},
           {StrId::STR_GRP_DEVICE,
            {StrId::STR_LANGUAGE, StrId::STR_CLEAN_STORAGE, StrId::STR_CLEAR_READING_CACHE, StrId::STR_CHECK_UPDATES,
-            StrId::STR_SD_FIRMWARE_UPDATE, StrId::STR_INSTALL_OTHER_FIRMWARE}},
+            StrId::STR_SD_FIRMWARE_UPDATE, StrId::STR_INSTALL_OTHER_FIRMWARE, StrId::STR_WHATS_NEW}},
           // Last, and named for what they are: a panel-tuning escape hatch and a
           // diagnostics readout. Performance Timings is compiled out of some builds, and
           // applyGroups draws no heading for a group whose rows are all missing.
@@ -398,7 +426,6 @@ void SettingsActivity::onEnter() {
   selectedCategory = 0;
   setSelected(0);
 
-  // Trigger first update
   requestUpdate();
 }
 
@@ -458,6 +485,17 @@ void SettingsActivity::activateCell(const int index) {
       activityManager.goToFileTransfer();
       return;
     }
+#if FREEINK_DEVICE_X4PRO
+    if (index == kFastPageTurnsTestCell) {
+      const uint8_t before = SETTINGS.fastPageTurns;
+      startActivityForResult(std::make_unique<FastPageTurnsTestActivity>(renderer, mappedInput),
+                             [this, before](const ActivityResult&) {
+                               if (SETTINGS.fastPageTurns != before) SETTINGS.saveToFile();
+                               requestUpdate();
+                             });
+      return;
+    }
+#endif
     // A new screen: its first row shares this cell's action and value, so it would
     // inherit the tap flash.
     app.clearTapFlash();
@@ -488,7 +526,7 @@ ListChrome SettingsActivity::chrome() const {
 
   const int index = selected();
   const bool onSleepTimeout = mode == Mode::Category && index >= 0 && index < settingsCount &&
-                              settings[index].nameId == StrId::STR_TIME_TO_SLEEP;
+                              (settings[index].nameId == StrId::STR_TIME_TO_SLEEP || isScheduleTime(settings[index]));
   chrome.confirmHint = onSleepTimeout ? tr(STR_SELECT) : tr(STR_TOGGLE);
   chrome.thirdHint = tr(STR_DIR_UP);
   chrome.fourthHint = tr(STR_DIR_DOWN);
@@ -506,6 +544,10 @@ void SettingsActivity::toggleCurrentSetting() {
 
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
     openSleepTimeoutPicker();
+    return;
+  }
+  if (isScheduleTime(setting)) {
+    openScheduleTimePicker(setting.valuePtr, setting.nameId);
     return;
   }
 
@@ -584,8 +626,9 @@ void SettingsActivity::toggleCurrentSetting() {
     const auto valuePtr = setting.valuePtr;
     constexpr int minLargeStep = 5;
     auto dialog = makeUniqueNoThrow<IntervalSelectionActivity>(
-        renderer, mappedInput, "SettingValue", setting.nameId, SETTINGS.*(setting.valuePtr), setting.valueRange.min,
-        setting.valueRange.max, /*smallStep=*/1, std::max(minLargeStep, static_cast<int>(setting.valueRange.step)));
+        renderer, mappedInput, "SettingValue", setting.nameId, setting.shownValue(SETTINGS.*(setting.valuePtr)),
+        setting.shownValue(setting.valueRange.min), setting.shownValue(setting.valueRange.max), /*smallStep=*/1,
+        std::max(minLargeStep, static_cast<int>(setting.valueRange.step)));
     if (!dialog) {
       LOG_ERR("SET", "OOM: IntervalSelectionActivity");
       return;
@@ -594,10 +637,11 @@ void SettingsActivity::toggleCurrentSetting() {
     // itself is the scratch the dialog writes through, so Cancel restoring the
     // opening value restores the setting too.
     liveValuePtr = valuePtr;
+    liveValueOffset = setting.displayOffset;
     dialog->setLiveApply({[](void* ctx, const int chosen) {
                             auto* self = static_cast<SettingsActivity*>(ctx);
                             if (self->liveValuePtr == nullptr) return;
-                            SETTINGS.*(self->liveValuePtr) = static_cast<uint8_t>(chosen);
+                            SETTINGS.*(self->liveValuePtr) = static_cast<uint8_t>(chosen - self->liveValueOffset);
                             applyFrontlightSetting(self->liveValuePtr);
                           },
                           this});
@@ -606,7 +650,7 @@ void SettingsActivity::toggleCurrentSetting() {
       if (!result.isCancelled) {
         const auto* chosen = std::get_if<IntervalResult>(&result.data);
         if (chosen != nullptr) {
-          SETTINGS.*valuePtr = static_cast<uint8_t>(chosen->value);
+          SETTINGS.*valuePtr = static_cast<uint8_t>(chosen->value - liveValueOffset);
           applyFrontlightSetting(valuePtr);
         }
         // One write when the dialog closes, not one per step: the value moved
@@ -684,7 +728,16 @@ void SettingsActivity::toggleCurrentSetting() {
         shareCredentials();
         break;
       case SettingAction::Network:
-        startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false), resultHandler);
+        startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false),
+                               [](const ActivityResult&) {
+                                 SETTINGS.saveToFile();
+                                 // Every other WiFi screen hands the radio to a session whose onExit()
+                                 // tears it down. This one only saves credentials, yet the scan alone
+                                 // brings the driver up, so release its heap here. Runs from the loop
+                                 // task with no lock held; the restart popup paints to the panel.
+                                 RenderLock lock;
+                                 teardownWifiAndRestart(silentRestartToSettings);
+                               });
         break;
       case SettingAction::ShuffleWallpapers: {
         // Inline, no sub-activity: the reshuffle is a reseed of the rotation
@@ -710,6 +763,12 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::SdFirmwareUpdate:
         startActivityForResult(std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::ScreenCalibration:
+        startActivityForResult(std::make_unique<ScreenCalibrationActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::ReleaseNotes:
+        startActivityForResult(std::make_unique<ReleaseNotesActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::DownloadFonts:
         startDownloadActivity(makeUniqueNoThrow<FontDownloadActivity>(renderer, mappedInput));
@@ -813,6 +872,28 @@ void SettingsActivity::shareCredentials() {
   // onExit, so nothing here waits around holding passwords on the card.
   activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
       renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, path));
+}
+
+void SettingsActivity::openScheduleTimePicker(uint8_t CrossPointSettings::* const valuePtr, const StrId titleId) {
+  // In minutes so the step hints read "15 min" and "60 min".
+  constexpr int step = frontlight::SCHEDULE_STEP_MINUTES;
+  auto dialog = makeUniqueNoThrow<IntervalSelectionActivity>(
+      renderer, mappedInput, "SettingValue", titleId, SETTINGS.*valuePtr * step, 0,
+      frontlight::SCHEDULE_LAST_STEP * step, step, 60, StrId::STR_SLEEP_TIMER_VALUE_FORMAT);
+  if (!dialog) {
+    LOG_ERR("SET", "OOM: IntervalSelectionActivity");
+    return;
+  }
+  dialog->setReadoutFormat(formatScheduleMinutes);
+  startActivityForResult(std::move(dialog), [this, valuePtr](const ActivityResult& result) {
+    if (!result.isCancelled) {
+      SETTINGS.*valuePtr = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value / step);
+      SETTINGS.saveToFile();
+    }
+    rebuildSettingsList();
+    restoreCursorAfterRebuild();
+    requestUpdate();
+  });
 }
 
 void SettingsActivity::openSleepTimeoutPicker() {

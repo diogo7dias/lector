@@ -19,12 +19,12 @@
 #include "WifiCredentialStore.h"
 #include "activities/ActivityManager.h"
 #include "activities/reader/NearbyPositionReceiveActivity.h"
-#include "activities/reader/ProgressFile.h"
 #include "util/BookCacheUtils.h"
 #include "util/BookFilingNames.h"
 #include "util/BusyTick.h"
 #include "util/CredentialBundle.h"
 #include "util/PartialUploads.h"
+#include "util/ProgressFile.h"
 
 using namespace nearby_file;
 using freeink::nearby::PacketType;
@@ -83,7 +83,7 @@ void NearbyFileTransferActivity::onEnter() {
 
   // The web server and this cannot hold the radio at the same time.
   if (WiFi.getMode() != WIFI_OFF) {
-    radioFailed = true;
+    failed = true;
     errorMessage = tr(STR_NEARBY_RADIO_BUSY);
     requestUpdate(true);
     return;
@@ -92,7 +92,7 @@ void NearbyFileTransferActivity::onEnter() {
   if (mode == Mode::Send) {
     if (sourcePaths.empty() || !openCurrentSource()) {
       closeFiles();
-      sourceUnreadable = true;
+      failed = true;
       errorMessage = tr(STR_NEARBY_CANNOT_READ_FILE);
       requestUpdate(true);
       return;
@@ -103,7 +103,7 @@ void NearbyFileTransferActivity::onEnter() {
   WiFi.disconnect(false);
   if (!transport.begin(ESPNOW_CHANNEL)) {
     closeFiles();
-    radioFailed = true;
+    failed = true;
     errorMessage = tr(STR_NEARBY_RADIO_BUSY);
     requestUpdate(true);
     return;
@@ -135,8 +135,8 @@ bool NearbyFileTransferActivity::openCurrentSource() {
   sourcePosition = {};
   const std::string cacheDir = bookCacheDirForPath(path);
   if (!cacheDir.empty()) {
-    HalFile progress = Storage.open((cacheDir + "/progress.bin").c_str());
-    if (progress && progress.fileSize() <= sourcePosition.bytes.size()) {
+    HalFile progress;
+    if (ProgressFile::openForRead("NFT", cacheDir, progress) && progress.fileSize() <= sourcePosition.bytes.size()) {
       sourcePosition.length = static_cast<uint8_t>(progress.fileSize());
       if (!sourcePosition.validFor(sourceName) ||
           progress.read(sourcePosition.bytes.data(), sourcePosition.length) != sourcePosition.length) {
@@ -167,7 +167,7 @@ void NearbyFileTransferActivity::advanceToNextSource() {
     // until its own timeout cleared it.
     if (hasChosenPeer) sendPacket(PacketType::Cancel, chosenPeerMac, 0, nullptr, 0);
     closeFiles();
-    sourceUnreadable = true;
+    failed = true;
     errorMessage = tr(STR_NEARBY_CANNOT_READ_FILE);
     requestUpdate(true);
     return;
@@ -843,7 +843,7 @@ UiStatusActivity::StatusView NearbyFileTransferActivity::statusView() const {
     view.confirmHint = tr(STR_SELECT);
     return view;
   }
-  if (radioFailed || sourceUnreadable) {
+  if (failed) {
     view.lines = {errorMessage.c_str(), nullptr, nullptr, nullptr};
     return view;
   }
@@ -939,7 +939,7 @@ void NearbyFileTransferActivity::onChoiceActivated(const int index) {
 // Back during a live transfer tells the other reader rather than just
 // vanishing, so it stops waiting instead of timing out.
 void NearbyFileTransferActivity::onBackButton() {
-  if (mode != Mode::Choose && !radioFailed && !sourceUnreadable) {
+  if (mode != Mode::Choose && !failed) {
     session.cancel(millis());
     runSessionActions();
   }
@@ -948,11 +948,11 @@ void NearbyFileTransferActivity::onBackButton() {
 
 // Confirm dismisses startup failures and a completed file whose progress could not be saved.
 void NearbyFileTransferActivity::onConfirmButton() {
-  if (radioFailed || sourceUnreadable || (session.state() == TransferState::DONE && !errorMessage.empty())) leave();
+  if (failed || (session.state() == TransferState::DONE && !errorMessage.empty())) leave();
 }
 
 bool NearbyFileTransferActivity::handleCustomInput() {
-  if (mode == Mode::Choose || radioFailed || sourceUnreadable) return false;
+  if (mode == Mode::Choose || failed) return false;
 
   pumpRadio();
   runSessionActions();

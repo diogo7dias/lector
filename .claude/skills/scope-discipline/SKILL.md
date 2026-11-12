@@ -1,19 +1,18 @@
 ---
 name: scope-discipline
-description: Feature-scope discipline for a dedicated e-reader (not a Swiss Army knife). Use when adding a feature, a new activity, a new lib, a setting, or a dependency, or when a request would grow the firmware's surface. Covers the SCOPE.md test, the RAM-cost vs reading-benefit gate, preferring no-code or existing-mechanism solutions, awareness of the existing activity surface, and how to push back on out-of-scope asks.
+description: Feature-scope discipline for a dedicated e-reader (not a Swiss Army knife). Use when adding a feature, a new activity, a new lib, a setting, or a dependency, or when a request would grow the firmware's surface. Covers the out-of-scope list, the RAM-cost vs reading-benefit gate, preferring no-code or existing-mechanism solutions, awareness of the existing activity surface, and how to push back on out-of-scope asks.
 ---
 
 # Scope Discipline
 
 The mission: do one thing exceptionally well, focused reading on constrained
-hardware. `SCOPE.md` is the source of truth for what is in and out. Read it
-before adding surface. This is the gate to run before writing a new feature.
+hardware. This is the gate to run before writing a new feature.
 
 ## The gate
 
 Before adding a feature, activity, lib, setting, or dependency, answer in order:
 
-1. **Is it in `SCOPE.md`?** Explicitly out: interactive apps (notepad,
+1. **Is it out of scope?** Explicitly out: interactive apps (notepad,
    calculator, games), active connectivity (RSS, news, browser), media/audio
    playback. If it is out, say so and stop.
 2. **Does it materially improve focused reading?** If the benefit is
@@ -27,7 +26,7 @@ Before adding a feature, activity, lib, setting, or dependency, answer in order:
    already built.
 
 If a request fails the gate, push back with the specific reason and the
-`SCOPE.md` basis, and offer the in-scope alternative. Make the call and say why;
+out-of-scope item it hits, and offer the in-scope alternative. Make the call and say why;
 do not just hand over a menu.
 
 ## Surface awareness
@@ -46,7 +45,7 @@ choice; otherwise pick a sensible fixed default.
 
 ## Self-review
 
-- [ ] Checked against `SCOPE.md`; not on the out-of-scope list.
+- [ ] Not on the out-of-scope list.
 - [ ] Stated the concrete reading benefit, not a generic "useful."
 - [ ] Named the RAM/size cost (measured, not guessed) and why the benefit wins.
 - [ ] Checked whether an existing activity/setting/doc already covers it.

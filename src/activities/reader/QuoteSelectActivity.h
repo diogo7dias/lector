@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "QuoteText.h"
 #include "activities/Activity.h"
+#include "util/QuoteText.h"
 
 // Grab Quote: pick a passage on the current reader page with the buttons and
 // save it to "<book>_QUOTES.txt". Two phases:
@@ -44,12 +44,14 @@ class QuoteSelectActivity final : public Activity {
     int16_t x;
     int16_t y;
     int16_t width;
+    int16_t height;
     uint16_t row;
     // Chapter-local paragraph this word belongs to (0 = not derivable from this
     // page); saved with the quote so the reader can find it again later.
     uint16_t paragraphOrdinal;
-    const char* text;
-    EpdFontFamily::Style style;
+    uint16_t index;  // into block; both live as long as the page
+    const TextBlock* block;
+    const char* text() const { return block->wordText(index); }
   };
 
   enum class Phase : uint8_t { SelectStart, SelectEnd };
@@ -82,7 +84,6 @@ class QuoteSelectActivity final : public Activity {
   Epub& epub;
   const int spineIndex;
   const int fontId;
-  int lineHeight = 0;
 
   std::vector<WordBox> words;
   uint16_t rowCount = 0;

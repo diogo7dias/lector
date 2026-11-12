@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>lector · crow logo · 3 options</title>
+<style>
+:root{--bg:#141311;--panel:#1d1b18;--ink:#e6e1d5;--dim:#8a857a;--line:#3a3833;--paper:#f3f1ea;--black:#141311;
+ --accent-bg:#e6e1d5;--accent-ink:#141311}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-monospace,Menlo,monospace;padding:24px 16px 120px}
+header{max-width:1100px;margin:0 auto 28px}
+h1{font-size:12px;letter-spacing:.25em;text-transform:uppercase;color:var(--dim);margin:0 0 6px}
+header p{margin:0;color:var(--dim);max-width:60ch}
+main{max-width:1100px;margin:0 auto;display:grid;gap:28px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.opt{background:var(--panel);border:1px solid var(--line);padding:20px;display:flex;flex-direction:column;gap:16px;
+ opacity:0;transform:translateY(24px);animation:rise .7s cubic-bezier(.2,.8,.2,1) forwards}
+.opt:nth-child(2){animation-delay:.12s}.opt:nth-child(3){animation-delay:.24s}
+@keyframes rise{to{opacity:1;transform:none}}
+.num{font-size:40px;line-height:1;color:var(--dim)}
+.opt h2{margin:0;font-size:16px}
+.opt p{margin:0;color:var(--dim)}
+.hero{background:var(--paper);aspect-ratio:1;display:grid;place-items:center;overflow:hidden}
+.hero svg{width:62%;transition:transform .5s cubic-bezier(.2,.8,.2,1)}
+.hero:hover svg{transform:scale(1.06) rotate(-2deg)}
+.hero svg .eye{animation:blink 5s infinite}
+@keyframes blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+.eye{transform-box:fill-box;transform-origin:center}
+.row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.chip{background:var(--paper);display:grid;place-items:center;padding:6px}
+.chip.dark{background:#000}
+.chip.dark svg{--fill:var(--paper);--cut:#000}
+.sizes{color:var(--dim);font-size:11px}
+.device{background:#2a2825;border-radius:14px;padding:14px 10px 26px;width:150px}
+.screen{background:var(--paper);aspect-ratio:480/800;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+ color:var(--black);font-size:10px;letter-spacing:.3em}
+.screen svg{width:46%}
+.word{display:flex;align-items:center;gap:10px;background:var(--paper);color:var(--black);padding:10px 14px;font-size:22px;letter-spacing:.04em}
+.word svg{width:34px}
+.pick{display:flex;gap:8px}
+.pick button{flex:1;background:none;color:var(--ink);border:1px solid var(--line);padding:10px;font:inherit;cursor:pointer;transition:background .2s,color .2s}
+.pick button[aria-pressed=true]{background:var(--accent-bg);color:var(--accent-ink);border-color:var(--accent-bg)}
+svg{display:block;--fill:var(--black);--cut:var(--paper)}
+.f{fill:var(--fill)}.c{fill:var(--cut)}.s{stroke:var(--fill)}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);padding:12px 16px;
+ display:flex;gap:12px;align-items:center;justify-content:center}
+#out{flex:0 1 420px;background:var(--bg);border:1px solid var(--line);padding:10px;min-height:40px;color:var(--ink)}
+#copy{background:var(--accent-bg);color:var(--accent-ink);border:0;padding:10px 18px;font:inherit;cursor:pointer}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;opacity:1!important;transform:none!important}}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+ <defs>
+  <!-- 1 · Cut: a perched crow from straight cuts, like a woodblock with no curves -->
+  <symbol id="crow1" viewBox="0 0 100 100">
+   <path class="f" d="M96 40 L74 28 L64 19 L52 21 L44 33 L28 43 L3 59 L8 66 L34 60 L48 66 L64 62 L73 51 L75 44 Z"/>
+   <circle class="c eye" cx="62" cy="30" r="2.6"/>
+   <path class="f" d="M50 64 h3 l-1 15 h-3 Z M59 63 h3 l0 16 h-3 Z M28 79 h62 v3 h-62 Z"/>
+  </symbol>
+  <!-- 2 · Reader: the same crow standing on an open book -->
+  <symbol id="crow2" viewBox="0 0 100 100">
+   <g transform="translate(14 2) scale(.72)">
+    <path class="f" d="M96 40 L74 28 L64 19 L52 21 L44 33 L28 43 L3 59 L8 66 L34 60 L48 66 L64 62 L73 51 L75 44 Z"/>
+    <circle class="c eye" cx="62" cy="30" r="2.8"/>
+    <path class="f" d="M50 64 h3.5 l-1 14 h-3.5 Z M59 63 h3.5 l0 15 h-3.5 Z"/>
+   </g>
+   <path class="f" d="M8 66 Q30 60 50 68 L50 92 Q30 84 8 90 Z M92 66 Q70 60 50 68 L50 92 Q70 84 92 90 Z"/>
+   <path class="c" d="M49 69 h2 v22 h-2 Z"/>
+  </symbol>
+  <!-- 3 · Head: crow head in a square, beak breaking the frame; holds at 16 px -->
+  <symbol id="crow3" viewBox="0 0 100 100">
+   <path class="f" d="M4 8 H80 V92 H4 Z M11 15 V85 H73 V15 Z" fill-rule="evenodd"/>
+   <path class="f" d="M16 92 V60 Q16 30 38 22 Q53 16 66 24 L99 38 L66 47 Q59 52 57 62 V92 Z"/>
+   <path class="c" d="M66 36 L90 38.2 L66 40 Z"/>
+   <circle class="c eye" cx="48" cy="35" r="4.2"/>
+  </symbol>
+ </defs>
+</svg>
+
+<header>
+ <h1>lector · logo workshop</h1>
+ <p>Three minimal crows. Each is shown big, at 128/64/32/16 px on paper and black, as a wordmark, and on the device's sleep screen. Pure 1-bit black, so it renders clean on e-ink with no gray dithering.</p>
+</header>
+
+<main id="opts"></main>
+
+<div class="bar">
+ <div id="out" aria-live="polite">pick below</div>
+ <button id="copy">Copy</button>
+</div>
+
+<script>
+const OPTS = [
+ { n: 1, name: 'Cut', note: 'Perched crow from straight cuts, like a woodblock with no curves. Reads as a bird at every size; the perch line gives it a base.' },
+ { n: 2, name: 'Reader', note: 'The same crow standing on an open book. Says “e-reader” outright; busier, so it softens below 32 px.' },
+ { n: 3, name: 'Head', note: 'Black crow head rising out of a square frame; the heavy beak breaks through it. Built as an app icon: the strongest at 16 px and as a favicon.' },
+];
+const use = (n, px) => `<svg width="${px}" height="${px}" role="img" aria-label="Crow logo ${n}"><use href="#crow${n}"/></svg>`;
+const picks = {};
+document.getElementById('opts').innerHTML = OPTS.map(o => `
+ <section class="opt">
+  <div class="num">${o.n}</div>
+  <h2>${o.name}</h2>
+  <div class="hero">${use(o.n, 400)}</div>
+  <p>${o.note}</p>
+  <div class="row">${[128, 64, 32, 16].map(px => `<div class="chip">${use(o.n, px)}</div>`).join('')}
+   ${[64, 16].map(px => `<div class="chip dark">${use(o.n, px)}</div>`).join('')}</div>
+  <div class="sizes">128 · 64 · 32 · 16 px on paper, 64 · 16 on black</div>
+  <div class="row">
+   <div class="word">${use(o.n, 34)}lector</div>
+   <div class="device"><div class="screen">${use(o.n, 70)}LECTOR</div></div>
+  </div>
+  <div class="pick" role="group" aria-label="Option ${o.n}">
+   <button data-n="${o.n}" data-v="yes" aria-pressed="false">Yes</button>
+   <button data-n="${o.n}" data-v="no" aria-pressed="false">No</button>
+  </div>
+ </section>`).join('');
+
+const out = document.getElementById('out');
+function render() {
+ const by = v => Object.keys(picks).filter(k => picks[k] === v).sort().join(' ');
+ const parts = [];
+ if (by('yes')) parts.push('yes ' + by('yes'));
+ if (by('no')) parts.push('no ' + by('no'));
+ out.textContent = parts.join(', ') || 'pick below';
+}
+document.querySelectorAll('.pick button').forEach(b => b.onclick = () => {
+ const n = b.dataset.n;
+ picks[n] = picks[n] === b.dataset.v ? undefined : b.dataset.v;
+ if (!picks[n]) delete picks[n];
+ document.querySelectorAll(`.pick button[data-n="${n}"]`).forEach(x => x.setAttribute('aria-pressed', picks[n] === x.dataset.v));
+ render();
+});
+document.getElementById('copy').onclick = async (e) => {
+ const text = out.textContent, btn = e.currentTarget;
+ let ok = false;
+ try { await navigator.clipboard.writeText(text); ok = true; } catch {}
+ if (!ok) {
+  const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select();
+  try { ok = document.execCommand('copy'); } catch {}
+  t.remove();
+ }
+ if (!ok) { const r = document.createRange(); r.selectNodeContents(out); getSelection().removeAllRanges(); getSelection().addRange(r); }
+ btn.textContent = ok ? 'Copied' : 'Select + copy';
+ setTimeout(() => btn.textContent = 'Copy', 1500);
+};
+</script>
+</body></html>

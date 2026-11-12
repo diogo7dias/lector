@@ -69,10 +69,11 @@ struct ThemeMetrics {
   int capsuleRadius;
 
   int homeTopPadding;
-  int homeCoverTileHeight;
   int homeMenuTopOffset;
 
   int buttonHintsHeight;
+  // In landscape the button hints stay on the panel's bottom edge, which is a side of
+  // the page. A screen that lays its own text out keeps this strip clear of it.
   int sideButtonHintsWidth;
 
   int progressBarHeight;
@@ -165,7 +166,6 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .sheetRadius = 0,
                                  .capsuleRadius = 0,
                                  .homeTopPadding = 40,
-                                 .homeCoverTileHeight = 400,
                                  .homeMenuTopOffset = 10,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
@@ -185,8 +185,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .popupProgressBarHeight = 4,
                                  .popupProgressDrawOutline = false,
                                  .popupProgressClampPercent = false,
-                                 // White on the strip's black backing.
-                                 .popupProgressFillInverted = false,
+                                 // Black on the strip's white backing.
+                                 .popupProgressFillInverted = true,
                                  .popupProgressOutlineInverted = false,
                                  .optionPopupItemSpacing = 6,
                                  .optionPopupInnerPadding = 16,
@@ -229,7 +229,6 @@ class BaseTheme {
   // lines rather than overflowing when it's too wide to fit.
   static void drawHintLabel(GfxRenderer& renderer, int fontId, const char* label, int x, int boxWidth, int boxTop,
                             int boxHeight);
-  void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
   // Paints the focused-row highlight in the style the user picked and returns true
   // when the row's own text has to be drawn white to stay legible. Every list, menu,
   // popup and tab goes through this rather than filling a rectangle itself, so one
@@ -292,8 +291,8 @@ class BaseTheme {
   void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                       const std::function<std::string(int index)>& buttonLabel,
                       const std::function<UIIcon(int index)>& rowIcon, int itemIndexBase = 0) const;
-  // The one message surface: a full-width black strip below the top padding, with a
-  // white inset border and white centered text. Paints only — the caller picks the
+  // The one message surface: a full-width white strip across the top, with a black rule
+  // on its page-facing edge and black centered text (components/BannerStyle.h). Paints only — the caller picks the
   // refresh, because the busy banner wants the cheap FAST waveform and popups do not.
   //
   // This is the paint/submit split. Any caller that wants to compose further drawing into

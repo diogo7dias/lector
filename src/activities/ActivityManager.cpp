@@ -10,8 +10,10 @@
 #include <algorithm>
 #include <optional>
 
+#include "Activity.h"
 #include "ActivityBusyLabel.h"
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "WakeTiming.h"
@@ -21,18 +23,28 @@
 #include "components/BusyBanner.h"
 #include "components/HintBandGeometry.h"
 #include "components/RowHitTest.h"
+#include "fontIds.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
 #include "network/CrossPointWebServerActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
+#include "settings/ReleaseNotesActivity.h"
 #include "settings/SettingsActivity.h"
 #include "util/DebugTrace.h"
 #include "util/FullScreenMessageActivity.h"
 #include "util/OrientationCycle.h"
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
+
+ActivityManager::ActivityManager(GfxRenderer& renderer, MappedInputManager& mappedInput)
+    : renderer(renderer), mappedInput(mappedInput), renderingMutex(xSemaphoreCreateMutex()) {
+  assert(renderingMutex != nullptr && "Failed to create rendering mutex");
+  stackActivities.reserve(10);
+}
+
+ActivityManager::~ActivityManager() { assert(false); /* should never be called */ }
 
 namespace {
 
@@ -53,10 +65,15 @@ StrId bookOrderLabel(const uint8_t order) {
 // What the panel's action grid holds. Refresh and Rotate work anywhere, so they lead both
 // sets; the rest is what you would want where you are. In a book that is the two things
 // about this book you change most; outside one it is getting back into a book, or finding
-// a different one.
-constexpr uint8_t IN_BOOK_ACTIONS[] = {CrossPointSettings::LP_MENU_FORCE_REFRESH, CrossPointSettings::LP_MENU_ROTATE,
+// a different one. Alignment and paragraph spacing close the in-book set, the alignment
+// pair side by side so it reads as one choice.
+constexpr uint8_t IN_BOOK_ACTIONS[] = {CrossPointSettings::LP_MENU_FORCE_REFRESH,
+                                       CrossPointSettings::LP_MENU_ROTATE,
                                        CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR,
-                                       CrossPointSettings::LP_MENU_READER_SETTINGS};
+                                       CrossPointSettings::LP_MENU_READER_SETTINGS,
+                                       CrossPointSettings::LP_MENU_ALIGN_LEFT,
+                                       CrossPointSettings::LP_MENU_ALIGN_JUSTIFY,
+                                       CrossPointSettings::LP_MENU_TOGGLE_PARAGRAPH_SPACING};
 
 constexpr uint8_t OUT_OF_BOOK_ACTIONS[] = {
     CrossPointSettings::LP_MENU_FORCE_REFRESH,    CrossPointSettings::LP_MENU_ROTATE,
@@ -171,7 +188,9 @@ void ActivityManager::renderTaskLoop() {
         // one place a paint begins, rather than inside the list draws — a screen that draws
         // two lists (the home's books and its menu) would otherwise have the second wipe the
         // first, and a screen that draws none would leave the previous screen's rows live.
-        if (lightPanel.isActive()) {
+        if (quickLocked) {
+          paintQuickLockBadge();
+        } else if (lightPanel.isActive()) {
           // Deliberately not re-rendering the activity: the panel is drawn over the page
           // already in the framebuffer, which is what makes it a live preview of the light
           // rather than a screen you leave the book for.
@@ -212,10 +231,16 @@ void ActivityManager::loop() {
     return;
   }
 
+  // The one gate: every screen, the light panel and the Home gesture read their input below.
+  if (quickLocked) {
+    if (requestedUpdate.exchange(false) && renderTaskHandle) xTaskNotify(renderTaskHandle, 1, eIncrement);
+    return;
+  }
+
   if (currentActivity) {
     // Home from anywhere, handled once here rather than in every activity: the
     // capacitive Home key on boards that have one, the bottom-edge up-swipe on the
-    // rest. Activities that need to intervene override handleHomeGesture().
+    // rest.
     // The light panel takes input before anything else while it is up, and the top-edge
     // swipe opens it from any screen. Handled once here for the same reason Home is.
     // Immediate, not deferred. Every branch below returns out of loop() before the
@@ -224,7 +249,12 @@ void ActivityManager::loop() {
     // be flushed at all: the panel opened, reported present=1, and was never drawn.
     WakeTiming::reportInput();
     if (lightPanel.isActive()) {
-      if (lightPanel.handleInput(mappedInput, [this] { requestUpdate(/*immediate=*/true); })) return;
+      // close() clears isActive() before this runs: the page under the band gets a clean paint.
+      if (lightPanel.handleInput(mappedInput, [this] {
+            if (!lightPanel.isActive()) currentActivity->onRevealed();
+            requestUpdate(/*immediate=*/true);
+          }))
+        return;
     } else if (Frontlight.present() && mappedInput.wasMenuGesture()) {
       debug_trace::note("top-edge gesture: opening the light panel");
       lightPanel.show();
@@ -233,7 +263,6 @@ void ActivityManager::loop() {
     }
 
     if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
-      if (currentActivity->handleHomeGesture()) return;
       goHome();
       return;
     }
@@ -292,7 +321,7 @@ void ActivityManager::loop() {
         LOG_DBG("ACT", "Popped from activity stack, new size = %zu", stackActivities.size());
         // Resume bookkeeping runs before the result handler can render or navigate again.
         currentActivity->becameTopmost();
-        // Handle result if necessary
+        currentActivity->onRevealed();
         if (currentActivity->resultHandler) {
           LOG_DBG("ACT", "Handling result for popped activity");
 
@@ -318,13 +347,11 @@ void ActivityManager::loop() {
       if (pendingAction == PendingAction::Replace) {
         // Destroy the current activity
         exitActivity(lock);
-        // Clear the stack
         while (!stackActivities.empty()) {
           stackActivities.back()->onExit();
           stackActivities.pop_back();
         }
       } else if (pendingAction == PendingAction::Push) {
-        // Move current activity to stack
         stackActivities.push_back(std::move(currentActivity));
         LOG_DBG("ACT", "Pushed to activity stack, new size = %zu", stackActivities.size());
       }
@@ -336,6 +363,18 @@ void ActivityManager::loop() {
 
       // onEnter may request another pending action, we will handle it in the next loop iteration
       continue;
+    }
+  }
+
+  // What's New once after an update, only over Home: a wake into a book never shows it.
+  // The activity marks it seen on entry, which ends this.
+  if (APP_STATE.releaseNotesSeen < ReleaseNotesActivity::REVISION && pendingAction == PendingAction::None &&
+      !lightPanel.isActive() && currentActivity && currentActivity->isHomeActivity()) {
+    if (auto notes = makeUniqueNoThrow<ReleaseNotesActivity>(renderer, mappedInput)) {
+      pushActivity(std::move(notes));
+    } else {
+      APP_STATE.releaseNotesSeen = ReleaseNotesActivity::REVISION;  // not saved: it shows again next boot
+      LOG_ERR("ACT", "OOM: What's New");
     }
   }
 
@@ -410,6 +449,7 @@ void ActivityManager::goToReader(std::string path, const bool allowFastInitialRe
 void ActivityManager::goToSleep(bool fromTimeout) {
   // An open panel eats every loop() pass, so the sleep screen would never be applied.
   if (lightPanel.isActive()) lightPanel.close([] {});
+  quickLocked = false;  // Likewise, and the wake is a chip reset that would forget it anyway.
   replaceActivity(std::make_unique<SleepActivity>(renderer, mappedInput, fromTimeout));
   loop();  // Important: sleep screen must be rendered immediately, the caller will go to sleep right after this returns
 }
@@ -422,7 +462,7 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
   replaceActivity(std::make_unique<FullScreenMessageActivity>(renderer, mappedInput, std::move(message), style));
 }
 
-void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefresh) {
+void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
   if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
     const auto& activityName = currentActivity->name;
     if (activityName == activity_name::kFileBrowser) {
@@ -435,7 +475,7 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
   }
-  replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem, cleanInitialRefresh));
+  replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
 
@@ -471,6 +511,36 @@ bool ActivityManager::isHomeActivity() const { return currentActivity && current
 bool ActivityManager::handleForcedRefresh() { return currentActivity && currentActivity->handleForcedRefresh(); }
 
 bool ActivityManager::isBookContext() const { return currentActivity && currentActivity->isBookContext(); }
+
+void ActivityManager::toggleQuickLock() {
+  if (!quickLocked &&
+      (!currentActivity || lightPanel.isActive() || pendingAction != PendingAction::None || preventAutoSleep())) {
+    LOG_INF("ACT", "Quick Lock refused");
+    return;
+  }
+  quickLocked = !quickLocked;
+  LOG_INF("ACT", "Quick Lock %s", quickLocked ? "on" : "off");
+  // Whatever is held now belongs to the gesture that fired this, not to the screen.
+  mappedInput.suppressHeldButtonRelease();
+  mappedInput.spendTouchContact();
+  if (!quickLocked) currentActivity->onRevealed();
+  requestUpdate(/*immediate=*/true);
+}
+
+// Over the page already in the framebuffer, like the light panel: nothing on screen is
+// changing, so the screen does not render again until the lock ends.
+void ActivityManager::paintQuickLockBadge() {
+  constexpr int padding = 6;
+  const char* text = tr(STR_LOCKED);
+  int top, right, bottom, left;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  const int width = renderer.getTextWidth(UI_10_FONT_ID, text) + padding * 2;
+  const int height = renderer.getLineHeight(UI_10_FONT_ID) + padding;
+  const int x = renderer.getScreenWidth() - right - width;
+  renderer.fillRect(x, top, width, height);
+  renderer.drawText(UI_10_FONT_ID, x + padding, top + padding / 2, text, /*black=*/false);
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+}
 
 bool ActivityManager::runBoundAction(const uint8_t function) {
   debug_trace::note("bound action %u dispatched", function);
@@ -564,6 +634,10 @@ ScreenshotInfo ActivityManager::getScreenshotInfo() const {
 
 void ActivityManager::requestUpdate(bool immediate) {
   if (immediate) {
+    // An immediate pass renders the state as it is by then, so it serves a deferred request
+    // already pending too. Left set, the deferred one painted the same screen again on the
+    // next loop: a whole second refresh after every light panel action.
+    requestedUpdate = false;
     if (renderTaskHandle) {
       xTaskNotify(renderTaskHandle, 1, eIncrement);
     }
@@ -605,9 +679,6 @@ void ActivityManager::requestUpdateAndWait() {
   assert(!holdingRenderLock && "Cannot call requestUpdateAndWait() while holding RenderLock");
 
   xTaskNotify(renderTaskHandle, 1, eIncrement);
-  // Tell the power manager the loop is parked here: it cannot poll input until the
-  // render finishes, so the BUSY-wait slice hook should not yield to it meanwhile.
-  powerManager.noteRenderWaitBegin();
   while (true) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     taskENTER_CRITICAL(&activityManagerSpinlock);
@@ -619,7 +690,6 @@ void ActivityManager::requestUpdateAndWait() {
     taskEXIT_CRITICAL(&activityManagerSpinlock);
     if (done) break;
   }
-  powerManager.noteRenderWaitEnd();
 }
 
 // RenderLock

@@ -3,6 +3,7 @@
 #include <PerfStats.h>
 
 #include <cstdio>
+#include <new>
 
 namespace PerfLog {
 namespace {
@@ -33,7 +34,8 @@ struct Record {
   uint16_t settleMs;  // time spent waiting out a panel still driving after its wait returned
 };
 
-Record records[kBatchSize];
+// Allocated by begin(): a build that never logs keeps the 768 bytes on the heap.
+Record* records = nullptr;
 size_t count = 0;
 uint16_t sequence = 0;
 char currentScreen[14] = "boot";
@@ -46,6 +48,8 @@ uint32_t droppedRecords = 0;
 }  // namespace
 
 void begin(const LineSink sink, const CommitSink commit) {
+  if (records == nullptr) records = new (std::nothrow) Record[kBatchSize];
+  if (records == nullptr) return;  // stays inert, as with no sink
   lineSink = sink;
   commitSink = commit;
   if (lineSink != nullptr)

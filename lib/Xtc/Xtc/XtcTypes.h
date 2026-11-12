@@ -118,7 +118,6 @@ enum class XtcError {
   DECOMPRESSION_ERROR,
 };
 
-// Convert error code to string
 inline const char* errorToString(XtcError err) {
   switch (err) {
     case XtcError::OK:

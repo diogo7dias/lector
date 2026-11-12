@@ -111,7 +111,10 @@ struct PixelCache {
     uint16_t h16 = (uint16_t)h;
     if (file.write(&w16, 2) != 2 || file.write(&h16, 2) != 2) {
       LOG_ERR("IMG", "Failed to write cache header: %s", cachePath.c_str());
-      abort();
+      file.close();
+      Storage.remove(cachePath.c_str());
+      free(buffer);
+      buffer = nullptr;
       return false;
     }
 

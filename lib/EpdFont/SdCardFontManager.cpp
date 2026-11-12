@@ -44,7 +44,8 @@ int SdCardFontManager::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
 }
 #endif
 
-int SdCardFontManager::loadFile(const SdCardFontFileInfo& file, const char* familyName, GfxRenderer& renderer) {
+int SdCardFontManager::loadFile(const SdCardFontFileInfo& file, const char* familyName, GfxRenderer& renderer,
+                                const int fontIdOverride) {
   auto* font = new (std::nothrow) SdCardFont();
   if (!font) {
     LOG_ERR("SDMGR", "Failed to allocate SdCardFont for %s", file.path.c_str());
@@ -59,7 +60,8 @@ int SdCardFontManager::loadFile(const SdCardFontFileInfo& file, const char* fami
 
   // Deterministic id, stable across load/unload cycles and reboots, changing when
   // font content changes (different header/TOC = different contentHash).
-  int fontId = ttfscan::fontIdForFamilySize(font->contentHash(), familyName, file.pointSize);
+  int fontId = fontIdOverride != 0 ? fontIdOverride
+                                   : ttfscan::fontIdForFamilySize(font->contentHash(), familyName, file.pointSize);
   // Guard against collision with built-in font IDs (astronomically unlikely
   // with FNV-1a hashes, but provides a safety net)
   if (renderer.getFontMap().count(fontId) != 0) {
@@ -107,19 +109,33 @@ bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRender
   return true;
 }
 
-int SdCardFontManager::loadFamilyExtraSize(const SdCardFontFamilyInfo& family, GfxRenderer& renderer,
-                                           uint8_t pointSize) {
+int SdCardFontManager::loadFamilyExtraSize(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t pointSize,
+                                           const int fontId) {
   if (family.hasTtf()) return 0;  // see loadTtfFamily()
   const SdCardFontFileInfo* file = family.findFile(pointSize);
   if (!file) return 0;  // family has no .cpfont at this exact size
 
   // Reuse an already-loaded font of the same size (e.g. when a reader size
   // happens to match a UI size) instead of double-loading the file.
-  for (const auto& lf : loaded_) {
-    if (lf.size == pointSize) return lf.fontId;
-  }
+  if (const int loadedId = getFontId(family.name, pointSize); loadedId != 0) return loadedId;
 
-  return loadFile(*file, family.name.c_str(), renderer);
+  return loadFile(*file, family.name.c_str(), renderer, fontId);
+}
+
+bool SdCardFontManager::loadFamilyVariant(const SdCardFontFamilyInfo& family, GfxRenderer& renderer,
+                                          const uint8_t pointSize, const int fontId) {
+  const SdCardFontFileInfo* file = family.findFile(pointSize);
+  return file && loadFile(*file, family.name.c_str(), renderer, fontId) != 0;
+}
+
+void SdCardFontManager::unloadFont(GfxRenderer& renderer, const int fontId) {
+  for (auto it = loaded_.begin(); it != loaded_.end(); ++it) {
+    if (it->fontId != fontId) continue;
+    renderer.removeFont(fontId);
+    delete it->font;
+    loaded_.erase(it);
+    return;
+  }
 }
 
 void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
@@ -141,10 +157,14 @@ void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
   loadedPointSize_ = 0;
 }
 
-int SdCardFontManager::getFontId(const std::string& familyName) const {
+int SdCardFontManager::getFontId(const std::string& familyName, const uint8_t pointSize) const {
 #ifdef CROSSPOINT_TTF_READER
-  if (ttfFontId_ != 0 && familyName == loadedFamilyName_) return ttfFontId_;
+  if (pointSize == 0 && ttfFontId_ != 0 && familyName == loadedFamilyName_) return ttfFontId_;
 #endif
   if (familyName != loadedFamilyName_ || loaded_.empty()) return 0;
-  return loaded_.front().fontId;
+  if (pointSize == 0) return loaded_.front().fontId;
+  for (const auto& lf : loaded_) {
+    if (lf.size == pointSize) return lf.fontId;
+  }
+  return 0;
 }

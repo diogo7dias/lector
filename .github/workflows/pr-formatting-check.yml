@@ -1,11 +1,8 @@
 name: "PR Formatting"
 
+# Manual only, like ci.yml: lector merges on the local gate.
 on:
-  pull_request_target:
-    types:
-      - opened
-      - reopened
-      - edited
+  workflow_dispatch:
 
 permissions:
   pull-requests: read

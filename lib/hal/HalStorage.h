@@ -39,6 +39,9 @@ class HalStorage {
   bool disconnectUsbDriveHost();
   void endUsbDrive();
   UsbDriveState usbDriveState() const;
+  // The bus is suspended: the host slept, or the cable is out on a battery-powered
+  // board, where TinyUSB still reports mounted (upstream #3538).
+  bool usbDriveHostSuspended() const;
   std::vector<String> listFiles(const char* path = "/", int maxFiles = 200);
   // Read the entire file at `path` into a String. Returns empty string on failure.
   String readFile(const char* path);

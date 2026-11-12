@@ -1,0 +1,17 @@
+add_executable(BitmapResampleTest
+  BitmapResampleTest.cpp
+  ${REPO_ROOT}/lib/GfxRenderer/Bitmap.cpp
+)
+
+target_include_directories(BitmapResampleTest PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/stubs
+  ${REPO_ROOT}/lib/GfxRenderer
+  ${REPO_ROOT}/lib/Memory
+)
+
+target_link_libraries(BitmapResampleTest PRIVATE
+  crosspoint_test_common
+  GTest::gtest_main
+)
+
+gtest_discover_tests(BitmapResampleTest)

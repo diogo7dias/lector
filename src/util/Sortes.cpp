@@ -53,8 +53,10 @@ ScanResult findBook(std::string& selected, Random random) {
     if (length == 0 || length >= sizeof(scan->name) - 1) return ScanResult::Failed;
     // Never descend into generated caches. Hidden user folders remain eligible.
     if (std::strcmp(scan->name, ".") == 0 || std::strcmp(scan->name, "..") == 0 ||
-        (scan->depth == 0 && std::strcmp(scan->name, ".crosspoint") == 0))
+        (scan->depth == 0 && std::strcmp(scan->name, ".crosspoint") == 0) || FsHelpers::isSystemFolderName(scan->name))
       continue;
+    // Lector's own root folders (fonts, sleep wallpapers, ...) hold no books.
+    if (scan->depth == 0 && entry.isDirectory() && FsHelpers::isLibrarySkippedRootFolder(scan->name)) continue;
     const size_t parentLength = std::strlen(scan->path);
     const size_t prefix = parentLength == 1 && scan->path[0] == '/' ? 0 : parentLength;
     if (prefix + 1 + length >= sizeof(scan->path)) return ScanResult::Failed;

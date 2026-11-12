@@ -82,10 +82,6 @@ class HalDisplay {
   // about to sit idle. Costs no flash and nothing visible. See PanelDriver::powerOff.
   void powerOffPanel();
 
-  // Install the slice hook that replaces the BUSY poll delay on proven-long
-  // waits (see EpdBus::setBusyWaitSliceHook for the contract)
-  void setBusyWaitSliceHook(bool (*sliceHook)(int8_t busyPin, uint8_t busyLevel));
-
   // Access to frame buffer
   uint8_t* getFrameBuffer() const;
 
@@ -175,6 +171,11 @@ class HalDisplay {
   EInkDisplay einkDisplay;
   DisplayRefreshPolicy refreshPolicy;
   bool turboWanted = false;
+  // The wake (or any caller) asked the driver to drive every pixel on the next FAST, and
+  // the driver has not consumed that yet. Read by applyRefreshPolicy().
+  bool driveAllArmed = false;
+  // False until the first pass after begin() has been through applyRefreshPolicy().
+  bool firstPassDone = false;
   // What the last pass actually ran, for the perf log: what was asked for and what the
   // reload cadence allowed are not the same thing.
   bool lastPassWasTurbo = false;

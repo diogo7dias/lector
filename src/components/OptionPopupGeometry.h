@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "GfxRenderer.h"
+#include "components/OptionPopupPaging.h"
 #include "components/themes/BaseTheme.h"
 #include "fontIds.h"
 
@@ -33,16 +34,15 @@ struct Geometry {
   std::vector<std::string> titleLines;
   std::vector<std::vector<std::string>> optionLines;
   std::vector<int> rowTop;
-  std::vector<int> rowHeight;
+  std::vector<int> rowHeight;  // 0 for a row on another page, which a tap can then never hit
+  Page page;
 };
 
-// The pop-up does not scroll: it grows with the row count. With enough ticked rows it would
-// grow past the panel and paint off both edges, which is worse than a tight layout. So when
-// the natural size does not fit, the gaps give way before the rows do — first the spacing
-// between rows, then the padding inside each row. Rows themselves are never dropped, because a
-// row the user deliberately ticked must always be reachable.
+// The pop-up grows with the row count. When the natural size does not fit, the gaps give way
+// first: the spacing between rows, then the padding inside each row. A list that still does not
+// fit is paged, showing the page that holds `selectedIndex`, because every row must stay reachable.
 inline Geometry compute(const GfxRenderer& renderer, const ThemeMetrics& metrics, const char* title,
-                        const std::vector<std::string>& options) {
+                        const std::vector<std::string>& options, const int selectedIndex = 0) {
   constexpr int optionFontId = FONT_ID;
   constexpr EpdFontFamily::Style optionStyle = FONT_STYLE;
   const int pageWidth = renderer.getScreenWidth();
@@ -97,10 +97,15 @@ inline Geometry compute(const GfxRenderer& renderer, const ThemeMetrics& metrics
   while (itemSpacing > 0 && heightFor(itemSpacing, selectionVPadding) > availableHeight) itemSpacing--;
   while (selectionVPadding > 0 && heightFor(itemSpacing, selectionVPadding) > availableHeight) selectionVPadding--;
 
-  g.dialogH = heightFor(itemSpacing, selectionVPadding);
+  std::vector<int> heights;
+  heights.reserve(options.size());
+  for (const auto& lines : g.optionLines) {
+    heights.push_back(static_cast<int>(lines.size()) * lineHeight + selectionVPadding * 2);
+  }
+  g.dialogH = std::min(heightFor(itemSpacing, selectionVPadding), availableHeight);
+  const int chrome = titleH + metrics.optionPopupTitleGap + innerPadding * 2;
+  g.page = pageFor(heights, itemSpacing, g.dialogH - chrome, selectedIndex);
   g.dialogX = (pageWidth - g.dialogW) / 2;
-  // Never negative: an over-tall dialog stays pinned under the frame rather than climbing off
-  // the top of the panel.
   g.dialogY = std::max(metrics.popupFrameThickness, (pageHeight - g.dialogH) / 2);
   g.itemRectX = g.dialogX + innerPadding;
 
@@ -108,10 +113,10 @@ inline Geometry compute(const GfxRenderer& renderer, const ThemeMetrics& metrics
   g.rowHeight.reserve(options.size());
   int y = g.dialogY + innerPadding + titleH + metrics.optionPopupTitleGap;
   for (int i = 0; i < optionCount; ++i) {
-    const int h = static_cast<int>(g.optionLines[i].size()) * lineHeight + selectionVPadding * 2;
+    const bool onPage = i >= g.page.first && i < g.page.first + g.page.count;
     g.rowTop.push_back(y);
-    g.rowHeight.push_back(h);
-    y += h + itemSpacing;
+    g.rowHeight.push_back(onPage ? heights[i] : 0);
+    if (onPage) y += heights[i] + itemSpacing;
   }
   return g;
 }

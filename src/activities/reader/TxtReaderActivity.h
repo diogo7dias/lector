@@ -7,6 +7,7 @@
 #include "CrossPointSettings.h"
 #include "ReaderProgressSaveDebouncer.h"
 #include "ReaderUtils.h"
+#include "ReadingTime.h"
 #include "SimpleReaderShortcut.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
@@ -25,6 +26,8 @@ class TxtReaderActivity final : public Activity {
   int linesPerPage = 0;
   int viewportWidth = 0;
   bool initialized = false;
+  // Set before a relayout from the light panel: the next index build skips its Indexing popup.
+  bool quietIndex_ = false;
   bool unsupportedEncoding = false;  // UTF-16 file: nothing indexed, a message instead
   bool legacy8Bit = false;           // Windows-1252 / Latin-1 bytes, decoded to UTF-8 per page
 
@@ -49,6 +52,13 @@ class TxtReaderActivity final : public Activity {
   // reader uses for its move-on-exit filing.
   bool pendingDeleteBook = false;
   reading_journal::Session journal;
+  // Status bar only, this sitting: forward turns ("+N") and the pace behind Book Time.
+  int sessionPages = 0;
+  reading_time::PageTimer pageTimer;
+  // Pages-to-paragraph answer for page paraPagesFor (-1 = none), kept so a redraw of
+  // the same page does not re-read the file. Reset whenever the page index changes.
+  mutable int paraPagesFor = -1;
+  mutable int paraPagesLeft = -1;
 
   void openSettingsPopup();
   void openFontPopup();
@@ -63,6 +73,9 @@ class TxtReaderActivity final : public Activity {
   // by the side keys and by a paging action bound to any other button.
   void pageTurn(bool forward);
   void renderStatusBar() const;
+  // Pages after the current one wholly inside the paragraph running off its bottom
+  // (">P.N"), as the EPUB reader counts them. -1 when the file cannot be read.
+  int pagesUntilNextParagraph() const;
 
   void initializeReader();
   bool loadPageAtOffset(size_t offset, std::vector<std::string>& outLines, size_t& nextOffset);
@@ -92,6 +105,7 @@ class TxtReaderActivity final : public Activity {
   bool isBookContext() const override { return true; }
   bool runBoundAction(uint8_t function) override;
   bool appliesNightMode() const override { return true; }
+  void onRevealed() override { pagesUntilFullRefresh = 0; }
   bool handleForcedRefresh() override {
     {
       RenderLock lock(*this);

@@ -11,6 +11,9 @@
 #include <WiFi.h>
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
+#include <fcntl.h>
+#include <lwip/sockets.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <cctype>
@@ -22,11 +25,14 @@
 #include "FontInstaller.h"
 #include "HttpDownloader.h"
 #include "OpdsServerStore.h"
+#include "ProtectedPaths.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "SettingsList.h"
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
+#include "WsIdleClients.h"
+#include "frontlight/ApplyFrontlightSetting.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
@@ -55,6 +61,9 @@ constexpr bool kVectorFontUploads = false;
 
 // Static pointer for WebSocket callback (WebSocketsServer requires C-style callback)
 CrossPointWebServer* wsInstance = nullptr;
+
+// millis() of each WebSocket client's last event, 0 for a free slot.
+uint32_t wsLastActivity[WEBSOCKETS_SERVER_CLIENT_MAX] = {};
 
 // WebSocket upload state
 HalFile wsUploadFile;
@@ -174,16 +183,13 @@ void CrossPointWebServer::begin() {
   // Upload endpoint with special handling for multipart form data
   server->on("/upload", HTTP_POST, [this] { handleUploadPost(upload); }, [this] { handleUpload(upload); });
 
-  // Create folder endpoint
   server->on("/mkdir", HTTP_POST, [this] { handleCreateFolder(); });
 
   // Rename file endpoint
   server->on("/rename", HTTP_POST, [this] { handleRename(); });
 
-  // Move file endpoint
   server->on("/move", HTTP_POST, [this] { handleMove(); });
 
-  // Delete file/folder endpoint
   server->on("/delete", HTTP_POST, [this] { handleDelete(); });
 
   // Settings endpoints
@@ -232,14 +238,15 @@ void CrossPointWebServer::begin() {
   if (!wsServer) {
     LOG_ERR("WEB", "OOM: WebSocketsServer; upload socket unavailable");
   } else {
+    std::fill(std::begin(wsLastActivity), std::end(wsLastActivity), 0);
     wsInstance = const_cast<CrossPointWebServer*>(this);
     wsServer->begin();
     wsServer->onEvent(wsEventCallback);
   }
   LOG_DBG("WEB", "WebSocket server started");
 
-  udpActive = udp.begin(LOCAL_UDP_PORT);
-  LOG_DBG("WEB", "Discovery UDP %s on port %d", udpActive ? "enabled" : "failed", LOCAL_UDP_PORT);
+  openDiscoverySocket();
+  LOG_DBG("WEB", "Discovery UDP %s on port %d", discoverySocket >= 0 ? "enabled" : "failed", LOCAL_UDP_PORT);
 
   // Do not subscribe the serving task to the task watchdog. Arduino WebServer
   // permits five-second client and ACK waits, which can consume the entire
@@ -298,7 +305,8 @@ bool crc32OfFilePrefix(const String& path, const size_t length, uint32_t& outCrc
 
 }  // namespace
 
-void CrossPointWebServer::abortWsUpload(const char* tag, const bool keepPartial) {
+void CrossPointWebServer::abortWsUpload(const char* tag, const bool keepPartial, const char* reason) {
+  diag::recordTransferFailure("ws", reason, wsUploadReceived, wsUploadSize, WiFi.RSSI());
   // Explicit close() required: file-scope global persists beyond function scope
   wsUploadFile.close();
   if (keepPartial) {
@@ -331,10 +339,9 @@ void CrossPointWebServer::stop() {
   // Close any in-progress WebSocket upload. The partial stays on the card: the
   // radio going away is exactly the interruption resume exists for.
   if (wsUploadInProgress) {
-    abortWsUpload("WEB", true);
+    abortWsUpload("WEB", true, "server stopped");
   }
 
-  // Stop WebSocket server
   if (wsServer) {
     LOG_DBG("WEB", "Stopping WebSocket server...");
     wsServer->close();
@@ -345,13 +352,10 @@ void CrossPointWebServer::stop() {
 
   // A job queued but not yet started would otherwise run against a server that
   // is gone, into a directory that may no longer be the one the user meant.
-  fetchQueued = false;
-  fetchCancelRequested = fetchRunning;
+  if (fetch.state == FetchStatus::State::Queued) fetch.state = FetchStatus::State::Idle;
+  fetchCancelRequested = fetch.state == FetchStatus::State::Running;
 
-  if (udpActive) {
-    udp.stop();
-    udpActive = false;
-  }
+  closeDiscoverySocket();
 
   // Brief delay to allow any in-flight handleClient() calls to complete
   delay(20);
@@ -391,38 +395,65 @@ void CrossPointWebServer::handleClient() {
 
   server->handleClient();
 
-  // Handle WebSocket events
   if (wsServer) {
     wsServer->loop();
+    ws_idle::closeIdleClients(*wsServer, wsLastActivity, WEBSOCKETS_SERVER_CLIENT_MAX, millis());
   }
+  // A transfer that failed in the pump above reaches the card here, outside
+  // any render lock; a no-op when nothing was recorded.
+  diag::flushIfPending();
 
-  // Respond to discovery broadcasts
-  if (udpActive) {
-    int packetSize = udp.parsePacket();
-    if (packetSize > 0) {
-      char buffer[16];
-      int len = udp.read(buffer, sizeof(buffer) - 1);
-      if (len > 0) {
-        buffer[len] = '\0';
-        if (strcmp(buffer, "hello") == 0) {
-          String hostname = WiFi.getHostname();
-          if (hostname.isEmpty()) {
-            hostname = "crosspoint";
-          }
-          String message = "crosspoint (on " + hostname + ");" + String(wsPort);
-          udp.beginPacket(udp.remoteIP(), udp.remotePort());
-          udp.write(reinterpret_cast<const uint8_t*>(message.c_str()), message.length());
-          udp.endPacket();
-        }
-      }
-    }
-  }
+  answerDiscovery();
 
   // Last, so the transfer starts from a serviced server rather than from the
   // middle of a request: runQueuedFetch() pumps the server itself while it runs.
-  if (fetchQueued) {
+  if (fetch.state == FetchStatus::State::Queued) {
     runQueuedFetch();
   }
+}
+
+// Discovery uses a plain socket: NetworkUDP keeps a 1,460-byte send buffer
+// while it is open, for a reply of a few dozen bytes.
+void CrossPointWebServer::openDiscoverySocket() {
+  if (discoverySocket >= 0) return;
+  const int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  if (fd < 0) return;
+  sockaddr_in addr = {};
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(LOCAL_UDP_PORT);
+  addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  if (bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0 ||
+      fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK) < 0) {
+    close(fd);
+    return;
+  }
+  discoverySocket = fd;
+}
+
+void CrossPointWebServer::closeDiscoverySocket() {
+  if (discoverySocket < 0) return;
+  close(discoverySocket);
+  discoverySocket = -1;
+}
+
+// Answers a "hello" broadcast with the device name and WebSocket port.
+void CrossPointWebServer::answerDiscovery() const {
+  if (discoverySocket < 0) return;
+  char buffer[16];
+  sockaddr_in from = {};
+  socklen_t fromLen = sizeof(from);
+  const int len =
+      recvfrom(discoverySocket, buffer, sizeof(buffer) - 1, 0, reinterpret_cast<sockaddr*>(&from), &fromLen);
+  if (len <= 0) return;
+  buffer[len] = '\0';
+  if (strcmp(buffer, "hello") != 0) return;
+  const char* hostname = WiFi.getHostname();
+  char message[96];
+  const int messageLen = snprintf(message, sizeof(message), "crosspoint (on %s);%u",
+                                  hostname && hostname[0] ? hostname : "crosspoint", static_cast<unsigned>(wsPort));
+  if (messageLen <= 0) return;
+  sendto(discoverySocket, message, std::min(static_cast<size_t>(messageLen), sizeof(message) - 1), 0,
+         reinterpret_cast<sockaddr*>(&from), fromLen);
 }
 
 bool CrossPointWebServer::recentlyActive() const {
@@ -529,7 +560,7 @@ const char* describeDownloadError(const HttpDownloader::DownloadError error) {
 // Queue a download. The request returns as soon as the job is accepted; the
 // browser follows it through /api/fetch/status.
 void CrossPointWebServer::handlePostFetch() {
-  if (fetchQueued || fetchRunning) {
+  if (fetchActive()) {
     server->send(409, "text/plain", "A download is already in progress");
     return;
   }
@@ -566,7 +597,7 @@ void CrossPointWebServer::handlePostFetch() {
   fetch.url = url.c_str();
   fetch.filename = filename;
   fetch.destPath = destPath;
-  fetchQueued = true;
+  fetch.state = FetchStatus::State::Queued;
 
   LOG_DBG("WEB", "Fetch queued: %s -> %s", fetch.url.c_str(), destPath.c_str());
 
@@ -584,6 +615,7 @@ void CrossPointWebServer::handleFetchStatus() const {
     case FetchStatus::State::Idle:
       doc["state"] = "idle";
       break;
+    case FetchStatus::State::Queued:
     case FetchStatus::State::Running:
       doc["state"] = "running";
       break;
@@ -608,8 +640,15 @@ void CrossPointWebServer::handleFetchStatus() const {
 // Called from the download's progress callback. The transfer runs on the same
 // task as the server, so without this the pages would freeze for the length of
 // the download; with it, status polling and the file list keep answering.
-// A fetch started here is refused by handlePostFetch (fetchRunning is set), so
+// A fetch started here is refused by handlePostFetch (the job is Running), so
 // this cannot recurse into another download.
+bool CrossPointWebServer::dropUploadIfCancelled() const {
+  if (!cancelPoll || !cancelPoll()) return false;
+  uploadCancelled = true;
+  server->client().stop();
+  return true;
+}
+
 void CrossPointWebServer::pumpDuringFetch() {
   constexpr unsigned long PUMP_INTERVAL_MS = 150;
   const unsigned long now = millis();
@@ -623,7 +662,7 @@ void CrossPointWebServer::pumpDuringFetch() {
 }
 
 bool CrossPointWebServer::conflictsWithActiveFetch(const String& path) const {
-  if (!fetchQueued && !fetchRunning) return false;
+  if (!fetchActive()) return false;
   const std::string target(path.c_str());
   if (fetch.destPath == target) return true;
   // A parent folder counts: removing or moving it takes the open file with it.
@@ -631,7 +670,7 @@ bool CrossPointWebServer::conflictsWithActiveFetch(const String& path) const {
 }
 
 void CrossPointWebServer::handleCancelFetch() {
-  if (!fetchQueued && !fetchRunning) {
+  if (!fetchActive()) {
     server->send(409, "text/plain", "No download is in progress");
     return;
   }
@@ -668,8 +707,6 @@ void CrossPointWebServer::applyServerFilename(const std::string& contentDisposit
 }
 
 void CrossPointWebServer::runQueuedFetch() {
-  fetchQueued = false;
-  fetchRunning = true;
   fetchCancelRequested = false;
   fetch.state = FetchStatus::State::Running;
   lastFetchPumpAt = millis();
@@ -697,8 +734,6 @@ void CrossPointWebServer::runQueuedFetch() {
     // downloadToFile has already removed the partial (no resume here).
     LOG_ERR("WEB", "Fetch failed: %s (%s)", fetch.url.c_str(), fetch.error.c_str());
   }
-
-  fetchRunning = false;
 }
 
 void CrossPointWebServer::handleReadingList() const {
@@ -791,8 +826,9 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
     auto fileName = String(name);
 
     // Dot names show only when the reader opted in; system folders never do.
-    const bool shouldHide =
-        WebDAVHandler::isProtectedPath(fileName) && !(SETTINGS.showHiddenFiles && fileName.startsWith("."));
+    const bool hiddenName = protected_paths::isProtectedName(std::string_view{fileName.c_str(), fileName.length()}) &&
+                            !(SETTINGS.showHiddenFiles && fileName.startsWith("."));
+    const bool shouldHide = hiddenName || protected_paths::isProtectedFile(std::string(path) + "/" + name);
 
     if (!shouldHide) {
       FileInfo info;
@@ -1086,6 +1122,15 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
 
     LOG_DBG("WEB", "[UPLOAD] File created successfully: %s", state.partialPath.c_str());
   } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (dropUploadIfCancelled()) {
+      state.bufferPos = 0;
+      if (state.file) {
+        state.file.close();
+        Storage.remove(state.partialPath.c_str());
+      }
+      state.error = "Upload cancelled on the device";
+      return;
+    }
     if (state.file && state.error.isEmpty()) {
       // Buffer incoming data and flush when buffer is full
       // This reduces SD card write operations and improves throughput
@@ -1114,7 +1159,6 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
 
       state.size += upload.currentSize;
 
-      // Log progress every 100KB
       if (state.size - lastLoggedSize >= 102400) {
         const unsigned long elapsed = millis() - uploadStartTime;
         const float kbps = (elapsed > 0) ? (state.size / 1024.0) / (elapsed / 1000.0) : 0;
@@ -1164,6 +1208,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     }
     state.error = "Upload aborted";
     LOG_DBG("WEB", "Upload aborted");
+    diag::recordTransferFailure("http", "client aborted", state.size, diag::kUnknownSize, WiFi.RSSI());
   }
 }
 
@@ -1172,12 +1217,15 @@ void CrossPointWebServer::handleUploadPost(UploadState& state) const {
     server->send(200, "text/plain", "File uploaded successfully: " + state.fileName);
   } else {
     const String error = state.error.isEmpty() ? "Unknown error during upload" : state.error;
+    // An abort was recorded where it happened; state.error may name the file.
+    if (state.error != "Upload aborted") {
+      diag::recordTransferFailure("http", "rejected or card error", state.size, diag::kUnknownSize, WiFi.RSSI());
+    }
     server->send(400, "text/plain", error);
   }
 }
 
 void CrossPointWebServer::handleCreateFolder() const {
-  // Get folder name from form data
   if (!server->hasArg("name")) {
     server->send(400, "text/plain", "Missing folder name");
     return;
@@ -1201,7 +1249,6 @@ void CrossPointWebServer::handleCreateFolder() const {
     return;
   }
 
-  // Get parent path
   String parentPath = "/";
   if (server->hasArg("path")) {
     parentPath = normalizeWebPath(server->arg("path"));
@@ -1211,20 +1258,17 @@ void CrossPointWebServer::handleCreateFolder() const {
     return;
   }
 
-  // Build full folder path
   String folderPath = parentPath;
   if (!folderPath.endsWith("/")) folderPath += "/";
   folderPath += folderName;
 
   LOG_DBG("WEB", "Creating folder: %s", folderPath.c_str());
 
-  // Check if already exists
   if (Storage.exists(folderPath.c_str())) {
     server->send(400, "text/plain", "Folder already exists");
     return;
   }
 
-  // Create the folder
   if (Storage.mkdir(folderPath.c_str())) {
     LOG_DBG("WEB", "Folder created successfully: %s", folderPath.c_str());
     server->send(200, "text/plain", "Folder created: " + folderName);
@@ -1433,7 +1477,6 @@ void CrossPointWebServer::handleDelete() const {
     return;
   }
 
-  // Parse paths
   String pathsArg;
   JsonDocument doc;
   DeserializationError error = DeserializationError(DeserializationError::Code::Ok);
@@ -1486,7 +1529,6 @@ void CrossPointWebServer::handleDelete() const {
       continue;
     }
 
-    // Check if item exists
     if (!Storage.exists(itemPath.c_str())) {
       failedItems += itemPath + " (not found); ";
       allSuccess = false;
@@ -1566,6 +1608,8 @@ void CrossPointWebServer::handleGetSettings() const {
 
   for (const auto& s : settings) {
     if (!s.key) continue;  // Skip ACTION-only entries
+    // The X4 Pro trial: its switch sits on the device, beside the instructions for it.
+    if (s.valuePtr == &CrossPointSettings::fastPageTurns && s.category == StrId::STR_NONE_OPT) continue;
 
     doc.clear();
     doc["key"] = s.key;
@@ -1611,10 +1655,10 @@ void CrossPointWebServer::handleGetSettings() const {
       case SettingType::VALUE: {
         doc["type"] = "value";
         if (s.valuePtr) {
-          doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
+          doc["value"] = s.shownValue(SETTINGS.*(s.valuePtr));
         }
-        doc["min"] = s.valueRange.min;
-        doc["max"] = s.valueRange.max;
+        doc["min"] = s.shownValue(s.valueRange.min);
+        doc["max"] = s.shownValue(s.valueRange.max);
         doc["step"] = s.valueRange.step;
         break;
       }
@@ -1668,6 +1712,7 @@ void CrossPointWebServer::handlePostSettings() {
         const int val = doc[s.key].as<int>() ? 1 : 0;
         if (s.valuePtr) {
           SETTINGS.*(s.valuePtr) = val;
+          applyFrontlightSetting(s.valuePtr);
         }
         applied++;
         break;
@@ -1687,10 +1732,11 @@ void CrossPointWebServer::handlePostSettings() {
         break;
       }
       case SettingType::VALUE: {
-        const int val = doc[s.key].as<int>();
+        const int val = doc[s.key].as<int>() - s.displayOffset;
         if (val >= s.valueRange.min && val <= s.valueRange.max) {
           if (s.valuePtr) {
             SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
+            applyFrontlightSetting(s.valuePtr);
           }
           applied++;
         }
@@ -1713,7 +1759,11 @@ void CrossPointWebServer::handlePostSettings() {
     }
   }
 
-  SETTINGS.saveToFile();
+  if (!SETTINGS.saveToFile()) {
+    LOG_ERR("WEB", "Applied %d setting(s) but could not save them", applied);
+    server->send(500, "text/plain", "Settings applied but not saved");
+    return;
+  }
 
   LOG_DBG("WEB", "Applied %d setting(s)", applied);
   server->send(200, "text/plain", String("Applied ") + String(applied) + " setting(s)");
@@ -1948,6 +1998,9 @@ void CrossPointWebServer::wsEventCallback(uint8_t num, WStype_t type, uint8_t* p
   if (wsInstance) {
     wsInstance->onWebSocketEvent(num, type, payload, length);
   }
+  // Stamped after the handler: checking a large partial before a RESUME offer can
+  // block for minutes, and the client must not be called idle for the device's wait.
+  if (num < WEBSOCKETS_SERVER_CLIENT_MAX) wsLastActivity[num] = type == WStype_DISCONNECTED ? 0 : millis();
 }
 
 // WebSocket event handler for fast binary uploads
@@ -1968,7 +2021,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
       // RESUME offer holds no open handle, and leaving it marked in progress
       // would refuse every upload after it.
       if (num == wsUploadClientNum && wsUploadInProgress) {
-        abortWsUpload("WS", true);
+        abortWsUpload("WS", true, "client disconnected");
       }
       break;
 
@@ -1978,7 +2031,6 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
     }
 
     case WStype_TEXT: {
-      // Parse control messages
       String msg = String((char*)payload);
       LOG_DBG("WS", "Text from client %u: %s", num, msg.c_str());
 
@@ -2080,7 +2132,6 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             Storage.remove(wsUploadPartialPath.c_str());
           }
 
-          // Open file for writing
           resetTaskWatchdogIfSubscribed();
           if (!Storage.openFileForWrite("WS", wsUploadPartialPath, wsUploadFile)) {
             wsServer->sendTXT(num, "ERROR:Failed to create file");
@@ -2132,7 +2183,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         const size_t requested = offsetValid ? (size_t)offsetToken.toInt() : 0;
         if (!offsetValid || (requested != 0 && requested != wsUploadResumeOffered)) {
           LOG_DBG("WS", "SEEK rejected: '%s'", offsetToken.c_str());
-          abortWsUpload("WS", true);
+          abortWsUpload("WS", true, "bad resume offset");
           wsServer->sendTXT(num, "ERROR:Invalid resume offset");
           break;
         }
@@ -2150,7 +2201,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             // wrong throughout. The upload ends instead, and the browser can
             // try again from a clean START.
             LOG_ERR("WS", "Could not resume %s at %u bytes", wsUploadPartialPath.c_str(), (unsigned)requested);
-            abortWsUpload("WS", false);
+            abortWsUpload("WS", false, "resume failed");
             wsServer->sendTXT(num, "ERROR:Failed to resume file");
             return;
           }
@@ -2160,7 +2211,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
           wsUploadFile.close();
           if (!Storage.openFileForWrite("WS", wsUploadPartialPath, wsUploadFile)) {
             wsServer->sendTXT(num, "ERROR:Failed to create file");
-            abortWsUpload("WS", false);
+            abortWsUpload("WS", false, "card open failed");
             return;
           }
           wsUploadReceived = 0;
@@ -2178,12 +2229,11 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         return;
       }
 
-      // Write binary data directly to file
       size_t remaining = wsUploadSize - wsUploadReceived;
       if (length > remaining) {
         // Nothing of this frame was written, so what is on the card is still a
         // clean prefix and worth keeping.
-        abortWsUpload("WS", true);
+        abortWsUpload("WS", true, "overflow");
         wsServer->sendTXT(num, "ERROR:Upload overflow");
         return;
       }
@@ -2194,7 +2244,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
       if (written != length) {
         // A card with no room left is the usual cause, and keeping the partial
         // would leave it holding space that the retry needs.
-        abortWsUpload("WS", false);
+        abortWsUpload("WS", false, "card write failed");
         wsServer->sendTXT(num, "ERROR:Write failed - disk full?");
         return;
       }
@@ -2208,7 +2258,6 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         wsLastProgressSent = wsUploadReceived;
       }
 
-      // Check if upload complete
       if (wsUploadReceived >= wsUploadSize) {
         // Explicit close() required: file-scope global persists beyond function scope
         wsUploadFile.close();
@@ -2385,6 +2434,8 @@ void CrossPointWebServer::handleFontUploadData() {
     }
 
     case UPLOAD_FILE_WRITE: {
+      // Invalid, END or ABORTED removes the partial.
+      if (dropUploadIfCancelled()) fontUpload.valid = false;
       if (!fontUpload.valid) break;
       resetTaskWatchdogIfSubscribed();
 

@@ -64,6 +64,9 @@ class CrossPointWebServerActivity final : public UiStatusActivity {
   void onWifiSelectionComplete(bool connected);
   void startAccessPoint();
   void startWebServer();
+  // Records why the screen closed, then leaves: the exit reboots, so the
+  // diagnostics file is the only place the cause survives.
+  void closeTransfer(const char* cause);
 
  public:
   explicit CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)

@@ -110,9 +110,11 @@ nothing collapsed and the input path is serialising on the panel, one refresh pe
 ## Judging Fast Page Turns (X4)
 
 Settings > System > Fast Page Turns picks the panel's cheap partial waveform for FAST
-refreshes. On by default, and only on the X4: the X3's UC8253 has no second fast path,
-and the Seeed Sticky and the X4 Pro keep their own configs, where `0x22 = 0x1C` does not
-select the partial waveform at all and would run the full one on every page.
+refreshes. On by default on the X4. Off by default on the X4 Pro (its own row on the main
+Settings page, with the test steps on it), where it reaches only
+SSD1677 units and has never been measured: a panel that does not honour `0x22 = 0x1C` as a
+partial runs the full waveform on every page. The X3's UC8253 has no second fast path, and
+the Seeed Sticky keeps its own config, where `0x1C` does not select the partial waveform.
 
 The trade is ghosting for speed, so it needs eyes rather than numbers. Before trusting it:
 
@@ -122,11 +124,14 @@ The trade is ghosting for speed, so it needs eyes rather than numbers. Before tr
 3. Repeat both with the setting off, for comparison on the same panel and the same book.
 
 Residue that the next anti-ghost clean does not remove means the setting is wrong for that
-panel. Two levers, in order: raise `DisplayRefreshPolicy::TURBO_DEBT_MULTIPLIER` so cheap
-passes buy cleans faster, or lower `TURBO_RELOAD_EVERY` so the panel re-reads its
-temperature more often. Both are in `lib/hal/DisplayRefreshPolicy.h`, with the arithmetic
-for each choice written out beside them. Shipping the setting off by default is the
-fallback if neither is enough.
+panel. A cheap pass already drives every pixel (`LECTOR_SSD1677_DRIVE_ALL_TURBO` in
+`lib/hal/HalDisplay.cpp`), so it scrubs the residue it just left instead of parking it until
+the every-eighth standard pass; building with that knob at 0 is the control that says how
+much of the ghosting it removed. After that, two levers, in order: raise
+`DisplayRefreshPolicy::TURBO_DEBT_MULTIPLIER` so cheap passes buy cleans faster, or lower
+`TURBO_RELOAD_EVERY` so the panel re-reads its temperature more often. Both are in
+`lib/hal/DisplayRefreshPolicy.h`, with the arithmetic for each choice written out beside
+them. Shipping the setting off by default is the fallback if neither is enough.
 
 The `turbo` column says what each pass actually ran, which is not the same as what was
 asked for: a promoted pass, an inverted-content pass, and every eighth pass all run the

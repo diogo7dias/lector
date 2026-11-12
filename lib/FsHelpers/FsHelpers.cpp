@@ -93,11 +93,9 @@ bool naturalLessC(const char* s1, const char* s2) {
   // bytes above 0x7f with signed char) is undefined behavior
   const auto isDigit = [](const char c) { return isdigit(static_cast<unsigned char>(c)) != 0; };
 
-  // Iterate while both strings have characters
   while (*s1 && *s2) {
     // Check if both are at the start of a number
     if (isDigit(*s1) && isDigit(*s2)) {
-      // Skip leading zeros and track them
       while (*s1 == '0') s1++;
       while (*s2 == '0') s2++;
 
@@ -183,6 +181,30 @@ bool hasXtcExtension(std::string_view fileName) {
 bool hasTxtExtension(std::string_view fileName) { return checkFileExtension(fileName, ".txt"); }
 
 bool hasMarkdownExtension(std::string_view fileName) { return checkFileExtension(fileName, ".md"); }
+
+bool hasTextBookExtension(std::string_view fileName) {
+  return hasTxtExtension(fileName) || hasMarkdownExtension(fileName);
+}
+
+bool hasBookExtension(std::string_view fileName) {
+  return hasEpubExtension(fileName) || hasXtcExtension(fileName) || hasTextBookExtension(fileName);
+}
+
+bool isSystemFolderName(const std::string_view name) {
+  return name == "System Volume Information" || name == "XTCache";
+}
+
+bool isLibrarySkippedRootFolder(const std::string_view name) {
+  static constexpr std::string_view ROOTS[] = {"fonts",       "dictionaries",  "plugins", "sleep",
+                                               "sleep pause", "sleep-overlay", "stats",   "perf"};
+  for (const auto root : ROOTS) {
+    if (std::equal(name.begin(), name.end(), root.begin(), root.end(),
+                   [](const char a, const char b) { return std::tolower(static_cast<unsigned char>(a)) == b; })) {
+      return true;
+    }
+  }
+  return false;
+}
 
 bool hasCssExtension(std::string_view fileName) { return checkFileExtension(fileName, ".css"); }
 

@@ -28,4 +28,6 @@ class LanguageSelectActivity final : public UiListActivity {
 
  private:
   constexpr static int totalItems = getLanguageCount();
+  // A member, not a static: lives on the heap only while this screen is open.
+  freeink::ui::ListItem items[totalItems];
 };

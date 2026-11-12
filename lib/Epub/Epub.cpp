@@ -237,7 +237,13 @@ bool Epub::parseTocNavFile() const {
   // Note: We can't use `contentBasePath` here as the nav file may be in a different folder to the content.opf
   // and the HTMLX nav file will have hrefs relative to itself
   const std::string navContentBasePath = tocNavItem.substr(0, tocNavItem.find_last_of('/') + 1);
-  TocNavParser navParser(navContentBasePath, navSize, bookMetadataCache.get());
+  // The printed edition's page numbers ride along in the same document; written to a
+  // part file and renamed into place only when the parse finished and found some.
+  const std::string pagesPath = pageListPath();
+  const std::string pagesPart = FsHelpers::partialPathFor(pagesPath);
+  HalFile pages;
+  const bool pagesOpen = Storage.openFileForWrite("EBP", pagesPart, pages);
+  TocNavParser navParser(navContentBasePath, navSize, bookMetadataCache.get(), pagesOpen ? &pages : nullptr);
 
   if (!navParser.setup()) {
     LOG_ERR("EBP", "Could not setup toc nav parser");
@@ -246,7 +252,17 @@ bool Epub::parseTocNavFile() const {
 
   // Stream the decompressed nav document straight into the parser instead of round-tripping
   // through a temp file on the SD card (decompress -> write -> reopen -> reread -> delete).
-  if (!readItemContentsToStream(tocNavItem, navParser, 1024)) {
+  const bool read = readItemContentsToStream(tocNavItem, navParser, 1024);
+  if (pagesOpen) {
+    pages.close();
+    Storage.remove(pagesPath.c_str());  // FAT rename never overwrites
+    if (read && navParser.pageListCount() > 0 && Storage.rename(pagesPart.c_str(), pagesPath.c_str())) {
+      LOG_DBG("EBP", "Page list: %u printed pages", navParser.pageListCount());
+    } else {
+      Storage.remove(pagesPart.c_str());
+    }
+  }
+  if (!read) {
     LOG_ERR("EBP", "Could not read toc nav file");
     return false;
   }
@@ -368,7 +384,6 @@ bool Epub::parseCssFiles() const {
     // Explicitly close() file before reopening for reading
     tempCssFile.close();
 
-    // Parse the CSS file
     if (!Storage.openFileForRead("EBP", tmpCssPath, tempCssFile)) {
       LOG_ERR("EBP", "Could not open temp CSS file for reading");
       Storage.remove(tmpCssPath.c_str());
@@ -476,7 +491,6 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   LOG_DBG("EBP", "Loading ePub: %s", filepath.c_str());
   dropCacheIfSourceChanged();
 
-  // Initialize spine/TOC cache
   bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
   if (!bookMetadataCache) {
     LOG_ERR("EBP", "OOM: BookMetadataCache");
@@ -601,7 +615,6 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   }
   LOG_DBG("EBP", "TOC pass completed in %lu ms", millis() - tocStart);
 
-  // Close the cache files
   if (!bookMetadataCache->endWrite()) {
     LOG_ERR("EBP", "Could not end writing cache");
     return false;
@@ -777,13 +790,20 @@ uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size
 
   const std::string path = FsHelpers::normalisePath(itemHref);
 
-  const auto content = ZipFile(filepath).readFileToMemory(path.c_str(), size, trailingNullByte);
+  const auto content = ZipFile(filepath, zipEntryIndex.get()).readFileToMemory(path.c_str(), size, trailingNullByte);
   if (!content) {
     LOG_DBG("EBP", "Failed to read item %s", path.c_str());
     return nullptr;
   }
 
   return content;
+}
+
+void Epub::indexZipEntries() {
+#if defined(BOARD_HAS_PSRAM)
+  auto index = makeUniqueNoThrow<ZipFile::EntryIndex>();
+  if (index && ZipFile(filepath).buildEntryIndex(*index)) zipEntryIndex = std::move(index);
+#endif
 }
 
 bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize,
@@ -794,28 +814,32 @@ bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, con
   }
 
   const std::string path = FsHelpers::normalisePath(itemHref);
-  return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize, allowEarlyStop);
+  return ZipFile(filepath, zipEntryIndex.get()).readFileToStream(path.c_str(), out, chunkSize, allowEarlyStop);
 }
 
 bool Epub::extractItemToFile(const std::string& itemHref, const std::string& destPath) const {
+  // Written under .part and renamed when whole: ImageBlock extracts only when the
+  // file does not exist, so a reset mid-write would leave a cut image trusted forever.
+  const std::string partPath = FsHelpers::partialPathFor(destPath);
   HalFile out;
-  if (!Storage.openFileForWrite("EBP", destPath, out)) {
+  if (!Storage.openFileForWrite("EBP", partPath, out)) {
     return false;
   }
   // Large images dominate lazy extraction. Match the section streamer size to
   // halve SD read/write calls while adding only 8 KB of transient ZIP buffers.
-  const bool ok = readItemContentsToStream(itemHref, out, 8192);
+  bool ok = readItemContentsToStream(itemHref, out, 8192);
   out.flush();
   out.close();
+  ok = ok && Storage.rename(partPath.c_str(), destPath.c_str());
   if (!ok) {
-    Storage.remove(destPath.c_str());
+    Storage.remove(partPath.c_str());
   }
   return ok;
 }
 
 bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
   const std::string path = FsHelpers::normalisePath(itemHref);
-  return ZipFile(filepath).getInflatedFileSize(path.c_str(), size);
+  return ZipFile(filepath, zipEntryIndex.get()).getInflatedFileSize(path.c_str(), size);
 }
 
 int Epub::getSpineItemsCount() const {
@@ -868,28 +892,12 @@ int Epub::getTocItemsCount() const {
   return bookMetadataCache->getTocCount();
 }
 
-// work out the section index for a toc index
-int Epub::getSpineIndexForTocIndex(const int tocIndex) const {
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    LOG_ERR("EBP", "getSpineIndexForTocIndex called but cache not loaded");
-    return 0;
-  }
-
-  if (tocIndex < 0 || tocIndex >= bookMetadataCache->getTocCount()) {
-    LOG_ERR("EBP", "getSpineIndexForTocIndex: tocIndex %d out of range", tocIndex);
-    return 0;
-  }
-
-  const int spineIndex = bookMetadataCache->getTocEntry(tocIndex).spineIndex;
-  if (spineIndex < 0) {
-    LOG_DBG("EBP", "Section not found for TOC index %d", tocIndex);
-    return 0;
-  }
-
-  return spineIndex;
-}
-
 int Epub::getTocIndexForSpineIndex(const int spineIndex) const { return getSpineItem(spineIndex).tocIndex; }
+
+int Epub::getSpineIndexForSize(const size_t bytes) const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded() || static_cast<uint64_t>(bytes) > UINT32_MAX) return -1;
+  return bookMetadataCache->getSpineIndexForSize(static_cast<uint32_t>(bytes));
+}
 
 size_t Epub::getBookSize() const {
   if (!bookMetadataCache || !bookMetadataCache->isLoaded() || bookMetadataCache->getSpineCount() == 0) {
@@ -1008,4 +1016,54 @@ int Epub::resolveHrefToSpineIndex(const std::string& href, const int fromSpineIn
   // The file name decides only when exactly one spine item carries it: two folders
   // holding the same name make any guess a wrong chapter.
   return nameMatches == 1 ? nameMatch : -1;
+}
+
+std::string Epub::pageListPath() const { return cachePath + "/pages.txt"; }
+
+bool Epub::hasPageList() const { return Storage.exists(pageListPath().c_str()); }
+
+void Epub::forEachPrintedPage(bool (*fn)(void* ctx, std::string_view label, const char* href), void* ctx) const {
+  HalFile file;
+  if (!Storage.openFileForRead("EBP", pageListPath(), file)) return;
+  // One "label\thref\n" line at a time; a line longer than the buffer is skipped whole.
+  char line[512];
+  size_t len = 0;
+  bool overflow = false;
+  uint8_t chunk[256];
+  int got;
+  while ((got = file.read(chunk, sizeof(chunk))) > 0) {
+    for (int i = 0; i < got; i++) {
+      const char c = static_cast<char>(chunk[i]);
+      if (c != '\n') {
+        if (len < sizeof(line) - 1)
+          line[len++] = c;
+        else
+          overflow = true;
+        continue;
+      }
+      line[len] = '\0';
+      const char* tab = overflow ? nullptr : strchr(line, '\t');
+      if (tab && !fn(ctx, std::string_view(line, tab - line), tab + 1)) return;
+      len = 0;
+      overflow = false;
+    }
+  }
+}
+
+std::string Epub::findPrintedPage(const std::string& label) const {
+  struct Find {
+    const std::string& label;
+    std::string href;
+  } find{label, ""};
+  if (label.empty()) return "";
+  forEachPrintedPage(
+      [](void* ctx, const std::string_view l, const char* href) {
+        auto& f = *static_cast<Find*>(ctx);
+        // Roman numerals in the front matter come in either case.
+        if (l.size() != f.label.size() || strncasecmp(l.data(), f.label.c_str(), l.size()) != 0) return true;
+        f.href = href;
+        return false;
+      },
+      &find);
+  return find.href;
 }

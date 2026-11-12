@@ -31,7 +31,7 @@ assert '.withHiddenEnumValues({CrossPointSettings::HOME_BACK_STATS})' in setting
 assert 'CrossPointSettings::LP_MENU_READING_STATS' in between(settings, 'inline std::vector<uint8_t> retiredBoundFunctions()', 'inline std::vector<StrId> boundFunctionLabels()')
 assert 'StrId::STR_NONE_OPT, StrId::STR_RESUME, StrId::STR_NONE_OPT, StrId::STR_SORTES' in settings
 
-reader = (repo / 'src/activities/reader/EpubReaderActivity.cpp').read_text()
+reader = ''.join(p.read_text() for p in sorted((repo / 'src/activities/reader').glob('EpubReaderActivity*.cpp')))
 counter = next(line for line in reader.splitlines() if '++sessionPages' in line)
 
 program = '''

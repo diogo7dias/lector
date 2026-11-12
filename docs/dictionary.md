@@ -52,16 +52,16 @@ On the very first lookup with a dictionary (and again whenever the `.idx` or `.s
 
 ### How Lookup Works
 
-1. **Direct match** — the word is found as-is (case-insensitive) in the dictionary index. Surrounding punctuation is ignored.
-2. **Synonyms** — on a miss, if the dictionary ships a `.syn` file, alternate spellings and irregular forms recorded there are resolved to their headword (e.g. `oxen` → `ox`, `colour` → `color`). This step is skipped if the `.sidx` sidecar could not be built (e.g. transient low memory during indexing); the dictionary otherwise stays usable, and the build is retried the next time it is opened.
+1. **Direct match** — the word is found case-insensitively in the dictionary index. Surrounding punctuation is ignored, CJK brackets and quotes such as `「」` and `《》` included. Hebrew niqqud and cantillation marks are removed from the search term so pointed text can match unpointed headwords. Basic Arabic vowel marks (U+064B–U+0650, U+0652) and superscript alef (U+0670) are also removed; shaddah, hamza and maddah remain significant. A word listed several times, once per meaning or part of speech, shows all of its entries.
+2. **Synonyms** — on a miss, if the dictionary ships a `.syn` file, alternate spellings and irregular forms recorded there are resolved to their headword (e.g. `oxen` → `ox`, `colour` → `color`). This step is skipped if the `.sidx` sidecar could not be built (e.g. transient low memory during indexing); the dictionary otherwise stays usable, and the build is retried the next time it is opened. A synonym that points at several headwords shows them all.
 3. **Stemming** — still no match: common English word forms are retried automatically: possessives and plurals (`dogs` → `dog`, `stories` → `story`) and verb endings (`walked` → `walk`, `running` → `run`, `making` → `make`).
 4. **Not found** — a short popup appears and you return to word selection.
 
 ## The Definition Screen
 
-When a word is found, the definition screen shows the matched headword at the top and the definition text below, with a page counter for long definitions.
+When a word is found, the definition screen shows the matched headword at the top and the definition text below, with a page counter for long definitions. When a word has several entries, each one starts with its own headword. An entry that would take the combined text past 64 KB is left out.
 
-HTML dictionaries that declare `sametypesequence=h` use the EPUB text-layout engine for semantic formatting such as headings, bold, italics, lists, and line breaks. Images and CSS styling are ignored. Definitions that are too large or cannot be laid out within the available memory fall back to plain text.
+HTML dictionaries that declare `sametypesequence=h`, and dictionaries whose `.ifo` has no `sametypesequence` (each entry tags its own fields), use the EPUB text-layout engine for semantic formatting such as headings, bold, italics, lists, and line breaks. Images and CSS styling are ignored. Definitions that are too large or cannot be laid out within the available memory fall back to plain text.
 
 - **Left/Right** or side **Up/Down** — previous / next page
 - **Back** — return to word selection

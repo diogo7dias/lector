@@ -18,7 +18,7 @@ test('opens a book, swipes a page, opens the menu, resumes after a reboot', asyn
   };
   await tapTwice(240, 517); // Browse Files
   await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
-  await tapTwice(150, 310); // test_kerning_ligature.epub
+  await tapTwice(150, 279); // test_kerning_ligature.epub
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
   await expect(busy).toHaveText('no', { timeout: 30_000 });
 

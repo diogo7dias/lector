@@ -166,6 +166,18 @@ const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {
     if (loaded) return loaded;
   }
 
+  // The turned comma uses the matching quotation-mark shape when absent.
+  if (cp == 0x02BB && hasCodepoint(0x2018)) return getGlyph(0x2018);
+
+  // A font without a Unicode space still has a blank to give: the replacement box in a
+  // gap reads as a damaged book. Zero-width characters draw and advance nothing.
+  // ponytail: every width borrows the plain space; per-width advances (CrossInk
+  // 20d74368b) if thin spaces ever look too wide.
+  if ((cp >= 0x200B && cp <= 0x200F) || (cp >= 0x2060 && cp <= 0x2064) || cp == 0xFEFF) return nullptr;
+  if (cp == 0x00A0 || (cp >= 0x2000 && cp <= 0x200A) || cp == 0x202F || cp == 0x205F || cp == 0x3000) {
+    return getGlyph(' ');
+  }
+
   if (cp != REPLACEMENT_GLYPH) {
     return getGlyph(REPLACEMENT_GLYPH);
   }

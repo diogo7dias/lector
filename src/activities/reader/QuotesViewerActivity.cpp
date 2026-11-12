@@ -11,11 +11,11 @@
 
 #include "MappedInputManager.h"
 #include "QuoteSidecar.h"
-#include "QuoteText.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BusyTick.h"
+#include "util/QuoteText.h"
 
 namespace fui = freeink::ui;
 

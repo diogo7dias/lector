@@ -1,7 +1,16 @@
 # CrossPoint Reader Development Guide
 
-Project: Open-source e-reader firmware for Xteink X4 (ESP32-C3)
+Project: Lector, open-source e-reader firmware for the Xteink X3 and X4 (ESP32-C3) and X4 Pro (ESP32-S3), forked from CrossPoint Reader
 Mission: Provide a lightweight, high-performance reading experience focused on EPUB rendering on constrained hardware.
+
+## Project memory (Notion)
+
+- This repo's Notion project page: https://app.notion.com/p/404918442ce581c5b3c4c065d2fed9b8
+- Before starting work, read it: what it is, status, key decisions and the latest Work log entries.
+- After finishing, add a dated entry (YYYY-MM-DD, Europe/Lisbon) to its Work log, and update Status or Key decisions if they changed.
+- Never put secrets, credentials or conversation transcripts in Notion.
+- Notion is the shared memory across agents. See the Agent Operating Guide: https://app.notion.com/p/3fe918442ce58134b30fce2438660a20
+- Hindsight is being retired. Do not write new memories there.
 
 ## Shared agent identity and working style
 
@@ -44,6 +53,7 @@ uname -s
 ```bash
 find src -name "*.cpp" -o -name "*.h" | xargs clang-format -i
 ```
+Run `./bin/install-git-hooks` once per clone. The pre-commit hook rejects commits whose staged C/C++ files are not clang-format 21 clean (CI pins 21); fix with `./bin/clang-format-fix -g` and re-stage.
 
 ---
 
@@ -95,9 +105,9 @@ find src -name "*.cpp" -o -name "*.h" | xargs clang-format -i
 **PlatformIO is BOTH a VS Code extension AND a CLI tool**:
 
 1. **VS Code Extension** (Recommended):
-   * Extension ID: `platformio.platformio-ide` (see `.vscode/extensions.json`)
+   * Extension ID: `platformio.platformio-ide`
    * Provides: Toolbar buttons, IntelliSense, integrated build/upload/monitor
-   * Configuration: `.vscode/c_cpp_properties.json`, `.vscode/tasks.json`
+   * `.vscode/` is gitignored: its files are generated per machine
    * Usage: Click Build (✓), Upload (→), or Monitor (🔌) buttons
 
 2. **CLI Tool** (`pio` command):
@@ -118,7 +128,6 @@ find src -name "*.cpp" -o -name "*.h" | xargs clang-format -i
   * `default`: Development (LOG_LEVEL=2, serial enabled)
   * `gh_release`: Production (LOG_LEVEL=0)
   * `gh_release_rc`: Release candidate (LOG_LEVEL=1)
-  * `slim`: Minimal build (no serial logging)
 
 ### Critical Build Flags
 These flags in `platformio.ini` fundamentally affect firmware behavior:
@@ -127,7 +136,7 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 -DEINK_DISPLAY_SINGLE_BUFFER_MODE=1  // Single framebuffer (saves 48KB RAM!)
 -DARDUINO_USB_MODE=1                 // Enable USB CDC
 -DARDUINO_USB_CDC_ON_BOOT=1          // Serial available immediately at boot
--DXML_CONTEXT_BYTES=1024             // XML parser memory limit (EPUB parsing)
+-DXML_CONTEXT_BYTES=0                // expat keeps no parse context (~1KB/parser saved)
 -DUSE_UTF8_LONG_NAMES=1              // SD card long filename support
 -DMINIZ_NO_ZLIB_COMPATIBLE_NAMES=1   // Avoid zlib name conflicts
 -DXML_GE=0                           // Disable XML general entities (security)
@@ -146,7 +155,7 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 - Only ONE framebuffer exists (not double-buffered)
 - Grayscale rendering requires temporary buffer allocation (`renderer.storeBwBuffer()`)
 - Must call `renderer.restoreBwBuffer()` to free temporary buffers
-- See [lib/GfxRenderer/GfxRenderer.cpp:439-440](../lib/GfxRenderer/GfxRenderer.cpp) for malloc usage
+- See `GfxRenderer::storeBwBuffer()` in [lib/GfxRenderer/GfxRenderer.cpp](../lib/GfxRenderer/GfxRenderer.cpp) for malloc usage
 
 ### Directory Structure
 * lib/: Internal libraries (Epub engine, GfxRenderer, UITheme, I18n)
@@ -288,8 +297,6 @@ When a template is necessary, limit instantiations: use explicit template instan
 
 ### Error Handling Philosophy
 
-**Source**: [src/main.cpp:132-143](../src/main.cpp), [lib/GfxRenderer/GfxRenderer.cpp:10](../lib/GfxRenderer/GfxRenderer.cpp)
-
 **Pattern Hierarchy**:
 1. **LOG_ERR + return false** (90%): `LOG_ERR("MOD", "Failed: %s", reason); return false;`
 2. **LOG_ERR + fallback**: `LOG_ERR("MOD", "Unavailable"); useDefault();`
@@ -333,8 +340,7 @@ sdkApiThatTakesOwnership(buffer, bufferSize);  // SDK calls free() / delete[]
 
 **Examples in codebase**:
 - Memory utilities: [Memory.h](../lib/Memory/Memory.h) (`makeUniqueNoThrow`)
-- Cover image buffers: [HomeActivity.cpp:166](../src/activities/home/HomeActivity.cpp)
-- Bitmap rendering: [GfxRenderer.cpp:439-440](../lib/GfxRenderer/GfxRenderer.cpp)
+- Bitmap rendering: `rowScratch` in [GfxRenderer.cpp](../lib/GfxRenderer/GfxRenderer.cpp)
 
 ### Heap Allocation with `new`: Always Use `makeUniqueNoThrow`
 
@@ -381,7 +387,7 @@ sdkApiThatTakesOwnership(obj);  // SDK calls delete
 
 ### Logical Button Mapping
 
-**Source**: [src/MappedInputManager.cpp:20-55](../src/MappedInputManager.cpp)
+**Source**: `MappedInputManager::mapButton()` in [src/MappedInputManager.cpp](../src/MappedInputManager.cpp)
 
 Constraint: Physical button positions are fixed on hardware, but their logical functions change based on user settings and screen orientation.
 
@@ -428,28 +434,21 @@ Constraint: Physical button positions are fixed on hardware, but their logical f
 
 ### Activity Lifecycle and Memory Management
 
-**Source**: [src/main.cpp:132-143](../src/main.cpp)
+**Source**: `ActivityManager::exitActivity()` in [src/activities/ActivityManager.cpp](../src/activities/ActivityManager.cpp)
 
-**CRITICAL**: Activities are **heap-allocated** and **deleted on exit**.
+**CRITICAL**: Activities are **heap-allocated** (`std::unique_ptr<Activity>`) and **destroyed on exit**.
 
 ```cpp
-// main.cpp navigation pattern
-void exitActivity() {
+void ActivityManager::exitActivity(const RenderLock& lock) {
   if (currentActivity) {
     currentActivity->onExit();
-    delete currentActivity;  // Activity deleted here!
-    currentActivity = nullptr;
+    currentActivity.reset();  // Activity destroyed here!
   }
-}
-
-void enterNewActivity(Activity* activity) {
-  currentActivity = activity;  // Heap-allocated activity
-  currentActivity->onEnter();
 }
 ```
 
 **Memory Implications**:
-- Activity navigation = `delete` old activity + `new` create next activity
+- Activity navigation = destroy the old activity + allocate the next one
 - Any memory allocated in `onEnter()` MUST be freed in `onExit()`
 - FreeRTOS tasks MUST be deleted in `onExit()` before activity destruction
 - Member `FsFile` handles MUST be closed in `onExit()` (local `FsFile` variables auto-close via destructor)
@@ -465,9 +464,9 @@ void onExit()   { /* free: vTaskDelete, free buffer, close member FsFiles */ Act
 
 ### FreeRTOS Task Guidelines
 
-**Source**: [src/activities/util/KeyboardEntryActivity.cpp:45-50](../src/activities/util/KeyboardEntryActivity.cpp)
+**Source**: `DeferredFavorite::` worker in [src/util/DeferredFavorite.cpp](../src/util/DeferredFavorite.cpp). Activities do not own render tasks: `ActivityManager` runs the one render task.
 
-**Pattern**: See Activity Lifecycle above. `xTaskCreate(&taskTrampoline, "Name", stackSize, this, 1, &handle)`
+**Pattern**: `xTaskCreate(&workerLoop, "Name", stackSize, nullptr, priority, &handle)`
 
 **Stack Sizing** (in BYTES, not words):
 - **2048**: Simple rendering (most activities)
@@ -478,34 +477,25 @@ void onExit()   { /* free: vTaskDelete, free buffer, close member FsFiles */ Act
 
 ### Global Font Loading
 
-**Source**: [src/main.cpp:40-115](../src/main.cpp)
+**Source**: [src/UiFont.cpp](../src/UiFont.cpp)
 
-**All fonts are loaded as global static objects** at firmware startup:
-- Noto Serif: 12, 14, 16, 18pt (4 styles each: regular, bold, italic, bold-italic)
-- Noto Sans: 12, 14, 16, 18pt (4 styles each)
-- Ubuntu UI fonts: 10, 12pt (2 styles)
+**Built-in fonts are global static objects**, bound by `bindBuiltinFonts()` at startup:
+- ChareInk 14pt, the one built-in reading font (regular, bold, italic, bold-italic)
+- Cozette 10, 12, 14pt (regular), the UI font for every language except Arabic and Hebrew
+- Ubuntu 10, 12, 14pt (regular), the UI font for Arabic and Hebrew and the language list
 
-**Total**: ~80+ global `EpdFont` and `EpdFontFamily` objects
-
-**Compilation Flag**:
-```cpp
-#ifndef OMIT_FONTS
-  // Most fonts loaded here
-#endif
-```
+Every other reading font and size is an SD card font (`src/SdCardFontSystem.cpp`).
 
 **Implications**:
-- Fonts stored in **Flash** (marked as `static const` in `lib/EpdFont/builtinFonts/`)
+- Fonts stored in **Flash** (`static const` in `lib/EpdFont/builtinFonts/`)
 - Font rendering data cached in **DRAM** when first used
-- `OMIT_FONTS` can reduce binary size for minimal builds
 - Font IDs defined in [src/fontIds.h](../src/fontIds.h)
 
 **Usage**:
 ```cpp
 #include "fontIds.h"
 
-renderer.insertFont(FONT_UI_MEDIUM, ui12FontFamily);
-renderer.drawText(FONT_UI_MEDIUM, x, y, "Hello", true);
+renderer.drawText(UI_10_FONT_ID, x, y, tr(STR_LOADING), true);
 ```
 
 ---
@@ -566,7 +556,7 @@ pio run -t upload && pio device monitor
 - `x4`: C3 `default` binary. SSD1677, SPI SD, button ladder.
 
 `sim/server.py` serves the device as a page (keys, click or drag on the panel to
-touch, `/state`, `/ink/x/y/w/h`); the e2e suites (`sim/tests/<board>/`) drive it
+touch, `/state`, `/log`, `/ink/x/y/w/h`); the e2e suites (`sim/tests/<board>/`) drive it
 with exact checks (activity, frame count, panel ink).
 
 ```bash
@@ -574,17 +564,24 @@ with exact checks (activity, frame count, panel ink).
 pio run -e x4pro && pio run -e default            # the firmware under test
 (cd sim && npm install && npm run test:e2e)       # all boards; or test:e2e:x4pro|x3|x3uc8279|x4
 python3 sim/soak.py x4pro 10 600                  # 10 boots + 600 s idle; exit 1 on hang/reset/crash report
+python3 sim/wallpaper_refresh.py                  # X4 Pro Refresh Wallpaper: timed wake repaints, sleeps, arms once
 ```
 
+To prove one change by hand mid-task, any agent: `.claude/skills/verify/bin/lv start x4pro`,
+then `lv doctor`, `lv tap|press|swipe|pinch|reboot`, `lv shot <name>`, `lv stop`. Recipes per
+feature and the proof rules: `.claude/skills/verify/SKILL.md` and its `features/`.
+
+- `LECTOR_SD_EXTRA=<folder>` copies that folder's contents onto the fresh card (wallpapers,
+  a `.crosspoint/settings.json`); `sim/fixtures/` holds the ones the scripts use.
 - QEMU changes live only as patches in `sim/qemu-patches/` (base tag in `build-qemu.sh`).
-- Time is instruction-counted (`-icount`). Light sleep jumps the clock to its next
-  event, never ahead of the wall clock, so idle timeouts (auto-sleep) match the device.
-  Lag from slow emulated work is dropped at each sleep, never caught up: otherwise a
-  short idle looks like 30 s and Touch Sleep eats the next tap.
+- Time is instruction-counted (`-icount`). The QEMU patches still model light sleep
+  (clock jumps to its next event, lag dropped at each sleep), but since 0.46 the
+  firmware never light-sleeps (CrossPoint's downclock instead), so that path is idle.
 - The GT911 holds a frame until the firmware clears 0x814E, like the chip: a lift that
   lands while a press frame is being read is reported next, never dropped. Dropping it
   left a contact that never ended, and the next tap never completed (CI-only, slow hosts).
-- CI runs `sim-e2e` on every PR (all boards, on the `build` and `build-x4pro` images).
+- `ci.yml` (manual trigger only) runs the sims: `sim-x4pro` (3 shards, split by file in `ci.yml`) on the `build-x4pro` image,
+  `sim-c3` (one job per board: x3, x3uc8279, x4) on the `build` image.
 - The page's Reboot (`POST /reboot`) power-cycles with the same flash and card, so
   settings and reading position must survive it. Emulated boot is slower than the
   device: wake holds Power until a frame appears (`power_on`).
@@ -832,9 +829,9 @@ renderer.drawText(FONT_UI, x, y, tr(STR_LOADING), true);
 ```
 
 **To add custom fonts**:
-1. Place source fonts in `lib/EpdFont/fontsrc/` (gitignored)
-2. Run conversion script (see `lib/EpdFont/README`)
-3. Update global font objects in `src/main.cpp:40-115`
+1. Place source fonts in `lib/EpdFont/builtinFonts/source/`
+2. Run the conversion script, `lib/EpdFont/scripts/convert-builtin-fonts.sh`
+3. Update global font objects in `src/UiFont.cpp`
 4. Add font ID constant to `src/fontIds.h`
 
 ---
@@ -884,7 +881,7 @@ build_flags =
 1. ✅ **Build**: `pio run -t clean && pio run` (0 errors/warnings)
 2. ✅ **Quality**: `pio check` + `find src -name "*.cpp" -o -name "*.h" | xargs clang-format -i`
 3. ✅ **Format**: Commit messages (`feat:`/`fix:`), no `.gitignore`-excluded files staged (e.g., `*.generated.h`, `.pio/`, `platformio.local.ini`)
-4. ✅ **CI**: Fix GitHub Actions failures before review
+4. ✅ **Gate**: both builds, ctest and the sim suites pass locally
 5. ✅ **Code review**: Ensure orientation-aware logic is correct in all 4 modes by inspecting switch/case coverage
 
 **Human tester scope** (flag these for the user):
@@ -895,20 +892,19 @@ build_flags =
 
 ### CI/CD Pipeline Awareness
 
-**GitHub Actions** run automatically on pull requests:
+The gate is local: `default` and `x4pro` build, ctest, and the sim e2e suites on all
+four boards. Every workflow starts only by hand (`workflow_dispatch`):
 
 | Workflow | File | Purpose |
 |----------|------|---------|
-| Build Check | `.github/workflows/ci.yml` | Verifies code compiles |
-| Format Check | `.github/workflows/pr-formatting-check.yml` | Validates clang-format |
+| Build Check | `.github/workflows/ci.yml` | Format, builds, host tests, sims |
+| Title Check | `.github/workflows/pr-formatting-check.yml` | Validates the pull request title |
 | Release Build | `.github/workflows/release.yml` | Production releases |
 | RC Build | `.github/workflows/release_candidate.yml` | Release candidates |
 
 **Rules**:
-- **Fix CI failures BEFORE** requesting review
-- CI runs on: Push to PR, PR updates
-- Format check fails → Run clang-format locally
-- Build check fails → Fix compile errors
+- Run the local gate before merging; a hosted run is optional
+- `release.yml` must be started on the release tag; it replaces the release's assets
 
 ---
 
@@ -974,17 +970,17 @@ rm -rf /path/to/sd/.crosspoint/epub_<hash>/sections/
 - Corrupt rendering (missing text, wrong layout)
 - Testing cache generation logic
 - After modifying:
-  - `lib/Epub/Epub/Section.cpp`
+  - `lib/Epub/Epub/Section*.cpp`
   - `lib/Epub/Epub/BookMetadataCache.cpp`
   - Render settings in `CrossPointSettings`
 
 ### Cache File Format Versioning
 
-**Source**: `lib/Epub/Epub/Section.cpp`, `lib/Epub/Epub/BookMetadataCache.cpp`
+**Source**: `lib/Epub/Epub/SectionFormat.h`, `lib/Epub/Epub/BookMetadataCache.cpp`
 
 **Current Versions**: read them from the source, never from this file. The
 constants are `BOOK_CACHE_VERSION` in `BookMetadataCache.cpp` and
-`SECTION_FILE_VERSION` in `Section.cpp`, each with a comment block above it
+`SECTION_FILE_VERSION` in `SectionFormat.h`, each with a comment block above it
 recording what every bump changed. A number copied here goes stale the next time
 someone bumps one.
 
@@ -995,7 +991,7 @@ someone bumps one.
 
 **Example** (incrementing section format version):
 ```cpp
-// lib/Epub/Epub/Section.cpp
+// lib/Epub/Epub/SectionFormat.h
 constexpr uint8_t SECTION_FILE_VERSION = 54;  // Was 53, now 54
 
 // Add new field to structure
@@ -1008,3 +1004,9 @@ struct PageLine {
 ---
 
 Philosophy: We are building a dedicated e-reader, not a Swiss Army knife. If a feature adds RAM pressure without significantly improving the reading experience, it is Out of Scope.
+
+## UI lint
+
+- Run lintapple before calling UI work done. The browser UI here is the simulator page; the device pages in `src/network/html` are served by the firmware and are not covered.
+- Serve and lint: `./sim/build-qemu.sh` (once), then `LECTOR_BOARD=x4pro python3 sim/server.py 18080 &`, then `npx -y lintapple http://127.0.0.1:18080/`.
+- No root `package.json`, so no `lint:ui` script; the policy lives in `ui-policy.json` (none yet, so defaults apply).

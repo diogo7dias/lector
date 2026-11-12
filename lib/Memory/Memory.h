@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <iterator>
 #include <memory>
 #include <new>
 #include <type_traits>
@@ -71,3 +72,14 @@ struct [[nodiscard]] ScopedCleanup final {
 
 template <typename F>
 ScopedCleanup(F) -> ScopedCleanup<F>;
+
+// Trims a vector's or deque's storage to its contents (all of it when empty).
+// Their shrink_to_fit() is a no-op in libstdc++ without exceptions, which is how
+// the firmware builds (upstream #4094). Invalidates pointers and iterators into `c`.
+template <typename C>
+void shrinkToFit(C& c) {
+  if constexpr (requires { c.capacity(); }) {
+    if (c.capacity() == c.size()) return;
+  }
+  C(std::make_move_iterator(c.begin()), std::make_move_iterator(c.end()), c.get_allocator()).swap(c);
+}

@@ -3,6 +3,7 @@
 #include <HalClock.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <cstring>
 
@@ -67,10 +68,14 @@ bool summarize(Summary& summary, const size_t tailBytes) {
     skipToNewline = true;  // landed mid-line
   }
 
-  // Static, not stack: 448 bytes is over the stack budget, and only the main task folds
-  // the journal (Stats screen, sleep entry), never two at once.
+  // Heap, not stack: 448 bytes is over the stack budget. Held only while folding.
   constexpr size_t CHUNK = 256;
-  static char buf[CHUNK + MAX_LINE];
+  const auto bufPtr = makeUniqueNoThrow<char[]>(CHUNK + MAX_LINE);
+  if (!bufPtr) {
+    LOG_ERR("JRN", "OOM: %u bytes", static_cast<unsigned>(CHUNK + MAX_LINE));
+    return false;
+  }
+  char* const buf = bufPtr.get();
   size_t have = 0;
   for (;;) {
     const int n = f.read(buf + have, CHUNK);

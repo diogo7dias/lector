@@ -16,7 +16,8 @@
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "ReaderFontSizes.h"
-#include "activities/settings/SettingInfo.h"
+#include "SettingInfo.h"
+#include "frontlight/FrontlightBootPolicy.h"
 #include "util/BoundMenuLabels.h"
 #include "util/DictionaryRegistry.h"
 
@@ -29,6 +30,14 @@
 inline std::vector<uint8_t> retiredBoundFunctions() {
   return {CrossPointSettings::LP_MENU_SELECT_CHAPTER, CrossPointSettings::LP_MENU_GO_TO_PERCENT,
           CrossPointSettings::LP_MENU_TEXT_SETTINGS, CrossPointSettings::LP_MENU_READING_STATS};
+}
+
+// The rows below act from inside the input a Quick Lock stops, so a lock set from one
+// could never be released. Only the Buttons screen offers it.
+inline std::vector<uint8_t> hiddenFromHoldRows() {
+  auto hidden = retiredBoundFunctions();
+  hidden.push_back(CrossPointSettings::LP_MENU_QUICK_LOCK);
+  return hidden;
 }
 
 inline std::vector<StrId> boundFunctionLabels() {
@@ -204,418 +213,429 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 // Each entry has a key (for JSON API) and category (for grouping).
 // ACTION-type entries and entries without a key are device-only.
 //
-// The static list is constructed exactly once (master's optimization, #1086 +
-// #1636) so the per-entry SettingInfo cost is paid once; every call then copies
-// it. When an SdCardFontRegistry is supplied AND has SD card fonts installed,
-// the font-family entry is replaced in that copy with a registry-aware version.
-// The font-size entry is always rebuilt, since its options are point sizes read
-// from the active family rather than a fixed enum.
-//
-// settingsBaseList() is that static itself, for callers that only read the fixed entries
-// (the Text Settings screen) and must not pay for a copy of the whole list. noinline so
-// every translation unit shares the one out-of-line copy of the ~15 KB builder below
-// instead of inlining it into each caller.
-[[gnu::noinline]] inline const std::vector<SettingInfo>& settingsBaseList() {
-  static const std::vector<SettingInfo> baseList = [] {
-    // Enum settings are persisted as numeric values. Assign these labels by enum
-    // value so a reordered menu or enum cannot silently swap their behavior.
-    // Only Custom and Cover are offered. Every other slot is a retired face (see
-    // SLEEP_SCREEN_MODE) whose value is migrated to Custom on load; the array stays
-    // index-aligned with the enum and the placeholders never reach the picker or the web
-    // API (withHiddenEnumValues below).
-    std::vector<StrId> sleepScreenValues(CrossPointSettings::SLEEP_SCREEN_MODE_COUNT, StrId::STR_NONE_OPT);
-    sleepScreenValues[CrossPointSettings::CUSTOM] = StrId::STR_CUSTOM;
-    sleepScreenValues[CrossPointSettings::COVER] = StrId::STR_COVER;
+// forEachBaseSetting() builds each fixed entry, hands it to `visit`, then frees it, so the
+// list costs no heap between walks and one entry at a time during one (upstream #4085).
+// Persistence walks it on load and on every save, including with little heap left.
+// Entries are valid only during the callback; getSettingsList() collects an owning list.
+// When an SdCardFontRegistry is supplied AND has SD card fonts installed, its font-family
+// entry is replaced with a registry-aware version. The font-size entry is always rebuilt,
+// since its options are point sizes read from the active family rather than a fixed enum.
+// noinline so every translation unit shares the one out-of-line copy of the ~15 KB builder
+// below instead of inlining it into each caller.
+using SettingVisitor = void (*)(void* context, SettingInfo& info);
 
-    // The list is appended one entry at a time instead of being written as a single
-    // braced initializer. A braced list materializes ALL entries as one temporary array
-    // in this frame before the vector copies them; at 86 entries that array alone was
-    // ~15.5 KB and overflowed the 16 KB Arduino loop task stack, panicking with a
-    // "Stack protection fault" during boot before anything painted. push_back keeps
-    // exactly one SettingInfo temporary alive at a time.
-    std::vector<SettingInfo> v;
-    v.reserve(88);
-    // --- Display ---
-    v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
-                                  std::move(sleepScreenValues), "sleepScreen", StrId::STR_CAT_DISPLAY)
-                    .withHiddenEnumValues({CrossPointSettings::DARK, CrossPointSettings::LIGHT,
-                                           CrossPointSettings::COVER_CUSTOM, CrossPointSettings::BLANK,
-                                           CrossPointSettings::QUICK_RESUME, CrossPointSettings::STATS_DASHBOARD,
-                                           CrossPointSettings::FREEZE, CrossPointSettings::TRANSPARENT_CUSTOM}));
+[[gnu::noinline]] inline void forEachBaseSetting(const SettingVisitor visit, void* const context) {
+  const auto emit = [visit, context](auto&& info) { visit(context, info); };
+  // Enum settings are persisted as numeric values. Assign these labels by enum
+  // value so a reordered menu or enum cannot silently swap their behavior.
+  // Only Custom and Cover are offered. Every other slot is a retired face (see
+  // SLEEP_SCREEN_MODE) whose value is migrated to Custom on load; the array stays
+  // index-aligned with the enum and the placeholders never reach the picker or the web
+  // API (withHiddenEnumValues below).
+  std::vector<StrId> sleepScreenValues(CrossPointSettings::SLEEP_SCREEN_MODE_COUNT, StrId::STR_NONE_OPT);
+  sleepScreenValues[CrossPointSettings::CUSTOM] = StrId::STR_CUSTOM;
+  sleepScreenValues[CrossPointSettings::COVER] = StrId::STR_COVER;
 
-    v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
-                                  {StrId::STR_FIT, StrId::STR_CROP}, "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY));
+  // One entry at a time, never a single braced initializer: a braced list materializes ALL
+  // entries as one temporary array in this frame; at 86 entries that array alone was ~15.5 KB
+  // and overflowed the 16 KB Arduino loop task stack, panicking with a "Stack protection
+  // fault" during boot before anything painted.
+  // --- Display ---
+  emit(SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen, std::move(sleepScreenValues),
+                         "sleepScreen", StrId::STR_CAT_DISPLAY)
+           .withHiddenEnumValues({CrossPointSettings::DARK, CrossPointSettings::LIGHT, CrossPointSettings::COVER_CUSTOM,
+                                  CrossPointSettings::BLANK, CrossPointSettings::QUICK_RESUME,
+                                  CrossPointSettings::STATS_DASHBOARD, CrossPointSettings::FREEZE,
+                                  CrossPointSettings::TRANSPARENT_CUSTOM}));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_COVER_FILTER, &CrossPointSettings::sleepScreenCoverFilter,
-                                  {StrId::STR_NONE_OPT, StrId::STR_FILTER_CONTRAST, StrId::STR_INVERTED},
-                                  "sleepScreenCoverFilter", StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
+                         {StrId::STR_FIT, StrId::STR_CROP}, "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY));
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_IMAGE_FILENAME, &CrossPointSettings::showSleepImageFilename,
-                                    "showSleepImageFilename", StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Enum(StrId::STR_SLEEP_COVER_FILTER, &CrossPointSettings::sleepScreenCoverFilter,
+                         {StrId::STR_NONE_OPT, StrId::STR_FILTER_CONTRAST, StrId::STR_INVERTED},
+                         "sleepScreenCoverFilter", StrId::STR_CAT_DISPLAY));
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_FAST_UNLOCK, &CrossPointSettings::fastUnlock, "fastUnlock",
-                                    StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_IMAGE_FILENAME, &CrossPointSettings::showSleepImageFilename,
+                           "showSleepImageFilename", StrId::STR_CAT_DISPLAY));
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_FAVORITE_BADGE, &CrossPointSettings::showSleepFavoriteBadge,
-                                    "showSleepFavoriteBadge", StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Toggle(StrId::STR_FAST_UNLOCK, &CrossPointSettings::fastUnlock, "fastUnlock",
+                           StrId::STR_CAT_DISPLAY));
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION,
-                                    &CrossPointSettings::showSleepWallpaperPosition, "showSleepWallpaperPosition",
-                                    StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_FAVORITE_BADGE, &CrossPointSettings::showSleepFavoriteBadge,
+                           "showSleepFavoriteBadge", StrId::STR_CAT_DISPLAY));
 
-    // "Never" (index 5) was dropped: an X3 left without a periodic cleanup ghosts badly,
-    // and upstream never offered it. A settings file still holding 5 clamps back to the
-    // 15-page default, because load() falls back to the field default for any index past
-    // the option list.
-    v.push_back(SettingInfo::Enum(StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
-                                  {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
-                                   StrId::STR_PAGES_30, StrId::STR_REFRESH_NEVER},
-                                  "refreshFrequency", StrId::STR_CAT_DISPLAY));
-    v.push_back(SettingInfo::Enum(StrId::STR_NIGHT_REFRESH_FREQ, &CrossPointSettings::refreshFrequencyNight,
-                                  {StrId::STR_SAME_AS_DAY, StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10,
-                                   StrId::STR_PAGES_15, StrId::STR_PAGES_30, StrId::STR_REFRESH_NEVER},
-                                  "refreshFrequencyNight", StrId::STR_CAT_DISPLAY));
-    v.push_back(SettingInfo::Toggle(StrId::STR_CHAPTER_START_REFRESH, &CrossPointSettings::chapterStartRefresh,
-                                    "chapterStartRefresh", StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, &CrossPointSettings::showSleepWallpaperPosition,
+                           "showSleepWallpaperPosition", StrId::STR_CAT_DISPLAY));
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
-                                    StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_READING_STATS, &CrossPointSettings::showSleepReadingStats,
+                           "showSleepReadingStats", StrId::STR_CAT_DISPLAY));
 
-    // Frontlight. Dropped below on a board the SDK reports no frontlight for,
-    // so these four rows only ever appear on hardware that has one.
-    v.push_back(SettingInfo::Toggle(StrId::STR_FRONTLIGHT, &CrossPointSettings::frontlightOn, "frontlightOn",
-                                    StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Enum(StrId::STR_SLEEP_READING_STATS_ALIGN, &CrossPointSettings::sleepReadingStatsAlign,
+                         {StrId::STR_CENTER, StrId::STR_ALIGN_LEFT, StrId::STR_ALIGN_RIGHT}, "sleepReadingStatsAlign",
+                         StrId::STR_CAT_DISPLAY));
 
-    // Step 5 rather than 1: the panel's perceived brightness moves in coarse
-    // jumps, and a 0-100 row stepped by one takes twenty presses to cross.
-    v.push_back(SettingInfo::Value(StrId::STR_FRONTLIGHT_BRIGHTNESS, &CrossPointSettings::frontlightBrightness,
-                                   {0, 100, 5}, "frontlightBrightness", StrId::STR_CAT_DISPLAY));
-    v.push_back(SettingInfo::Value(StrId::STR_FRONTLIGHT_MAX_BRIGHTNESS, &CrossPointSettings::frontlightMaxBrightness,
-                                   {10, 100, 5}, "frontlightMaxBrightness", StrId::STR_CAT_DISPLAY));
+#if FREEINK_DEVICE_X4PRO
+  // Only the X4 Pro has the timed wake behind it (main.cpp), so only it has the row.
+  emit(SettingInfo::Toggle(StrId::STR_REFRESH_SLEEP_WALLPAPER, &CrossPointSettings::refreshSleepWallpaper,
+                           "refreshSleepWallpaper", StrId::STR_CAT_DISPLAY));
+#endif
 
-    v.push_back(SettingInfo::Value(StrId::STR_FRONTLIGHT_WARMTH, &CrossPointSettings::frontlightWarmth, {0, 100, 5},
-                                   "frontlightWarmth", StrId::STR_CAT_DISPLAY));
+  // "Never" (index 5) is back, matching upstream: the reader skips its own cadence, and
+  // DisplayRefreshPolicy still forces a clean after its consecutive-FAST cap.
+  emit(SettingInfo::Enum(StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
+                         {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
+                          StrId::STR_PAGES_30, StrId::STR_REFRESH_NEVER},
+                         "refreshFrequency", StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Enum(StrId::STR_NIGHT_REFRESH_FREQ, &CrossPointSettings::refreshFrequencyNight,
+                         {StrId::STR_SAME_AS_DAY, StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10,
+                          StrId::STR_PAGES_15, StrId::STR_PAGES_30, StrId::STR_REFRESH_NEVER},
+                         "refreshFrequencyNight", StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Toggle(StrId::STR_CHAPTER_START_REFRESH, &CrossPointSettings::chapterStartRefresh,
+                           "chapterStartRefresh", StrId::STR_CAT_DISPLAY));
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
-                                    "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
+                           StrId::STR_CAT_DISPLAY));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_AUTHOR_DISPLAY, &CrossPointSettings::authorDisplay,
-                                  {StrId::STR_AUTHOR_INITIALS, StrId::STR_AUTHOR_FULL_NAME}, "authorDisplay",
-                                  StrId::STR_CAT_DISPLAY));
+  // Frontlight. Dropped below on a board the SDK reports no frontlight for,
+  // so these four rows only ever appear on hardware that has one.
+  emit(SettingInfo::Toggle(StrId::STR_FRONTLIGHT, &CrossPointSettings::frontlightOn, "frontlightOn",
+                           StrId::STR_CAT_DISPLAY));
 
-    v.push_back(SettingInfo::Enum(
-        StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
-        {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE, StrId::STR_STATE_INVERTED_TAP},
-        "touchReaderControls", StrId::STR_CAT_CONTROLS));
+  // Step 5 rather than 1: the panel's perceived brightness moves in coarse
+  // jumps, and a 0-100 row stepped by one takes twenty presses to cross.
+  emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_BRIGHTNESS, &CrossPointSettings::frontlightBrightness, {0, 100, 5},
+                          "frontlightBrightness", StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_MAX_BRIGHTNESS, &CrossPointSettings::frontlightMaxBrightness,
+                          {10, 100, 5}, "frontlightMaxBrightness", StrId::STR_CAT_DISPLAY));
 
-    // Persisted under CrossPoint's legacy "tapForReaderMenu" key: the old values
-    // line up (0 = Off, 1 = Tap), so a settings file carries over either way.
-    v.push_back(SettingInfo::Enum(StrId::STR_SHOW_READER_MENU, &CrossPointSettings::showReaderMenu,
-                                  {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE_UP},
-                                  "tapForReaderMenu", StrId::STR_CAT_CONTROLS));
+  emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_WARMTH, &CrossPointSettings::frontlightWarmth, {0, 100, 5},
+                          "frontlightWarmth", StrId::STR_CAT_DISPLAY));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_HOME_BACK_ACTION, &CrossPointSettings::homeBackAction,
-                                  {StrId::STR_NONE_OPT, StrId::STR_RESUME, StrId::STR_NONE_OPT, StrId::STR_SORTES},
-                                  "homeBackAction", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues({CrossPointSettings::HOME_BACK_STATS}));
+  emit(SettingInfo::Toggle(StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
+                           "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Toggle(StrId::STR_FRONTLIGHT_SCHEDULE, &CrossPointSettings::frontlightScheduleEnabled,
+                           "frontlightScheduleEnabled", StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_SCHEDULE_ON, &CrossPointSettings::frontlightScheduleOn,
+                          {0, frontlight::SCHEDULE_LAST_STEP, 1}, nullptr, StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_SCHEDULE_OFF, &CrossPointSettings::frontlightScheduleOff,
+                          {0, frontlight::SCHEDULE_LAST_STEP, 1}, nullptr, StrId::STR_CAT_DISPLAY));
 
-    // --- Reader ---
-    // Built-in font-family entry. Replaced per-call with a registry-aware
-    // version when SD fonts are installed.
-    v.push_back(SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily, {StrId::STR_CHAREINK},
-                                  "fontFamily", StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Enum(StrId::STR_AUTHOR_DISPLAY, &CrossPointSettings::authorDisplay,
+                         {StrId::STR_AUTHOR_INITIALS, StrId::STR_AUTHOR_FULL_NAME}, "authorDisplay",
+                         StrId::STR_CAT_DISPLAY));
 
-    // Placeholder: the selectable sizes depend on the active font family, so
-    // this entry is always replaced by buildFontSizeSetting() below. It only
-    // fixes the setting's position in the Reader category.
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_FONT_SIZE, nullptr, {}, "fontSize", StrId::STR_CAT_READER).withTextSettings());
+  emit(SettingInfo::Enum(
+      StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
+      {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE, StrId::STR_STATE_INVERTED_TAP},
+      "touchReaderControls", StrId::STR_CAT_CONTROLS));
 
-    // Granular line spacing as a percentage of natural line height (restored from
-    // old lector; supersedes the coarse Tight/Normal/Wide enum).
-    v.push_back(SettingInfo::Value(
-                    StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacingPercent,
-                    {CrossPointSettings::MIN_LINE_SPACING_PERCENT, CrossPointSettings::MAX_LINE_SPACING_PERCENT, 5},
-                    "lineSpacingPercent", StrId::STR_CAT_READER)
-                    .withTextSettings());
+  // Persisted under CrossPoint's legacy "tapForReaderMenu" key: the old values
+  // line up (0 = Off, 1 = Tap), so a settings file carries over either way.
+  emit(SettingInfo::Enum(StrId::STR_SHOW_READER_MENU, &CrossPointSettings::showReaderMenu,
+                         {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE_UP}, "tapForReaderMenu",
+                         StrId::STR_CAT_CONTROLS));
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_EXTRA_SPACING, &CrossPointSettings::extraParagraphSpacing,
-                                    "extraParagraphSpacing", StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Enum(StrId::STR_HOME_BACK_ACTION, &CrossPointSettings::homeBackAction,
+                         {StrId::STR_NONE_OPT, StrId::STR_RESUME, StrId::STR_NONE_OPT, StrId::STR_SORTES},
+                         "homeBackAction", StrId::STR_CAT_CONTROLS)
+           .withHiddenEnumValues({CrossPointSettings::HOME_BACK_STATS}));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
-                                  {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
-                                   StrId::STR_BOOK_S_STYLE},
-                                  "paragraphAlignment", StrId::STR_CAT_READER)
-                    .withTextSettings());
+  // --- Reader ---
+  // Built-in font-family entry. Replaced per-call with a registry-aware
+  // version when SD fonts are installed.
+  emit(SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily, {StrId::STR_CHAREINK}, "fontFamily",
+                         StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    // First-line indent (restored old-lector model): Book (respect CSS) vs Custom %.
-    v.push_back(SettingInfo::Enum(StrId::STR_FIRST_LINE_INDENT, &CrossPointSettings::firstLineIndentMode,
-                                  {StrId::STR_INDENT_BOOK, StrId::STR_INDENT_PERCENT}, "firstLineIndentMode",
-                                  StrId::STR_CAT_READER)
-                    .withTextSettings());
+  // Placeholder: the selectable sizes depend on the active font family, so
+  // this entry is always replaced by buildFontSizeSetting() below. It only
+  // fixes the setting's position in the Reader category.
+  emit(SettingInfo::Enum(StrId::STR_FONT_SIZE, nullptr, {}, "fontSize", StrId::STR_CAT_READER).withTextSettings());
 
-    v.push_back(SettingInfo::Value(StrId::STR_FIRST_LINE_INDENT_PERCENT, &CrossPointSettings::firstLineIndentPercent,
-                                   {0, CrossPointSettings::MAX_FIRST_LINE_INDENT_PERCENT, 5}, "firstLineIndentPercent",
-                                   StrId::STR_CAT_READER)
-                    .withTextSettings());
+  // Granular line spacing as a percentage of natural line height (restored from
+  // old lector; supersedes the coarse Tight/Normal/Wide enum).
+  emit(SettingInfo::Value(
+           StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacingPercent,
+           {CrossPointSettings::MIN_LINE_SPACING_PERCENT, CrossPointSettings::MAX_LINE_SPACING_PERCENT, 5},
+           "lineSpacingPercent", StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    // The web settings API can write this key straight into the field, so the mode's own
-    // consequences (All Sides carries the horizontal margin onto every side and turns
-    // Dynamic Margins off) are re-applied by CrossPointSettings::normalizeMargins().
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_LINK_MARGINS, &CrossPointSettings::marginLinkMode,
-                          {StrId::STR_MARGIN_LINK_OFF, StrId::STR_MARGIN_LINK_TOP_BOTTOM, StrId::STR_MARGIN_LINK_ALL},
-                          "marginLinkMode", StrId::STR_CAT_READER)
-            .withTextSettings());
+  emit(SettingInfo::Toggle(StrId::STR_EXTRA_SPACING, &CrossPointSettings::extraParagraphSpacing,
+                           "extraParagraphSpacing", StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Value(StrId::STR_HORIZONTAL_MARGIN, &CrossPointSettings::screenMargin,
-                                   {CrossPointSettings::SCREEN_MARGIN_MIN, CrossPointSettings::SCREEN_MARGIN_MAX, 5},
-                                   "screenMargin", StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Enum(StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
+                         {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
+                          StrId::STR_BOOK_S_STYLE},
+                         "paragraphAlignment", StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Value(StrId::STR_SCREEN_MARGIN_TOP, &CrossPointSettings::screenMarginTop,
-                                   {CrossPointSettings::SCREEN_MARGIN_MIN, CrossPointSettings::SCREEN_MARGIN_MAX, 5},
-                                   "screenMarginTop", StrId::STR_CAT_READER)
-                    .withTextSettings());
+  // First-line indent (restored old-lector model): Book (respect CSS) vs Custom %.
+  emit(SettingInfo::Enum(StrId::STR_FIRST_LINE_INDENT, &CrossPointSettings::firstLineIndentMode,
+                         {StrId::STR_INDENT_BOOK, StrId::STR_INDENT_PERCENT}, "firstLineIndentMode",
+                         StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Value(StrId::STR_SCREEN_MARGIN_BOTTOM, &CrossPointSettings::screenMarginBottom,
-                                   {CrossPointSettings::SCREEN_MARGIN_MIN, CrossPointSettings::SCREEN_MARGIN_MAX, 5},
-                                   "screenMarginBottom", StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Value(StrId::STR_FIRST_LINE_INDENT_PERCENT, &CrossPointSettings::firstLineIndentPercent,
+                          {0, CrossPointSettings::MAX_FIRST_LINE_INDENT_PERCENT, 5}, "firstLineIndentPercent",
+                          StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Enum(
-                    StrId::STR_DYNAMIC_MARGINS, &CrossPointSettings::dynamicMargins,
-                    {StrId::STR_DYNAMIC_MARGINS_OFF, StrId::STR_DYNAMIC_MARGINS_10, StrId::STR_DYNAMIC_MARGINS_20},
-                    "dynamicMargins", StrId::STR_CAT_READER)
-                    .withTextSettings());
+  // The web settings API can write this key straight into the field, so the mode's own
+  // consequences (All Sides carries the horizontal margin onto every side and turns
+  // Dynamic Margins off) are re-applied by CrossPointSettings::normalizeMargins().
+  emit(SettingInfo::Enum(StrId::STR_LINK_MARGINS, &CrossPointSettings::marginLinkMode,
+                         {StrId::STR_MARGIN_LINK_OFF, StrId::STR_MARGIN_LINK_TOP_BOTTOM, StrId::STR_MARGIN_LINK_ALL},
+                         "marginLinkMode", StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_EMBEDDED_TEXT_STYLE, &CrossPointSettings::embeddedTextStyle,
-                                    "embeddedStyle", StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Value(StrId::STR_HORIZONTAL_MARGIN, &CrossPointSettings::screenMargin,
+                          {CrossPointSettings::SCREEN_MARGIN_MIN, CrossPointSettings::SCREEN_MARGIN_MAX, 5},
+                          "screenMargin", StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_EMBEDDED_LAYOUT_STYLE, &CrossPointSettings::embeddedLayoutStyle,
-                                    "embeddedLayoutStyle", StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Value(StrId::STR_SCREEN_MARGIN_TOP, &CrossPointSettings::screenMarginTop,
+                          {CrossPointSettings::SCREEN_MARGIN_MIN, CrossPointSettings::SCREEN_MARGIN_MAX, 5},
+                          "screenMarginTop", StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Value(StrId::STR_WORD_SPACING, &CrossPointSettings::wordSpacing,
-                                   {CrossPointSettings::MIN_WORD_SPACING, CrossPointSettings::MAX_WORD_SPACING, 5},
-                                   "wordSpacing", StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Value(StrId::STR_SCREEN_MARGIN_BOTTOM, &CrossPointSettings::screenMarginBottom,
+                          {CrossPointSettings::SCREEN_MARGIN_MIN, CrossPointSettings::SCREEN_MARGIN_MAX, 5},
+                          "screenMarginBottom", StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_KERNING, &CrossPointSettings::kerning, "kerning", StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Enum(StrId::STR_DYNAMIC_MARGINS, &CrossPointSettings::dynamicMargins,
+                         {StrId::STR_DYNAMIC_MARGINS_OFF, StrId::STR_DYNAMIC_MARGINS_10, StrId::STR_DYNAMIC_MARGINS_20},
+                         "dynamicMargins", StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(
-        SettingInfo::Toggle(StrId::STR_LIGATURES, &CrossPointSettings::ligatures, "ligatures", StrId::STR_CAT_READER)
-            .withTextSettings());
+  emit(SettingInfo::Toggle(StrId::STR_EMBEDDED_TEXT_STYLE, &CrossPointSettings::embeddedTextStyle, "embeddedStyle",
+                           StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_LINK_UNDERLINE, &CrossPointSettings::linkUnderline, "linkUnderline",
-                                    StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Toggle(StrId::STR_EMBEDDED_LAYOUT_STYLE, &CrossPointSettings::embeddedLayoutStyle,
+                           "embeddedLayoutStyle", StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    // Retired in 0.8.2: the granular paragraph gap (% of line height) duplicated what
-    // the Extra Paragraph Spacing toggle above already does. The field and its render
-    // spec entry are kept (old caches and sidecars still carry it) but it is pinned to
-    // 0 and no longer editable, here or in the in-book Layout tab. Restore this entry
-    // to bring the control back.
-    // SettingInfo::Value(StrId::STR_PARAGRAPH_SPACING, &CrossPointSettings::paragraphSpacing,
-    //                    {0, CrossPointSettings::MAX_PARAGRAPH_SPACING, 10}, "paragraphSpacing",
-    //                    StrId::STR_CAT_READER)
-    //     .withTextSettings(),
-    v.push_back(SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
-                                    StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Value(StrId::STR_WORD_SPACING, &CrossPointSettings::wordSpacing,
+                          {CrossPointSettings::MIN_WORD_SPACING, CrossPointSettings::MAX_WORD_SPACING, 5},
+                          "wordSpacing", StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Enum(StrId::STR_TEXT_CONTRAST, &CrossPointSettings::textContrast,
-                                  {StrId::STR_NORMAL, StrId::STR_HIGH, StrId::STR_MAX}, "textContrast",
-                                  StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Toggle(StrId::STR_KERNING, &CrossPointSettings::kerning, "kerning", StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_BOOK_MARGINS, &CrossPointSettings::bookMargins, "bookMargins",
-                                    StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Toggle(StrId::STR_LIGATURES, &CrossPointSettings::ligatures, "ligatures", StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_HEADING_PAGE_BREAK, &CrossPointSettings::headingPageBreak,
-                                    "headingPageBreak", StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Toggle(StrId::STR_LINK_UNDERLINE, &CrossPointSettings::linkUnderline, "linkUnderline",
+                           StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Enum(
-                    StrId::STR_WORD_EXPANSION, &CrossPointSettings::wordExpansion,
-                    {StrId::STR_WORD_EXPANSION_OFF, StrId::STR_WORD_EXPANSION_SOME, StrId::STR_WORD_EXPANSION_MORE},
-                    "wordExpansion", StrId::STR_CAT_READER)
-                    .withTextSettings());
+  // Retired in 0.8.2: the granular paragraph gap (% of line height) duplicated what
+  // the Extra Paragraph Spacing toggle above already does. The field and its render
+  // spec entry are kept (old caches and sidecars still carry it) but it is pinned to
+  // 0 and no longer editable, here or in the in-book Layout tab. Restore this entry
+  // to bring the control back.
+  // SettingInfo::Value(StrId::STR_PARAGRAPH_SPACING, &CrossPointSettings::paragraphSpacing,
+  //                    {0, CrossPointSettings::MAX_PARAGRAPH_SPACING, 10}, "paragraphSpacing",
+  //                    StrId::STR_CAT_READER)
+  //     .withTextSettings(),
+  emit(SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
+                           StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_FOCUS_READING, &CrossPointSettings::focusReadingEnabled,
-                                    "focusReadingEnabled", StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Enum(StrId::STR_TEXT_CONTRAST, &CrossPointSettings::textContrast,
+                         {StrId::STR_NORMAL, StrId::STR_HIGH, StrId::STR_MAX}, "textContrast", StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_GUIDE_DOTS, &CrossPointSettings::guideDotsEnabled, "guideDotsEnabled",
-                                    StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Toggle(StrId::STR_BOOK_MARGINS, &CrossPointSettings::bookMargins, "bookMargins",
+                           StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_HIDDEN_DOTS, &CrossPointSettings::guideDotsHidden, "guideDotsHidden",
-                                    StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Toggle(StrId::STR_HEADING_PAGE_BREAK, &CrossPointSettings::headingPageBreak, "headingPageBreak",
+                           StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_DEBUG_BORDERS, &CrossPointSettings::debugBorders, "debugBorders",
-                                    StrId::STR_CAT_READER)
-                    .withTextSettings());
+  emit(SettingInfo::Toggle(StrId::STR_FILL_PAGES, &CrossPointSettings::fillPages, "fillPages", StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Enum(
-        StrId::STR_ORIENTATION, &CrossPointSettings::orientation,
-        {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_ORIENTATION_INVERTED, StrId::STR_LANDSCAPE_CCW},
-        "orientation", StrId::STR_CAT_READER));
+  emit(
+      SettingInfo::Enum(StrId::STR_WORD_EXPANSION, &CrossPointSettings::wordExpansion,
+                        {StrId::STR_WORD_EXPANSION_OFF, StrId::STR_WORD_EXPANSION_SOME, StrId::STR_WORD_EXPANSION_MORE},
+                        "wordExpansion", StrId::STR_CAT_READER)
+          .withTextSettings());
 
-    // Which tab the in-book menu lands on. Labels are the tab bar's own strings, and
-    // the list is index-aligned with CrossPointSettings::BOOK_MENU_TAB because ENUM
-    // settings persist by index.
-    {
-      std::vector<StrId> bookMenuTabValues(CrossPointSettings::BOOK_MENU_TAB_COUNT);
-      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_NAVIGATE] = StrId::STR_SEC_NAVIGATE;
-      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_THIS_BOOK] = StrId::STR_SEC_THIS_BOOK;
-      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_LOOK] = StrId::STR_SEC_LOOK;
-      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_DEVICE] = StrId::STR_SEC_DEVICE;
-      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_SLEEP] = StrId::STR_SEC_SLEEP_SCREEN;
+  emit(SettingInfo::Value(StrId::STR_CHARACTER_SPACING, &CrossPointSettings::characterSpacing,
+                          {0, reader_defaults::MAX_CHARACTER_SPACING, 1}, "characterSpacing", StrId::STR_CAT_READER)
+           .withTextSettings()
+           .withDisplayOffset(-static_cast<int8_t>(reader_defaults::CHARACTER_SPACING)));
 
-      v.push_back(SettingInfo::Enum(StrId::STR_BOOK_MENU_TAB, &CrossPointSettings::bookMenuTab,
-                                    std::move(bookMenuTabValues), "bookMenuTab", StrId::STR_CAT_READER));
-    }
+  emit(SettingInfo::Toggle(StrId::STR_FOCUS_READING, &CrossPointSettings::focusReadingEnabled, "focusReadingEnabled",
+                           StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    // Off / On / Bolder. Stored 0/1/2, so a file written when this was a toggle reads the same.
-    v.push_back(SettingInfo::Enum(StrId::STR_PAPERBACK_LOOK, &CrossPointSettings::paperbackLookBody,
-                                  {StrId::STR_STATE_OFF, StrId::STR_STATE_ON, StrId::STR_BOLDER}, "paperbackLookBody",
-                                  StrId::STR_CAT_READER));
+  emit(SettingInfo::Toggle(StrId::STR_GUIDE_DOTS, &CrossPointSettings::guideDotsEnabled, "guideDotsEnabled",
+                           StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    // Defaults for the three per-book looks that used to be reachable only from the
-    // in-book menu. Changing one here sets what the NEXT freshly opened book starts
-    // with; a book that already has its own override keeps its own value, and the
-    // in-book menu still overrides any of them per book.
-    v.push_back(SettingInfo::Enum(StrId::STR_PARAGRAPH_NUMBERS, &CrossPointSettings::paragraphNumbering,
-                                  {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER}, "paragraphNumbering",
-                                  StrId::STR_CAT_READER));
+  emit(SettingInfo::Toggle(StrId::STR_HIDDEN_DOTS, &CrossPointSettings::guideDotsHidden, "guideDotsHidden",
+                           StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_PARAGRAPH_NUMBER_SIZE, &CrossPointSettings::paragraphNumberSize,
-                          {StrId::STR_PARA_NUM_SIZE_35, StrId::STR_PARA_NUM_SIZE_65, StrId::STR_PARA_NUM_SIZE_100},
-                          "paragraphNumberSize", StrId::STR_CAT_READER));
+  emit(SettingInfo::Toggle(StrId::STR_DEBUG_BORDERS, &CrossPointSettings::debugBorders, "debugBorders",
+                           StrId::STR_CAT_READER)
+           .withTextSettings());
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_PAPERBACK_STATUS, &CrossPointSettings::paperbackLookStatus,
-                                    "paperbackLookStatus", StrId::STR_CAT_READER));
+  emit(SettingInfo::Enum(
+      StrId::STR_ORIENTATION, &CrossPointSettings::orientation,
+      {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_ORIENTATION_INVERTED, StrId::STR_LANDSCAPE_CCW},
+      "orientation", StrId::STR_CAT_READER));
 
-    // Night mode = inverted output polarity on the reading surfaces only
-    // (EPUB/TXT/XTC; ActivityManager resolves the polarity per render).
-    // Reader category, since it does not affect the rest of the UI.
-    v.push_back(SettingInfo::Toggle(StrId::STR_NIGHT_MODE, &CrossPointSettings::screenInverted, "screenInverted",
-                                    StrId::STR_CAT_READER));
+  // Which tab the in-book menu lands on. Labels are the tab bar's own strings, and
+  // the list is index-aligned with CrossPointSettings::BOOK_MENU_TAB because ENUM
+  // settings persist by index.
+  {
+    std::vector<StrId> bookMenuTabValues(CrossPointSettings::BOOK_MENU_TAB_COUNT);
+    bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_NAVIGATE] = StrId::STR_SEC_NAVIGATE;
+    bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_THIS_BOOK] = StrId::STR_SEC_THIS_BOOK;
+    bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_LOOK] = StrId::STR_SEC_LOOK;
+    bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_DEVICE] = StrId::STR_SEC_DEVICE;
+    bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_SLEEP] = StrId::STR_SEC_SLEEP_SCREEN;
 
-    // --- Controls ---
-    v.push_back(SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
-                                  {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED}, "sideButtonLayout",
-                                  StrId::STR_CAT_CONTROLS));
+    emit(SettingInfo::Enum(StrId::STR_BOOK_MENU_TAB, &CrossPointSettings::bookMenuTab, std::move(bookMenuTabValues),
+                           "bookMenuTab", StrId::STR_CAT_READER));
+  }
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION,
-                                    &CrossPointSettings::frontButtonFollowOrientation, "frontButtonFollowOrientation",
-                                    StrId::STR_CAT_CONTROLS));
+  // Off / On / Bolder. Stored 0/1/2, so a file written when this was a toggle reads the same.
+  emit(SettingInfo::Enum(StrId::STR_PAPERBACK_LOOK, &CrossPointSettings::paperbackLookBody,
+                         {StrId::STR_STATE_OFF, StrId::STR_STATE_ON, StrId::STR_BOLDER}, "paperbackLookBody",
+                         StrId::STR_CAT_READER));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
-                                  boundFunctionLabels(), "longPressMenuFunction", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions()));
+  // Defaults for the three per-book looks that used to be reachable only from the
+  // in-book menu. Changing one here sets what the NEXT freshly opened book starts
+  // with; a book that already has its own override keeps its own value, and the
+  // in-book menu still overrides any of them per book.
+  emit(SettingInfo::Enum(StrId::STR_PARAGRAPH_NUMBERS, &CrossPointSettings::paragraphNumbering,
+                         {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER}, "paragraphNumbering",
+                         StrId::STR_CAT_READER));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_MENU_HOLD, &CrossPointSettings::menuHoldFunction, boundFunctionLabels(),
-                                  "menuHoldFunction", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions()));
+  emit(SettingInfo::Enum(StrId::STR_PARAGRAPH_NUMBER_SIZE, &CrossPointSettings::paragraphNumberSize,
+                         {StrId::STR_PARA_NUM_SIZE_35, StrId::STR_PARA_NUM_SIZE_65, StrId::STR_PARA_NUM_SIZE_100},
+                         "paragraphNumberSize", StrId::STR_CAT_READER));
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
-                                    "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS));
+  emit(SettingInfo::Toggle(StrId::STR_PAPERBACK_STATUS, &CrossPointSettings::paperbackLookStatus, "paperbackLookStatus",
+                           StrId::STR_CAT_READER));
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_BACK_SHORT_TO_FILE_BROWSER, &CrossPointSettings::backShortToFileBrowser,
-                                    "backShortToFileBrowser", StrId::STR_CAT_CONTROLS));
+  // Night mode = inverted output polarity on the reading surfaces only
+  // (EPUB/TXT/XTC; ActivityManager resolves the polarity per render).
+  // Reader category, since it does not affect the rest of the UI.
+  emit(SettingInfo::Toggle(StrId::STR_NIGHT_MODE, &CrossPointSettings::screenInverted, "screenInverted",
+                           StrId::STR_CAT_READER));
 
-    // The per-button bindings. Registered here so they persist and reach the web API;
-    // the Buttons screen is what actually lists them (withButtons keeps them out of the
-    // flat Controls list). Key names match the field names so a settings file reads as
-    // context + button + gesture.
-    // Same [context][button][gesture] layout as CrossPointSettings::bindingField, walked
-    // book first, one row per push_back (see the stack note above).
-    {
-      static constexpr const char* kBindingKeys[2][CrossPointSettings::BOUND_BTN_COUNT]
-                                               [CrossPointSettings::BOUND_GESTURE_COUNT] = {
-                                                   {{"btnUiLeftSingle", "btnUiLeftDouble", "btnUiLeftHold"},
-                                                    {"btnUiRightSingle", "btnUiRightDouble", "btnUiRightHold"},
-                                                    {"btnUiHomeSingle", "btnUiHomeDouble", "btnUiHomeHold"},
-                                                    {"btnUiPowerSingle", "btnUiPowerDouble", "btnUiPowerHold"}},
-                                                   {{"btnBookLeftSingle", "btnBookLeftDouble", "btnBookLeftHold"},
-                                                    {"btnBookRightSingle", "btnBookRightDouble", "btnBookRightHold"},
-                                                    {"btnBookHomeSingle", "btnBookHomeDouble", "btnBookHomeHold"},
-                                                    {"btnBookPowerSingle", "btnBookPowerDouble", "btnBookPowerHold"}}};
-      static constexpr StrId kButtonLabels[CrossPointSettings::BOUND_BTN_COUNT] = {
-          StrId::STR_BTN_LEFT, StrId::STR_BTN_RIGHT, StrId::STR_BTN_HOME, StrId::STR_BTN_POWER};
-      for (const bool inBook : {true, false}) {
-        for (uint8_t button = 0; button < CrossPointSettings::BOUND_BTN_COUNT; ++button) {
-          for (uint8_t gesture = 0; gesture < CrossPointSettings::BOUND_GESTURE_COUNT; ++gesture) {
-            v.push_back(
-                SettingInfo::Enum(kButtonLabels[button], CrossPointSettings::bindingField(inBook, button, gesture),
-                                  boundFunctionLabels(), kBindingKeys[inBook][button][gesture], StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-          }
+  // --- Controls ---
+  emit(SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
+                         {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED}, "sideButtonLayout",
+                         StrId::STR_CAT_CONTROLS));
+
+  emit(SettingInfo::Toggle(StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION, &CrossPointSettings::frontButtonFollowOrientation,
+                           "frontButtonFollowOrientation", StrId::STR_CAT_CONTROLS));
+
+  emit(SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction, boundFunctionLabels(),
+                         "longPressMenuFunction", StrId::STR_CAT_CONTROLS)
+           .withHiddenEnumValues(hiddenFromHoldRows()));
+
+  emit(SettingInfo::Enum(StrId::STR_MENU_HOLD, &CrossPointSettings::menuHoldFunction, boundFunctionLabels(),
+                         "menuHoldFunction", StrId::STR_CAT_CONTROLS)
+           .withHiddenEnumValues(hiddenFromHoldRows()));
+
+  emit(SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
+                           "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS));
+
+  emit(SettingInfo::Toggle(StrId::STR_BACK_SHORT_TO_FILE_BROWSER, &CrossPointSettings::backShortToFileBrowser,
+                           "backShortToFileBrowser", StrId::STR_CAT_CONTROLS));
+
+  // The per-button bindings. Registered here so they persist and reach the web API;
+  // the Buttons screen is what actually lists them (withButtons keeps them out of the
+  // flat Controls list). Key names match the field names so a settings file reads as
+  // context + button + gesture.
+  // Same [context][button][gesture] layout as CrossPointSettings::bindingField, walked
+  // book first, one row per push_back (see the stack note above).
+  {
+    static constexpr const char* kBindingKeys[2][CrossPointSettings::BOUND_BTN_COUNT]
+                                             [CrossPointSettings::BOUND_GESTURE_COUNT] = {
+                                                 {{"btnUiLeftSingle", "btnUiLeftDouble", "btnUiLeftHold"},
+                                                  {"btnUiRightSingle", "btnUiRightDouble", "btnUiRightHold"},
+                                                  {"btnUiHomeSingle", "btnUiHomeDouble", "btnUiHomeHold"},
+                                                  {"btnUiPowerSingle", "btnUiPowerDouble", "btnUiPowerHold"}},
+                                                 {{"btnBookLeftSingle", "btnBookLeftDouble", "btnBookLeftHold"},
+                                                  {"btnBookRightSingle", "btnBookRightDouble", "btnBookRightHold"},
+                                                  {"btnBookHomeSingle", "btnBookHomeDouble", "btnBookHomeHold"},
+                                                  {"btnBookPowerSingle", "btnBookPowerDouble", "btnBookPowerHold"}}};
+    static constexpr StrId kButtonLabels[CrossPointSettings::BOUND_BTN_COUNT] = {
+        StrId::STR_BTN_LEFT, StrId::STR_BTN_RIGHT, StrId::STR_BTN_HOME, StrId::STR_BTN_POWER};
+    for (const bool inBook : {true, false}) {
+      for (uint8_t button = 0; button < CrossPointSettings::BOUND_BTN_COUNT; ++button) {
+        for (uint8_t gesture = 0; gesture < CrossPointSettings::BOUND_GESTURE_COUNT; ++gesture) {
+          emit(SettingInfo::Enum(kButtonLabels[button], CrossPointSettings::bindingField(inBook, button, gesture),
+                                 boundFunctionLabels(), kBindingKeys[inBook][button][gesture], StrId::STR_CAT_CONTROLS)
+                   .withHiddenEnumValues(retiredBoundFunctions())
+                   .withButtons());
         }
       }
     }
+  }
 
-    // --- System ---
-    v.push_back(SettingInfo::Value(
-        StrId::STR_TIME_TO_SLEEP, &CrossPointSettings::sleepTimeoutMinutes,
-        {CrossPointSettings::MIN_SLEEP_TIMEOUT_MINUTES, CrossPointSettings::MAX_SLEEP_TIMEOUT_MINUTES, 1},
-        "sleepTimeoutMinutes", StrId::STR_CAT_SYSTEM));
-    v.push_back(SettingInfo::Enum(
-        StrId::STR_TOUCH_SLEEP, &CrossPointSettings::touchSleep,
-        {StrId::STR_TOUCH_SLEEP_OFF, StrId::STR_TOUCH_SLEEP_15S, StrId::STR_TOUCH_SLEEP_30S, StrId::STR_TOUCH_SLEEP_1M},
-        "touchSleep", StrId::STR_CAT_SYSTEM));
+  // --- System ---
+  emit(SettingInfo::Value(
+      StrId::STR_TIME_TO_SLEEP, &CrossPointSettings::sleepTimeoutMinutes,
+      {CrossPointSettings::MIN_SLEEP_TIMEOUT_MINUTES, CrossPointSettings::MAX_SLEEP_TIMEOUT_MINUTES, 1},
+      "sleepTimeoutMinutes", StrId::STR_CAT_SYSTEM));
+  emit(SettingInfo::Enum(
+      StrId::STR_TOUCH_SLEEP, &CrossPointSettings::touchSleep,
+      {StrId::STR_TOUCH_SLEEP_OFF, StrId::STR_TOUCH_SLEEP_15S, StrId::STR_TOUCH_SLEEP_30S, StrId::STR_TOUCH_SLEEP_1M},
+      "touchSleep", StrId::STR_CAT_SYSTEM));
 
-    // How this reader introduces itself during Nearby Position Sync. Left empty
-    // it falls back to a generated "Lector-XXXX" from the MAC.
-    v.push_back(SettingInfo::String(StrId::STR_DEVICE_NAME, &SETTINGS.deviceName[0], sizeof(SETTINGS.deviceName),
-                                    "deviceName", StrId::STR_CAT_SYSTEM));
+  // How this reader introduces itself during Nearby Position Sync. Left empty
+  // it falls back to a generated "Lector-XXXX" from the MAC.
+  emit(SettingInfo::String(StrId::STR_DEVICE_NAME, &SETTINGS.deviceName[0], sizeof(SETTINGS.deviceName), "deviceName",
+                           StrId::STR_CAT_SYSTEM));
 
-    // "Off" is retired: an unlock always lands on a book. Its slot stays in the array so
-    // the labels remain index-aligned with the enum, and is hidden from the picker and
-    // the web API the same way the retired sleep faces are.
-    v.push_back(SettingInfo::Enum(StrId::STR_OPEN_BOOK_ON_BOOT, &CrossPointSettings::bootBookMode,
-                                  {StrId::STR_BOOT_BOOK_OFF, StrId::STR_BOOT_BOOK_LAST, StrId::STR_BOOT_BOOK_RANDOM},
-                                  "bootBookMode", StrId::STR_CAT_SYSTEM)
-                    .withHiddenEnumValues({CrossPointSettings::BOOT_BOOK_OFF}));
+  // "Off" is retired: an unlock always lands on a book. Its slot stays in the array so
+  // the labels remain index-aligned with the enum, and is hidden from the picker and
+  // the web API the same way the retired sleep faces are.
+  emit(SettingInfo::Enum(StrId::STR_OPEN_BOOK_ON_BOOT, &CrossPointSettings::bootBookMode,
+                         {StrId::STR_BOOT_BOOK_OFF, StrId::STR_BOOT_BOOK_LAST, StrId::STR_BOOT_BOOK_RANDOM},
+                         "bootBookMode", StrId::STR_CAT_SYSTEM)
+           .withHiddenEnumValues({CrossPointSettings::BOOT_BOOK_OFF}));
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles,
-                                    "showHiddenFiles", StrId::STR_CAT_SYSTEM));
+  emit(SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles, "showHiddenFiles",
+                           StrId::STR_CAT_SYSTEM));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_BOOK_BROWSER_ORDER, &CrossPointSettings::bookBrowserOrder,
-                                  {StrId::STR_BOOK_ORDER_ALPHABETICAL, StrId::STR_BOOK_ORDER_RANDOM,
-                                   StrId::STR_BOOK_ORDER_RECENTLY_ADDED, StrId::STR_BOOK_ORDER_LAST_READ},
-                                  "bookBrowserOrder", StrId::STR_CAT_SYSTEM));
+  emit(SettingInfo::Enum(StrId::STR_BOOK_BROWSER_ORDER, &CrossPointSettings::bookBrowserOrder,
+                         {StrId::STR_BOOK_ORDER_ALPHABETICAL, StrId::STR_BOOK_ORDER_RANDOM,
+                          StrId::STR_BOOK_ORDER_RECENTLY_ADDED, StrId::STR_BOOK_ORDER_LAST_READ},
+                         "bookBrowserOrder", StrId::STR_CAT_SYSTEM));
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_REMOVE_READ_FROM_RECENTS,
-                                    &CrossPointSettings::removeReadBooksFromRecents, "removeReadBooksFromRecents",
-                                    StrId::STR_CAT_SYSTEM));
+  emit(SettingInfo::Toggle(StrId::STR_REMOVE_READ_FROM_RECENTS, &CrossPointSettings::removeReadBooksFromRecents,
+                           "removeReadBooksFromRecents", StrId::STR_CAT_SYSTEM));
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_MOVE_FINISHED_TO_READ, &CrossPointSettings::moveFinishedToReadFolder,
-                                    "moveFinishedToReadFolder", StrId::STR_CAT_SYSTEM));
+  emit(SettingInfo::Toggle(StrId::STR_MOVE_FINISHED_TO_READ, &CrossPointSettings::moveFinishedToReadFolder,
+                           "moveFinishedToReadFolder", StrId::STR_CAT_SYSTEM));
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_MOVE_OPENED_TO_RECENTS, &CrossPointSettings::moveOpenedToRecentsFolder,
-                                    "moveOpenedToRecentsFolder", StrId::STR_CAT_SYSTEM));
+  emit(SettingInfo::Toggle(StrId::STR_MOVE_OPENED_TO_RECENTS, &CrossPointSettings::moveOpenedToRecentsFolder,
+                           "moveOpenedToRecentsFolder", StrId::STR_CAT_SYSTEM));
 
-    // OPDS download folder: persisted + web-exposed, but category-less so it
-    // is hidden from the on-device Settings screen (edited via OPDS UI).
-    v.push_back(SettingInfo::String(StrId::STR_OPDS_DOWNLOAD_FOLDER, &SETTINGS.opdsDownloadFolder[0],
-                                    sizeof(SETTINGS.opdsDownloadFolder), "opdsDownloadFolder"));
+  // OPDS download folder: persisted + web-exposed, but category-less so it
+  // is hidden from the on-device Settings screen (edited via OPDS UI).
+  emit(SettingInfo::String(StrId::STR_OPDS_DOWNLOAD_FOLDER, &SETTINGS.opdsDownloadFolder[0],
+                           sizeof(SETTINGS.opdsDownloadFolder), "opdsDownloadFolder"));
 
-    // OPDS download filename format: persisted + web-exposed, category-less so it
-    // is hidden from the on-device Settings screen (cycled from the OPDS UI).
-    v.push_back(SettingInfo::Enum(StrId::STR_OPDS_FILENAME_FORMAT, &CrossPointSettings::opdsFilenameFormat,
-                                  {StrId::STR_FMT_AUTHOR_TITLE, StrId::STR_FMT_TITLE_AUTHOR, StrId::STR_FMT_TITLE},
-                                  "opdsFilenameFormat"));
+  // OPDS download filename format: persisted + web-exposed, category-less so it
+  // is hidden from the on-device Settings screen (cycled from the OPDS UI).
+  emit(SettingInfo::Enum(StrId::STR_OPDS_FILENAME_FORMAT, &CrossPointSettings::opdsFilenameFormat,
+                         {StrId::STR_FMT_AUTHOR_TITLE, StrId::STR_FMT_TITLE_AUTHOR, StrId::STR_FMT_TITLE},
+                         "opdsFilenameFormat"));
 
 // Measurement, off by default and free while it is off. On, the device times every
 // refresh, draws the previous one's cost in a corner of the screen, and writes a CSV
@@ -625,170 +645,185 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 // Instrumented builds keep it on and out of sight; releases never show it. See the
 // field's declaration in CrossPointSettings.h.
 #ifndef LECTOR_FORCE_PERF_TIMINGS
-    v.push_back(SettingInfo::Toggle(StrId::STR_PERF_TIMINGS, &CrossPointSettings::showTimings, "showTimings",
-                                    StrId::STR_CAT_SYSTEM));
+  emit(SettingInfo::Toggle(StrId::STR_PERF_TIMINGS, &CrossPointSettings::showTimings, "showTimings",
+                           StrId::STR_CAT_SYSTEM));
 #endif
 
-    // The panel's cheapest partial waveform on page turns and menu moves. On by default
-    // on the one board validated for it; the row is here so a panel that turns out to
-    // ghost can be put back on the vendor sequence without a reflash. See
-    // CrossPointSettings::fastPageTurns.
-    v.push_back(SettingInfo::Toggle(StrId::STR_FAST_PAGE_TURNS, &CrossPointSettings::fastPageTurns, "fastPageTurns",
-                                    StrId::STR_CAT_SYSTEM));
+  // The panel's cheapest partial waveform on page turns and menu moves. On by default
+  // on the one board validated for it; the row is here so a panel that turns out to
+  // ghost can be put back on the vendor sequence without a reflash. See
+  // CrossPointSettings::fastPageTurns.
+#if FREEINK_DEVICE_X4PRO
+  // Its own key: settings saved while this row did nothing here hold "fastPageTurns": 1,
+  // which would switch an unmeasured waveform on for every reader who updates. No category:
+  // the switch lives on its own page (FastPageTurnsTestActivity), beside what to test.
+  emit(SettingInfo::Toggle(StrId::STR_FAST_PAGE_TURNS, &CrossPointSettings::fastPageTurns, "x4ProFastPageTurns"));
+#else
+  emit(SettingInfo::Toggle(StrId::STR_FAST_PAGE_TURNS, &CrossPointSettings::fastPageTurns, "fastPageTurns",
+                           StrId::STR_CAT_SYSTEM));
+#endif
 
-    // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
-    v.push_back(SettingInfo::DynamicString(
-        StrId::STR_KOREADER_USERNAME, [] { return KOREADER_STORE.getUsername(); },
-        [](const std::string& v) {
-          KOREADER_STORE.setCredentials(v, KOREADER_STORE.getPassword());
-          KOREADER_STORE.saveToFile();
-        },
-        "koUsername", StrId::STR_KOREADER_SYNC));
+  // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
+  emit(SettingInfo::DynamicString(
+      StrId::STR_KOREADER_USERNAME, [] { return KOREADER_STORE.getUsername(); },
+      [](const std::string& v) {
+        KOREADER_STORE.setCredentials(v, KOREADER_STORE.getPassword());
+        KOREADER_STORE.saveToFile();
+      },
+      "koUsername", StrId::STR_KOREADER_SYNC));
 
-    v.push_back(SettingInfo::DynamicString(
-        StrId::STR_KOREADER_PASSWORD, [] { return KOREADER_STORE.getPassword(); },
-        [](const std::string& v) {
-          KOREADER_STORE.setCredentials(KOREADER_STORE.getUsername(), v);
-          KOREADER_STORE.saveToFile();
-        },
-        "koPassword", StrId::STR_KOREADER_SYNC));
+  emit(SettingInfo::DynamicString(
+      StrId::STR_KOREADER_PASSWORD, [] { return KOREADER_STORE.getPassword(); },
+      [](const std::string& v) {
+        KOREADER_STORE.setCredentials(KOREADER_STORE.getUsername(), v);
+        KOREADER_STORE.saveToFile();
+      },
+      "koPassword", StrId::STR_KOREADER_SYNC));
 
-    v.push_back(SettingInfo::DynamicString(
-        StrId::STR_SYNC_SERVER_URL, [] { return KOREADER_STORE.getServerUrl(); },
-        [](const std::string& v) {
-          KOREADER_STORE.setServerUrl(v);
-          KOREADER_STORE.saveToFile();
-        },
-        "koServerUrl", StrId::STR_KOREADER_SYNC));
+  emit(SettingInfo::DynamicString(
+      StrId::STR_SYNC_SERVER_URL, [] { return KOREADER_STORE.getServerUrl(); },
+      [](const std::string& v) {
+        KOREADER_STORE.setServerUrl(v);
+        KOREADER_STORE.saveToFile();
+      },
+      "koServerUrl", StrId::STR_KOREADER_SYNC));
 
-    v.push_back(SettingInfo::DynamicEnum(
-        StrId::STR_DOCUMENT_MATCHING, {StrId::STR_FILENAME, StrId::STR_BINARY},
-        [] { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); },
-        [](uint8_t v) {
-          KOREADER_STORE.setMatchMethod(static_cast<DocumentMatchMethod>(v));
-          KOREADER_STORE.saveToFile();
-        },
-        "koMatchMethod", StrId::STR_KOREADER_SYNC));
+  emit(SettingInfo::DynamicEnum(
+      StrId::STR_DOCUMENT_MATCHING, {StrId::STR_FILENAME, StrId::STR_BINARY},
+      [] { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); },
+      [](uint8_t v) {
+        KOREADER_STORE.setMatchMethod(static_cast<DocumentMatchMethod>(v));
+        KOREADER_STORE.saveToFile();
+      },
+      "koMatchMethod", StrId::STR_KOREADER_SYNC));
 
-    v.push_back(SettingInfo::DynamicEnum(
-        StrId::STR_SEND_METADATA, {StrId::STR_STATE_OFF, StrId::STR_STATE_ON},
-        [] { return static_cast<uint8_t>(KOREADER_STORE.getSendMetadata()); },
-        [](uint8_t v) {
-          KOREADER_STORE.setSendMetadata(v != 0);
-          KOREADER_STORE.saveToFile();
-        },
-        "koSendMetadata", StrId::STR_KOREADER_SYNC));
+  emit(SettingInfo::DynamicEnum(
+      StrId::STR_SEND_METADATA, {StrId::STR_STATE_OFF, StrId::STR_STATE_ON},
+      [] { return static_cast<uint8_t>(KOREADER_STORE.getSendMetadata()); },
+      [](uint8_t v) {
+        KOREADER_STORE.setSendMetadata(v != 0);
+        KOREADER_STORE.saveToFile();
+      },
+      "koSendMetadata", StrId::STR_KOREADER_SYNC));
 
-    v.push_back(SettingInfo::DynamicEnum(
-        StrId::STR_SYNC_BEHAVIOR, {StrId::STR_ASK_EVERY_TIME, StrId::STR_SMART_SYNC},
-        [] { return static_cast<uint8_t>(KOREADER_STORE.getSyncBehavior()); },
-        [](uint8_t v) {
-          KOREADER_STORE.setSyncBehavior(static_cast<KOReaderSyncBehavior>(v));
-          KOREADER_STORE.saveToFile();
-        },
-        "koSyncBehavior", StrId::STR_KOREADER_SYNC));
+  emit(SettingInfo::DynamicEnum(
+      StrId::STR_SYNC_BEHAVIOR, {StrId::STR_ASK_EVERY_TIME, StrId::STR_SMART_SYNC},
+      [] { return static_cast<uint8_t>(KOREADER_STORE.getSyncBehavior()); },
+      [](uint8_t v) {
+        KOREADER_STORE.setSyncBehavior(static_cast<KOReaderSyncBehavior>(v));
+        KOREADER_STORE.saveToFile();
+      },
+      "koSyncBehavior", StrId::STR_KOREADER_SYNC));
 
-    // --- Per-item status bar model (v2). Position enums share the same 7-value
-    // list {Off, TL, TC, TR, BL, BC, BR}; the device UI (StatusBarSettingsActivity)
-    // renders these as the [XX] position popup. ---
-    // Every position enum shares the same 7-value list; built once, copied per entry.
-    const std::vector<StrId> anchorPositions = {StrId::STR_STATE_OFF, StrId::STR_ANCHOR_TL, StrId::STR_ANCHOR_TC,
-                                                StrId::STR_ANCHOR_TR, StrId::STR_ANCHOR_BL, StrId::STR_ANCHOR_BC,
-                                                StrId::STR_ANCHOR_BR};
-    v.push_back(SettingInfo::Toggle(StrId::STR_STATUS_BAR, &CrossPointSettings::sbEnabled, "sbEnabled",
-                                    StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::DynamicEnum(
+      StrId::STR_AUTO_SYNC, {StrId::STR_STATE_OFF, StrId::STR_STATE_ON},
+      [] { return static_cast<uint8_t>(KOREADER_STORE.getAutoSync()); },
+      [](uint8_t v) {
+        KOREADER_STORE.setAutoSync(v != 0);
+        KOREADER_STORE.saveToFile();
+      },
+      "koAutoSync", StrId::STR_KOREADER_SYNC));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_BATTERY, &CrossPointSettings::sbBatteryPos, anchorPositions,
-                                  "sbBatteryPos", StrId::STR_CUSTOMISE_STATUS_BAR));
+  // --- Per-item status bar model (v2). Position enums share the same 7-value
+  // list {Off, TL, TC, TR, BL, BC, BR}; the device UI (StatusBarSettingsActivity)
+  // renders these as the [XX] position popup. ---
+  // Every position enum shares the same 7-value list; built once, copied per entry.
+  const std::vector<StrId> anchorPositions = {StrId::STR_STATE_OFF, StrId::STR_ANCHOR_TL, StrId::STR_ANCHOR_TC,
+                                              StrId::STR_ANCHOR_TR, StrId::STR_ANCHOR_BL, StrId::STR_ANCHOR_BC,
+                                              StrId::STR_ANCHOR_BR};
+  emit(SettingInfo::Toggle(StrId::STR_STATUS_BAR, &CrossPointSettings::sbEnabled, "sbEnabled",
+                           StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_CLOCK, &CrossPointSettings::sbClockPos, anchorPositions, "sbClockPos",
-                                  StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_BATTERY, &CrossPointSettings::sbBatteryPos, anchorPositions, "sbBatteryPos",
+                         StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_TITLE, &CrossPointSettings::sbTitlePos, anchorPositions, "sbTitlePos",
-                                  StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_CLOCK, &CrossPointSettings::sbClockPos, anchorPositions, "sbClockPos",
+                         StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_TITLE_SOURCE, &CrossPointSettings::sbTitleSource,
-                                  {StrId::STR_BOOK, StrId::STR_CHAPTER}, "sbTitleSource",
-                                  StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_CHAPTER_TITLE, &CrossPointSettings::sbTitlePos, anchorPositions, "sbTitlePos",
+                         StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_TRUNCATE_TITLE, &CrossPointSettings::sbTitleTruncate, "sbTitleTruncate",
-                                    StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_BOOK_TITLE, &CrossPointSettings::sbBookTitlePos, anchorPositions, "sbBookTitlePos",
+                         StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_PAGE_IN_CHAPTER, &CrossPointSettings::sbPagePos, anchorPositions,
-                                  "sbPagePos", StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Toggle(StrId::STR_TRUNCATE_TITLE, &CrossPointSettings::sbTitleTruncate, "sbTitleTruncate",
+                           StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_PAGE_FORMAT, &CrossPointSettings::sbPageFormat,
-                                  {StrId::STR_PAGE_FRACTION, StrId::STR_PAGE_LEFT}, "sbPageFormat",
-                                  StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_PAGE_IN_CHAPTER, &CrossPointSettings::sbPagePos, anchorPositions, "sbPagePos",
+                         StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_BOOK_PERCENT, &CrossPointSettings::sbBookPctPos, anchorPositions,
-                                  "sbBookPctPos", StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_PAGE_FORMAT, &CrossPointSettings::sbPageFormat,
+                         {StrId::STR_PAGE_FRACTION, StrId::STR_PAGE_LEFT}, "sbPageFormat",
+                         StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_CHAPTER_PERCENT, &CrossPointSettings::sbChapterPctPos, anchorPositions,
-                                  "sbChapterPctPos", StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_BOOK_PERCENT, &CrossPointSettings::sbBookPctPos, anchorPositions, "sbBookPctPos",
+                         StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_CHAPTER_NUMBER, &CrossPointSettings::sbChapterNumPos, anchorPositions,
-                                  "sbChapterNumPos", StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_CHAPTER_PERCENT, &CrossPointSettings::sbChapterPctPos, anchorPositions,
+                         "sbChapterPctPos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_SESSION_PAGES, &CrossPointSettings::sbSessionPagesPos, anchorPositions,
-                                  "sbSessionPagesPos", StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_CHAPTER_NUMBER, &CrossPointSettings::sbChapterNumPos, anchorPositions,
+                         "sbChapterNumPos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_PARA_PAGES, &CrossPointSettings::sbParaPagesPos, anchorPositions,
-                                  "sbParaPagesPos", StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_SESSION_PAGES, &CrossPointSettings::sbSessionPagesPos, anchorPositions,
+                         "sbSessionPagesPos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_CHAPTER_TIME_LEFT, &CrossPointSettings::sbChapterTimePos, anchorPositions,
-                                  "sbChapterTimePos", StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_PARA_PAGES, &CrossPointSettings::sbParaPagesPos, anchorPositions, "sbParaPagesPos",
+                         StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_BOOK_TIME_LEFT, &CrossPointSettings::sbBookTimePos, anchorPositions,
-                                  "sbBookTimePos", StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_CHAPTER_TIME_LEFT, &CrossPointSettings::sbChapterTimePos, anchorPositions,
+                         "sbChapterTimePos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_BOOK_BAR, &CrossPointSettings::sbBookBar,
-                                  {StrId::STR_STATE_OFF, StrId::STR_TOP, StrId::STR_BOTTOM}, "sbBookBar",
-                                  StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_BOOK_TIME_LEFT, &CrossPointSettings::sbBookTimePos, anchorPositions,
+                         "sbBookTimePos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_CHAPTER_BAR, &CrossPointSettings::sbChapterBar,
-                                  {StrId::STR_STATE_OFF, StrId::STR_TOP, StrId::STR_BOTTOM}, "sbChapterBar",
-                                  StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_BOOK_BAR, &CrossPointSettings::sbBookBar,
+                         {StrId::STR_STATE_OFF, StrId::STR_TOP, StrId::STR_BOTTOM}, "sbBookBar",
+                         StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_BAR_THICKNESS, &CrossPointSettings::sbBarThickness,
-                                  {StrId::STR_SLIM, StrId::STR_PROGRESS_BAR_MEDIUM, StrId::STR_FAT}, "sbBarThickness",
-                                  StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_CHAPTER_BAR, &CrossPointSettings::sbChapterBar,
+                         {StrId::STR_STATE_OFF, StrId::STR_TOP, StrId::STR_BOTTOM}, "sbChapterBar",
+                         StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    // Keeps the Book Bar / Chapter Bar edges drawing while the status bar itself is
-    // hidden, at its own thickness. Ignored while the status bar is on.
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_PROGRESS_BAR, &CrossPointSettings::sbOffBar,
-                          {StrId::STR_STATE_OFF, StrId::STR_SLIM, StrId::STR_PROGRESS_BAR_MEDIUM, StrId::STR_FAT},
-                          "sbOffBar", StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_BAR_THICKNESS, &CrossPointSettings::sbBarThickness,
+                         {StrId::STR_SLIM, StrId::STR_PROGRESS_BAR_MEDIUM, StrId::STR_FAT}, "sbBarThickness",
+                         StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_XTC_STATUS_BAR, &CrossPointSettings::xtcStatusBarMode,
-                                  {StrId::STR_HIDE, StrId::STR_BOTTOM, StrId::STR_TOP}, "xtcStatusBarMode",
-                                  StrId::STR_CUSTOMISE_STATUS_BAR));
+  // Keeps the Book Bar / Chapter Bar edges drawing while the status bar itself is
+  // hidden, at its own thickness. Ignored while the status bar is on.
+  emit(SettingInfo::Enum(StrId::STR_PROGRESS_BAR, &CrossPointSettings::sbOffBar,
+                         {StrId::STR_STATE_OFF, StrId::STR_SLIM, StrId::STR_PROGRESS_BAR_MEDIUM, StrId::STR_FAT},
+                         "sbOffBar", StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    // Clock entries (web settings only).
-    // Range 0..104 = quarter-hour steps from UTC-12:00 to UTC+14:00, biased by 48.
-    v.push_back(SettingInfo::Value(StrId::STR_CLOCK_UTC_OFFSET, &CrossPointSettings::clockUtcOffsetQ, {0, 104, 1},
-                                   "clockUtcOffsetQ", StrId::STR_CUSTOMISE_STATUS_BAR));
+  emit(SettingInfo::Enum(StrId::STR_XTC_STATUS_BAR, &CrossPointSettings::xtcStatusBarMode,
+                         {StrId::STR_HIDE, StrId::STR_BOTTOM, StrId::STR_TOP}, "xtcStatusBarMode",
+                         StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    // Order matches clock_zones::TZ.
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_CLOCK_TIME_ZONE, &CrossPointSettings::clockTimeZone,
-                          {StrId::STR_TZ_MANUAL, StrId::STR_TZ_LISBON, StrId::STR_TZ_PARIS, StrId::STR_TZ_ATHENS,
-                           StrId::STR_TZ_NEW_YORK, StrId::STR_TZ_CHICAGO, StrId::STR_TZ_DENVER,
-                           StrId::STR_TZ_LOS_ANGELES, StrId::STR_TZ_SYDNEY, StrId::STR_TZ_AUCKLAND},
-                          "clockTimeZone", StrId::STR_CUSTOMISE_STATUS_BAR));
+  // Clock entries (web settings only).
+  // Range 0..104 = quarter-hour steps from UTC-12:00 to UTC+14:00, biased by 48.
+  emit(SettingInfo::Value(StrId::STR_CLOCK_UTC_OFFSET, &CrossPointSettings::clockUtcOffsetQ, {0, 104, 1},
+                          "clockUtcOffsetQ", StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_CLOCK_FORMAT, &CrossPointSettings::clockFormat,
-                                  {StrId::STR_CLOCK_FORMAT_24H, StrId::STR_CLOCK_FORMAT_12H}, "clockFormat",
-                                  StrId::STR_CUSTOMISE_STATUS_BAR));
+  // Order matches clock_zones::TZ.
+  emit(SettingInfo::Enum(StrId::STR_CLOCK_TIME_ZONE, &CrossPointSettings::clockTimeZone,
+                         {StrId::STR_TZ_MANUAL, StrId::STR_TZ_LISBON, StrId::STR_TZ_PARIS, StrId::STR_TZ_ATHENS,
+                          StrId::STR_TZ_NEW_YORK, StrId::STR_TZ_CHICAGO, StrId::STR_TZ_DENVER,
+                          StrId::STR_TZ_LOS_ANGELES, StrId::STR_TZ_SYDNEY, StrId::STR_TZ_AUCKLAND},
+                         "clockTimeZone", StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    // Persistence flag for NTP debounce. Resetting from the web UI forces a re-sync
-    // on next WiFi connect, which is useful when crossing time zones.
-    v.push_back(SettingInfo::Toggle(StrId::STR_CLOCK_SYNCED, &CrossPointSettings::clockHasBeenSynced,
-                                    "clockHasBeenSynced", StrId::STR_CUSTOMISE_STATUS_BAR));
-    return v;
-  }();
-  return baseList;
+  emit(SettingInfo::Enum(StrId::STR_CLOCK_FORMAT, &CrossPointSettings::clockFormat,
+                         {StrId::STR_CLOCK_FORMAT_24H, StrId::STR_CLOCK_FORMAT_12H}, "clockFormat",
+                         StrId::STR_CUSTOMISE_STATUS_BAR));
+
+  // Persistence flag for NTP debounce. Resetting from the web UI forces a re-sync
+  // on next WiFi connect, which is useful when crossing time zones.
+  emit(SettingInfo::Toggle(StrId::STR_CLOCK_SYNCED, &CrossPointSettings::clockHasBeenSynced, "clockHasBeenSynced",
+                           StrId::STR_CUSTOMISE_STATUS_BAR));
+}
+
+template <typename Fn>
+void forEachBaseSetting(Fn& fn) {
+  forEachBaseSetting([](void* context, SettingInfo& info) { (*static_cast<Fn*>(context))(info); }, &fn);
 }
 
 // withAbsentHardware keeps the rows this board cannot use. Saving and loading pass it:
@@ -796,7 +831,14 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
                                                 const std::vector<DictionaryEntry>* dictionaries = nullptr,
                                                 const bool withAbsentHardware = false) {
-  std::vector<SettingInfo> v = settingsBaseList();
+  // Counted first so the vector never grows: each growth holds two copies of the list.
+  size_t fixedCount = 0;
+  auto count = [&fixedCount](SettingInfo&) { fixedCount++; };
+  forEachBaseSetting(count);
+  std::vector<SettingInfo> v;
+  v.reserve(fixedCount + (dictionaries && !dictionaries->empty() ? 1 : 0));
+  auto collect = [&v](SettingInfo& info) { v.push_back(std::move(info)); };
+  forEachBaseSetting(collect);
   // The status-bar clock reads the RTC, which only the X3 carries. HalClock does have
   // a system-clock fallback for boards without one, but deep sleep here is a full chip
   // reset, so that clock would be lost every time the reader sleeps — a clock that is
@@ -804,16 +846,20 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   // RTC-only, and its row is dropped on a board that cannot ever show it rather than
   // offering a setting that does nothing.
   //
-  // Filtered in this per-call copy rather than in the static baseList: the static is
-  // built on first use, which is not guaranteed to be after HalClock::begin().
+  // Filtered here rather than in forEachBaseSetting(): persistence walks that before
+  // HalClock::begin() has run, and has to keep the key anyway.
   // No frontlight on this board: drop the four light rows rather than offer
-  // controls that move nothing. Filtered in this per-call copy rather than in
-  // the static baseList because the static is built on first use, which is not
-  // guaranteed to be after HalFrontlight::begin().
+  // controls that move nothing. Filtered here for the same reason: persistence walks
+  // the fixed entries before HalFrontlight::begin() has run.
   if (!withAbsentHardware && !Frontlight.present()) {
-    static constexpr StrId FRONTLIGHT_ROWS[] = {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS,
-                                                StrId::STR_FRONTLIGHT_MAX_BRIGHTNESS, StrId::STR_FRONTLIGHT_WARMTH,
-                                                StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE};
+    static constexpr StrId FRONTLIGHT_ROWS[] = {StrId::STR_FRONTLIGHT,
+                                                StrId::STR_FRONTLIGHT_BRIGHTNESS,
+                                                StrId::STR_FRONTLIGHT_MAX_BRIGHTNESS,
+                                                StrId::STR_FRONTLIGHT_WARMTH,
+                                                StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE,
+                                                StrId::STR_FRONTLIGHT_SCHEDULE,
+                                                StrId::STR_FRONTLIGHT_SCHEDULE_ON,
+                                                StrId::STR_FRONTLIGHT_SCHEDULE_OFF};
     v.erase(std::remove_if(v.begin(), v.end(),
                            [](const SettingInfo& s) {
                              return std::find(std::begin(FRONTLIGHT_ROWS), std::end(FRONTLIGHT_ROWS), s.nameId) !=
@@ -831,7 +877,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             v.end());
   }
   if (!withAbsentHardware && !halClock.isAvailable()) {
-    v.erase(std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_CLOCK; }),
+    // The schedule reads the same clock, at a wake, so the same reasoning drops it.
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) {
+                             return s.nameId == StrId::STR_CLOCK || s.nameId == StrId::STR_FRONTLIGHT_SCHEDULE ||
+                                    s.nameId == StrId::STR_FRONTLIGHT_SCHEDULE_ON ||
+                                    s.nameId == StrId::STR_FRONTLIGHT_SCHEDULE_OFF;
+                           }),
             v.end());
   }
   if (registry && registry->getFamilyCount() > 0) {

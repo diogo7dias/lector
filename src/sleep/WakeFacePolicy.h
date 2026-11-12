@@ -29,8 +29,9 @@ inline constexpr unsigned long inputSettleMs(const bool isX4Pro, const bool fast
 // toward its target (the controller's old plane is written as the target's complement,
 // the mechanism night mode already uses on every driver), so whatever ink the panel
 // holds is driven out by the same short waveform that draws the page. One submission,
-// ~505 ms on an X4. The X3 driver promotes the first paint after begin() to its half
-// scrub regardless, so there it is one ~710 ms pass carrying the page. What that short
+// ~505 ms on an X4. The UC8253 X3 driver promotes the first paint after begin() to its
+// half scrub regardless, so there it is one ~710 ms pass carrying the page; the UC8279 X3
+// driver honours the drive-all request itself (Uc8279Driver::requestDriveAllNextFast). What that short
 // waveform leaves of a dense wallpaper is the hardware question; the first page turn is
 // promoted to a clean pass on the boards that ran the differential (see
 // firstPageTurnCleans), so any residue lives on one page only.

@@ -10,7 +10,10 @@
 #include <OpdsStream.h>
 #include <WiFi.h>
 
+#include <utility>
+
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -21,6 +24,7 @@
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 #include "network/TlsScratchHeap.h"
+#include "network/opds/BookOrbitMissing.h"
 #include "util/BookCacheUtils.h"
 #include "util/OpdsFilename.h"
 #include "util/StringUtils.h"
@@ -29,6 +33,7 @@
 namespace {
 constexpr int SEARCH_ICON_SIZE = 24;
 constexpr int SEARCH_ICON_MARGIN = 14;
+constexpr unsigned long GO_HOME_MS = 1000;  // Back held this long leaves for Home (upstream #4397)
 
 // The search glyph sits inside the header band, at its right edge.
 int searchIconX(const GfxRenderer& renderer) {
@@ -40,11 +45,9 @@ int searchIconX(const GfxRenderer& renderer) {
 void OpdsBookBrowserActivity::onEnter() {
   UiStatusActivity::onEnter();
 
-  // Browsing an OPDS catalogue is WiFi plus TLS plus a parse, on whatever heap
-  // is left after a book's fonts are resident. Release the rebuildable SD font
-  // caches first, the way the web server and Calibre paths do: a handshake that
-  // runs out of contiguous heap fails as a bad peer key, which reads like a
-  // server fault and is not one.
+  // WiFi, TLS and a parse run on the heap a book's fonts leave. Release the rebuildable SD
+  // font caches first, as the web server and Calibre do: a handshake short of contiguous
+  // heap fails as a bad peer key, which reads like a server fault and is not one.
   if (auto* fcm = renderer.getFontCacheManager()) {
     LOG_DBG("OPDS", "Free heap before SD font cache release: %d bytes", ESP.getFreeHeap());
     fcm->releaseSdFontCaches();
@@ -55,7 +58,8 @@ void OpdsBookBrowserActivity::onEnter() {
   entries.clear();
   navigationHistory.clear();
   searchTemplate = "";
-  currentPath = "";
+  currentPath = startPath;
+  openDownloadedBook = false;
   setListSelection(0);
   consumeConfirm = false;
   cancelRequested = false;
@@ -74,11 +78,11 @@ void OpdsBookBrowserActivity::onExit() {
   entries.clear();
   navigationHistory.clear();
 
-  teardownWifiAndRestart();
+  teardownWifiAndRestart(openDownloadedBook ? silentRestartToReader : silentRestart);
 }
 
-// What the error screen says for a failed fetch; nullptr when the feed arrived (empty
-// counts). ABORTED is not an error screen and is handled before this is asked.
+// The error screen's text for a failed fetch; nullptr when the feed arrived, even empty.
+// ABORTED is handled before this is asked.
 static const char* feedErrorMessage(const opds::ClientStatus status) {
   switch (status) {
     case opds::ClientStatus::OK:
@@ -92,6 +96,8 @@ static const char* feedErrorMessage(const opds::ClientStatus status) {
       return tr(STR_UPDATE_LOW_MEMORY);
     case opds::ClientStatus::PARSE_FAILED:
       return tr(STR_PARSE_FEED_FAILED);
+    case opds::ClientStatus::UNREACHABLE:
+      return tr(STR_SERVER_UNREACHABLE);
     default:
       return tr(STR_FETCH_FEED_FAILED);
   }
@@ -197,6 +203,10 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   const auto prevUrl = std::move(result.prevPageUrl);
   const bool feedTruncated = result.truncated;
   entries = std::move(result.entries);
+  if (missingOnly) {
+    const size_t missing = bookorbit_missing::keepMissing(entries);
+    if (navigationHistory.empty()) bookorbit_missing::save(static_cast<int>(missing), startPath);
+  }
 
   entries.reserve(entries.size() + (prevUrl.empty() ? 0 : 1) + (nextUrl.empty() ? 0 : 1));
   if (!prevUrl.empty()) {
@@ -220,8 +230,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
 }
 
 void OpdsBookBrowserActivity::releaseEntries() {
-  // Under the render lock: the rows the render task is walking point into these
-  // two vectors, so freeing them from this task mid-paint reads freed memory.
+  // Under the render lock: the rows being painted point into these vectors.
   RenderLock lock(*this);
   std::vector<OpdsEntry>().swap(entries);
   rows.clear();
@@ -271,8 +280,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     }
     downloadProgress = downloaded;
     downloadTotal = total;
-    // Deliberately no repaint: the framebuffer belongs to wolfSSL until the
-    // loan ends. The counters still move, and the screen catches up after.
+    // No repaint: wolfSSL holds the framebuffer until the loan ends; the screen catches up.
   };
 
   std::unique_ptr<GfxRenderer::FrameBufferLoan> loan;
@@ -313,6 +321,15 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     return;
   }
 
+  if (result == HttpDownloader::OK && missingOnly) {
+    // Open it so Auto Sync pulls its position; it is still listed, hence -1.
+    if (navigationHistory.empty())
+      bookorbit_missing::save(static_cast<int>(bookorbit_missing::countBooks(entries)) - 1, startPath);
+    APP_STATE.openEpubPath = finalPath;
+    openDownloadedBook = true;
+    activityManager.goToReader(finalPath);
+    return;
+  }
   if (result == HttpDownloader::OK) {
     state = BrowserState::BROWSING;
   } else if (result == HttpDownloader::ABORTED) {
@@ -370,8 +387,8 @@ void OpdsBookBrowserActivity::performSearch(const std::string& query) {
   const size_t pos = url.find(placeholder);
   if (pos != std::string::npos) url.replace(pos, placeholder.length(), urlEncode(query));
 
-  navigationHistory.push_back(currentPath);  // <-- add this
-  currentPath = url;                         // <-- add this
+  navigationHistory.push_back(currentPath);
+  currentPath = url;
 
   state = BrowserState::LOADING;
   statusMessage = tr(STR_LOADING);
@@ -415,17 +432,15 @@ void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
 // --- Rows and screen ---
 
 void OpdsBookBrowserActivity::refreshRows() {
-  // The rows borrow the feed's own strings rather than copying them: a large
-  // catalogue already costs what its titles cost, and a second copy of every
-  // title and author is heap this device does not have with WiFi and TLS up.
+  // The rows borrow the feed's strings: a second copy of every title and author is heap
+  // this device lacks with WiFi and TLS up.
   rows.resize(entries.size());
   for (size_t i = 0; i < entries.size(); ++i) {
     const OpdsEntry& entry = entries[i];
     rows[i] = freeink::ui::ListItem{};
     rows[i].label = entry.title.c_str();
     rows[i].actionValue = static_cast<int16_t>(i);
-    // A feed mixes places to go with books to take. The arrow marks the first,
-    // and a book carries its author under the title.
+    // An arrow marks a place to go; a book carries its author under the title.
     if (entry.type == OpdsEntryType::NAVIGATION) {
       rows[i].value = ">";
     } else if (!entry.author.empty()) {
@@ -437,8 +452,7 @@ void OpdsBookBrowserActivity::refreshRows() {
 UiStatusActivity::StatusView OpdsBookBrowserActivity::statusView() const {
   StatusView view;
   view.title = server.name.empty() ? tr(STR_OPDS_BROWSER) : server.name.c_str();
-  // The framebuffer comes back white from a TLS loan, and the download screen
-  // repaints in FAST on every step, so the frame after either owes a full pass.
+  // A TLS loan returns the framebuffer white and downloads repaint FAST: owe a full pass.
   if (pendingFullRefresh) view.refresh = HalDisplay::FULL_REFRESH;
 
   switch (state) {
@@ -475,16 +489,14 @@ UiStatusActivity::StatusView OpdsBookBrowserActivity::statusView() const {
       view.listItems = rows.data();
       view.listCount = static_cast<int>(rows.size());
       view.listHasSubtitle = true;
-      // The selection is clamped when the list is built, which is after this
-      // runs: on the first paint of a shorter feed it can still name a row that
-      // is no longer there.
+      // The selection is clamped after this runs, so on a shorter feed's first paint it can
+      // name a row that is gone.
       {
         const size_t selected = static_cast<size_t>(listSelection());
         const bool isBook = selected < entries.size() && entries[selected].type == OpdsEntryType::BOOK;
         view.confirmHint = isBook ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
       }
-      // The search sits on the same button the list pages up with, and only on
-      // the first row, which is where the reader lands when a feed opens.
+      // Search shares the page-up button, on the first row only, where a feed opens.
       view.thirdHint = !searchTemplate.empty() && listSelection() == 0 ? tr(STR_SEARCH) : tr(STR_DIR_UP);
       view.fourthHint = tr(STR_DIR_DOWN);
       break;
@@ -517,6 +529,14 @@ bool OpdsBookBrowserActivity::handleCustomInput() {
       cancelRequested = true;
       return true;
     }
+    return true;
+  }
+
+  // Back acts on release, so a hold skips refetching every level. Only a press seen here
+  // arms it, not the one that closed the search keyboard.
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) return backArmed = true;
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && std::exchange(backArmed, false)) {
+    mappedInput.getHeldTime() >= GO_HOME_MS ? onGoHome() : onBackButton();
     return true;
   }
 

@@ -70,6 +70,7 @@ void KOReaderSyncActivity::applyRemoteProgress(int spineIndex, int page) {
     requestUpdate(true);
     return;
   }
+  Storage.remove(EpubReaderUtils::linkStackPath(epub->getCachePath()).c_str());
   // Moving the reader's position is the one destructive thing a sync does, so
   // it is never silent: say it happened, then return to the book the way an
   // upload does.
@@ -85,7 +86,7 @@ void KOReaderSyncActivity::applyRemoteProgress(int spineIndex, int page) {
 void KOReaderSyncActivity::returnToReader() { activityManager.goToReader(epubPath); }
 
 bool KOReaderSyncActivity::smartSyncEnabled() const {
-  return KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART;
+  return autoMode || KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART;
 }
 
 void KOReaderSyncActivity::markAutoReturn() { autoReturnAt = millis() + AUTO_RETURN_DELAY_MS; }
@@ -195,7 +196,7 @@ void KOReaderSyncActivity::performSync() {
     return;
   }
 
-  if (result == KOReaderSyncClient::CERT_UNTRUSTED &&
+  if (result == KOReaderSyncClient::CERT_UNTRUSTED && !autoMode &&
       askToTrustRejectedCertificate(*this, renderer, mappedInput, [this](const bool trusted) {
         if (trusted) {
           requestUpdate();
@@ -385,7 +386,6 @@ void KOReaderSyncActivity::onEnter() {
   UiStatusActivity::onEnter();
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
-  // Check for credentials first
   if (!KOREADER_STORE.hasCredentials()) {
     state = NO_CREDENTIALS;
     requestUpdate();
@@ -404,18 +404,14 @@ void KOReaderSyncActivity::onEnter() {
 
   // Launch WiFi selection subactivity
   LOG_DBG("KOSync", "Launching WifiSelectionActivity...");
-  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, autoMode, autoMode),
                          [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
 }
 
 void KOReaderSyncActivity::onExit() {
   Activity::onExit();
 
-  if (wifiActivated) {
-    WiFi.disconnect(false);
-    delay(30);
-    silentRestartToReader();
-  }
+  if (wifiActivated) teardownWifiAndRestart(silentRestartToReader);
 }
 
 void KOReaderSyncActivity::prepareComparison() {
@@ -495,6 +491,7 @@ UiStatusActivity::StatusView KOReaderSyncActivity::statusView() const {
 bool KOReaderSyncActivity::handleCustomInput() {
   // A smart sync that finished on its own returns to the book by itself, after
   // long enough for the outcome to be read.
+  if (autoMode && state == SYNC_FAILED && autoReturnAt == 0) markAutoReturn();
   if (autoReturnAt != 0 && millis() >= autoReturnAt) {
     returnToReader();
     return true;
@@ -508,7 +505,6 @@ void KOReaderSyncActivity::onBackButton() { returnToReader(); }
 
 void KOReaderSyncActivity::onConfirmButton() {
   if (state == NO_REMOTE_PROGRESS) {
-    // Calculate hash if not done yet
     if (documentHash.empty()) {
       documentHash = KOReaderDocumentId::calculateFor(epubPath, KOREADER_STORE.getMatchMethod());
     }

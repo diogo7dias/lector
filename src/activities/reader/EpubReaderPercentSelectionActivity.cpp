@@ -41,6 +41,7 @@ UiStatusActivity::StatusView EpubReaderPercentSelectionActivity::statusView() co
   view.sliderValue = percent;
   view.sliderMin = kRange.min;
   view.sliderMax = kRange.max;
+  view.showKeypad = true;
   view.lines[0] = smallStepLine.c_str();
   view.lines[1] = largeStepLine.c_str();
   view.confirmHint = tr(STR_SELECT);

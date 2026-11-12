@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include "ReaderRenderSpec.h"
+#include "SectionFormat.h"
 
 #define LOG_DBG(...) ((void)0)
 #define LOG_ERR(...) ((void)0)
@@ -19,13 +20,16 @@ struct Section {
   void writeSectionFileHeader(const ReaderRenderSpec& spec);
   bool loadSectionFile(const ReaderRenderSpec& spec);
   bool clearCache() { return cleared = true; }
+  // The keep-one-previous-layout swap touches several files; covered by the sim, not here.
+  bool swapInPreviousLayout(const ReaderRenderSpec&, bool) { return clearCache() && false; }
 };
 #include "SectionHeader.inc"
 
 TEST(SectionCacheValidity, OldHeadersRejectedBeforeSpecReadAndNewHeadersRoundTrip) {
   const ReaderRenderSpec spec;
-  for (uint8_t oldVersion : {61, 221}) {
-    // v61 finalized and suspended headers were 47 bytes, including the retired toggle.
+  for (uint8_t oldVersion : {61, 221, 81, 201}) {
+    // v61 finalized and suspended headers were 47 bytes, including the retired toggle; v81
+    // (and its partial 201) is the layout just before TrueType .notdef fallbacks.
     Storage.bytes.assign(47, 0xFF);
     Storage.bytes[0] = oldVersion;
     Section section;
@@ -35,12 +39,12 @@ TEST(SectionCacheValidity, OldHeadersRejectedBeforeSpecReadAndNewHeadersRoundTri
     EXPECT_FALSE(section.file.opened);
   }
 
-  EXPECT_EQ(75, SECTION_FILE_VERSION);
-  EXPECT_EQ(207, SECTION_FILE_PARTIAL_VERSION);
+  EXPECT_EQ(87, SECTION_FILE_VERSION);
+  EXPECT_EQ(195, SECTION_FILE_PARTIAL_VERSION);
   for (uint8_t version : {SECTION_FILE_VERSION, SECTION_FILE_PARTIAL_VERSION}) {
     Section writer;
     writer.writeSectionFileHeader(spec);
-    ASSERT_EQ(52u, writer.file.size());  // v74 added the wordExpansion byte
+    ASSERT_EQ(54u, writer.file.size());  // v85 added the fillPages byte
     writer.file.seek(0);
     serialization::writePod(writer.file, version);
     if (version == SECTION_FILE_PARTIAL_VERSION) {

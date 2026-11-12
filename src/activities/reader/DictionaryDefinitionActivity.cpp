@@ -9,6 +9,7 @@
 #include <cstdio>
 
 #include "CrossPointSettings.h"
+#include "ReaderUtils.h"
 #include "components/ListChrome.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -207,19 +208,29 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNext([this] {
+  const auto turnForward = [this] {
     if (currentPage + 1 < totalPages) {
       currentPage++;
       requestUpdate();
     }
-  });
-
-  buttonNavigator.onPrevious([this] {
+  };
+  const auto turnBack = [this] {
     if (currentPage > 0) {
       currentPage--;
       requestUpdate();
     }
-  });
+  };
+
+  buttonNavigator.onNext(turnForward);
+  buttonNavigator.onPrevious(turnBack);
+
+  // A definition has no reader menu, so the tap that would open it turns forward.
+  const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
+  if (touch.prev) {
+    turnBack();
+  } else if (touch.next || touch.menu) {
+    turnForward();
+  }
 }
 
 // Draws the current page: a styled Page when the HTML layout succeeded,
@@ -279,5 +290,6 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   drawBody(fontId, contentX + SIDE_PADDING, bodyStartY);
 
   drawListChromeBottom(renderer, mappedInput, chrome);
-  renderer.displayBuffer();
+  renderer.displayBuffer(firstPaint ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+  firstPaint = false;
 }

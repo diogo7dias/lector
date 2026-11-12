@@ -17,10 +17,13 @@
 // hasChapters is true (EPUB, chaptered XTC); otherwise chapter items are hidden.
 struct StatusBarData {
   bool hasChapters = false;
-  int chapterPage = 0;     // 1-based page within the chapter
-  int chapterPages = 0;    // total pages in the chapter
-  int chapterNum = 0;      // 1-based chapter index
-  int chapterTotal = 0;    // total chapters
+  int chapterPage = 0;   // 1-based page within the chapter
+  int chapterPages = 0;  // total pages in the chapter
+  int chapterNum = 0;    // 1-based chapter index
+  int chapterTotal = 0;  // total chapters
+  // The printed edition's page this one belongs to ("147"), appended to the page item.
+  // nullptr when the book has no page list. Points at storage the reader owns.
+  const char* printedPage = nullptr;
   int bookPercent = 0;     // 0..100
   int chapterPercent = 0;  // 0..100
   std::string bookTitle;
@@ -94,6 +97,7 @@ struct Seg {
   const char* text = nullptr;
   int width = 0;
   bool isBattery = false;
+  bool clip = false;  // clipped with an ellipsis to the room its anchor has (clipRoom)
 };
 
 // The anchored items of the bar, declared once, in the order the renderer places them.
@@ -113,7 +117,8 @@ struct Seg {
   X(SessionPages, sessionPagesPos, false) \
   X(ParaPages, paraPagesPos, false)       \
   X(ChapterTime, chapterTimePos, true)    \
-  X(BookTime, bookTimePos, false)
+  X(BookTime, bookTimePos, false)         \
+  X(BookTitle, bookTitlePos, false)
 
 #define SB_ITEM_ENUM(id, field, chapterOnly) id,
 enum Item : uint8_t { STATUS_BAR_ITEMS(SB_ITEM_ENUM) kItemCount };
@@ -157,7 +162,16 @@ int clusterWidth(const BarLayout& layout, int anchor, int sepW);
 // centred cluster with no clipping, which is how a long chapter title beside a page count
 // used to run off both edges. `titleSegIndex` says which segment of that anchor is the
 // title; it is rarely 0, because battery and clock are placed before it.
+//
+// `stacked` is a title slot of more than one line of its own (book above chapter): it
+// keeps its anchor to itself whatever its width or truncation, so the other items at
+// that anchor always move out.
 void reflowTitle(BarLayout& layout, int titleAnchor, int titleSegIndex, bool titleTruncate, int bandWidth, int sepW,
-                 bool destBandReserved);
+                 bool destBandReserved, bool stacked = false);
+
+// Widest an anchor's cluster may be drawn without running into the other clusters of its
+// band: a corner stops `sepW` short of the centre cluster (or the far corner when the
+// centre is empty), the centre stays clear of the wider corner on both sides.
+int clipRoom(const BarLayout& layout, int anchor, int bandWidth, int sepW);
 
 }  // namespace statusbar

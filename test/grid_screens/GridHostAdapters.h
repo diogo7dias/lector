@@ -24,7 +24,7 @@ using Rect = list_chrome::Rect;
 // Hardware, chrome, and task scheduling only. The generated includes below keep
 // the production list/grid activities, navigation, host, gate and SDK drawing/routing.
 struct HalDisplay {
-  enum RefreshMode { FAST_REFRESH };
+  enum RefreshMode { FAST_REFRESH, HALF_REFRESH };
   struct Profile {
     bool isX4Pro = true;
   } device;
@@ -117,6 +117,7 @@ struct Activity {
   virtual void onEnter() {}
   virtual void loop() {}
   virtual void render(RenderLock&&) {}
+  virtual void onRevealed() {}
   void requestUpdate() {}
   void finish() {}
 };
@@ -138,8 +139,18 @@ struct UITheme {
     static ThemeMetrics metrics;
     return metrics;
   }
+  // The firmware's "a popup is on the panel" flag. The audit tests drive the
+  // production render() bodies, so it has to exist here; no test paints a popup.
+  static void noteOverlayPainted() { overlayPainted = true; }
+  static bool consumeOverlayPainted() {
+    const bool painted = overlayPainted;
+    overlayPainted = false;
+    return painted;
+  }
+  static bool overlayPainted;
   void drawScrollArrows(GfxRenderer&, Rect, list_scrollbar::Arrows) {}
 };
+inline bool UITheme::overlayPainted = false;
 #define GUI UITheme::getInstance()
 namespace BoardConfig {
 inline const struct {

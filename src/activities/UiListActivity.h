@@ -21,6 +21,7 @@ class UiListActivity : public Activity, protected UiAppHost {
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
+  void onRevealed() override { cleanPaint_ = true; }
 
  protected:
   // Base-owned row action; subclass-registered actions start at ACTION_USER.
@@ -43,10 +44,6 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Touch long-press on a row; only fires when the subclass opted in via the
   // wantsTouchLongPress constructor flag (rows must also carry InputLongPress).
   virtual void onRowLongPress(int index) {}
-  // The selection/viewport state the loop, sync, and row dispatch operate on.
-  // Default (and only current) storage is the single `nav` member; the hook
-  // exists so a screen with more than one viewport can redirect it.
-  virtual freeink::ui::ListNav& activeNav() { return nav; }
   // Bounds-checked ACTION_ROW dispatch. Default: selection follows the tapped
   // row, then long-press/activate.
   virtual void onRowAction(const freeink::ui::ActionEvent& event);
@@ -72,18 +69,10 @@ class UiListActivity : public Activity, protected UiAppHost {
   virtual ListChrome chrome() const;
   // Shorthand for the common case: a title and nothing else.
   virtual const char* headerTitle() const { return nullptr; }
-  // The paint itself. Overriding these is the exception now; chrome() is the
-  // hook, and the base reserves the body from the same numbers it draws with.
-  virtual void drawChrome();
-  virtual void drawFooter();
   // Drawn over the finished page, after the app and the hints. Return true when
   // the overlay refreshed the display itself (GUI.drawPopup does) so the base
   // does not push a second refresh behind it.
   virtual bool drawOverlay() { return false; }
-  // The waveform this pass is pushed with. A screen commonly reached from ones
-  // that only ever paint FAST arrives with the panel already carrying ghosts and
-  // asks for one FULL pass; everything else stays on the default.
-  virtual HalDisplay::RefreshMode refreshMode() { return HalDisplay::FAST_REFRESH; }
 
   // --- helpers ---------------------------------------------------------------
   // Measure visibleRows for the screen band, apply follow-on-build, clamp the
@@ -104,8 +93,7 @@ class UiListActivity : public Activity, protected UiAppHost {
   // --- shared state ----------------------------------------------------------
   // Where the last build put the rows, for drawScrollArrows().
   Rect listBand{};
-  // Selection + viewport (selected/top/visibleRows/followOnBuild). Access via
-  // activeNav() in shared code; `nav` is the single-list default storage.
+  // Selection + viewport (selected/top/visibleRows/followOnBuild).
   freeink::ui::ListNav nav;
   // List repeat rates, not the {500, 500} page-flick default: holding used to
   // jump a whole page per repeat, which is ~14 rows twice a second and reads as
@@ -113,6 +101,9 @@ class UiListActivity : public Activity, protected UiAppHost {
   ButtonNavigator buttonNavigator{ButtonNavigator::LIST_REPEAT_INTERVAL_MS, ButtonNavigator::LIST_REPEAT_START_MS};
 
  private:
+  // The panel still shows the previous screen on entry and when a child closes: that
+  // paint is a HALF so it does not stay ghosted under the rows.
+  bool cleanPaint_ = true;
   static void screenTrampoline(UiScreen& screen, void* user);
   static void rowActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
   // Two-tap confirmation armed a row instead of opening it: move the selection

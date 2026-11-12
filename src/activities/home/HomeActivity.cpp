@@ -21,11 +21,13 @@
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "StatsActivity.h"
+#include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/network/NearbyFileTransferActivity.h"
 #include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "components/icons/skull12.h"
 #include "fontIds.h"
+#include "network/opds/BookOrbitMissing.h"
 #include "util/BusyTick.h"
 #include "util/DeferredFavorite.h"
 
@@ -34,6 +36,7 @@ int HomeActivity::menuRowCount() const {
   if (hasOpdsServers) {
     count++;
   }
+  if (bookOrbitMissing > 0) count++;
   return count;
 }
 
@@ -54,7 +57,6 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
     // spends its seconds.
     busy::tick();
 
-    // Skip if file no longer exists
     if (RecentBooksStore::isMissing(book)) {
       continue;
     }
@@ -95,6 +97,8 @@ void HomeActivity::onEnter() {
   DeferredFavorite::reconcile();
 
   hasOpdsServers = OPDS_STORE.hasServers();
+  bookOrbitMissing = bookorbit_missing::findServer() ? bookorbit_missing::savedCount() : 0;
+  snprintf(bookOrbitMissingLabel, sizeof(bookOrbitMissingLabel), tr(STR_BOOKORBIT_MISSING), bookOrbitMissing);
   if (SETTINGS.homeBackAction == CrossPointSettings::HOME_BACK_SORTES) {
     BusyBanner banner(renderer, tr(STR_SORTES));
     sortesResult = sortes::findBook(sortesBook, esp_random);
@@ -108,9 +112,10 @@ void HomeActivity::onEnter() {
   lastVisibleBookIdx = 0;
 
   const auto base = static_cast<int>(recentBooks.size());
-  selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
+  selectorIndex = initialMenuItem == HomeMenuItem::NONE
+                      ? 0
+                      : base + menuItemToIndex(initialMenuItem, hasOpdsServers, bookOrbitMissing > 0);
 
-  // Trigger first update
   requestUpdate();
 }
 
@@ -125,7 +130,10 @@ void HomeActivity::loop() {
       return;
     }
     const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
-    switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
+    switch (indexToMenuItem(menuIndex, hasOpdsServers, bookOrbitMissing > 0)) {
+      case HomeMenuItem::BOOKORBIT_MISSING:
+        onBookOrbitMissingOpen();
+        break;
       case HomeMenuItem::FILE_BROWSER:
         onFileBrowserOpen();
         break;
@@ -245,27 +253,28 @@ void HomeActivity::render(RenderLock&&) {
     menuItems.insert(menuItems.begin() + 1, tr(STR_OPDS_BROWSER));
     menuIcons.insert(menuIcons.begin() + 1, Library);
   }
+  if (bookOrbitMissing > 0) {
+    menuItems.insert(menuItems.begin(), bookOrbitMissingLabel);
+    menuIcons.insert(menuIcons.begin(), Library);
+  }
 
   // drawButtonMenu lays its rows out from the top of this rect and ignores the height,
   // so any row the home screen does not draw leaves its gap at the BOTTOM — which is
   // what dropping Recent Books produced: a hole between Settings and the button hints.
   // Bottom-anchor the block instead, so the gap under the last row equals the gap
-  // between rows. std::max keeps the original top as a floor, so a long book list can
-  // still push the menu down but never up into itself.
+  // between rows. No floor under the top: a sixth row (the BookOrbit one) has to rise
+  // into the list's space, or Settings lands on the button hints.
   const int menuCount = static_cast<int>(menuItems.size());
-  const int menuTopFloor = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
   const int lastRowBottomWanted = pageHeight - metrics.buttonHintsHeight - metrics.menuSpacing;
   const int menuBlockHeight =
       metrics.verticalSpacing + (menuCount - 1) * (metrics.menuRowHeight + metrics.menuSpacing) + metrics.menuRowHeight;
-  const int menuTop = std::max(menuTopFloor, lastRowBottomWanted - menuBlockHeight);
+  const int menuTop = std::max(metrics.homeTopPadding, lastRowBottomWanted - menuBlockHeight);
 
   // The in-progress list gets every row between the header and the menu, rather than a
   // fixed tile height: with the menu bottom-anchored, whatever the menu does not use is
-  // reading material. homeCoverTileHeight stays the floor so a theme that wants a short
-  // list still gets one.
-  const Rect bookRect{
-      0, metrics.homeTopPadding, pageWidth,
-      std::max(metrics.homeCoverTileHeight, menuTop - metrics.homeTopPadding - metrics.verticalSpacing)};
+  // reading material.
+  const Rect bookRect{0, metrics.homeTopPadding, pageWidth,
+                      std::max(0, menuTop - metrics.homeTopPadding - metrics.verticalSpacing)};
   const int bookSelected = (selectorIndex < static_cast<int>(recentBooks.size())) ? selectorIndex : -1;
   const ListVisibility vis = GUI.drawRecentBookList(renderer, bookRect, recentBooks, bookSelected, scrollOffset);
   firstVisibleBookIdx = vis.firstVisible;
@@ -303,10 +312,8 @@ void HomeActivity::render(RenderLock&&) {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (cleanInitialRefresh) {
-    // Splashless wake with a custom sleep face and no saved frame: the panel still
-    // physically shows the sleep image, and a FAST_REFRESH would leave it under the menu.
-    // One HALF_REFRESH on this first paint clears it without a second refresh pass
-    // (upstream #3009). One-shot: later Home paints go back to the cheap path.
+    // The panel still shows the previous screen (a page, a sleep image, a list), and a
+    // FAST_REFRESH would leave it under the menu (upstream #3009). One-shot.
     cleanInitialRefresh = false;
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   } else {
@@ -331,3 +338,10 @@ void HomeActivity::onFileTransferOpen() {
 }
 
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
+
+void HomeActivity::onBookOrbitMissingOpen() {
+  const OpdsServer* server = bookorbit_missing::findServer();
+  if (!server) return;
+  activityManager.replaceActivity(std::make_unique<OpdsBookBrowserActivity>(
+      renderer, mappedInput, *server, bookorbit_missing::savedFeedUrl(), /*missingOnly=*/true));
+}

@@ -5,6 +5,7 @@
 #include <ObfuscationUtils.h>
 #include <SecureHttpClient.h>
 #include <TrustedPins.h>
+#include <esp_heap_caps.h>
 
 #include <string>
 
@@ -56,10 +57,13 @@ void applyAuthHeaders(freeink::SecureHttpClient& http) {
   http.addHeader("Authorization", basicAuthHeader(KOREADER_STORE.getUsername(), KOREADER_STORE.getPassword()));
 }
 
-// True when free heap is too low to risk a TLS handshake.
+// True when free heap is too low to risk a TLS handshake. MALLOC_CAP_DEFAULT, not
+// ESP.getFreeHeap(): that counts internal RAM only, while on PSRAM boards wolfSSL's
+// record buffers (over the 4 KB SPIRAM_MALLOC_ALWAYSINTERNAL cut) land in PSRAM.
+// On boards without PSRAM the two read the same.
 bool insufficientHeap() {
-  const uint32_t freeHeap = ESP.getFreeHeap();
-  const uint32_t maxAllocHeap = ESP.getMaxAllocHeap();
+  const uint32_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
+  const uint32_t maxAllocHeap = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
   if (freeHeap < MIN_FREE_FOR_TLS || maxAllocHeap < MIN_BLOCK_FOR_TLS) {
     LOG_ERR("KOSync", "Insufficient heap for TLS handshake: %u bytes free (need %u), %u max alloc (need %u)", freeHeap,
             MIN_FREE_FOR_TLS, maxAllocHeap, MIN_BLOCK_FOR_TLS);
@@ -168,10 +172,10 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
     return trusted_pins::noteIfRejected(http, url.c_str()) ? CERT_UNTRUSTED : NETWORK_ERROR;
   }
 
-  // 204 = success with no stored progress for this document (Spring-style
-  // KOSync implementations; the reference server answers 200 with an empty
-  // object instead). Map it to the same graceful no-remote-progress path as
-  // 404 rather than falling through to SERVER_ERROR — see upstream #2876.
+  // 204 (Spring-style KOSync servers) and a 200 empty object (the reference server,
+  // BookOrbit) both mean no stored progress for this document. Map them to the same
+  // graceful path as 404: an empty object read as a real record put the remote at 0%,
+  // so Auto Sync opened the manual choice instead of uploading. See upstream #2876.
   if (httpCode == 204) {
     http.end();
     return NOT_FOUND;
@@ -186,6 +190,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
       LOG_ERR("KOSync", "JSON parse failed: %s", error.c_str());
       return JSON_ERROR;
     }
+    if (doc["progress"].isNull() && doc["percentage"].isNull()) return NOT_FOUND;
 
     outProgress.document = documentHash;
     outProgress.progress = doc["progress"].as<std::string>();
@@ -234,7 +239,6 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   LOG_DBG("KOSync", "Updating progress: %s (heap: %u)", url.c_str(), (unsigned)ESP.getFreeHeap());
   if (insufficientHeap()) return LOW_MEMORY;
 
-  // Build JSON body
   JsonDocument doc;
   doc["document"] = progress.document;
   if (progress.metadata.has_value()) {

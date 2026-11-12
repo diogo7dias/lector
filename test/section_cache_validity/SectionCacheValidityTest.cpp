@@ -44,6 +44,7 @@ TEST(SectionCacheValidity, EveryLayoutFieldInvalidatesIndependently) {
   CHECK_FIELD(bookMargins, false);
   CHECK_FIELD(headingPageBreak, true);
   CHECK_FIELD(wordExpansion, 2);
+  CHECK_FIELD(fillPages, true);
 #undef CHECK_FIELD
 }
 

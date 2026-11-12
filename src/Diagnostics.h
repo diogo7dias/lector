@@ -84,6 +84,21 @@ void recordOtaFailure(const char* step, const char* error, const char* screenLin
 void recordTlsGate(const char* step, uint32_t freeHeap, uint32_t largestBlock, bool framebufferLent, uint32_t floorFree,
                    uint32_t floorBlock, bool allowed, uint32_t poolFree, uint32_t poolBlock);
 
+// A web file transfer that ended without the file: `via` is "ws" or "http",
+// `reason` a fixed phrase (never a file name), `received` of `expected` bytes
+// (kUnknownSize when not known), `rssi` the station's signal now. Adds battery
+// and heap. Marks pending; the web server flushes after its pump, never here,
+// because stop() runs under the render lock.
+void recordTransferFailure(const char* via, const char* reason, size_t received, size_t expected, int rssi);
+
+// The file transfer screen closing: `cause` a fixed phrase, `rssi` the
+// station's signal (0 in AP mode), `adc1`/`adc2` the raw button-ladder readings
+// at that moment (-1 without a ladder). Back fires on the press edge, so a
+// real press is still held here; an idle reading means a press nobody made.
+// Adds battery and heap. Flushes: the screen's exit reboots, and the RAM
+// buffer would not survive it.
+void recordTransferExit(const char* cause, int rssi, int adc1, int adc2);
+
 // RAM only. Signed heap delta includes allocator overhead and concurrent heap
 // activity; vector payload is separately calculated from capacity * element size.
 void recordHeapReclaim(const char* step, uint32_t before, uint32_t after, size_t capacity = 0, size_t elementSize = 0);

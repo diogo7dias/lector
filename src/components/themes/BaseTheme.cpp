@@ -297,62 +297,6 @@ hint_band::Band BaseTheme::hintBand(const GfxRenderer& renderer) const {
                          UITheme::getInstance().getMetrics().buttonHintsHeight, gpio.hasTouch(), gpio.deviceIsX3()};
 }
 
-void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
-  const int screenWidth = renderer.getScreenWidth();
-  constexpr int buttonWidth = BaseMetrics::values.sideButtonHintsWidth;  // Width on screen (height when rotated)
-  constexpr int buttonHeight = 80;                                       // Height on screen (width when rotated)
-  constexpr int buttonMargin = 4;
-
-  if (gpio.deviceIsX3()) {
-    // X3 layout: Up on left side, Down on right side, positioned higher
-    constexpr int x3ButtonY = 155;
-
-    if (topBtn != nullptr && topBtn[0] != '\0') {
-      const int leftX = buttonMargin;
-      renderer.drawRect(leftX, x3ButtonY, buttonWidth, buttonHeight, kLine, true);
-      const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, topBtn);
-      const int textHeight = renderer.getTextHeight(UI_10_FONT_ID);
-      const int textX = leftX + (buttonWidth - textHeight) / 2;
-      const int textY = x3ButtonY + (buttonHeight + textWidth) / 2;
-      renderer.drawTextRotated90CW(UI_10_FONT_ID, textX, textY, topBtn);
-    }
-
-    if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
-      const int rightX = screenWidth - buttonMargin - buttonWidth;
-      renderer.drawRect(rightX, x3ButtonY, buttonWidth, buttonHeight, kLine, true);
-      const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, bottomBtn);
-      const int textHeight = renderer.getTextHeight(UI_10_FONT_ID);
-      const int textX = rightX + (buttonWidth - textHeight) / 2;
-      const int textY = x3ButtonY + (buttonHeight + textWidth) / 2;
-      renderer.drawTextRotated90CW(UI_10_FONT_ID, textX, textY, bottomBtn);
-    }
-  } else {
-    // X4 layout: Both buttons stacked on right side
-    constexpr int topButtonY = 345;
-    const char* labels[] = {topBtn, bottomBtn};
-    const int x = screenWidth - buttonMargin - buttonWidth;
-
-    // Two stacked boxes; where both show, they share one line between them.
-    if (topBtn != nullptr && topBtn[0] != '\0') {
-      renderer.drawRect(x, topButtonY, buttonWidth, buttonHeight, kLine, true);
-    }
-    if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
-      renderer.drawRect(x, topButtonY + buttonHeight - kLine, buttonWidth, buttonHeight + kLine, kLine, true);
-    }
-
-    for (int i = 0; i < 2; i++) {
-      if (labels[i] != nullptr && labels[i][0] != '\0') {
-        const int y = topButtonY + i * buttonHeight;
-        const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[i]);
-        const int textHeight = renderer.getTextHeight(UI_10_FONT_ID);
-        const int textX = x + (buttonWidth - textHeight) / 2;
-        const int textY = y + (buttonHeight + textWidth) / 2;
-        renderer.drawTextRotated90CW(UI_10_FONT_ID, textX, textY, labels[i]);
-      }
-    }
-  }
-}
-
 bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, const bool armed) const {
   // One highlight: the row filled, its text knocked out white.
   if (armed) {
@@ -715,6 +659,10 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 }
 
 Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message) const {
+  // Painted over the screen rather than as part of it: whatever is underneath
+  // has to clean the band once this is gone (UITheme::consumeOverlayPainted).
+  // Both the popup and the busy banner come through here.
+  UITheme::noteOverlayPainted();
   const int w = renderer.getScreenWidth();
   const int lineHeight = renderer.getLineHeight(banner::FONT_ID);
   // The message wraps rather than being cut, and the band grows a line per line.
@@ -724,19 +672,17 @@ Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message
   const int h = banner::PAD * 2 + lineHeight * lineCount;
 
   // Physical top crop (X4 crops ~9px, X3 crops 0) via the renderer's oriented viewable
-  // inset: the black backing starts at row
-  // 0 so nothing white shows above the band, while the text and the rule sit below the
-  // crop where they cannot be clipped. Starting the backing at the theme's topPadding
-  // instead left a white gap along the top edge.
+  // inset: the backing starts at row 0 so no page shows above the band, while the text and the rule sit below the
+  // crop where they cannot be clipped.
   int viewTop = 0, viewRight = 0, viewBottom = 0, viewLeft = 0;
   renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &viewLeft);
   const int y = viewTop;
 
-  renderer.fillRect(0, 0, w, y + h, true);                             // black to the physical edge
-  renderer.fillRect(0, y + h - banner::RULE, w, banner::RULE, false);  // rule on the page-facing edge
+  renderer.fillRect(0, 0, w, y + h, false);                           // white to the physical edge
+  renderer.fillRect(0, y + h - banner::RULE, w, banner::RULE, true);  // rule on the page-facing edge
   int lineY = y + banner::PAD;
   for (const std::string& line : lines) {
-    renderer.drawCenteredText(banner::FONT_ID, lineY, line.c_str(), false, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(banner::FONT_ID, lineY, line.c_str(), true, EpdFontFamily::REGULAR);
     lineY += lineHeight;
   }
   return Rect{0, y, w, h};
@@ -935,15 +881,24 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
                           SETTINGS.clockTimeZone)) {
     set(statusbar::Clock, clkBuf);
   }
-  // Title (points at the caller's string; truncated at draw time if it overflows).
-  // Chapter source falls back to the book title on a chapterless book (TXT, flat
-  // XTC) so the title never silently vanishes there; hence the item is not
-  // chapter-only.
+  // Titles (pointing at the caller's strings). The title slot is the one that wraps and
+  // that neighbours reflow around; `pos` is the block with the two title anchors moved to
+  // where the slot and the separate one-line book title actually sit. See TitleSlot.
+  const StatusBarBlock::TitleSlot slot = sb.titleSlot(data.hasChapters);
+  StatusBarBlock pos = sb;
+  pos.titlePos = slot.anchor;
+  pos.bookTitlePos = slot.bookItem;
+  const char* stackedBook = slot.bookAbove && !data.bookTitle.empty() ? data.bookTitle.c_str() : nullptr;
   {
-    const bool chapterSrc = sb.titleSource == CrossPointSettings::SB_TITLE_CHAPTER;
-    const char* title = (chapterSrc && data.hasChapters) ? data.chapterTitle.c_str() : data.bookTitle.c_str();
+    const char* title = slot.chapter ? data.chapterTitle.c_str() : data.bookTitle.c_str();
+    if (title[0] == '\0' && stackedBook) std::swap(title, stackedBook);  // no chapter title: book alone
     if (title[0] != '\0') set(statusbar::Title, title);
+    // A stack is as wide as its wider line; the reflow and the clip both measure that.
+    if (stackedBook && text[statusbar::Title]) {
+      width[statusbar::Title] = std::max(width[statusbar::Title], renderer.getTextWidth(f, stackedBook));
+    }
   }
+  if (slot.bookItem != 0 && !data.bookTitle.empty()) set(statusbar::BookTitle, data.bookTitle.c_str());
   // Page in chapter ("3/40" or "8 left")
   if (sb.pageFormat == CrossPointSettings::SB_PAGE_LEFT) {
     const int remaining = data.chapterPages - data.chapterPage;
@@ -953,6 +908,10 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   }
   // Page item is NOT chapter-only: on a chapterless book (TXT, flat XTC) the
   // reader fills chapterPage/chapterPages with BOOK page/total so it still shows.
+  if (data.printedPage) {
+    const size_t used = strlen(pageBuf);
+    snprintf(pageBuf + used, sizeof(pageBuf) - used, " p.%s", data.printedPage);
+  }
   set(statusbar::Page, pageBuf);
   // Book % ("B:20%"), Chapter % ("C:60%"), Chapter number ("Ch 2/12")
   snprintf(bookPctBuf, sizeof(bookPctBuf), "B:%d%%", data.bookPercent);
@@ -1000,18 +959,24 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
 
   // Place the items in table order (STATUS_BAR_ITEMS), the same list the band heights
   // are reserved from.
+  // Clipped to its room after the reflow: the separate book title always, and a lone title
+  // when Truncate Title is on. drawAnchor only clips a centred title, so a corner one ran
+  // off the edge. A stack cuts its own lines where it draws them.
+  auto clipItem = [&](statusbar::Item item) {
+    return item == statusbar::BookTitle || (item == statusbar::Title && sb.titleTruncate != 0 && !stackedBook);
+  };
   auto push = [&](statusbar::Item item, uint8_t anchor, bool chapterOnly) {
     if (!text[item] || anchor == CrossPointSettings::SB_ANCHOR_OFF) return;
     if (chapterOnly && !data.hasChapters) return;  // chapter items hide on chapterless books
     const int idx = static_cast<int>(anchor) - 1;  // TL(1)..BR(6) -> 0..5
     if (idx < 0 || idx >= statusbar::kAnchorCount) return;
-    L.buckets[idx][L.counts[idx]++] = Seg{text[item], width[item], item == statusbar::Battery};
+    L.buckets[idx][L.counts[idx]++] = Seg{text[item], width[item], item == statusbar::Battery, clipItem(item)};
     if (item == statusbar::Title) {
       titleAnchorIdx = idx;  // reflow pivots on where the greedy title landed
       titleSegIdx = L.counts[idx] - 1;
     }
   };
-#define SB_PUSH(id, field, chapterOnly) push(statusbar::id, sb.field, chapterOnly);
+#define SB_PUSH(id, field, chapterOnly) push(statusbar::id, pos.field, chapterOnly);
   STATUS_BAR_ITEMS(SB_PUSH)
 #undef SB_PUSH
 
@@ -1020,10 +985,30 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   // The opposite band may only *receive* bumped items when it already reserves
   // height (has native text) — the band heights are computed pre-reflow from native
   // anchors, so a bump into an unreserved band would draw over the reading text.
-  if (titleAnchorIdx >= 0 && sb.titleTruncate == 0) {
+  const bool stacked = titleAnchorIdx >= 0 && stackedBook != nullptr;
+  if (titleAnchorIdx >= 0 && (sb.titleTruncate == 0 || stacked)) {
     const int destBase = (titleAnchorIdx < 3) ? 3 : 0;
     const bool destReserved = L.counts[destBase] > 0 || L.counts[destBase + 1] > 0 || L.counts[destBase + 2] > 0;
-    statusbar::reflowTitle(L, titleAnchorIdx, titleSegIdx, /*titleTruncate=*/false, bandWidth, sepW, destReserved);
+    statusbar::reflowTitle(L, titleAnchorIdx, titleSegIdx, sb.titleTruncate != 0, bandWidth, sepW, destReserved,
+                           stacked);
+  }
+
+  // Clip the titles marked above to the room their anchor has left, now that the reflow
+  // has settled where everything sits. One string per title: they live until the draw.
+  std::string clipped[2];
+  int clippedCount = 0;
+  for (int a = 0; a < statusbar::kAnchorCount; a++) {
+    for (int i = 0; i < L.counts[a]; i++) {
+      Seg& s = L.buckets[a][i];
+      if (!s.clip) continue;
+      const int over = statusbar::clusterWidth(L, a, sepW) - statusbar::clipRoom(L, a, bandWidth, sepW);
+      if (over <= 0) continue;
+      if (clippedCount == 2) continue;  // only the two titles are ever marked
+      std::string& out = clipped[clippedCount++];
+      out = renderer.truncatedText(f, s.text, s.width - over);
+      s.text = out.c_str();
+      s.width = renderer.getTextWidth(f, s.text);
+    }
   }
 
   auto clusterW = [&](int idx) { return statusbar::clusterWidth(L, idx, sepW); };
@@ -1069,14 +1054,28 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   };
 
   // A greedy (truncate-off) lone title wraps across as many lines as it needs and
-  // is drawn here, aligned to its anchor column (left/centre/right). The band's
-  // extra height was reserved by getStatusBarV2TitleLines at inset time. We empty
-  // its bucket so the generic pass below skips it. A truncate-ON title (or one
-  // sharing its anchor) falls through to drawAnchor's single-line ellipsis clip.
-  if (titleAnchorIdx >= 0 && sb.titleTruncate == 0 && L.counts[titleAnchorIdx] == 1) {
+  // is drawn here, aligned to its anchor column (left/centre/right). A stack (book title
+  // above chapter title) is drawn here too, each title wrapped, or cut to one line when
+  // Truncate Title is on. The band's extra height was reserved by
+  // getStatusBarV2TitleLines at inset time. We empty its bucket so the generic pass
+  // below skips it. A truncate-ON lone title (or a greedy one sharing its anchor) falls
+  // through to drawAnchor's single-line ellipsis clip.
+  if (titleAnchorIdx >= 0 && L.counts[titleAnchorIdx] == 1 && (sb.titleTruncate == 0 || stacked)) {
     const int col = titleAnchorIdx % 3;
     const bool top = titleAnchorIdx < 3;
-    const auto lines = renderer.wrappedText(f, L.buckets[titleAnchorIdx][0].text, bandWidth, 6);
+    std::vector<std::string> lines;
+    lines.reserve(2 * UITheme::kMaxStatusBarTitleLines);
+    auto addTitle = [&](const char* t) {
+      if (sb.titleTruncate != 0) {
+        lines.push_back(renderer.truncatedText(f, t, statusbar::clipRoom(L, titleAnchorIdx, bandWidth, sepW)));
+        return;
+      }
+      for (auto& l : renderer.wrappedText(f, t, bandWidth, UITheme::kMaxStatusBarTitleLines)) {
+        lines.push_back(std::move(l));
+      }
+    };
+    if (stacked) addTitle(stackedBook);
+    addTitle(L.buckets[titleAnchorIdx][0].text);
     const int n = static_cast<int>(lines.size());
     for (int i = 0; i < n; i++) {
       const int lw = renderer.getTextWidth(f, lines[i].c_str());
@@ -1197,6 +1196,8 @@ void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int 
 
 void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
                                 int selectedIndex, bool leftAlign) const {
+  // An overlay like the banner strip: the row it covered is owed a clean paint.
+  UITheme::noteOverlayPainted();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   // One size and one weight for the whole popup, the same the menu rows behind it use.
@@ -1204,7 +1205,7 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   constexpr EpdFontFamily::Style optionStyle = option_popup::FONT_STYLE;
 
   // Shared with OptionPopup's hit-test layout, so a tap always resolves to the row it landed on.
-  const auto geometry = option_popup::compute(renderer, metrics, title, options);
+  const auto geometry = option_popup::compute(renderer, metrics, title, options, selectedIndex);
   const int innerPadding = geometry.innerPadding;
   const int selectionHPadding = metrics.optionPopupSelectionHPadding;
   const int lineHeight = geometry.lineHeight;
@@ -1232,6 +1233,12 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   }
 
   int y = dialogY + innerPadding;
+  if (geometry.page.total > 1) {
+    char pageText[12];
+    snprintf(pageText, sizeof(pageText), "%d/%d", geometry.page.number, geometry.page.total);
+    renderer.drawText(optionFontId, dialogX + dialogW - innerPadding - renderer.getTextWidth(optionFontId, pageText), y,
+                      pageText, true, optionStyle);
+  }
   for (const std::string& line : geometry.titleLines) {
     renderer.drawCenteredText(optionFontId, y, line.c_str(), true, optionStyle);
     y += lineHeight;
@@ -1249,6 +1256,7 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   for (int i = 0; i < optionCount; i++) {
     const int itemY = geometry.rowTop[i];
     const int rowHeight = geometry.rowHeight[i];
+    if (rowHeight == 0) continue;  // on another page
     const bool selected = (i == selectedIndex);
     const auto& lines = geometry.optionLines[i];
 
