@@ -1043,8 +1043,11 @@ void loop() {
     // the detectors and drop whatever gesture was in flight.
     static uint8_t appliedBindings[button_router::KEY_COUNT][CrossPointSettings::BOUND_GESTURE_COUNT] = {};
     static bool bindingsApplied = false;
+    static bool appliedSidesSwapped = false;
 
     const bool inBook = activityManager.isBookContext();
+    // The layout swap only reaches the reader's PageBack/PageForward; lists page by key.
+    const bool sidesSwapped = inBook && SETTINGS.sideButtonLayout == CrossPointSettings::NEXT_PREV;
     uint8_t wanted[button_router::KEY_COUNT][CrossPointSettings::BOUND_GESTURE_COUNT] = {};
     for (uint8_t key = 0; key < button_router::KEY_COUNT; ++key) {
       for (uint8_t gesture = 0; gesture < CrossPointSettings::BOUND_GESTURE_COUNT; ++gesture) {
@@ -1052,19 +1055,17 @@ void loop() {
         wanted[key][gesture] = binding != nullptr ? *binding : CrossPointSettings::LP_MENU_DISABLED;
       }
     }
-    if (!bindingsApplied || memcmp(wanted, appliedBindings, sizeof(wanted)) != 0) {
+    if (!bindingsApplied || sidesSwapped != appliedSidesSwapped ||
+        memcmp(wanted, appliedBindings, sizeof(wanted)) != 0) {
       for (uint8_t key = 0; key < button_router::KEY_COUNT; ++key) {
-        // The Home key goes home; the two side keys page. A key still set to what it
-        // already did is left alone entirely (Router::intercepts).
-        const auto& native = key == CrossPointSettings::BOUND_BTN_HOME    ? button_router::NATIVE_HOME_KEY
-                             : key == CrossPointSettings::BOUND_BTN_POWER ? button_router::NATIVE_POWER_KEY
-                                                                          : button_router::NATIVE_SIDE_KEY;
+        // A key still set to what it already did is left alone entirely (Router::intercepts).
         bindingRouter.configure(key,
                                 button_router::Binding{wanted[key][CrossPointSettings::BOUND_SINGLE],
                                                        wanted[key][CrossPointSettings::BOUND_DOUBLE],
                                                        wanted[key][CrossPointSettings::BOUND_HOLD]},
-                                native);
+                                button_router::nativeFor(key, sidesSwapped));
       }
+      appliedSidesSwapped = sidesSwapped;
       // Power holds at the user's own sleepHoldMs, not the shared 500 ms: that is the
       // threshold its hold has always used, and leaving it on Sleep must not change it.
       bindingRouter.setHoldMs(CrossPointSettings::BOUND_BTN_POWER, SETTINGS.getSleepHoldMs());
@@ -1072,8 +1073,7 @@ void loop() {
       bindingsApplied = true;
     }
 
-    // Two actions ActivityManager cannot run: only this file can put the device down, and
-    // only this file owns the renderer a forced refresh paints through.
+    // Sleep goes straight down from here: this file owns the device.
     const auto runBoundFunction = [&](const uint8_t function) {
       if (function == CrossPointSettings::LP_MENU_QUICK_LOCK) {
         activityManager.toggleQuickLock();
@@ -1082,14 +1082,6 @@ void loop() {
       if (activityManager.isQuickLocked()) return;
       if (function == CrossPointSettings::LP_MENU_SLEEP) {
         enterDeepSleep();
-      }
-      if (function == CrossPointSettings::LP_MENU_FORCE_REFRESH) {
-        LOG_DBG("MAIN", "Manual screen refresh triggered");
-        if (!activityManager.handleForcedRefresh()) {
-          RenderLock lock;
-          renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-        }
-        return;
       }
       activityManager.runBoundAction(function);
     };

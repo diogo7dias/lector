@@ -144,6 +144,7 @@ void TxtReaderActivity::pageTurn(const bool forward) {
     journal.turn(millis(), false);
     pageTimer.onTurn(millis(), false);
     currentPage--;
+    journal.finished = false;  // left the last page again: not finished after all
     requestUpdate();
     return;
   }

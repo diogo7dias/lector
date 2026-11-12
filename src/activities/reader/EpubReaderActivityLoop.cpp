@@ -100,8 +100,9 @@ void EpubReaderActivity::loop() {
   // /Read/ in onExit(); paging back off the end screen disarms it (book not actually
   // finished). If removeReadBooksFromRecents also fired, RecentBooksStore::updatePath in the
   // move path becomes a safe no-op since the entry was already removed.
-  // Reached by turning pages this sitting, not reopened on the end screen.
-  if (atEndOfBook && journal.pages > 0) journal.finished = true;
+  // Reached by turning pages this sitting, not reopened on the end screen; paging back
+  // off it un-finishes the book, as it disarms the move.
+  journal.finished = atEndOfBook && journal.pages > 0;
   if (atEndOfBook) {
     pendingReadFolderMove = !sortesMode && SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath());
   } else {

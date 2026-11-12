@@ -14,10 +14,12 @@ using bound_action::LP_MENU_BOOKMARK;
 using bound_action::LP_MENU_DISABLED;
 using bound_action::LP_MENU_LIGHT_PANEL;
 using bound_action::LP_MENU_PAGE_NEXT;
+using bound_action::LP_MENU_PAGE_PREV;
 using bound_action::LP_MENU_SLEEP;
 using button_router::Router;
 
 constexpr int LEFT = 0;
+constexpr int RIGHT = 1;
 constexpr int HOME = 2;
 constexpr int POWER = 3;
 
@@ -32,18 +34,18 @@ button_router::Fired click(Router& router, const int key, uint32_t& now) {
 
 TEST(ButtonRouter, ASingleClickNamesTheActionBoundToIt) {
   Router router;
-  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_DISABLED, LP_MENU_DISABLED});
   uint32_t now = 1000;
   const auto fired = click(router, LEFT, now);
   EXPECT_TRUE(fired.valid);
-  EXPECT_EQ(fired.function, LP_MENU_PAGE_NEXT);
+  EXPECT_EQ(fired.function, LP_MENU_PAGE_PREV);
 }
 
 TEST(ButtonRouter, WithNothingOnTheDoubleTheSingleFiresOnRelease) {
   // The whole point of arming per binding: a key that carries no double must not make
   // the page turn wait for a second press that is never coming.
   Router router;
-  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_DISABLED, LP_MENU_DISABLED});
   uint32_t now = 1000;
   EXPECT_TRUE(click(router, LEFT, now).valid);
   EXPECT_FALSE(router.busy(LEFT));
@@ -51,7 +53,7 @@ TEST(ButtonRouter, WithNothingOnTheDoubleTheSingleFiresOnRelease) {
 
 TEST(ButtonRouter, WithADoubleBoundTheSingleWaitsForTheWindowToClose) {
   Router router;
-  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_LIGHT_PANEL, LP_MENU_DISABLED});
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_LIGHT_PANEL, LP_MENU_DISABLED});
   uint32_t now = 1000;
   EXPECT_FALSE(click(router, LEFT, now).valid);
   EXPECT_TRUE(router.busy(LEFT));
@@ -59,13 +61,13 @@ TEST(ButtonRouter, WithADoubleBoundTheSingleWaitsForTheWindowToClose) {
   now += button_gestures::DOUBLE_WINDOW_MS;
   const auto fired = router.tick(LEFT, now);
   EXPECT_TRUE(fired.valid);
-  EXPECT_EQ(fired.function, LP_MENU_PAGE_NEXT);
+  EXPECT_EQ(fired.function, LP_MENU_PAGE_PREV);
   EXPECT_FALSE(router.busy(LEFT));
 }
 
 TEST(ButtonRouter, ASecondPressInsideTheWindowNamesTheDoubleAction) {
   Router router;
-  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_LIGHT_PANEL, LP_MENU_DISABLED});
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_LIGHT_PANEL, LP_MENU_DISABLED});
   uint32_t now = 1000;
   click(router, LEFT, now);
   now += 100;
@@ -76,7 +78,7 @@ TEST(ButtonRouter, ASecondPressInsideTheWindowNamesTheDoubleAction) {
 
 TEST(ButtonRouter, AHoldFiresWhileTheKeyIsStillDown) {
   Router router;
-  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_SLEEP});
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_DISABLED, LP_MENU_SLEEP});
   uint32_t now = 1000;
   router.onPress(LEFT, now);
   now += button_gestures::HOLD_MS;
@@ -89,7 +91,7 @@ TEST(ButtonRouter, AKeyThatReportsItsOwnLongPressNamesTheHoldDirectly) {
   // The capacitive Home key reports a completed long press rather than a held edge, so
   // its hold cannot be timed here.
   Router router;
-  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_SLEEP});
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_DISABLED, LP_MENU_SLEEP});
   const auto fired = router.fireHold(LEFT);
   EXPECT_TRUE(fired.valid);
   EXPECT_EQ(fired.function, LP_MENU_SLEEP);
@@ -98,7 +100,7 @@ TEST(ButtonRouter, AKeyThatReportsItsOwnLongPressNamesTheHoldDirectly) {
 TEST(ButtonRouter, FiringTheHoldDropsAGestureStillInFlight) {
   // The key may report a tap alongside its long press; that tap must not fire as well.
   Router router;
-  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_LIGHT_PANEL, LP_MENU_SLEEP});
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_LIGHT_PANEL, LP_MENU_SLEEP});
   uint32_t now = 1000;
   click(router, LEFT, now);
   ASSERT_TRUE(router.busy(LEFT));
@@ -110,7 +112,7 @@ TEST(ButtonRouter, FiringTheHoldDropsAGestureStillInFlight) {
 
 TEST(ButtonRouter, FiringTheHoldOnAKeyWithNoHoldBoundDoesNothing) {
   Router router;
-  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_DISABLED, LP_MENU_DISABLED});
   EXPECT_FALSE(router.fireHold(LEFT).valid);
 }
 
@@ -127,11 +129,36 @@ TEST(ButtonRouter, PagingActionsAskForTheRawEdgeInsteadOfBeingDispatched) {
   // Prev/Next page on a side key IS what the key already does; replaying the edge lets
   // the reader and every list keep their own paging code, including its repeat.
   Router router;
-  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_DISABLED, LP_MENU_DISABLED});
   uint32_t now = 1000;
   const auto fired = click(router, LEFT, now);
   EXPECT_TRUE(fired.valid);
   EXPECT_TRUE(fired.replayRawEdge);
+}
+
+TEST(ButtonRouter, TheOtherSideKeysDirectionIsDispatchedRatherThanReplayed) {
+  // Reported from a device: Page forward bound to the left key paged back. Each side key
+  // natively pages ONE way, so the other way is a remap: replaying the left key's raw edge
+  // would turn the page in the direction the user just asked to move away from.
+  Router router;
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  router.configure(RIGHT, {LP_MENU_PAGE_PREV, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  EXPECT_TRUE(router.intercepts(LEFT));
+  EXPECT_TRUE(router.intercepts(RIGHT));
+  uint32_t now = 1000;
+  const auto left = click(router, LEFT, now);
+  EXPECT_TRUE(left.valid);
+  EXPECT_EQ(left.function, LP_MENU_PAGE_NEXT);
+  EXPECT_FALSE(left.replayRawEdge);
+  const auto right = click(router, RIGHT, now);
+  EXPECT_TRUE(right.valid);
+  EXPECT_FALSE(right.replayRawEdge);
+}
+
+TEST(ButtonRouter, TheRightSideKeyLeavesPageNextAlone) {
+  Router router;
+  router.configure(RIGHT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  EXPECT_FALSE(router.intercepts(RIGHT));
 }
 
 TEST(ButtonRouter, EveryOtherActionIsDispatchedRatherThanReplayed) {
@@ -147,15 +174,15 @@ TEST(ButtonRouter, AKeyWithOnlyItsDefaultSingleNeedsNoGating) {
   // Nothing bound beyond the paging the key already does: the router must not suppress
   // a single edge, or holding the key to page-repeat through a list would stop working.
   Router router;
-  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_DISABLED, LP_MENU_DISABLED});
   EXPECT_FALSE(router.intercepts(LEFT));
 }
 
 TEST(ButtonRouter, AKeyWithADoubleOrAHoldIsIntercepted) {
   Router router;
-  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_LIGHT_PANEL, LP_MENU_DISABLED});
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_LIGHT_PANEL, LP_MENU_DISABLED});
   EXPECT_TRUE(router.intercepts(LEFT));
-  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_SLEEP});
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_DISABLED, LP_MENU_SLEEP});
   EXPECT_TRUE(router.intercepts(LEFT));
 }
 
@@ -169,9 +196,9 @@ TEST(ButtonRouter, AKeyWhoseSingleWasRemappedIsInterceptedToo) {
 
 TEST(ButtonRouter, OnlyAHoldBindingCostsTheKeyItsRepeat) {
   Router router;
-  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_LIGHT_PANEL, LP_MENU_DISABLED});
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_LIGHT_PANEL, LP_MENU_DISABLED});
   EXPECT_FALSE(router.suppressesHold(LEFT));
-  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_SLEEP});
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_DISABLED, LP_MENU_SLEEP});
   EXPECT_TRUE(router.suppressesHold(LEFT));
 }
 
@@ -179,11 +206,11 @@ TEST(ButtonRouter, ReconfiguringClearsAPendingGesture) {
   // Leaving a book re-arms every key. A click still waiting for its window must not
   // fire into the screen that replaced the one it was pressed on.
   Router router;
-  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_LIGHT_PANEL, LP_MENU_DISABLED});
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_LIGHT_PANEL, LP_MENU_DISABLED});
   uint32_t now = 1000;
   click(router, LEFT, now);
   ASSERT_TRUE(router.busy(LEFT));
-  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_DISABLED, LP_MENU_DISABLED});
   EXPECT_FALSE(router.busy(LEFT));
   now += button_gestures::DOUBLE_WINDOW_MS;
   EXPECT_FALSE(router.tick(LEFT, now).valid);
@@ -246,7 +273,7 @@ TEST(ButtonRouter, PagingOnASideKeyHoldIsStillReplayed) {
   // The side keys repeat while held, so a hold bound back to paging keeps the firmware's
   // own repeat rather than firing one page at half a second.
   Router router;
-  router.configure(LEFT, {LP_MENU_DISABLED, LP_MENU_DISABLED, LP_MENU_PAGE_NEXT});
+  router.configure(LEFT, {LP_MENU_DISABLED, LP_MENU_DISABLED, LP_MENU_PAGE_PREV});
   uint32_t now = 1000;
   router.onPress(LEFT, now);
   now += button_gestures::HOLD_MS;
@@ -276,7 +303,7 @@ TEST(ButtonRouter, TheHoldFiresWithAPagePrevSingleAndABoundDouble) {
   router.configure(0,
                    button_router::Binding{bound_action::LP_MENU_PAGE_PREV, bound_action::LP_MENU_FORCE_REFRESH,
                                           bound_action::LP_MENU_LIGHT_PANEL},
-                   button_router::NATIVE_SIDE_KEY);
+                   button_router::NATIVE_LEFT_KEY);
   EXPECT_TRUE(router.intercepts(0));
   EXPECT_TRUE(router.suppressesHold(0));
 
@@ -286,4 +313,14 @@ TEST(ButtonRouter, TheHoldFiresWithAPagePrevSingleAndABoundDouble) {
   ASSERT_TRUE(held.valid);
   EXPECT_EQ(held.function, bound_action::LP_MENU_LIGHT_PANEL);
   EXPECT_FALSE(held.replayRawEdge);
+}
+
+TEST(ButtonRouter, SwappedSideLayoutTradesTheSideKeysNatives) {
+  // Side button layout Next/Prev: in a book the left key's raw edge pages forward, so
+  // forward is what it already does and back is the remap.
+  Router router;
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED}, button_router::nativeFor(LEFT, true));
+  EXPECT_FALSE(router.intercepts(LEFT));
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_DISABLED, LP_MENU_DISABLED}, button_router::nativeFor(LEFT, true));
+  EXPECT_TRUE(router.intercepts(LEFT));
 }

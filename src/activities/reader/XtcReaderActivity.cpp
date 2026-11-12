@@ -156,6 +156,7 @@ void XtcReaderActivity::loop() {
 
 void XtcReaderActivity::returnToLastPage() {
   currentPage = xtc->getPageCount() > 0 ? xtc->getPageCount() - 1 : 0;
+  journal.finished = false;  // paged back off the end screen: not finished after all
   requestUpdate();
 }
 
@@ -180,22 +181,16 @@ void XtcReaderActivity::pageTurn(const bool forward) {
   }
 
   // Page turn buttons carry nothing but the page turn now, so every turn is one page.
-  constexpr int skipAmount = 1;
-  journal.turn(millis(), nextTriggered);
-
+  // The end screen returned above; a back press on page 0 turns nothing and counts nothing.
   if (prevTriggered) {
-    if (currentPage >= static_cast<uint32_t>(skipAmount)) {
-      currentPage -= skipAmount;
-    } else {
-      currentPage = 0;
-    }
+    if (currentPage == 0) return;
+    journal.turn(millis(), false);
+    currentPage--;
     requestUpdate();
   } else if (nextTriggered) {
-    currentPage += skipAmount;
-    if (currentPage >= xtc->getPageCount()) {
-      currentPage = xtc->getPageCount();  // Allow showing "End of book"
-      journal.finished = true;
-    }
+    journal.turn(millis(), true);
+    currentPage++;  // up to getPageCount(), which shows "End of book"
+    if (currentPage >= xtc->getPageCount()) journal.finished = true;
     requestUpdate();
   }
 }

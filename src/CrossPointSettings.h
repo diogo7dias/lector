@@ -856,10 +856,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // short press to Power instead of Confirm.
   bool shortPressSleeps() const { return btnUiPowerSingle == LP_MENU_SLEEP || btnBookPowerSingle == LP_MENU_SLEEP; }
 
-  // True when Sleep is bound to any gesture, on any button, in either context. False here
-  // means the device has no manual route to sleep at all, and getSleepTimeoutMs() caps the
-  // auto-sleep timeout in response; see util/SleepTimeoutGuard.h.
-  bool anySleepBinding() const { return anyButtonBindingIs(LP_MENU_SLEEP); }
+  // True when Sleep is bound to any gesture, on any button, in either context, or to the
+  // reader's Confirm long-press or menu hold. False here means the device has no manual
+  // route to sleep at all, and getSleepTimeoutMs() caps the auto-sleep timeout in response;
+  // see util/SleepTimeoutGuard.h.
+  bool anySleepBinding() const {
+    return anyButtonBindingIs(LP_MENU_SLEEP) || longPressMenuFunction == LP_MENU_SLEEP ||
+           menuHoldFunction == LP_MENU_SLEEP;
+  }
   // Pop-up membership. The mask layout has exactly one owner: these three.
   bool isPopupItem(const uint8_t function) const { return (popupItems >> function) & 1u; }
   uint8_t popupItemCount() const {
