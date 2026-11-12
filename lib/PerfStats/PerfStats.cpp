@@ -34,6 +34,17 @@ uint32_t wakeCount = 0;
 bool wakeFinished = false;
 
 uint32_t promoted = 0;
+
+struct LastRefresh {
+  uint8_t requested;
+  uint8_t actual;
+  uint16_t thinkMs;
+  uint32_t totalUs;
+  uint32_t wireUs;
+  uint32_t waveUs;
+};
+LastRefresh last{};
+bool haveLast = false;
 uint32_t renderPasses = 0;
 uint32_t updateRequests = 0;
 
@@ -69,7 +80,9 @@ uint16_t takeThinkMs(const uint32_t nowMs) {
 }
 
 void noteRefresh(const uint8_t requestedMode, const uint8_t actualMode, const uint32_t totalUs, const uint32_t wireUs,
-                 const uint32_t waveUs) {
+                 const uint32_t waveUs, const uint16_t thinkMs) {
+  last = {requestedMode, actualMode, thinkMs, totalUs, wireUs, waveUs};
+  haveLast = true;
   if (!wakeFinished) {
     if (wakeCount < 8) {
       const uint32_t ms = totalUs / 1000;
@@ -126,6 +139,30 @@ size_t formatSummary(char (*const lines)[64], const size_t maxLines) {
     used++;
   }
   return used;
+}
+
+void formatLastLine(char* const out, const size_t outLen) {
+  if (outLen == 0) return;
+  out[0] = '\0';
+  if (!haveLast) return;
+  char mode[12];
+  if (last.requested == last.actual) {
+    snprintf(mode, sizeof(mode), "%s", modeName(last.actual));
+  } else {
+    snprintf(mode, sizeof(mode), "%s>%s", modeName(last.requested), modeName(last.actual));
+  }
+  char think[8] = "-";
+  if (last.thinkMs != kNoThink) snprintf(think, sizeof(think), "%u", static_cast<unsigned>(last.thinkMs));
+  snprintf(out, outLen, "%s t%s p%lu w%lu v%lu", mode, think, static_cast<unsigned long>(last.totalUs / 1000),
+           static_cast<unsigned long>(last.wireUs / 1000), static_cast<unsigned long>(last.waveUs / 1000));
+}
+
+bool lastRefresh(uint8_t& actualMode, uint32_t& totalUs, uint32_t& wireUs, uint32_t& waveUs) {
+  actualMode = last.actual;
+  totalUs = last.totalUs;
+  wireUs = last.wireUs;
+  waveUs = last.waveUs;
+  return haveLast;
 }
 
 uint32_t promotedCount() { return promoted; }

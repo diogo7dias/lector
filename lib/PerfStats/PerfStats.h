@@ -48,7 +48,16 @@ uint16_t takeThinkMs(uint32_t nowMs);
 // Everything else a refresh produces (the async split, think time, the ink score and the
 // anti-ghost debt) is the CSV's to keep: see PerfLog::record, which is called alongside
 // this from the same place.
-void noteRefresh(uint8_t requestedMode, uint8_t actualMode, uint32_t totalUs, uint32_t wireUs, uint32_t waveUs);
+void noteRefresh(uint8_t requestedMode, uint8_t actualMode, uint32_t totalUs, uint32_t wireUs, uint32_t waveUs,
+                 uint16_t thinkMs);
+
+// The previous refresh as one short line for the Speed Kit overlay, e.g.
+// "FAST t90 p520 w30 v480": think, panel call, wire and waveform in ms ("t-" when no
+// press caused it, "FAST>HALF" when the anti-ghost policy promoted it). Empty before the
+// first refresh.
+void formatLastLine(char* out, size_t outLen);
+// The same refresh as numbers, for the Speed Test. False before the first refresh.
+bool lastRefresh(uint8_t& actualMode, uint32_t& totalUs, uint32_t& wireUs, uint32_t& waveUs);
 
 // First eight wake submissions, captured until the destination render completes.
 // These are HAL call times, including internal waveforms and async overlap.

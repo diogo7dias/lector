@@ -267,6 +267,9 @@ static void setupBuiltinFonts() {
   fontCacheManager.setFontDecompressor(&fontDecompressor);
   renderer.setFontCacheManager(&fontCacheManager);
   bindBuiltinFonts(renderer);
+#ifdef LECTOR_SPEED_KIT
+  renderer.setTimingOverlay(UI_10_FONT_ID);  // Speed Kit: every frame shows the previous refresh's cost
+#endif
 }
 
 void setupDisplayAndFonts(const bool seamless, const HalGPIO::WakeupReason wakeupReason) {
@@ -973,7 +976,8 @@ void loop() {
   // The press, not the release, and not "any activity": this is the instant the reader's
   // thumb acted, and the refresh that answers it closes the measurement. A release-driven
   // action (a short power click) still lands within the same press-to-paint window.
-  if (gpio.wasAnyPressed()) PerfStats::noteInput(millis());
+  // A tap or swipe acts when the finger lifts, so for touch the lift is that instant.
+  if (gpio.wasAnyPressed() || gpio.wasTouchReleased()) PerfStats::noteInput(millis());
 
   // Let wake continue as soon as its hold has been verified. The release can
   // arrive after setup, so consume that one input frame rather than making it

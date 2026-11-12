@@ -54,10 +54,10 @@ TEST(WakeFacePolicy, FirstPageTurnCleansAfterADriveAllWakeExceptOnTheX3) {
 TEST(WakeFacePolicy, WakePanelCaptureStopsAtReadableAndBoundsOutput) {
   // B/W base and grayscale composite are two submissions, regardless of their
   // matching mode labels. Later page turns must not change the wake record.
-  PerfStats::noteRefresh(2, 2, 617000, 0, 0);
-  PerfStats::noteRefresh(2, 2, 500000, 0, 0);
+  PerfStats::noteRefresh(2, 2, 617000, 0, 0, PerfStats::kNoThink);
+  PerfStats::noteRefresh(2, 2, 500000, 0, 0, PerfStats::kNoThink);
   PerfStats::finishWakePanels();
-  PerfStats::noteRefresh(1, 1, 1800000, 0, 0);
+  PerfStats::noteRefresh(1, 1, 1800000, 0, 0, PerfStats::kNoThink);
   EXPECT_EQ(PerfStats::wakePanelCount(), 2u);
   char out[48];
   PerfStats::formatWakePanels(out, sizeof(out));
@@ -66,4 +66,14 @@ TEST(WakeFacePolicy, WakePanelCaptureStopsAtReadableAndBoundsOutput) {
   PerfStats::formatWakePanels(tiny, sizeof(tiny));
   EXPECT_EQ(tiny[1], '\0');
   PerfStats::formatWakePanels(nullptr, 0);
+}
+
+TEST(WakeFacePolicy, SpeedLineNamesPromotionAndMissingPress) {
+  PerfStats::noteRefresh(2, 1, 1912000, 31000, 1850000, 85);
+  char line[48];
+  PerfStats::formatLastLine(line, sizeof(line));
+  EXPECT_STREQ(line, "FAST>HALF t85 p1912 w31 v1850");
+  PerfStats::noteRefresh(2, 2, 520000, 30000, 480000, PerfStats::kNoThink);
+  PerfStats::formatLastLine(line, sizeof(line));
+  EXPECT_STREQ(line, "FAST t- p520 w30 v480");
 }

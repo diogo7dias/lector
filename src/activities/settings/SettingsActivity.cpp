@@ -31,6 +31,7 @@
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
 #include "SilentRestart.h"
+#include "SpeedTestActivity.h"
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
 #include "WifiCredentialStore.h"
@@ -119,9 +120,17 @@ namespace {
 // Fast Page Turns trial.
 constexpr int kFastPageTurnsTestCell = 5;
 #if FREEINK_DEVICE_X4PRO
-constexpr int kCategoryCount = 6;
+constexpr int kBaseCellCount = 6;
 #else
-constexpr int kCategoryCount = 5;
+constexpr int kBaseCellCount = 5;
+#endif
+// Speed Kit builds add the Speed Test as the last cell.
+#ifdef LECTOR_SPEED_KIT
+constexpr int kSpeedTestCell = kBaseCellCount;
+constexpr int kCategoryCount = kBaseCellCount + 1;
+#else
+constexpr int kSpeedTestCell = -1;
+constexpr int kCategoryCount = kBaseCellCount;
 #endif
 }  // namespace
 
@@ -166,6 +175,7 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) const
 }
 
 StrId SettingsActivity::categoryName(const int index) const {
+  if (index == kSpeedTestCell) return StrId::STR_SPEED_TEST;
   switch (index) {
     case kFastPageTurnsTestCell:
       return StrId::STR_FAST_PAGE_TURNS;
@@ -227,7 +237,7 @@ const char* SettingsActivity::cellName(const int index) const {
 
 const char* SettingsActivity::cellValue(const int index) const {
   if (mode == Mode::Hub) {
-    if (index == 4) return nullptr;
+    if (index == 4 || index == kSpeedTestCell) return nullptr;
     if (index < 0 || index >= kCategoryCount) return nullptr;
     if (index == kFastPageTurnsTestCell) return SETTINGS.fastPageTurns ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     // Settings only: the group headings applyGroups inserts are rows too.
@@ -485,6 +495,13 @@ void SettingsActivity::activateCell(const int index) {
       activityManager.goToFileTransfer();
       return;
     }
+#ifdef LECTOR_SPEED_KIT
+    if (index == kSpeedTestCell) {
+      startActivityForResult(std::make_unique<SpeedTestActivity>(renderer, mappedInput),
+                             [this](const ActivityResult&) { requestUpdate(); });
+      return;
+    }
+#endif
 #if FREEINK_DEVICE_X4PRO
     if (index == kFastPageTurnsTestCell) {
       const uint8_t before = SETTINGS.fastPageTurns;
