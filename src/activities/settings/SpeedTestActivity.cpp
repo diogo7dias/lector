@@ -8,6 +8,9 @@
 #include <cstdio>
 
 #include "fontIds.h"
+#ifdef FREEINK_UC8279_X4_CONFIG
+#include "platform/LectorUc8279Config.h"
+#endif
 
 extern HalDisplay display;
 
@@ -29,21 +32,44 @@ void SpeedTestActivity::onEnter() {
 void SpeedTestActivity::loop() {
   int x = 0;
   int y = 0;
-  if (done && (mappedInput.wasAnyPressed() || mappedInput.wasScreenTapped(x, y))) finish();
+  if (phase == Phase::Bench) return;
+  const bool back = mappedInput.wasPressed(MappedInputManager::Button::Back);
+  if (!back && !mappedInput.wasAnyPressed() && !mappedInput.wasScreenTapped(x, y)) return;
+  if (back || phase == Phase::Table || (phase == Phase::Results && !canSweep())) {
+    finish();
+    return;
+  }
+  if (phase == Phase::Results) {
+    phase = Phase::Sweep;
+  } else if (++step == kSweepSteps) {
+    phase = Phase::Table;
+  }
+  requestUpdate();
 }
 
 void SpeedTestActivity::render(RenderLock&&) {
-  if (!done) {
-    runBench();
-    done = true;
+  switch (phase) {
+    case Phase::Bench:
+      runBench();
+      phase = Phase::Results;
+      drawResults();
+      break;
+    case Phase::Results:
+      drawResults();
+      break;
+    case Phase::Sweep:
+      runSweepStep();
+      break;
+    case Phase::Table:
+      drawSweepTable();
+      break;
   }
-  drawResults();
 }
 
-void SpeedTestActivity::drawTestPage(const bool shifted) const {
+void SpeedTestActivity::drawTestPage(const bool shifted, const char* header) const {
   renderer.clearScreen();
   const int lh = renderer.getLineHeight(UI_12_FONT_ID);
-  renderer.drawText(UI_12_FONT_ID, 10, 36, tr(STR_SPEED_TEST_RUNNING), true);
+  renderer.drawText(UI_12_FONT_ID, 10, 36, header, true);
   for (int row = 0, y = 46 + 2 * lh; y + lh < renderer.getScreenHeight(); ++row, y += lh) {
     renderer.drawText(UI_12_FONT_ID, shifted ? 18 : 10, y, kSample[(row + (shifted ? 1 : 0)) % kSampleCount], true);
   }
@@ -58,16 +84,16 @@ SpeedTestActivity::Pass SpeedTestActivity::refresh(const HalDisplay::RefreshMode
 
 void SpeedTestActivity::runBench() {
   const uint32_t t0 = micros();
-  drawTestPage(false);
+  drawTestPage(false, tr(STR_SPEED_TEST_RUNNING));
   drawUs = micros() - t0;
   refresh(HalDisplay::HALF_REFRESH);  // a clean baseline, so every turn starts from the same glass
   for (int i = 0; i < kTurns; ++i) {
-    drawTestPage(i % 2 == 0);
+    drawTestPage(i % 2 == 0, tr(STR_SPEED_TEST_RUNNING));
     turns[i] = refresh(HalDisplay::FAST_REFRESH);
   }
-  drawTestPage(false);
+  drawTestPage(false, tr(STR_SPEED_TEST_RUNNING));
   clean = refresh(HalDisplay::HALF_REFRESH);
-  drawTestPage(true);
+  drawTestPage(true, tr(STR_SPEED_TEST_RUNNING));
   full = refresh(HalDisplay::FULL_REFRESH);
   LOG_INF("SPEED", "draw %lu us, half %lu us, full %lu us", static_cast<unsigned long>(drawUs),
           static_cast<unsigned long>(clean.totalUs), static_cast<unsigned long>(full.totalUs));
@@ -122,5 +148,70 @@ void SpeedTestActivity::drawResults() const {
   put(CROSSPOINT_VERSION);
   y += lh;
   put(tr(STR_SPEED_TEST_PHOTO));
+  if (canSweep()) put(tr(STR_SPEED_SWEEP_START));
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
+
+bool SpeedTestActivity::canSweep() {
+#ifdef FREEINK_UC8279_X4_CONFIG
+  return display.profile().controllerIsUc8279 && !display.profile().isX3;
+#else
+  return false;
+#endif
+}
+
+void SpeedTestActivity::runSweepStep() {
+#ifdef FREEINK_UC8279_X4_CONFIG
+  auto& tune = freeink::lectorUc8279X4Tune();
+  const auto& stock = freeink::uc8279X4DefaultConfig();
+  const SweepStep& s = kSweep[step];
+  char header[64];
+  snprintf(header, sizeof(header), "%s %d/%d  PLL %02X  TS %02X", tr(STR_SPEED_SWEEP_STEP), step + 1, kSweepSteps,
+           s.pll, s.tsFast);
+
+  // Every step starts from the same clean glass, cleaned on the stock settings.
+  tune.pllAfterPon = 0;
+  tune.tssetFast = stock.tssetFast;
+  drawTestPage(true, header);
+  refresh(HalDisplay::HALF_REFRESH);
+
+  tune.pllAfterPon = s.pll;
+  tune.tssetFast = s.tsFast;
+  uint32_t total = 0, wave = 0, n = 0;
+  for (int i = 0; i < kSweepTurns; ++i) {
+    drawTestPage(i % 2 == 0, i + 1 == kSweepTurns ? tr(STR_SPEED_SWEEP_NEXT) : header);
+    if (i + 1 == kSweepTurns)
+      renderer.drawText(UI_12_FONT_ID, 10, 36 + renderer.getLineHeight(UI_12_FONT_ID), header, true);
+    const Pass p = refresh(HalDisplay::FAST_REFRESH);
+    if (p.mode != HalDisplay::FAST_REFRESH) continue;  // promoted: ran the stock clean waveform
+    ++n;
+    total += p.totalUs / 1000;
+    wave += p.waveUs / 1000;
+  }
+  // The stock bytes stay live outside the sweep, the final table included.
+  tune.pllAfterPon = 0;
+  tune.tssetFast = stock.tssetFast;
+  sweep[step] = {static_cast<uint16_t>(n ? total / n : 0), static_cast<uint16_t>(n ? wave / n : 0),
+                 static_cast<uint8_t>(kSweepTurns - n)};
+  LOG_INF("SPEED", "sweep pll %02X ts %02X: turn %u ms wave %u ms promoted %u", s.pll, s.tsFast, sweep[step].totalMs,
+          sweep[step].waveMs, sweep[step].promoted);
+#endif
+}
+
+void SpeedTestActivity::drawSweepTable() const {
+  renderer.clearScreen();
+  const int lh = renderer.getLineHeight(UI_12_FONT_ID) + 6;
+  int y = 40 + lh;
+  char line[64];
+  renderer.drawCenteredText(UI_12_FONT_ID, 36, tr(STR_SPEED_SWEEP), true);
+  for (int i = 0; i < kSweepSteps; ++i) {
+    snprintf(line, sizeof(line), "%d  PLL %02X TS %02X  %ums  w%u  p%u", i + 1, kSweep[i].pll, kSweep[i].tsFast,
+             sweep[i].totalMs, sweep[i].waveMs, sweep[i].promoted);
+    renderer.drawText(UI_12_FONT_ID, 16, y, line, true);
+    y += lh;
+  }
+  renderer.drawText(UI_12_FONT_ID, 16, y, CROSSPOINT_VERSION, true);
+  y += 2 * lh;
+  renderer.drawText(UI_12_FONT_ID, 16, y, tr(STR_SPEED_TEST_PHOTO), true);
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
