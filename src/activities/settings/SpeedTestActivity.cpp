@@ -40,7 +40,7 @@ void SpeedTestActivity::onEnter() {
 void SpeedTestActivity::loop() {
   int x = 0;
   int y = 0;
-  if (phase == Phase::Bench) return;
+  if (phase == Phase::Bench || busy) return;
   const bool back = mappedInput.wasPressed(MappedInputManager::Button::Back);
   if (!back && !mappedInput.wasAnyPressed() && !mappedInput.wasScreenTapped(x, y)) return;
   if (back || phase == Phase::Table || (phase == Phase::Results && !canSweep())) {
@@ -52,6 +52,7 @@ void SpeedTestActivity::loop() {
   } else if (++step == kSweepSteps) {
     phase = Phase::Table;
   }
+  busy = true;
   requestUpdate();
 }
 
@@ -72,6 +73,7 @@ void SpeedTestActivity::render(RenderLock&&) {
       drawSweepTable();
       break;
   }
+  busy = false;
 }
 
 void SpeedTestActivity::drawTestPage(const bool shifted, const char* header) const {

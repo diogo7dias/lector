@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 
 #include "activities/Activity.h"
@@ -34,7 +35,7 @@ class SpeedTestActivity final : public Activity {
     uint8_t wave;
     uint8_t frames;
   };
-  static constexpr SweepStep kSweep[] = {{0, 0}, {1, 0}, {2, 20}, {2, 14}, {2, 10}, {2, 7}, {2, 5}};
+  static constexpr SweepStep kSweep[] = {{0, 0}, {1, 0}, {2, 4}, {2, 8}, {2, 12}, {2, 16}, {2, 24}};
   static constexpr int kSweepSteps = sizeof(kSweep) / sizeof(kSweep[0]);
   static constexpr int kSweepTurns = 3;
   struct SweepResult {
@@ -46,6 +47,9 @@ class SpeedTestActivity final : public Activity {
   enum class Phase : uint8_t { Bench, Results, Sweep, Table };
   Phase phase = Phase::Bench;
   int step = 0;
+  // Set by loop() when it queues a step, cleared when render() finishes it: a key pressed
+  // meanwhile would otherwise skip a step (exp.88 lost P10 that way).
+  std::atomic<bool> busy{false};
 
   void drawTestPage(bool shifted, const char* header) const;
   Pass refresh(HalDisplay::RefreshMode mode) const;
