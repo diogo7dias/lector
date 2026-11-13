@@ -267,9 +267,6 @@ static void setupBuiltinFonts() {
   fontCacheManager.setFontDecompressor(&fontDecompressor);
   renderer.setFontCacheManager(&fontCacheManager);
   bindBuiltinFonts(renderer);
-#ifdef LECTOR_SPEED_KIT
-  renderer.setTimingOverlay(UI_10_FONT_ID);  // Speed Kit: every frame shows the previous refresh's cost
-#endif
 }
 
 void setupDisplayAndFonts(const bool seamless, const HalGPIO::WakeupReason wakeupReason) {

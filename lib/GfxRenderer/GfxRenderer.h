@@ -105,10 +105,6 @@ class GfxRenderer {
   // Emits the summary (if any) and rearms the limiter for the next frame.
   void reportOutOfRangePixels() const;
 
-  // Speed Kit overlay (see setTimingOverlay). 0 = off.
-  int timingOverlayFontId = 0;
-  void drawTimingOverlay() const;
-
   // "Paperback Look": drawn glyph pixels are smeared to fake heavier paperback ink (BW pass
   // only). Level 1 adds +1px right and +1px down; level 2 (Bolder) also adds +2px right, so
   // vertical strokes gain a second pixel. Plain byte owned by the renderer (lib/ must not
@@ -229,11 +225,6 @@ class GfxRenderer {
 
   // Fading fix control
   void setFadingFix(const bool enabled) { fadingFix = enabled; }
-
-  // Speed Kit: stamp the PREVIOUS refresh's timing line (PerfStats::formatLastLine) into the
-  // top-left corner of every frame pushed. 0 turns it off. The font id comes from src/,
-  // which this library must not include.
-  void setTimingOverlay(const int fontId) { timingOverlayFontId = fontId; }
 
   // Screen ops
   int getScreenWidth() const;

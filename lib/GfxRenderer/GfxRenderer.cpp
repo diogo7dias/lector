@@ -14,7 +14,6 @@
 #include <HalGPIO.h>
 #include <Logging.h>
 #include <Memory.h>
-#include <PerfStats.h>
 #include <SdCardFont.h>
 #ifdef CROSSPOINT_TTF_READER
 #include <TtfSdFont.h>
@@ -1719,17 +1718,6 @@ void GfxRenderer::reportOutOfRangePixels() const {
   outOfRangeLogged = 0;
 }
 
-// One frame behind by necessity: a refresh's cost is known only after the panel finished.
-void GfxRenderer::drawTimingOverlay() const {
-  if (timingOverlayFontId == 0 || _stripActive) return;
-  char line[48];
-  PerfStats::formatLastLine(line, sizeof(line));
-  if (line[0] == '\0') return;
-  const int lh = getLineHeight(timingOverlayFontId);
-  fillRect(0, 0, getTextWidth(timingOverlayFontId, line) + 6, lh + 2, false);
-  drawText(timingOverlayFontId, 3, 1, line, true);
-}
-
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   if (!hasFrameBuffer()) {
     LOG_ERR("GFX", "displayBuffer called with null framebuffer");
@@ -1738,7 +1726,6 @@ void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
   reportOutOfRangePixels();
-  drawTimingOverlay();
   display.displayBuffer(refreshMode, fadingFix);
 }
 
@@ -1748,7 +1735,6 @@ void GfxRenderer::displayBufferAsync(const HalDisplay::RefreshMode refreshMode) 
     return;
   }
   reportOutOfRangePixels();
-  drawTimingOverlay();
   // The async path has no turn-off-screen hook, which the sunlight fading fix
   // relies on; keep those users on the blocking path.
   if (fadingFix) {
