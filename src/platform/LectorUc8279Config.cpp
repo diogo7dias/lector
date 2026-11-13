@@ -1,17 +1,53 @@
 // X4 Pro UC8279 config, selected with -DFREEINK_UC8279_X4_CONFIG=lectorUc8279X4Config
 // in Speed Kit builds only. It is the SDK default, held mutable so the Speed Test sweep
-// can try other frame rates (PLL) and fast-refresh temperature slots (TSSET) between
-// refreshes: the driver keeps a reference and reads both on every refresh.
+// can swap the Fast waveform between refreshes: the driver keeps a reference and reads
+// fastLut on every refresh.
 
 #include "LectorUc8279Config.h"
 
+#include <cstring>
+
+#include "lut/Uc8279X3Luts.h"
+
 namespace freeink {
 
-Uc8279X4Config& lectorUc8279X4Tune() {
+namespace {
+Uc8279X4Config& tune() {
   static Uc8279X4Config cfg = uc8279X4DefaultConfig();
   return cfg;
 }
 
-const Uc8279X4Config& lectorUc8279X4Config() { return lectorUc8279X4Tune(); }
+// Group layout (XTF_PRE_BW_MID, Uc8279X3Luts.h): repeat, then phase bytes, each
+// level << 6 | frames. Under the fast CDI (0xD7), 0x22 drives level 10 (white) and
+// 0x23 level 01 (black), as the stock pre-pass tables do; 0x20 VCOM, 0x21 WW and
+// 0x24 BB idle at level 00 for the same frame count.
+uint8_t pulse[5][43];
+}  // namespace
+
+const Uc8279X4Config& lectorUc8279X4Config() { return tune(); }
+
+void lectorUc8279SetFastWave(const Uc8279FastWave wave, const uint8_t frames) {
+  switch (wave) {
+    case Uc8279FastWave::Otp:
+      tune().fastLut = nullptr;
+      return;
+    case Uc8279FastWave::X3Du:
+      tune().fastLut = kUc8279X3_BwDu;
+      return;
+    case Uc8279FastWave::Pulse: {
+      const uint8_t n = frames & 0x3F;
+      static constexpr uint8_t kLevel[5] = {0x00, 0x00, 0x80, 0x40, 0x00};
+      memset(pulse, 0, sizeof(pulse));
+      for (uint8_t i = 0; i < 5; i++) {
+        pulse[i][0] = static_cast<uint8_t>(0x20 + i);
+        pulse[i][1] = 0x01;  // repeat once
+        pulse[i][2] = static_cast<uint8_t>(kLevel[i] | n);
+        pulse[i][3] = 0x01;  // one grounded frame to finish, like the stock DU banks
+      }
+      tune().fastLut = pulse;
+      return;
+    }
+  }
+}
 
 }  // namespace freeink

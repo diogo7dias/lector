@@ -27,14 +27,14 @@ class SpeedTestActivity final : public Activity {
   Pass full;
   uint32_t drawUs = 0;
 
-  // X4 Pro UC8279 only: after the results, one step per PLL/TSSET pair, each left on
+  // X4 Pro UC8279 only: after the results, one step per Fast waveform, each left on
   // screen for the reader to judge, then a table of what each cost.
+  // wave: 0 the panel's own DU, 1 the stock X3 DU bank, 2 one pulse of `frames`.
   struct SweepStep {
-    uint8_t pll;  // written after PON; 0 = stock, no write
-    uint8_t tsFast;
+    uint8_t wave;
+    uint8_t frames;
   };
-  static constexpr SweepStep kSweep[] = {{0, 0x5A}, {0x0E, 0x5A}, {0x0F, 0x5A}, {0x0C, 0x5A},
-                                         {0, 0x64}, {0, 0x78},    {0, 0x46}};
+  static constexpr SweepStep kSweep[] = {{0, 0}, {1, 0}, {2, 20}, {2, 14}, {2, 10}, {2, 7}, {2, 5}};
   static constexpr int kSweepSteps = sizeof(kSweep) / sizeof(kSweep[0]);
   static constexpr int kSweepTurns = 3;
   struct SweepResult {
@@ -52,6 +52,7 @@ class SpeedTestActivity final : public Activity {
   void runBench();
   void drawResults() const;
   static bool canSweep();
+  static const char* waveName(const SweepStep& s);
   void runSweepStep();
   void drawSweepTable() const;
 };

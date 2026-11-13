@@ -24,6 +24,14 @@ constexpr const char* kSample[] = {
 constexpr int kSampleCount = sizeof(kSample) / sizeof(kSample[0]);
 }  // namespace
 
+const char* SpeedTestActivity::waveName(const SweepStep& s) {
+  static char buf[8];
+  if (s.wave == 0) return "OTP";
+  if (s.wave == 1) return "X3 DU";
+  snprintf(buf, sizeof(buf), "P%u", s.frames);
+  return buf;
+}
+
 void SpeedTestActivity::onEnter() {
   Activity::onEnter();
   requestUpdate();
@@ -162,21 +170,16 @@ bool SpeedTestActivity::canSweep() {
 
 void SpeedTestActivity::runSweepStep() {
 #ifdef FREEINK_UC8279_X4_CONFIG
-  auto& tune = freeink::lectorUc8279X4Tune();
-  const auto& stock = freeink::uc8279X4DefaultConfig();
+  using freeink::Uc8279FastWave;
   const SweepStep& s = kSweep[step];
   char header[64];
-  snprintf(header, sizeof(header), "%s %d/%d  PLL %02X  TS %02X", tr(STR_SPEED_SWEEP_STEP), step + 1, kSweepSteps,
-           s.pll, s.tsFast);
+  snprintf(header, sizeof(header), "%s %d/%d  %s", tr(STR_SPEED_SWEEP_STEP), step + 1, kSweepSteps, waveName(s));
 
-  // Every step starts from the same clean glass, cleaned on the stock settings.
-  tune.pllAfterPon = 0;
-  tune.tssetFast = stock.tssetFast;
+  // Every step starts from the same clean glass (Half runs the OTP clean waveform).
   drawTestPage(true, header);
   refresh(HalDisplay::HALF_REFRESH);
 
-  tune.pllAfterPon = s.pll;
-  tune.tssetFast = s.tsFast;
+  freeink::lectorUc8279SetFastWave(static_cast<Uc8279FastWave>(s.wave), s.frames);
   uint32_t total = 0, wave = 0, n = 0;
   for (int i = 0; i < kSweepTurns; ++i) {
     drawTestPage(i % 2 == 0, i + 1 == kSweepTurns ? tr(STR_SPEED_SWEEP_NEXT) : header);
@@ -188,13 +191,12 @@ void SpeedTestActivity::runSweepStep() {
     total += p.totalUs / 1000;
     wave += p.waveUs / 1000;
   }
-  // The stock bytes stay live outside the sweep, the final table included.
-  tune.pllAfterPon = 0;
-  tune.tssetFast = stock.tssetFast;
+  // The stock waveform stays live outside the sweep, the final table included.
+  freeink::lectorUc8279SetFastWave(Uc8279FastWave::Otp);
   sweep[step] = {static_cast<uint16_t>(n ? total / n : 0), static_cast<uint16_t>(n ? wave / n : 0),
                  static_cast<uint8_t>(kSweepTurns - n)};
-  LOG_INF("SPEED", "sweep pll %02X ts %02X: turn %u ms wave %u ms promoted %u", s.pll, s.tsFast, sweep[step].totalMs,
-          sweep[step].waveMs, sweep[step].promoted);
+  LOG_INF("SPEED", "sweep %s: turn %u ms wave %u ms promoted %u", waveName(s), sweep[step].totalMs, sweep[step].waveMs,
+          sweep[step].promoted);
 #endif
 }
 
@@ -205,8 +207,8 @@ void SpeedTestActivity::drawSweepTable() const {
   char line[64];
   renderer.drawCenteredText(UI_12_FONT_ID, 36, tr(STR_SPEED_SWEEP), true);
   for (int i = 0; i < kSweepSteps; ++i) {
-    snprintf(line, sizeof(line), "%d  PLL %02X TS %02X  %ums  w%u  p%u", i + 1, kSweep[i].pll, kSweep[i].tsFast,
-             sweep[i].totalMs, sweep[i].waveMs, sweep[i].promoted);
+    snprintf(line, sizeof(line), "%d  %-6s %ums  w%u  p%u", i + 1, waveName(kSweep[i]), sweep[i].totalMs,
+             sweep[i].waveMs, sweep[i].promoted);
     renderer.drawText(UI_12_FONT_ID, 16, y, line, true);
     y += lh;
   }
