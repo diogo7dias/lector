@@ -193,8 +193,8 @@ void SpeedTestActivity::runSweepStep() {
     total += p.totalUs / 1000;
     wave += p.waveUs / 1000;
   }
-  // The stock waveform stays live outside the sweep, the final table included.
-  freeink::lectorUc8279SetFastWave(Uc8279FastWave::Otp);
+  // Back to the reading waveform outside the sweep, the final table included.
+  freeink::lectorUc8279SetFastWave(Uc8279FastWave::Pulse, freeink::kReadingPulseFrames);
   sweep[step] = {static_cast<uint16_t>(n ? total / n : 0), static_cast<uint16_t>(n ? wave / n : 0),
                  static_cast<uint8_t>(kSweepTurns - n)};
   LOG_INF("SPEED", "sweep %s: turn %u ms wave %u ms promoted %u", waveName(s), sweep[step].totalMs, sweep[step].waveMs,

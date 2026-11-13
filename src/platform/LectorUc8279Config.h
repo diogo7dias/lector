@@ -16,4 +16,9 @@ enum class Uc8279FastWave : uint8_t {
   Pulse,  // one pulse of `frames` toward the target, changed pixels only
 };
 void lectorUc8279SetFastWave(Uc8279FastWave wave, uint8_t frames = 0);
+
+// Page turns run the pulse at this length. exp.89 on the X4 Pro: 19 ms per frame plus
+// about 165 ms per refresh; P12 turned a page in 520 ms (stock 692) as clean as stock,
+// P4 ghosted. Calibration knob: lower for speed, raise if text washes out when cold.
+constexpr uint8_t kReadingPulseFrames = 12;
 }  // namespace freeink
