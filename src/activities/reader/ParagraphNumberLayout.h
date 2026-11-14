@@ -18,7 +18,7 @@
 struct ParagraphNumberMetrics {
   int lineTop = 0;         ///< top of the body line's ascender box, in screen coordinates
   int bodyAscender = 0;    ///< body font's declared ascender (baseline = lineTop + this)
-  int bodyInkTop = 0;      ///< body 'x' (or 'H') ink height above the baseline; 0 = unknown
+  int bodyInkTop = 0;      ///< body 'H' (or 'x') ink height above the baseline; 0 = unknown
   int bodyLineHeight = 0;  ///< body font advanceY, used only by the fallback
   int numAscender = 0;     ///< number font's declared ascender
   int numInkTop = 0;       ///< digit ink height above the number's baseline; 0 = unknown
@@ -32,14 +32,16 @@ struct ParagraphNumberMetrics {
 /// value reads as the default, 2x.
 inline int paragraphNumberScale(const uint8_t size) { return size < 3 ? size + 1 : 2; }
 
-/// The number's x: flush with the page's left edge, a column at the edge of the book
-/// rather than tucked against each paragraph's first letter. -1 when the margin plus
-/// the indent leave no room for it before the first letter, so it is skipped, not clipped.
-inline int paragraphNumberX(const int pageLeft, const int numWidth, const int firstLetterX) {
+/// The number's x: flush with the page's left edge (a column at the edge of the book),
+/// or with `byText` right up against the paragraph's first letter, in its indent. -1
+/// when the margin plus the indent leave no room for it before the first letter, so
+/// it is skipped, not clipped.
+inline int paragraphNumberX(const int pageLeft, const int numWidth, const int firstLetterX, const bool byText) {
   constexpr int kInset = 4;  // px from the page edge
   constexpr int kGap = 5;    // px the number keeps clear of the first letter
-  const int x = pageLeft + kInset;
-  return x + numWidth + kGap <= firstLetterX ? x : -1;
+  const int edgeX = pageLeft + kInset;
+  const int x = byText ? firstLetterX - kGap - numWidth : edgeX;
+  return x >= edgeX && x + numWidth + kGap <= firstLetterX ? x : -1;
 }
 
 /// Returns the y to hand to GfxRenderer::drawText, which takes the TOP of the ascender
@@ -51,7 +53,7 @@ inline int paragraphNumberDrawY(const ParagraphNumberMetrics& m) {
     return m.lineTop + (m.bodyLineHeight - m.numLineHeight) / 2;
   }
   const int bodyBaseline = m.lineTop + m.bodyAscender;
-  // Put the middle of the digits on the middle of the body's x-height band, then step
+  // Put the middle of the digits on the middle of the body's ink band, then step
   // back up by the number font's ascender to reach the origin drawText expects.
   return bodyBaseline - m.bodyInkTop / 2 + m.numInkTop / 2 - m.numAscender;
 }

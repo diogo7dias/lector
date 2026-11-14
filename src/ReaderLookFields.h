@@ -62,6 +62,7 @@
 #define READER_LOOK_BOOK_FIELDS(X) \
   X(paragraphNumbering)            \
   X(paragraphNumberSize)           \
+  X(paragraphNumberPlace)          \
   X(paperbackLookBody)             \
   X(paperbackLookStatus)
 

@@ -412,7 +412,7 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 - **Reset Reader Settings** — drop the per-book override, shown only when one exists.
 - **Steal Look** — copy another book's look onto this one, once.
 - **Reading Themes** — apply a saved look. A theme holds the text, margin and in-book settings, the paragraph numbers and the status bar layout (which items show and where). A theme's bar becomes your default bar, like Customise Status Bar. Up to 8 themes are kept.
-- **Paragraph Numbers**, **Number Size**, **Paperback Look**, **Paperback Status**.
+- **Paragraph Numbers**, **Number Size**, **Number Position**, **Paperback Look**, **Paperback Status**.
 - **Status Bar** — show or hide it. With the bar hidden, a **Progress Bar** row appears in its
   place.
 - **Customise Status Bar** — everything the bar can show and where. Changes here become your
@@ -1113,8 +1113,10 @@ is centred.
 
 - **Reading Orientation** — Portrait, Landscape CW, Portrait 180°, Landscape CCW.
 - **Paragraph Numbers** — Off or Per Chapter, with **Number Size**: Small, Medium or Large,
-  set in crisp pixel digits (8, 16 or 24 px tall). The numbers sit at the page's left edge, beside the first
-  line of each paragraph.
+  set in crisp pixel digits (8, 16 or 24 px tall), and **Number Position**: By the Text
+  (default) tucks each number into the indent just before the paragraph's first letter;
+  Page Edge lines them up in a column at the left edge. Either way they sit centred on
+  the first line, and a number is left out where there is no room for it.
 - **Book Menu Opens On** — which tab the in-book menu starts on: Sleep Screen (default), Navigate, Book, Look or Device.
 
 **Look**

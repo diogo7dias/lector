@@ -120,10 +120,16 @@ TEST(ParagraphNumberLayout, FallsBackToLineBoxCentringWithoutInkMetrics) {
 }
 
 TEST(ParagraphNumberLayout, NumbersSitAtThePageEdgeOrNotAtAll) {
-  EXPECT_EQ(paragraphNumberX(3, 18, 40), 7);   // in the margin, flush left
-  EXPECT_EQ(paragraphNumberX(3, 18, 30), 7);   // 7 + 18 + 5 lands exactly on the letter
-  EXPECT_EQ(paragraphNumberX(3, 18, 29), -1);  // one pixel short: skipped, never clipped
-  EXPECT_EQ(paragraphNumberX(0, 27, 60), 4);   // an indent gives a wide number room
+  EXPECT_EQ(paragraphNumberX(3, 18, 40, false), 7);   // in the margin, flush left
+  EXPECT_EQ(paragraphNumberX(3, 18, 30, false), 7);   // 7 + 18 + 5 lands exactly on the letter
+  EXPECT_EQ(paragraphNumberX(3, 18, 29, false), -1);  // one pixel short: skipped, never clipped
+  EXPECT_EQ(paragraphNumberX(0, 27, 60, false), 4);   // an indent gives a wide number room
+}
+
+TEST(ParagraphNumberLayout, ByTheTextNumbersEndJustBeforeTheFirstLetter) {
+  EXPECT_EQ(paragraphNumberX(3, 18, 60, true), 37);  // 37 + 18 + 5 = the letter at 60
+  EXPECT_EQ(paragraphNumberX(3, 18, 30, true), 7);   // no indent to spare: same as the edge
+  EXPECT_EQ(paragraphNumberX(3, 18, 29, true), -1);  // would cross the page edge: skipped
 }
 
 TEST(FullTextPageAlignment, BalancesRemainderWithoutChangingLineSpacing) {

@@ -28,31 +28,32 @@ class EpubReaderMenuActivity final : public UiListActivity {
     NEARBY_SEND_BOOK,  // send this book itself to another reader over ESP-NOW
     DELETE_CACHE,
     DICTIONARY,
-    DICTIONARY_HISTORY,         // the words looked up before, newest first
-    READER_SETTINGS,            // open this book's per-book reader settings
-    RESET_READER_SETTINGS,      // clear this book's override, follow global again
-    TOGGLE_PARAGRAPH_NUMBERS,   // cycle off / per-chapter / whole-book in place
-    TOGGLE_PARAGRAPH_NUM_SIZE,  // cycle Small / Double in place
-    TOGGLE_PAPERBACK_LOOK,      // toggle heavier ink for reader body text
-    TOGGLE_PAPERBACK_STATUS,    // toggle heavier ink for status bar text
-    TOGGLE_STATUS_BAR,          // show or hide the reading status bar for this book only
-    TOGGLE_PROGRESS_BAR,        // cycle Off / Slim / Medium / Fat for the bar that outlives a hidden status bar
-    CUSTOMISE_STATUS_BAR,       // open the full per-item status bar screen for this book
-    GO_TO_PARAGRAPH,            // jump to a paragraph number (only when numbering is on)
-    GRAB_QUOTE,                 // pick a passage on the page and save it to <book>_QUOTES.txt
-    STEAL_LOOK,                 // copy another book's reader settings onto this one
-    READING_THEMES,             // saved reader looks: apply one to this book, or save this one
-    WALLPAPER_FAVORITE,         // star/unstar the wallpaper the lock screen last showed
-    WALLPAPER_PAUSE,            // move that wallpaper to "/sleep pause", out of rotation
-    WALLPAPER_HOLD,             // stop picking a new wallpaper each sleep; keep this one
-    WALLPAPER_DELETE,           // delete that wallpaper file from the card, behind a confirmation
-    REMOVE_FROM_RECENTS,        // drop this book from the home list and put its file back at the card root
-    DELETE_BOOK,                // erase this book's file and its cache from the card, behind a confirmation
-    RETURN,                     // back to the last deliberate-jump origin
-    VIEW_QUOTES,                // browse (and delete) the quotes saved in <book>_QUOTES.txt
-    FORWARD,                    // redo the last Return
-    SEARCH,                     // find a phrase anywhere in the book
-    GO_TO_PAGE                  // jump to a printed page number (books with a page list)
+    DICTIONARY_HISTORY,          // the words looked up before, newest first
+    READER_SETTINGS,             // open this book's per-book reader settings
+    RESET_READER_SETTINGS,       // clear this book's override, follow global again
+    TOGGLE_PARAGRAPH_NUMBERS,    // cycle off / per-chapter / whole-book in place
+    TOGGLE_PARAGRAPH_NUM_SIZE,   // cycle Small / Medium / Large in place
+    TOGGLE_PARAGRAPH_NUM_PLACE,  // flip Page Edge / By the Text in place
+    TOGGLE_PAPERBACK_LOOK,       // toggle heavier ink for reader body text
+    TOGGLE_PAPERBACK_STATUS,     // toggle heavier ink for status bar text
+    TOGGLE_STATUS_BAR,           // show or hide the reading status bar for this book only
+    TOGGLE_PROGRESS_BAR,         // cycle Off / Slim / Medium / Fat for the bar that outlives a hidden status bar
+    CUSTOMISE_STATUS_BAR,        // open the full per-item status bar screen for this book
+    GO_TO_PARAGRAPH,             // jump to a paragraph number (only when numbering is on)
+    GRAB_QUOTE,                  // pick a passage on the page and save it to <book>_QUOTES.txt
+    STEAL_LOOK,                  // copy another book's reader settings onto this one
+    READING_THEMES,              // saved reader looks: apply one to this book, or save this one
+    WALLPAPER_FAVORITE,          // star/unstar the wallpaper the lock screen last showed
+    WALLPAPER_PAUSE,             // move that wallpaper to "/sleep pause", out of rotation
+    WALLPAPER_HOLD,              // stop picking a new wallpaper each sleep; keep this one
+    WALLPAPER_DELETE,            // delete that wallpaper file from the card, behind a confirmation
+    REMOVE_FROM_RECENTS,         // drop this book from the home list and put its file back at the card root
+    DELETE_BOOK,                 // erase this book's file and its cache from the card, behind a confirmation
+    RETURN,                      // back to the last deliberate-jump origin
+    VIEW_QUOTES,                 // browse (and delete) the quotes saved in <book>_QUOTES.txt
+    FORWARD,                     // redo the last Return
+    SEARCH,                      // find a phrase anywhere in the book
+    GO_TO_PAGE                   // jump to a printed page number (books with a page list)
   };
 
   // Tab pages of the menu. Sleep exists only when the lock screen last showed a
@@ -75,6 +76,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
     bool hasReaderOverride = false;
     uint8_t paragraphNumbering = 0;
     uint8_t paragraphNumberSize = 1;
+    uint8_t paragraphNumberPlace = 1;
     uint8_t paperbackBody = 1;
     uint8_t paperbackStatus = 1;
     uint8_t statusBar = 1;
@@ -171,6 +173,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
   uint8_t pendingOrientation = 0;
   uint8_t selectedParagraphNumbering = 0;
   uint8_t selectedParagraphNumberSize = 1;
+  uint8_t selectedParagraphNumberPlace = 1;
   // Per-book Paperback Look, toggled live in the menu; returned via MenuResult.
   uint8_t selectedPaperbackBody = 1;
   uint8_t selectedPaperbackStatus = 1;
@@ -187,6 +190,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
   const std::vector<StrId> paragraphNumLabels = {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER};
   const std::vector<StrId> paragraphNumSizeLabels = {StrId::STR_PARA_NUM_SIZE_SMALL, StrId::STR_PARA_NUM_SIZE_MEDIUM,
                                                      StrId::STR_PARA_NUM_SIZE_LARGE};
+  const std::vector<StrId> paragraphNumPlaceLabels = {StrId::STR_PARA_NUM_PLACE_EDGE, StrId::STR_PARA_NUM_PLACE_TEXT};
   // Same four labels the Customise Status Bar screen uses for this setting.
   const std::vector<StrId> progressBarLabels = {StrId::STR_STATE_OFF, StrId::STR_SLIM, StrId::STR_PROGRESS_BAR_MEDIUM,
                                                 StrId::STR_FAT};

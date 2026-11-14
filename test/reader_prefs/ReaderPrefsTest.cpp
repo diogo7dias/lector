@@ -60,6 +60,7 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.bookMargins, b.bookMargins);
   EXPECT_EQ(a.headingPageBreak, b.headingPageBreak);
   EXPECT_EQ(a.fillPages, b.fillPages);
+  EXPECT_EQ(a.paragraphNumberPlace, b.paragraphNumberPlace);
   EXPECT_EQ(a.wordExpansion, b.wordExpansion);
   EXPECT_EQ(a.sbBookTitlePos, b.sbBookTitlePos);
   EXPECT_EQ(a.screenMargin, b.screenMargin);
@@ -563,7 +564,9 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V21_SIZE + 1, READER_PREFS_V22_SIZE);
   EXPECT_EQ(READER_PREFS_V22_SIZE + 1, READER_PREFS_V23_SIZE);
   EXPECT_EQ(READER_PREFS_V23_SIZE + 1, READER_PREFS_V24_SIZE);
-  EXPECT_EQ(READER_PREFS_V24_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V24_SIZE + 1, READER_PREFS_V25_SIZE);
+  EXPECT_EQ(READER_PREFS_V25_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V25_SIZE, readerPrefsRecordSize(25));
   EXPECT_EQ(READER_PREFS_V24_SIZE, readerPrefsRecordSize(24));
   EXPECT_EQ(READER_PREFS_V23_SIZE, readerPrefsRecordSize(23));
   EXPECT_EQ(READER_PREFS_V22_SIZE, readerPrefsRecordSize(22));
@@ -580,7 +583,7 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(25, ReaderPrefs::VERSION);
+  EXPECT_EQ(26, ReaderPrefs::VERSION);
 }
 
 // A v23 record stops before Character Spacing: it reads back as the font as designed,
@@ -1020,6 +1023,20 @@ TEST(ReaderPrefs, FillPagesFlippedRoundTrips) {
   ASSERT_TRUE(readReaderPrefs(file, loaded));
   expectEqual(original, loaded);
   EXPECT_EQ(true, makeRenderSpec(loaded, 1, 480, 800).fillPages);
+}
+
+TEST(ReaderPrefs, AV25RecordPutsNumbersByTheText) {
+  auto old = makeSample();
+  old.paragraphNumberPlace = 0;  // outside the v25 record, must not be read
+  std::stringstream file;
+  file.put(static_cast<char>(25));
+  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(25));
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(1, loaded.paragraphNumberPlace);
+  EXPECT_EQ(old.fillPages, loaded.fillPages);
 }
 
 TEST(ReaderPrefs, AV21RecordLeavesWordExpansionAtItsDefault) {

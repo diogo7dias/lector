@@ -195,10 +195,13 @@ void EpubReaderActivity::resetReaderPrefsToGlobal() {
   requestUpdate();
 }
 
-void EpubReaderActivity::applyParagraphNumbering(const uint8_t mode, const uint8_t size) {
-  if (mode == prefs_.paragraphNumbering && size == prefs_.paragraphNumberSize) return;
+void EpubReaderActivity::applyParagraphNumbering(const uint8_t mode, const uint8_t size, const uint8_t place) {
+  if (mode == prefs_.paragraphNumbering && size == prefs_.paragraphNumberSize && place == prefs_.paragraphNumberPlace) {
+    return;
+  }
   prefs_.paragraphNumbering = mode;
   prefs_.paragraphNumberSize = size;
+  prefs_.paragraphNumberPlace = place;
   prefsCustom_ = true;
   writeReaderOverride(prefs_);
   // No re-layout: the ordinals are already baked into the page cache; only whether
