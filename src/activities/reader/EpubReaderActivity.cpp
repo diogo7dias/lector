@@ -101,6 +101,7 @@ void EpubReaderActivity::onEnter() {
   buildChapterMarks();
   hasPageList_ = epub->hasPageList();
 
+  bool progressLoaded = false;
   HalFile f;
   if (!sortesMode && ProgressFile::openForRead("ERS", epub->getCachePath(), f)) {
     uint8_t data[10];
@@ -108,6 +109,7 @@ void EpubReaderActivity::onEnter() {
     // Decoded by the same tested function the position sync uses. The reader keeps a
     // page past the chapter's end (the section clamps it) rather than losing the spine.
     if (const auto saved = nearby_position::decodeCachedPosition(data, dataSize > 0 ? dataSize : 0)) {
+      progressLoaded = true;
       currentSpineIndex = saved->spine;
       nextPageNumber = saved->page;
       if (nextPageNumber == UINT16_MAX) {
@@ -123,9 +125,9 @@ void EpubReaderActivity::onEnter() {
       LOG_DBG("ERS", "Loaded cache: %d, %d", currentSpineIndex, nextPageNumber);
     }
   }
-  // We may want a better condition to detect if we are opening for the first time.
-  // This will trigger if the book is re-opened at Chapter 0.
-  if (!sortesMode && currentSpineIndex == 0) {
+  // Only a book with no saved position starts at the text reference; a reader who paged
+  // back into spine 0 stays there (upstream #4472).
+  if (!sortesMode && !progressLoaded && currentSpineIndex == 0) {
     int textSpineIndex = epub->getSpineIndexForTextReference();
     if (textSpineIndex != 0) {
       currentSpineIndex = textSpineIndex;
