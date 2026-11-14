@@ -77,6 +77,15 @@ for size in ${UI_FONT_SIZES[@]}; do
   done
 done
 
+# Paragraph numbers: Cozette's digits alone, 1-bit at 1x, 2x and 3x its native 13px grid
+# (--dpi 72 so size means pixels), so every size is an exact pixel multiple.
+for px in 13 26 39; do
+  output_path="../builtinFonts/cozette_digits_${px}.h"
+  python fontconvert.py cozette_digits_${px} $px ../builtinFonts/source/Cozette/Cozette-Regular.ttf \
+    --dpi 72 --only-intervals --additional-intervals 0x30,0x39 > $output_path
+  echo "Generated $output_path"
+done
+
 echo ""
 echo "Running compression verification..."
 python verify_compression.py ../builtinFonts/

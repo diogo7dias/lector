@@ -25,12 +25,12 @@ struct ParagraphNumberMetrics {
   int numLineHeight = 0;   ///< number font advanceY, used only by the fallback
 };
 
-/// The number's size as a percent of the reading font, from the stored Number Size
-/// (0 = 35%, 1 = 65%, 2 = 100%). An unknown value reads as the default, 65%.
-inline int paragraphNumberPercent(const uint8_t size) {
-  constexpr int kPercent[] = {35, 65, 100};
-  return size < 3 ? kPercent[size] : 65;
-}
+/// The number's pixel scale, from the stored Number Size (0 = Small, 1 = Medium,
+/// 2 = Large): the digits are Cozette's 13px cell drawn at 1x, 2x or 3x, so 8, 16 or
+/// 24 px tall. A pixel face is only crisp on whole multiples of its grid, and those
+/// three span the reading sizes' digits at roughly 35%, 65% and 100%. An unknown
+/// value reads as the default, 2x.
+inline int paragraphNumberScale(const uint8_t size) { return size < 3 ? size + 1 : 2; }
 
 /// The number's x: flush with the page's left edge, a column at the edge of the book
 /// rather than tucked against each paragraph's first letter. -1 when the margin plus

@@ -308,13 +308,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     PARAGRAPH_NUMBERING_COUNT
   };
 
-  // How large those paragraph numbers are drawn, as a share of the reading font: they
-  // are set in that font, shrunk. The values are the old Small (0) and Double (1), so a
-  // stored choice keeps roughly its size. Per-book, like the mode above.
+  // How large those paragraph numbers are drawn: Cozette digits at 1x, 2x or 3x their
+  // 13px cell (see paragraphNumberScale). The stored values are the old 35%, 65% and
+  // 100%, which those scales roughly match. Per-book, like the mode above.
   enum PARAGRAPH_NUMBER_SIZE {
-    PARA_NUM_SIZE_35 = 0,
-    PARA_NUM_SIZE_65 = 1,
-    PARA_NUM_SIZE_100 = 2,
+    PARA_NUM_SIZE_SMALL = 0,
+    PARA_NUM_SIZE_MEDIUM = 1,
+    PARA_NUM_SIZE_LARGE = 2,
     PARAGRAPH_NUMBER_SIZE_COUNT
   };
 
@@ -721,9 +721,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // already carrying its own reader_override.bin keeps whatever it was set to in the
   // in-book menu; this only seeds the next book opened fresh.
   uint8_t paragraphNumbering = PARA_NUM_CHAPTER;
-  // Default size for those numbers. Double is the default: at the native cell the digits
-  // are 8px tall, which reads as too small on the device.
-  uint8_t paragraphNumberSize = PARA_NUM_SIZE_35;
+  // Default size for those numbers.
+  uint8_t paragraphNumberSize = PARA_NUM_SIZE_SMALL;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
   // TXT reader font, kept apart from the EPUB reader font above. A plain text file
