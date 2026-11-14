@@ -10,11 +10,7 @@
 #define FOOTNOTE_HREF_LEN 256
 
 struct FootnoteEntry {
-  char number[FOOTNOTE_NUMBER_LEN];
-  char href[FOOTNOTE_HREF_LEN];
-
-  FootnoteEntry() {
-    number[0] = '\0';
-    href[0] = '\0';
-  }
+  // Whole buffers go into the section cache: zero them, or stale heap bytes land on the card.
+  char number[FOOTNOTE_NUMBER_LEN]{};
+  char href[FOOTNOTE_HREF_LEN]{};
 };
