@@ -131,10 +131,11 @@ void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int margin
   metrics.bodyLineHeight = lineHeight;
   metrics.numAscender = renderer.getFontAscenderSize(numFontId);
   metrics.numLineHeight = renderer.getLineHeight(numFontId);
-  // 'x' because lowercase is the bulk of what a line of prose looks like; 'H' stands in
-  // for a face without it, and the layout falls back to line-box centring without either.
-  metrics.bodyInkTop = renderer.getGlyphInkTop(fontId, 'x');
-  if (metrics.bodyInkTop <= 0) metrics.bodyInkTop = renderer.getGlyphInkTop(fontId, 'H');
+  // Centred on a capital 'H', which reads as centred on the line; on lowercase 'x' the
+  // larger sizes hung below it. 'x' stands in for a face without 'H', and the layout
+  // falls back to line-box centring without either.
+  metrics.bodyInkTop = renderer.getGlyphInkTop(fontId, 'H');
+  if (metrics.bodyInkTop <= 0) metrics.bodyInkTop = renderer.getGlyphInkTop(fontId, 'x');
   metrics.numInkTop = renderer.getGlyphInkTop(numFontId, '0');
   for (const auto& el : page.elements) {
     if (el->getTag() != TAG_PageLine) continue;
@@ -148,7 +149,8 @@ void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int margin
     const int numWidth = renderer.getTextWidth(numFontId, buf);
     // wordXpos(0) is non-zero for indented, centred and RTL lines, so the room the
     // number has runs to the first letter, not just to the text column.
-    const int x = paragraphNumberX(pageLeft, numWidth, marginLeft + line.xPos + block->wordXpos(0));
+    const int x = paragraphNumberX(pageLeft, numWidth, marginLeft + line.xPos + block->wordXpos(0),
+                                   prefs_.paragraphNumberPlace == CrossPointSettings::PARA_NUM_PLACE_TEXT);
     if (x < 0) continue;
     metrics.lineTop = marginTop + line.yPos;
     const int y = paragraphNumberDrawY(metrics);

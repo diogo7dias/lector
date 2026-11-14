@@ -318,6 +318,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     PARAGRAPH_NUMBER_SIZE_COUNT
   };
 
+  // Where those numbers sit across: a column at the page's left edge, or tucked into
+  // the indent just before the paragraph's first letter. Per-book, like the size.
+  enum PARAGRAPH_NUMBER_PLACE { PARA_NUM_PLACE_EDGE = 0, PARA_NUM_PLACE_TEXT = 1, PARAGRAPH_NUMBER_PLACE_COUNT };
+
   // Sleep screen settings
   uint8_t sleepScreen = CUSTOM;
   // Night mode: inverted output polarity on the reading surfaces only
@@ -723,6 +727,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t paragraphNumbering = PARA_NUM_CHAPTER;
   // Default size for those numbers.
   uint8_t paragraphNumberSize = PARA_NUM_SIZE_SMALL;
+  // Default position for those numbers.
+  uint8_t paragraphNumberPlace = PARA_NUM_PLACE_TEXT;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
   // TXT reader font, kept apart from the EPUB reader font above. A plain text file

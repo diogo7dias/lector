@@ -63,6 +63,7 @@ void EpubReaderActivity::openReaderMenu() {
   menuContext.hasReaderOverride = prefsCustom_;
   menuContext.paragraphNumbering = prefs_.paragraphNumbering;
   menuContext.paragraphNumberSize = prefs_.paragraphNumberSize;
+  menuContext.paragraphNumberPlace = prefs_.paragraphNumberPlace;
   menuContext.paperbackBody = prefs_.paperbackLookBody;
   menuContext.paperbackStatus = prefs_.paperbackLookStatus;
   menuContext.statusBar = prefs_.statusBarEnabled;
@@ -78,7 +79,8 @@ void EpubReaderActivity::openReaderMenu() {
                            // Always apply orientation / paragraph-number / paperback changes even if cancelled
                            const auto& menu = std::get<MenuResult>(result.data);
                            applyOrientation(menu.orientation);
-                           applyParagraphNumbering(menu.paragraphNumbering, menu.paragraphNumberSize);
+                           applyParagraphNumbering(menu.paragraphNumbering, menu.paragraphNumberSize,
+                                                   menu.paragraphNumberPlace);
                            applyPaperbackLook(menu.paperbackBody, menu.paperbackStatus);
                            // Last of the live toggles because it is the only one that repaginates.
                            applyStatusBar(menu.statusBar, menu.progressBar);

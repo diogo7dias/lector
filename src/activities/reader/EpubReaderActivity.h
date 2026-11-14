@@ -191,7 +191,7 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // adopted — an SD font that is no longer installed is swapped for the built-in family.
   ReaderPrefs applyReaderPrefsFrom(const ReaderPrefs& incoming);
   // Paragraph numbers (#10).
-  void applyParagraphNumbering(uint8_t mode, uint8_t size);
+  void applyParagraphNumbering(uint8_t mode, uint8_t size, uint8_t place);
   // Paperback Look: per-book heavier-ink toggles (body text + status bar).
   void applyPaperbackLook(uint8_t body, uint8_t status);
   void applyStatusBar(uint8_t enabled, uint8_t progressBar);

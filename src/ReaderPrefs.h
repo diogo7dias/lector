@@ -68,12 +68,12 @@ inline constexpr uint8_t MAX_CHARACTER_SPACING = 10;
 struct ReaderPrefs {
   // Bump whenever the field set changes: readReaderPrefs rejects a mismatched
   // version, so an old sidecar is ignored and the book falls back to global.
-  // v5 through v24 are the exceptions: they are read and upgraded instead of dropped.
+  // v5 through v25 are the exceptions: they are read and upgraded instead of dropped.
   // Dropping a sidecar silently discards every per-book setting the user ever chose,
   // which is far worse than carrying an old one forward. Each of those older layouts is
   // a strict prefix of this struct, so a record is read at its own length and every
   // field appended since keeps its constructed default — see readerPrefsRecordSize().
-  static constexpr uint8_t VERSION = 25;  // v25: Fill Pages
+  static constexpr uint8_t VERSION = 26;  // v26: paragraph number position
 
   // Bring a sidecar written before the current version onto the current reading
   // defaults. Only these values are re-seeded, and only for books that predate them.
@@ -229,6 +229,10 @@ struct ReaderPrefs {
   // off unless turned on. APPENDED LAST.
   uint8_t fillPages = 0;
 
+  // Paragraph numbers at the page edge (0) or by the first letter (1), per book like
+  // paragraphNumberSize. APPENDED LAST.
+  uint8_t paragraphNumberPlace = 1;  // CrossPointSettings::PARA_NUM_PLACE_TEXT
+
   // Copy the status bar block from `source`.
   //
   // A sidecar written before v11 stops before that block, so every field would
@@ -312,6 +316,7 @@ inline constexpr size_t READER_PREFS_V21_SIZE = offsetof(ReaderPrefs, wordExpans
 inline constexpr size_t READER_PREFS_V22_SIZE = offsetof(ReaderPrefs, sbBookTitlePos);
 inline constexpr size_t READER_PREFS_V23_SIZE = offsetof(ReaderPrefs, characterSpacing);
 inline constexpr size_t READER_PREFS_V24_SIZE = offsetof(ReaderPrefs, fillPages);
+inline constexpr size_t READER_PREFS_V25_SIZE = offsetof(ReaderPrefs, paragraphNumberPlace);
 
 // A record older than v12 carries one "Embedded Style" choice, in what is now the text
 // switch. Someone who turned it off wanted the book's own styling gone, so the layout
@@ -373,6 +378,7 @@ inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
   if (version == 22) return READER_PREFS_V22_SIZE;
   if (version == 23) return READER_PREFS_V23_SIZE;
   if (version == 24) return READER_PREFS_V24_SIZE;
+  if (version == 25) return READER_PREFS_V25_SIZE;
   if (version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
   return 0;
 }
@@ -401,8 +407,9 @@ static_assert(READER_PREFS_V21_SIZE == READER_PREFS_V20_SIZE + 1, "v21 adds head
 static_assert(READER_PREFS_V22_SIZE == READER_PREFS_V21_SIZE + 1, "v22 adds wordExpansion");
 static_assert(READER_PREFS_V23_SIZE == READER_PREFS_V22_SIZE + 1, "v23 adds sbBookTitlePos");
 static_assert(READER_PREFS_V24_SIZE == READER_PREFS_V23_SIZE + 1, "v24 adds characterSpacing");
-static_assert(sizeof(ReaderPrefs) == READER_PREFS_V24_SIZE + 1,
-              "fillPages must be the last byte: every new field goes last, or "
+static_assert(READER_PREFS_V25_SIZE == READER_PREFS_V24_SIZE + 1, "v25 adds fillPages");
+static_assert(sizeof(ReaderPrefs) == READER_PREFS_V25_SIZE + 1,
+              "paragraphNumberPlace must be the last byte: every new field goes last, or "
               "this firmware misreads every sidecar written by the version before it");
 
 // ── The field lists cover the struct ──────────────────────────────────────────

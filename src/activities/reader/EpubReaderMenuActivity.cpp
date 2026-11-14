@@ -25,6 +25,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
       pendingOrientation(context.currentOrientation),
       selectedParagraphNumbering(context.paragraphNumbering),
       selectedParagraphNumberSize(context.paragraphNumberSize),
+      selectedParagraphNumberPlace(context.paragraphNumberPlace),
       selectedPaperbackBody(context.paperbackBody),
       selectedPaperbackStatus(context.paperbackStatus),
       selectedStatusBar(context.statusBar),
@@ -39,6 +40,7 @@ MenuResult EpubReaderMenuActivity::resultFor(const int action) const {
   r.orientation = pendingOrientation;
   r.paragraphNumbering = selectedParagraphNumbering;
   r.paragraphNumberSize = selectedParagraphNumberSize;
+  r.paragraphNumberPlace = selectedParagraphNumberPlace;
   r.paperbackBody = selectedPaperbackBody;
   r.paperbackStatus = selectedPaperbackStatus;
   r.statusBar = selectedStatusBar;
@@ -114,6 +116,7 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
     items.push_back({MenuAction::TOGGLE_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBERS});
     if (paragraphNumbering != CrossPointSettings::PARA_NUM_OFF) {
       items.push_back({MenuAction::TOGGLE_PARAGRAPH_NUM_SIZE, StrId::STR_PARAGRAPH_NUMBER_SIZE});
+      items.push_back({MenuAction::TOGGLE_PARAGRAPH_NUM_PLACE, StrId::STR_PARAGRAPH_NUMBER_PLACE});
     }
     items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   }
@@ -404,8 +407,15 @@ void EpubReaderMenuActivity::activateIndex(const int visibleIndex) {
   }
 
   if (selectedAction == MenuAction::TOGGLE_PARAGRAPH_NUM_SIZE) {
-    // Cycle 35% / 65% / 100% in place; applied by the reader on exit, like the row above.
+    // Cycle Small / Medium / Large in place; applied by the reader on exit, like the row above.
     selectedParagraphNumberSize = (selectedParagraphNumberSize + 1) % CrossPointSettings::PARAGRAPH_NUMBER_SIZE_COUNT;
+    requestUpdate();
+    return;
+  }
+
+  if (selectedAction == MenuAction::TOGGLE_PARAGRAPH_NUM_PLACE) {
+    selectedParagraphNumberPlace =
+        (selectedParagraphNumberPlace + 1) % CrossPointSettings::PARAGRAPH_NUMBER_PLACE_COUNT;
     requestUpdate();
     return;
   }
@@ -460,6 +470,8 @@ const char* EpubReaderMenuActivity::rowValue(const int index) const {
       return I18N.get(paragraphNumLabels[selectedParagraphNumbering % paragraphNumLabels.size()]);
     case MenuAction::TOGGLE_PARAGRAPH_NUM_SIZE:
       return I18N.get(paragraphNumSizeLabels[selectedParagraphNumberSize % paragraphNumSizeLabels.size()]);
+    case MenuAction::TOGGLE_PARAGRAPH_NUM_PLACE:
+      return I18N.get(paragraphNumPlaceLabels[selectedParagraphNumberPlace % paragraphNumPlaceLabels.size()]);
     case MenuAction::TOGGLE_PAPERBACK_LOOK:
       return I18N.get(selectedPaperbackBody > 1   ? StrId::STR_BOLDER
                       : selectedPaperbackBody > 0 ? StrId::STR_STATE_ON

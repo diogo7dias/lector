@@ -359,7 +359,7 @@ void SettingsActivity::rebuildSettingsList() {
           // of the map it fell to the bottom of the category under no heading at all.
           {StrId::STR_GRP_PAGE,
            {StrId::STR_ORIENTATION, StrId::STR_BOOK_MENU_TAB, StrId::STR_PARAGRAPH_NUMBERS,
-            StrId::STR_PARAGRAPH_NUMBER_SIZE}},
+            StrId::STR_PARAGRAPH_NUMBER_SIZE, StrId::STR_PARAGRAPH_NUMBER_PLACE}},
           // The status bar rows adjacent, and the screen that configures it straight after
           // the toggle that hides it.
           {StrId::STR_GRP_LOOK,
