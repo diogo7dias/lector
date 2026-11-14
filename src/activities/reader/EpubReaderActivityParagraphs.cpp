@@ -14,6 +14,7 @@
 #include "ParagraphNumberLayout.h"
 #include "QuoteSelectActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "fontIds.h"
 
 int EpubReaderActivity::findPageForOrdinal(Section& sec, const uint16_t ordinal, bool* const outFound) const {
   if (outFound) *outFound = false;
@@ -117,9 +118,8 @@ void EpubReaderActivity::jumpToParagraph(const int target) {
 void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int marginLeft, const int marginTop,
                                               const int fontId) {
   if (prefs_.paragraphNumbering == CrossPointSettings::PARA_NUM_OFF) return;
-  // Set in the reading font itself, shrunk to the chosen share of it.
-  const int percent = paragraphNumberPercent(prefs_.paragraphNumberSize);
-  const auto scaled = [percent](const int px) { return px * percent / 100; };
+  constexpr int kNumFontIds[] = {PARA_NUM_13_FONT_ID, PARA_NUM_26_FONT_ID, PARA_NUM_39_FONT_ID};
+  const int numFontId = kNumFontIds[paragraphNumberScale(prefs_.paragraphNumberSize) - 1];
   int viewTop = 0, viewRight = 0, viewBottom = 0, pageLeft = 0;
   renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &pageLeft);
   const int lineHeight = renderer.getLineHeight(fontId);
@@ -129,13 +129,13 @@ void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int margin
   ParagraphNumberMetrics metrics;
   metrics.bodyAscender = renderer.getFontAscenderSize(fontId);
   metrics.bodyLineHeight = lineHeight;
-  metrics.numAscender = scaled(metrics.bodyAscender);
-  metrics.numLineHeight = scaled(lineHeight);
+  metrics.numAscender = renderer.getFontAscenderSize(numFontId);
+  metrics.numLineHeight = renderer.getLineHeight(numFontId);
   // 'x' because lowercase is the bulk of what a line of prose looks like; 'H' stands in
   // for a face without it, and the layout falls back to line-box centring without either.
   metrics.bodyInkTop = renderer.getGlyphInkTop(fontId, 'x');
   if (metrics.bodyInkTop <= 0) metrics.bodyInkTop = renderer.getGlyphInkTop(fontId, 'H');
-  metrics.numInkTop = scaled(renderer.getGlyphInkTop(fontId, '0'));
+  metrics.numInkTop = renderer.getGlyphInkTop(numFontId, '0');
   for (const auto& el : page.elements) {
     if (el->getTag() != TAG_PageLine) continue;
     const auto& line = static_cast<const PageLine&>(*el);
@@ -145,13 +145,13 @@ void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int margin
     if (!block || block->wordCount() == 0) continue;
     char buf[12];
     snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(ord));
-    const int numWidth = scaled(renderer.getTextWidth(fontId, buf));
+    const int numWidth = renderer.getTextWidth(numFontId, buf);
     // wordXpos(0) is non-zero for indented, centred and RTL lines, so the room the
     // number has runs to the first letter, not just to the text column.
     const int x = paragraphNumberX(pageLeft, numWidth, marginLeft + line.xPos + block->wordXpos(0));
     if (x < 0) continue;
     metrics.lineTop = marginTop + line.yPos;
     const int y = paragraphNumberDrawY(metrics);
-    renderer.drawTextScaled(fontId, x, y, buf, percent, true);
+    renderer.drawText(numFontId, x, y, buf, true);
   }
 }

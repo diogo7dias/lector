@@ -520,9 +520,10 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
                          {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER}, "paragraphNumbering",
                          StrId::STR_CAT_READER));
 
-  emit(SettingInfo::Enum(StrId::STR_PARAGRAPH_NUMBER_SIZE, &CrossPointSettings::paragraphNumberSize,
-                         {StrId::STR_PARA_NUM_SIZE_35, StrId::STR_PARA_NUM_SIZE_65, StrId::STR_PARA_NUM_SIZE_100},
-                         "paragraphNumberSize", StrId::STR_CAT_READER));
+  emit(SettingInfo::Enum(
+      StrId::STR_PARAGRAPH_NUMBER_SIZE, &CrossPointSettings::paragraphNumberSize,
+      {StrId::STR_PARA_NUM_SIZE_SMALL, StrId::STR_PARA_NUM_SIZE_MEDIUM, StrId::STR_PARA_NUM_SIZE_LARGE},
+      "paragraphNumberSize", StrId::STR_CAT_READER));
 
   emit(SettingInfo::Toggle(StrId::STR_PAPERBACK_STATUS, &CrossPointSettings::paperbackLookStatus, "paperbackLookStatus",
                            StrId::STR_CAT_READER));

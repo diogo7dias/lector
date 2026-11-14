@@ -138,9 +138,9 @@ TEST(FullTextPageAlignment, BalancesRemainderWithoutChangingLineSpacing) {
   EXPECT_EQ(fullTextPageOffset(700, 0, 650, 0, 40), 0);
 }
 
-TEST(ParagraphNumberLayout, NumberSizeIsAShareOfTheReadingFont) {
-  EXPECT_EQ(paragraphNumberPercent(0), 35);   // was Small
-  EXPECT_EQ(paragraphNumberPercent(1), 65);   // was Double
-  EXPECT_EQ(paragraphNumberPercent(2), 100);  // the text's own size
-  EXPECT_EQ(paragraphNumberPercent(7), 65);   // a corrupt value reads as the default
+TEST(ParagraphNumberLayout, NumberSizeIsAWholePixelScale) {
+  EXPECT_EQ(paragraphNumberScale(0), 1);  // Small, stored as 35% before
+  EXPECT_EQ(paragraphNumberScale(1), 2);  // Medium, stored as 65% before
+  EXPECT_EQ(paragraphNumberScale(2), 3);  // Large, stored as 100% before
+  EXPECT_EQ(paragraphNumberScale(7), 2);  // a corrupt value reads as the default
 }

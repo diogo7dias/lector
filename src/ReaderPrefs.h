@@ -52,7 +52,7 @@ inline constexpr uint8_t FIRST_LINE_INDENT_PERCENT = 20;  // % of the column wid
 inline constexpr uint8_t FIRST_LINE_INDENT_MODE = 1;      // CrossPointSettings::FIRST_LINE_INDENT_PERCENT
 inline constexpr uint8_t PARAGRAPH_NUMBERING = 1;         // CrossPointSettings::PARA_NUM_CHAPTER
 inline constexpr uint8_t PARAGRAPH_NUMBERING_COUNT = 2;   // CrossPointSettings::PARAGRAPH_NUMBERING_COUNT
-inline constexpr uint8_t PARAGRAPH_NUMBER_SIZE = 1;       // CrossPointSettings::PARA_NUM_SIZE_65
+inline constexpr uint8_t PARAGRAPH_NUMBER_SIZE = 1;       // CrossPointSettings::PARA_NUM_SIZE_MEDIUM
 // Ranges the render spec clamps to, shared with the settings rows that edit them.
 inline constexpr uint8_t MIN_LINE_SPACING_PERCENT = 35;
 inline constexpr uint8_t MAX_LINE_SPACING_PERCENT = 150;
@@ -138,7 +138,7 @@ struct ReaderPrefs {
   // is exactly this struct up to here and can be read straight into the front of it
   // (see READER_PREFS_V8_SIZE below). Any future field must also go last, for the
   // same reason.
-  uint8_t paragraphNumberSize = 1;  // CrossPointSettings::PARA_NUM_SIZE_65
+  uint8_t paragraphNumberSize = 1;  // CrossPointSettings::PARA_NUM_SIZE_MEDIUM
   // Status bar on/off for this book, seeded from the global SETTINGS.sbEnabled.
   // Turning it off frees the reserved top/bottom bands, which changes the viewport and
   // therefore repaginates this book's cache like any margin change.

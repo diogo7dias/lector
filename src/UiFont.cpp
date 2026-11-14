@@ -52,6 +52,15 @@ EpdFontFamily cozette12FontFamily(&cozette12RegularFont, &cozette12RegularFont);
 EpdFont cozette14RegularFont(&cozette_14_regular);
 EpdFontFamily cozette14FontFamily(&cozette14RegularFont, &cozette14RegularFont);
 
+// Paragraph numbers: Cozette's ten digits at 1x, 2x and 3x its 13px grid. A pixel face
+// only stays crisp on whole multiples of its grid, and digits alone cost under 1 KB.
+EpdFont paraNum13Font(&cozette_digits_13);
+EpdFontFamily paraNum13FontFamily(&paraNum13Font, &paraNum13Font);
+EpdFont paraNum26Font(&cozette_digits_26);
+EpdFontFamily paraNum26FontFamily(&paraNum26Font, &paraNum26Font);
+EpdFont paraNum39Font(&cozette_digits_39);
+EpdFontFamily paraNum39FontFamily(&paraNum39Font, &paraNum39Font);
+
 // Cozette cannot draw Arabic or Hebrew, so those two UI languages use the Ubuntu
 // family. Every other language (incl. Cyrillic + Vietnamese, verified in Cozette's
 // cmap) uses Cozette. Called at boot and on every in-app language change (declared
@@ -79,6 +88,9 @@ void bindUiFontsForLanguage(GfxRenderer& renderer) {
 
 void bindBuiltinFonts(GfxRenderer& renderer) {
   renderer.insertFont(CHAREINK_14_FONT_ID, chareink14FontFamily);
+  renderer.insertFont(PARA_NUM_13_FONT_ID, paraNum13FontFamily);
+  renderer.insertFont(PARA_NUM_26_FONT_ID, paraNum26FontFamily);
+  renderer.insertFont(PARA_NUM_39_FONT_ID, paraNum39FontFamily);
   // Permanent Ubuntu ids (full Latin/Arabic/Hebrew/Vietnamese coverage) for the
   // language-select native-name list and the Arabic/Hebrew UI.
   renderer.insertFont(UBUNTU_10_FONT_ID, ubuntu10FontFamily);

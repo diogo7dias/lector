@@ -1112,8 +1112,8 @@ is centred.
 **Page**
 
 - **Reading Orientation** — Portrait, Landscape CW, Portrait 180°, Landscape CCW.
-- **Paragraph Numbers** — Off or Per Chapter, with **Number Size**: 35%, 65% or 100% of the
-  text, set in the reading font. The numbers sit at the page's left edge, beside the first
+- **Paragraph Numbers** — Off or Per Chapter, with **Number Size**: Small, Medium or Large,
+  set in crisp pixel digits (8, 16 or 24 px tall). The numbers sit at the page's left edge, beside the first
   line of each paragraph.
 - **Book Menu Opens On** — which tab the in-book menu starts on: Sleep Screen (default), Navigate, Book, Look or Device.
 
