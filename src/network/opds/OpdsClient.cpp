@@ -190,29 +190,30 @@ HttpDownloader::DownloadError OpdsClient::downloadBook(
     if (afterAttempt) afterAttempt();
 
     if (result == HttpDownloader::OK) {
-      if (Storage.exists(filename.c_str())) Storage.remove(filename.c_str());
-      if (!Storage.rename(partPath.c_str(), filename.c_str())) {
-        LOG_ERR("OPDSCLI", "rename of finished download failed: %s", partPath.c_str());
-        return giveUp(HttpDownloader::FILE_ERROR);
-      }
       // downloadToFile hands back the raw header ("attachment; filename=..."), and
       // sanitizeFilename never returns empty: sanitizing the header itself renamed
       // every book to the header text, or to "book" when the server sent none.
-      const std::string sanitized = fetch_url::filenameFromContentDisposition(contentDisposition);
-      if (server.keepFilename && !sanitized.empty()) {
-        std::string finalPath;
-        finalPath.reserve(96);
-        if (haveFolder) finalPath += folder;
-        finalPath += '/';
-        finalPath += sanitized;
-        if (finalPath != filename) {
-          if (Storage.exists(finalPath.c_str())) Storage.remove(finalPath.c_str());
-          if (Storage.rename(filename.c_str(), finalPath.c_str())) {
-            filename = finalPath;
-          } else {
-            LOG_ERR("OPDSCLI", "rename to server filename failed, keeping %s", filename.c_str());
-          }
+      const std::string offered = fetch_url::filenameFromContentDisposition(contentDisposition);
+      // The part takes the server's name in one step. Landing under the generated
+      // name first and renaming again removed "whatever is at the new name" in
+      // between, and on FAT a name differing only in case is the book itself.
+      const auto place = [&partPath](const std::string& target) {
+        if (Storage.exists(target.c_str())) Storage.remove(target.c_str());
+        return Storage.rename(partPath.c_str(), target.c_str());
+      };
+      bool placed = false;
+      if (server.keepFilename && !offered.empty()) {
+        const std::string named = std::string(haveFolder ? folder : "") + '/' + offered;
+        placed = place(named);
+        if (placed) {
+          filename = named;
+        } else {
+          LOG_ERR("OPDSCLI", "rename to server filename failed, keeping %s", filename.c_str());
         }
+      }
+      if (!placed && !place(filename)) {
+        LOG_ERR("OPDSCLI", "rename of finished download failed: %s", partPath.c_str());
+        return giveUp(HttpDownloader::FILE_ERROR);
       }
       clearBookCache(filename);
       outFinalPath = filename;
