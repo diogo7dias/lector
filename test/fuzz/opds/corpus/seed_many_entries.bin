@@ -1,0 +1,33 @@
+þ<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry><title>Book 1</title><author><name>Author 1</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/1/epub/"/></entry>
+  <entry><title>Book 2</title><author><name>Author 2</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/2/epub/"/></entry>
+  <entry><title>Book 3</title><author><name>Author 3</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/3/epub/"/></entry>
+  <entry><title>Book 4</title><author><name>Author 4</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/4/epub/"/></entry>
+  <entry><title>Book 5</title><author><name>Author 5</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/5/epub/"/></entry>
+  <entry><title>Book 6</title><author><name>Author 6</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/6/epub/"/></entry>
+  <entry><title>Book 7</title><author><name>Author 7</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/7/epub/"/></entry>
+  <entry><title>Book 8</title><author><name>Author 8</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/8/epub/"/></entry>
+  <entry><title>Book 9</title><author><name>Author 9</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/9/epub/"/></entry>
+  <entry><title>Book 10</title><author><name>Author 10</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/10/epub/"/></entry>
+  <entry><title>Book 11</title><author><name>Author 11</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/11/epub/"/></entry>
+  <entry><title>Book 12</title><author><name>Author 12</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/12/epub/"/></entry>
+  <entry><title>Book 13</title><author><name>Author 13</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/13/epub/"/></entry>
+  <entry><title>Book 14</title><author><name>Author 14</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/14/epub/"/></entry>
+  <entry><title>Book 15</title><author><name>Author 15</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/15/epub/"/></entry>
+  <entry><title>Book 16</title><author><name>Author 16</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/16/epub/"/></entry>
+  <entry><title>Book 17</title><author><name>Author 17</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/17/epub/"/></entry>
+  <entry><title>Book 18</title><author><name>Author 18</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/18/epub/"/></entry>
+  <entry><title>Book 19</title><author><name>Author 19</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/19/epub/"/></entry>
+  <entry><title>Book 20</title><author><name>Author 20</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/20/epub/"/></entry>
+  <entry><title>Book 21</title><author><name>Author 21</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/21/epub/"/></entry>
+  <entry><title>Book 22</title><author><name>Author 22</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/22/epub/"/></entry>
+  <entry><title>Book 23</title><author><name>Author 23</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/23/epub/"/></entry>
+  <entry><title>Book 24</title><author><name>Author 24</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/24/epub/"/></entry>
+  <entry><title>Book 25</title><author><name>Author 25</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/25/epub/"/></entry>
+  <entry><title>Book 26</title><author><name>Author 26</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/26/epub/"/></entry>
+  <entry><title>Book 27</title><author><name>Author 27</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/27/epub/"/></entry>
+  <entry><title>Book 28</title><author><name>Author 28</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/28/epub/"/></entry>
+  <entry><title>Book 29</title><author><name>Author 29</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/29/epub/"/></entry>
+  <entry><title>Book 30</title><author><name>Author 30</name></author><link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/30/epub/"/></entry>
+</feed>

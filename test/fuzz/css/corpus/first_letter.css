@@ -1,0 +1,2 @@
+p::first-letter { initial-letter: 3; font-size: 2rem; }
+p.drop:first-letter { float: left; }

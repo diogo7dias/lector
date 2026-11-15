@@ -1,0 +1,7 @@
+@font-face {
+  font-family: "Body";
+  src: url(fonts/body.otf);
+  font-style: italic;
+  font-weight: 700;
+}
+p { font-family: "Body"; }

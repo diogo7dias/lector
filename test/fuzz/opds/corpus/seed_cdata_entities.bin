@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title><![CDATA[Ben & Jerry's <Special> Edition]]></title>
+    <author><name>S&#233;bastien &amp; &lt;Friends&gt;</name></author>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/dl?id=3&amp;fmt=epub"/>
+  </entry>
+  <entry>
+    <title>Quotes &quot;inside&quot; &apos;here&apos; &#x1F4DA;</title>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/dl/4/epub/"/>
+  </entry>
+</feed>

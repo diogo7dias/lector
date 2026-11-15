@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/terms/">
+  <title>Recent</title>
+  <link rel="next" href="/opds/new/2" type="application/atom+xml"/>
+  <link rel="previous" href="/opds/new/0" type="application/atom+xml"/>
+  <entry>
+    <title>The Left Hand of Darkness</title>
+    <author><name>Ursula K. Le Guin</name></author>
+    <id>urn:book:1</id>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/1/epub/"/>
+    <link rel="http://opds-spec.org/image/thumbnail" type="image/jpeg" href="/covers/1.jpg"/>
+  </entry>
+  <entry>
+    <title>Dune</title>
+    <author><name>Frank Herbert</name></author>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/opds/dl/2/epub/"/>
+  </entry>
+</feed>

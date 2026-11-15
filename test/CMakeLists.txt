@@ -9,6 +9,20 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# Host builds with AddressSanitizer + UndefinedBehaviorSanitizer:
+#   cmake -S test -B build/test-asan -DLECTOR_SANITIZE=ON
+option(LECTOR_SANITIZE "Build host tests with ASan and UBSan" OFF)
+if(LECTOR_SANITIZE)
+  add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -g)
+  # Firmware code builds -fno-rtti while gtest has RTTI: vptr checks false-positive across them.
+  add_compile_options(-fno-sanitize=vptr)
+  add_link_options(-fsanitize=address,undefined)
+endif()
+
+# libFuzzer harnesses for the parsers that read untrusted input (clang only), see fuzz/README.md:
+#   CC=clang CXX=clang++ cmake -S test -B build/fuzz -DLECTOR_FUZZ=ON
+option(LECTOR_FUZZ "Build libFuzzer harnesses in test/fuzz" OFF)
+
 include(FetchContent)
 
 FetchContent_Declare(
@@ -207,3 +221,7 @@ add_subdirectory(dither_utils)
 add_subdirectory(usb_drive_storage_guard)
 add_subdirectory(bitmap_resample)
 add_subdirectory(pinch_font_resize)
+
+if(LECTOR_FUZZ)
+  add_subdirectory(fuzz)
+endif()

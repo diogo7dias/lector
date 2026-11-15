@@ -1,0 +1,18 @@
+ <?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>Outer <b>bold <i>deep</i></b> tail</title>
+    <author>
+      <uri>https://x</uri>
+      <name>First</name>
+      <author><name>Nested</name></author>
+    </author>
+    <entry>
+      <title>Inner</title>
+      <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/inner.epub"/>
+    </entry>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/outer.epub"/>
+  </entry>
+  <empty/>
+  <entry/>
+</feed>
