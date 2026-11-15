@@ -1,0 +1,10 @@
+@<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>Multi Format</title>
+    <author><name>Anon</name></author>
+    <link rel="http://opds-spec.org/acquisition" type="application/pdf" href="/dl/9.pdf"/>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/dl/9.kepub.epub"/>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/dl/9/epub/"/>
+  </entry>
+</feed>

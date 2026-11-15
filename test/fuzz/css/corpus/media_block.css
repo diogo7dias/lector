@@ -1,0 +1,4 @@
+@media (min-width: 600px) {
+  p { text-align: justify; }
+}
+@media print { .x { display: none; } }

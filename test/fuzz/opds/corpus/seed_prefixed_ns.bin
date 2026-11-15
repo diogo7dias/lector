@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<atom:feed xmlns:atom="http://www.w3.org/2005/Atom" xmlns:opds="http://opds-spec.org/2010/catalog">
+  <atom:entry>
+    <atom:title>Prefixed Title</atom:title>
+    <atom:author><atom:name>Prefixed Author</atom:name></atom:author>
+    <atom:link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/p/1.epub"/>
+  </atom:entry>
+  <atom:link rel="next" href="/p?page=2" type="application/atom+xml"/>
+</atom:feed>

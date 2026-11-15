@@ -1,0 +1,10 @@
+ÿ<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <link type="application/atom+xml" href="/next/odd" rel="next"/>
+  <entry>
+    <link href="/dl/5/epub/" type="application/epub+zip" rel="http://opds-spec.org/acquisition"/>
+    <title   >Attribute Order</title>
+    <author><name>Order</name></author>
+  </entry>
+  <link rel="search" href="/s?q={searchTerms}"/>
+</feed>

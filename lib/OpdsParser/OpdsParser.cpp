@@ -110,7 +110,7 @@ size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
 
 void OpdsParser::flush() {
   if (errorOccured || !parser) return;
-  if (XML_Parse(parser, nullptr, 0, XML_TRUE) != XML_STATUS_OK) {
+  if (XML_Parse(parser, "", 0, XML_TRUE) != XML_STATUS_OK) {
     errorOccured = true;
     destroyXmlParser(parser);
   }

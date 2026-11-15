@@ -1612,7 +1612,8 @@ int SdCardFont::buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, 
 
   // One reserved slot for a space injected after the main scan.
   static constexpr uint32_t MAX_UNIQUE_CODEPOINTS = 4096;
-  uint32_t* codepoints = new (std::nothrow) uint32_t[MAX_UNIQUE_CODEPOINTS + 1];
+  auto codepointBuffer = makeUniqueNoThrow<uint32_t[]>(MAX_UNIQUE_CODEPOINTS + 1);
+  uint32_t* const codepoints = codepointBuffer.get();
   if (!codepoints) {
     LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate codepoint buffer (%u bytes)", MAX_UNIQUE_CODEPOINTS * 4);
     return -1;

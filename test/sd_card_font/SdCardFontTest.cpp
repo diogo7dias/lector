@@ -26,7 +26,8 @@ void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
     return nullptr;
   }
   ++nothrowArrayAllocs;
-  return std::malloc(size ? size : 1);
+  return ::operator new[](size ? size
+                               : 1);  // not malloc: delete[] (default) must match, or ASan flags alloc-dealloc-mismatch
 }
 
 namespace {

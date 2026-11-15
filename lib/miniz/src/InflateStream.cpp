@@ -113,6 +113,9 @@ InflateStream::Status InflateStream::readAtMost(uint8_t* dest, const size_t maxL
                             (streaming ? 0 : TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
 
     size_t inBytes = inAvail;
+    // Never hand tinfl a null input: it computes in + size in C, undefined for null even at 0.
+    static constexpr uint8_t NO_INPUT = 0;
+    const uint8_t* const in = inPtr ? inPtr : &NO_INPUT;
     tinfl_status status;
     size_t outBytes;
     if (streaming) {
@@ -120,7 +123,7 @@ InflateStream::Status InflateStream::readAtMost(uint8_t* dest, const size_t maxL
       // (cursor offset + avail_out), so avail_out MUST always reach the end of
       // the 32KB window -- never cap it to the caller's remaining space.
       outBytes = WINDOW_SIZE - windowPos;
-      status = tinfl_decompress(state, inPtr, &inBytes, window, window + windowPos, &outBytes, flags);
+      status = tinfl_decompress(state, in, &inBytes, window, window + windowPos, &outBytes, flags);
       pendingStart = windowPos;
       pendingLen = outBytes;
       windowPos += outBytes;
@@ -128,7 +131,7 @@ InflateStream::Status InflateStream::readAtMost(uint8_t* dest, const size_t maxL
     } else {
       // One-shot: back-references resolve directly inside the destination buffer.
       outBytes = maxLen - *produced;
-      status = tinfl_decompress(state, inPtr, &inBytes, oneShotStart, dest + *produced, &outBytes, flags);
+      status = tinfl_decompress(state, in, &inBytes, oneShotStart, dest + *produced, &outBytes, flags);
       *produced += outBytes;
     }
     inPtr += inBytes;

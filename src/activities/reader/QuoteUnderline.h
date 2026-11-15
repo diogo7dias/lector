@@ -140,7 +140,7 @@ inline bool findQuoteRun(const char* const* words, const size_t wordCount, const
 // findQuoteRun.
 inline bool findQuoteContinuation(const char* const* words, const size_t wordCount, const char* quote,
                                   size_t& outLast) {
-  if (!words || !quote || wordCount == 0) return false;
+  if (!words || !quote || !quote[0] || wordCount == 0) return false;
   const char firstChar = firstSignificant(words[0]);
   if (firstChar == '\0') return false;
 

@@ -1,0 +1,4 @@
+@import url(other.css);
+@namespace epub url(http://www.idpf.org/2007/ops);
+p.noindent + p { text-indent: 0; }
+a[href] ~ span:hover { color: blue; }

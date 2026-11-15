@@ -32,6 +32,10 @@ void operator delete(void* allocation) noexcept { std::free(allocation); }
 
 void operator delete(void* allocation, size_t) noexcept { std::free(allocation); }
 
+// Nothrow new (std::get_temporary_buffer, firmware nothrow allocations) must come from malloc too, or the free()
+// deletes above mismatch under ASan.
+void* operator new(const size_t size, const std::nothrow_t&) noexcept { return std::malloc(size ? size : 1); }
+
 TEST(FontCacheManagerTest, PrewarmScopeBatchesEachFontAndResolvedStyleSeparately) {
   SdCardFont readerFont;
   SdCardFont fallbackFont;

@@ -1,0 +1,3 @@
+/* heading block
+   spans lines * with stars */
+p { /* inline */ text-align: right; } /* trailing */
