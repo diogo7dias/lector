@@ -664,7 +664,7 @@ void CrossPointWebServer::pumpDuringFetch() {
 bool CrossPointWebServer::conflictsWithActiveFetch(const String& path) const {
   if (!fetchActive()) return false;
   const std::string target(path.c_str());
-  if (fetch.destPath == target) return true;
+  if (fetch.destPath == target || FsHelpers::partialPathFor(fetch.destPath) == target) return true;
   // A parent folder counts: removing or moving it takes the open file with it.
   return fetch.destPath.rfind(target + "/", 0) == 0;
 }
@@ -714,14 +714,23 @@ void CrossPointWebServer::runQueuedFetch() {
   // A link like ".../download?id=8123" names nothing, so ask for the header the
   // server may send instead and use it once the bytes are safely on the card.
   std::string contentDisposition;
-  const auto result = HttpDownloader::downloadToFile(
-      fetch.url, fetch.destPath,
+  // Written under .part and renamed when whole, like every upload: a reset
+  // mid-download otherwise leaves a cut book under its real name, and
+  // handlePostFetch then refuses the retry because the name is taken.
+  const std::string partPath = FsHelpers::partialPathFor(fetch.destPath);
+  auto result = HttpDownloader::downloadToFile(
+      fetch.url, partPath,
       [this](const size_t downloaded, const size_t total) {
         fetch.received = downloaded;
         fetch.total = total;
         pumpDuringFetch();
       },
       &fetchCancelRequested, "", "", false, &contentDisposition);
+  if (result == HttpDownloader::OK && !Storage.rename(partPath.c_str(), fetch.destPath.c_str())) {
+    LOG_ERR("WEB", "Could not rename %s to %s", partPath.c_str(), fetch.destPath.c_str());
+    Storage.remove(partPath.c_str());
+    result = HttpDownloader::FILE_ERROR;
+  }
 
   if (result == HttpDownloader::OK) {
     applyServerFilename(contentDisposition);

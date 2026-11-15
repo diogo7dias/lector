@@ -2,6 +2,30 @@
 #include <SDCardManager.h>
 #include <gtest/gtest.h>
 
+// A dirty SdFat cache is lost by FsVolume::end(): the volume must be synced first, and a
+// failed sync must leave the card mounted and the firmware's access intact.
+TEST(UsbDriveStorageGuard, FailedFlushKeepsTheCardMountedAndUsable) {
+  syncOk = false;
+  EXPECT_FALSE(Storage.beginUsbDrive());
+  EXPECT_EQ(syncCalls, 1);
+  EXPECT_EQ(detachCalls, 0);
+  HalFile file;
+  EXPECT_TRUE(Storage.openFileForWrite("TEST", "/still.txt", file));
+  syncOk = true;
+}
+
+TEST(UsbDriveStorageGuard, SleepFlushesBeforeUnmountAndStillSleepsOnFailure) {
+  syncCalls = detachCalls = 0;
+  Storage.prepareForDeepSleep();
+  EXPECT_EQ(syncCalls, 1);
+  EXPECT_EQ(detachCalls, 1);
+  syncOk = false;
+  Storage.prepareForDeepSleep();
+  EXPECT_EQ(syncCalls, 2);
+  EXPECT_EQ(detachCalls, 2);
+  syncOk = true;
+}
+
 // Once USB Drive lends the card to a computer, no firmware file call may reach it,
 // including through a handle that was opened before the handoff.
 TEST(UsbDriveStorageGuard, NoCallReachesTheCardWhileTheHostHoldsIt) {
@@ -10,7 +34,11 @@ TEST(UsbDriveStorageGuard, NoCallReachesTheCardWhileTheHostHoldsIt) {
   const uint8_t byte = 1;
   EXPECT_EQ(before.write(&byte, 1), 1u);
 
+  syncCalls = detachCalls = detachWithoutSync = 0;
   ASSERT_TRUE(Storage.beginUsbDrive());
+  EXPECT_EQ(syncCalls, 1);
+  EXPECT_EQ(detachCalls, 1);
+  EXPECT_EQ(detachWithoutSync, 0);
   const int callsAtHandoff = cardCalls;
 
   EXPECT_FALSE(before.isOpen());

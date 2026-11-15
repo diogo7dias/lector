@@ -10,6 +10,12 @@
 #include <vector>
 
 inline int cardCalls = 0;
+// Volume flush: syncOk drives FsFile::sync(); detachAfterSync records that a detach only
+// ever follows a successful sync.
+inline bool syncOk = true;
+inline int syncCalls = 0;
+inline int detachCalls = 0;
+inline int detachWithoutSync = 0;
 
 class FsBlockDeviceInterface {
  public:
@@ -31,6 +37,7 @@ class FsFile {
     return true;
   }
   bool isOpen() const { return open_; }
+  bool sync() { return ++cardCalls, ++syncCalls, syncOk; }
   void flush() { ++cardCalls; }
   size_t getName(char*, size_t) { return ++cardCalls; }
   bool getModifyDateTime(uint16_t*, uint16_t*) { return ++cardCalls; }
@@ -63,7 +70,11 @@ class SDCardManager {
  public:
   bool begin() { return true; }
   bool ready() const { return true; }
-  FsBlockDeviceInterface* detachFilesystemForRawAccess() { return &device; }
+  FsBlockDeviceInterface* detachFilesystemForRawAccess() {
+    ++detachCalls;
+    if (syncCalls == 0) ++detachWithoutSync;
+    return &device;
+  }
   String readFile(const char*) { return ++cardCalls, String("x"); }
   size_t readFileToBuffer(const char*, char*, size_t, size_t) { return ++cardCalls; }
   bool writeFile(const char*, const String&) { return ++cardCalls; }

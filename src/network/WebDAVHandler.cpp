@@ -574,23 +574,33 @@ void WebDAVHandler::handleMove(WebServer& s) {
     return;
   }
 
-  if (dstExists) {
-    Storage.remove(dstPath.c_str());
-  }
-
-  HalFile file = Storage.open(srcPath.c_str());
-  if (!file) {
-    s.send(500, "text/plain", "Failed to open source");
-    return;
-  }
-
   clearBookCache(srcPath.c_str());
   // Either end of the move can be a sleep folder (in or out both change it).
   // Out of the indexed folder is a deletion, into it is a creation; both are
   // exact one-entry patches, so neither end needs a walk.
   const auto pendingDelete = crosspoint::sleep::windex::planDeletion(srcPath.c_str());
-  bool success = file.rename(dstPath.c_str());
-  file.close();
+
+  // The destination can be the source under another spelling: FAT ignores case and
+  // trailing dots, and answers to 8.3 aliases, so comparing the two strings proves
+  // nothing. Removing the destination first deleted the very file a client was
+  // renaming ("Book.epub" to "book.epub"). The source steps aside first; whatever
+  // still answers to the destination after that is a different file.
+  String movingPath = srcPath;
+  if (dstExists) {
+    movingPath += ".davtmp";
+    Storage.remove(movingPath.c_str());
+    if (!Storage.rename(srcPath.c_str(), movingPath.c_str())) {
+      s.send(500, "text/plain", "Move failed");
+      return;
+    }
+    if (Storage.exists(dstPath.c_str()) && !Storage.remove(dstPath.c_str())) {
+      Storage.rename(movingPath.c_str(), srcPath.c_str());
+      s.send(409, "text/plain", "Destination could not be replaced");
+      return;
+    }
+  }
+  const bool success = Storage.rename(movingPath.c_str(), dstPath.c_str());
+  if (!success && dstExists) Storage.rename(movingPath.c_str(), srcPath.c_str());
 
   if (success) {
     crosspoint::sleep::windex::commitDeletion(pendingDelete);
@@ -677,12 +687,13 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   }
   uint8_t* const buf = bufOwner.get();
 
-  if (dstExists) {
-    Storage.remove(dstPath.c_str());
-  }
-
+  // Staged like PUT. The old destination went first before, so a copy that ran out
+  // of disk lost it, and a destination that is the source under another spelling
+  // (FAT ignores case) was deleted while it was still being read.
+  const String tempPath = dstPath + ".davtmp";
+  Storage.remove(tempPath.c_str());
   HalFile dstFile;
-  if (!Storage.openFileForWrite("DAV", dstPath, dstFile)) {
+  if (!Storage.openFileForWrite("DAV", tempPath, dstFile)) {
     srcFile.close();
     s.send(500, "text/plain", "Failed to create destination");
     return;
@@ -691,10 +702,9 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   bool copyOk = true;
   while (srcFile.available()) {
     resetTaskWatchdogIfSubscribed();
-    int bytesRead = srcFile.read(buf, COPY_BYTES);
-    if (bytesRead <= 0) break;
-    size_t written = dstFile.write(buf, bytesRead);
-    if (written != (size_t)bytesRead) {
+    const int bytesRead = srcFile.read(buf, COPY_BYTES);
+    // More was available, so anything but data is a read error, not the end.
+    if (bytesRead <= 0 || dstFile.write(buf, bytesRead) != static_cast<size_t>(bytesRead)) {
       copyOk = false;
       break;
     }
@@ -702,6 +712,9 @@ void WebDAVHandler::handleCopy(WebServer& s) {
 
   srcFile.close();
   dstFile.close();
+
+  if (copyOk && dstExists) copyOk = Storage.remove(dstPath.c_str());
+  copyOk = copyOk && Storage.rename(tempPath.c_str(), dstPath.c_str());
 
   if (copyOk) {
     if (dstExists) {
@@ -711,7 +724,7 @@ void WebDAVHandler::handleCopy(WebServer& s) {
     }
     s.send(dstExists ? 204 : 201);
   } else {
-    Storage.remove(dstPath.c_str());
+    Storage.remove(tempPath.c_str());
     s.send(500, "text/plain", "Copy failed - disk full?");
   }
 }

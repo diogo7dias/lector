@@ -25,8 +25,9 @@ class HalStorage {
   HalStorage();
   bool begin();
   bool ready() const;
-  // Stop the SD card for deep sleep: unmount, stop the SDMMC host, and float the
-  // bus pads (no-op on SPI boards). Call only after all file users have stopped;
+  // Stop the SD card for deep sleep: flush the volume, unmount, stop the SDMMC host,
+  // and float the bus pads (flush only on SPI boards). A failed flush is logged and
+  // sleep goes on. Call only after all file users have stopped;
   // open HalFiles become invalid. A deep-sleep wake resets the MCU and mounts
   // storage again through begin().
   void prepareForDeepSleep();
