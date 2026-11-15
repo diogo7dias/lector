@@ -7,9 +7,9 @@
 #include <OpdsStream.h>
 
 #include "CrossPointSettings.h"
+#include "network/FetchUrlPolicy.h"
 #include "util/BookCacheUtils.h"
 #include "util/OpdsFilename.h"
-#include "util/StringUtils.h"
 #include "util/UrlUtils.h"
 
 namespace opds {
@@ -170,13 +170,13 @@ HttpDownloader::DownloadError OpdsClient::downloadBook(
   for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
     if (isCancelled()) return giveUp(HttpDownloader::ABORTED);
 
-    std::string serverFilename;
+    std::string contentDisposition;
     HttpDownloader::DownloadError result;
 
     if (beforeAttempt) beforeAttempt();
     result = HttpDownloader::downloadToFile(
         downloadUrl, partPath, progress, cancelFlag, server.username, server.password,
-        /*allowResume=*/true, server.keepFilename ? &serverFilename : nullptr, timeoutMs);
+        /*allowResume=*/true, server.keepFilename ? &contentDisposition : nullptr, timeoutMs);
     if (afterAttempt) afterAttempt();
 
     if (result == HttpDownloader::OK) {
@@ -185,7 +185,10 @@ HttpDownloader::DownloadError OpdsClient::downloadBook(
         LOG_ERR("OPDSCLI", "rename of finished download failed: %s", partPath.c_str());
         return giveUp(HttpDownloader::FILE_ERROR);
       }
-      const std::string sanitized = StringUtils::sanitizeFilename(serverFilename);
+      // downloadToFile hands back the raw header ("attachment; filename=..."), and
+      // sanitizeFilename never returns empty: sanitizing the header itself renamed
+      // every book to the header text, or to "book" when the server sent none.
+      const std::string sanitized = fetch_url::filenameFromContentDisposition(contentDisposition);
       if (server.keepFilename && !sanitized.empty()) {
         std::string finalPath;
         finalPath.reserve(96);
