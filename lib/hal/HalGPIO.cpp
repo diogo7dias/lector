@@ -192,6 +192,13 @@ bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
 bool HalGPIO::rawInputActive() {
   if (inputMgr.isPowerButtonPhysicallyPressed()) return true;
+  // The X4 Pro's keys are plain active-low GPIOs, which the ADC read below never sees.
+  if (BoardConfig::ACTIVE.inputStyle == BoardConfig::InputStyle::DigitalButtons) {
+    const auto& in = BoardConfig::ACTIVE.input;
+    for (const int8_t pin : {in.back, in.confirm, in.left, in.right, in.up, in.down}) {
+      if (pin >= 0 && digitalRead(pin) == LOW) return true;
+    }
+  }
   InputManager::ButtonAdcSample g1{}, g2{};
   inputMgr.readButtonAdc(g1, g2);
   // The Xteink ladder idles at the ADC full-scale rail (~4095); every button band sits below 3900.

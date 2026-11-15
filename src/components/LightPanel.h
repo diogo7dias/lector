@@ -24,15 +24,9 @@
 #include "util/DebugTrace.h"
 
 // The light panel: a band pulled down from the top edge holding the frontlight's controls
-// and the actions that make sense where you are. Drawn over whatever is on screen without
-// clearing it, the same way OptionPopup is, so the page you were
-// reading is still there to judge the light against — which is the whole reason to reach
-// for it mid-page.
-//
-// White with black text, like the message banner it borrows its metrics from.
-//
-// The page below is stippled, one pixel in two, which reads as a shade drawn over the page
-// without erasing a word of it.
+// and the actions that make sense where you are. Drawn over the page without clearing it,
+// like OptionPopup, so the page is still there to judge the light against. White with
+// black text, like the message banner; the page below is stippled one pixel in two.
 //
 // Every light change applies to the hardware immediately; SETTINGS is written once, on
 // close, so a drag across the track does not spend a file write per pixel.
@@ -135,10 +129,14 @@ class LightPanel {
       const int localY = ty - topInset_;
       // A drag that began on a track owns every following frame, wherever the finger has
       // wandered to: letting the hit test speak again mid-drag would hand the finger to
-      // whatever it slid over.
-      if (!down && dragging_ != light_panel::Row::None) {
+      // whatever it slid over. `down` repeats the landing point while the contact is a tap
+      // candidate, so follow the live position or a small nudge at 0% or 100% does nothing.
+      if (dragging_ != light_panel::Row::None) {
+        int lx = tx;
+        int ly = ty;
+        input.isScreenTouchHeld(lx, ly);
         const auto& bar = dragging_ == light_panel::Row::Warmth ? layout_.warmth.bar : layout_.brightness.bar;
-        if (setValue(dragging_, light_panel::valueForX(bar, tx, 0, maxFor(dragging_)))) requestUpdate();
+        if (setValue(dragging_, light_panel::valueForX(bar, lx, 0, maxFor(dragging_)))) requestUpdate();
         return true;
       }
 

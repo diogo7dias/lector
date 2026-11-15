@@ -97,6 +97,7 @@ struct MappedInputManager {
   unsigned long getHeldTime() const { return 0; }
   bool wasAnyPressed() const { return key; }
   int tappedHintHardware() const { return -1; }
+  bool isScreenTouchHeld(int&, int&) const { return false; }
   SwipeDir wasSwipe() const { return touch ? swipe : SwipeDir::None; }
   list_swipe::Scroll wasListScrollSwipe() const {
     if (wasSwipe() == SwipeDir::Up) return list_swipe::Scroll::PageDown;
@@ -162,6 +163,7 @@ inline const struct {
 
 #include "UIThemeTokens.h.inc"
 #include "UiAppHost.h.inc"
+#include "components/TouchFrameRouting.h"
 
 inline std::atomic<const fui::ThemeTokens*>& sharedUiThemeCell() {
   static std::atomic<const fui::ThemeTokens*> cell{nullptr};
