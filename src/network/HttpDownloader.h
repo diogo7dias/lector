@@ -44,13 +44,7 @@ class HttpDownloader {
   static constexpr uint32_t DEFAULT_TIMEOUT_MS = 60000;
 
   /**
-   * Fetch text content from a URL with optional credentials.
-   */
-  static bool fetchUrl(const std::string& url, std::string& outContent, const std::string& username = "",
-                       const std::string& password = "", uint32_t timeoutMs = DEFAULT_TIMEOUT_MS);
-
-  /**
-   * As above, streaming into `stream`. outError receives why a failed fetch
+   * Fetch a URL with optional credentials, streaming into `stream`. outError receives why a failed fetch
    * failed, so a caller can tell the reader whether the server refused it or the
    * connection never got that far.
    */

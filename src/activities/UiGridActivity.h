@@ -74,8 +74,6 @@ class UiGridActivity : public Activity, protected UiAppHost {
   // Up and Down move a whole grid row so the column is kept; Left and Right move
   // one cell.
   void moveSelection(int deltaRows, int deltaCells);
-  // Puts the cursor back inside the grid after a rebuild changed its size.
-  void clampSelection();
 
   ButtonNavigator buttonNavigator{ButtonNavigator::LIST_REPEAT_INTERVAL_MS, ButtonNavigator::LIST_REPEAT_START_MS};
 

@@ -388,12 +388,10 @@ class GfxRenderer {
   // Grayscale functions
   void setRenderMode(const RenderMode mode) { this->renderMode = mode; }
   RenderMode getRenderMode() const { return renderMode; }
-  // Grayscale preconditioning settle pass (no-op on X4). The rect overload
-  // takes the gray region in LOGICAL screen coordinates and rotates it to the
-  // panel; the no-arg overload settles the full frame. Call after the BW base
-  // frame is displayed and before the grayscale planes are written.
+  // Grayscale preconditioning settle pass over the full frame (no-op on X4).
+  // Call after the BW base frame is displayed and before the grayscale planes
+  // are written.
   void preconditionGrayscale() const;
-  void preconditionGrayscale(int x, int y, int w, int h) const;
   // Display the framebuffer as the base frame for a grayscale overlay that
   // follows (X3: OEM differential base waveform; others: plain display with
   // `fallback`).
@@ -448,7 +446,6 @@ class GfxRenderer {
 
   // Low level functions
   uint8_t* getFrameBuffer() const;
-  size_t getBufferSize() const;
   bool lastPassCleaned() const { return display.lastPassCleaned(); }
   uint16_t getDisplayWidth() const { return panelWidth; }
   uint16_t getDisplayHeight() const { return panelHeight; }

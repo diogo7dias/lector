@@ -186,16 +186,6 @@ int utf8SafeTruncateBuffer(const char* buf, int len) {
   return len;
 }
 
-size_t utf8RemoveLastChar(std::string& str) {
-  if (str.empty()) return 0;
-  size_t pos = str.size() - 1;
-  while (pos > 0 && (static_cast<unsigned char>(str[pos]) & 0xC0) == 0x80) {
-    --pos;
-  }
-  str.resize(pos);
-  return pos;
-}
-
 TextEncodingGuess utf8GuessEncoding(const unsigned char* data, const size_t len) {
   bool sawMultiByte = false;
   size_t i = 0;

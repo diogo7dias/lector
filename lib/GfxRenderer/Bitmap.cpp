@@ -44,44 +44,6 @@ uint32_t Bitmap::readLE32(HalFile& f) {
          (static_cast<uint32_t>(b3) << 24);
 }
 
-const char* Bitmap::errorToString(BmpReaderError err) {
-  switch (err) {
-    case BmpReaderError::Ok:
-      return "Ok";
-    case BmpReaderError::FileInvalid:
-      return "FileInvalid";
-    case BmpReaderError::SeekStartFailed:
-      return "SeekStartFailed";
-    case BmpReaderError::NotBMP:
-      return "NotBMP (missing 'BM')";
-    case BmpReaderError::DIBTooSmall:
-      return "DIBTooSmall (<40 bytes)";
-    case BmpReaderError::BadPlanes:
-      return "BadPlanes (!= 1)";
-    case BmpReaderError::UnsupportedBpp:
-      return "UnsupportedBpp (expected 1, 2, 4, 8, 24, or 32)";
-    case BmpReaderError::UnsupportedCompression:
-      return "UnsupportedCompression (expected BI_RGB or BI_BITFIELDS for 32bpp)";
-    case BmpReaderError::BadDimensions:
-      return "BadDimensions";
-    case BmpReaderError::ImageTooLarge:
-      return "ImageTooLarge (max 2048x3072)";
-    case BmpReaderError::PaletteTooLarge:
-      return "PaletteTooLarge";
-
-    case BmpReaderError::SeekPixelDataFailed:
-      return "SeekPixelDataFailed";
-    case BmpReaderError::BufferTooSmall:
-      return "BufferTooSmall";
-
-    case BmpReaderError::OomRowBuffer:
-      return "OomRowBuffer";
-    case BmpReaderError::ShortReadRow:
-      return "ShortReadRow";
-  }
-  return "Unknown";
-}
-
 BmpReaderError Bitmap::parseHeaders() {
   if (!file) return BmpReaderError::FileInvalid;
   if (!file.seek(0)) return BmpReaderError::SeekStartFailed;

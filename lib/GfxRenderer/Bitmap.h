@@ -65,8 +65,6 @@ enum class BitmapToneMapping : uint8_t { None, Adaptive };
 
 class Bitmap {
  public:
-  static const char* errorToString(BmpReaderError err);
-
   explicit Bitmap(HalFile& file, bool dithering = false, BitmapToneMapping toneMapping = BitmapToneMapping::None)
       : file(file), dithering(dithering), toneMapping(toneMapping) {}
   BmpReaderError parseHeaders();
