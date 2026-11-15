@@ -13,6 +13,14 @@
 #include "util/UrlUtils.h"
 
 namespace opds {
+namespace {
+// The stored password only reaches the server it was entered for, never a host a
+// feed link points at.
+const std::string& ifSameServer(const OpdsServer& server, const std::string& url, const std::string& secret) {
+  static const std::string none;
+  return fetch_url::mayCarryCredentials(server.url, url) ? secret : none;
+}
+}  // namespace
 
 ClientStatus OpdsClient::fetchFeed(const OpdsServer& server, const std::string& pathOrUrl, FeedResult& outResult,
                                    const ReconnectCallback& onReconnect, bool* cancelFlag, const uint32_t timeoutMs,
@@ -61,7 +69,8 @@ ClientStatus OpdsClient::fetchFeed(const OpdsServer& server, const std::string& 
     {
       OpdsParserStream stream{parser};
       fetched =
-          HttpDownloader::fetchUrl(url, stream, server.username, server.password, &fetchError, &fetchStatus, timeoutMs);
+          HttpDownloader::fetchUrl(url, stream, ifSameServer(server, url, server.username),
+                                   ifSameServer(server, url, server.password), &fetchError, &fetchStatus, timeoutMs);
     }
     if (afterAttempt) afterAttempt();
 
@@ -175,7 +184,8 @@ HttpDownloader::DownloadError OpdsClient::downloadBook(
 
     if (beforeAttempt) beforeAttempt();
     result = HttpDownloader::downloadToFile(
-        downloadUrl, partPath, progress, cancelFlag, server.username, server.password,
+        downloadUrl, partPath, progress, cancelFlag, ifSameServer(server, downloadUrl, server.username),
+        ifSameServer(server, downloadUrl, server.password),
         /*allowResume=*/true, server.keepFilename ? &contentDisposition : nullptr, timeoutMs);
     if (afterAttempt) afterAttempt();
 

@@ -171,6 +171,27 @@ inline std::string filenameFromContentDisposition(const std::string_view header)
   return !extended.empty() ? extended : plain;
 }
 
+// True when a request for `url` may carry the password stored for `serverUrl`.
+// A catalogue's links can point anywhere (a CDN, another catalogue), and Basic
+// auth sent there hands the password to that host. Same host on any port (one
+// machine often serves the catalogue and its files on two), and never from https
+// down to plain http. A `serverUrl` without a scheme is http, as UrlUtils reads it.
+inline bool mayCarryCredentials(const std::string_view serverUrl, const std::string_view url) {
+  const auto hostOf = [](std::string_view text) {
+    if (const size_t scheme = text.find("://"); scheme != std::string_view::npos) text.remove_prefix(scheme + 3);
+    text = text.substr(0, text.find_first_of("/?#"));
+    if (const size_t user = text.rfind('@'); user != std::string_view::npos) text.remove_prefix(user + 1);
+    if (!text.empty() && text.front() == '[') return text.substr(0, text.find(']'));  // IPv6 literal
+    return text.substr(0, text.find(':'));
+  };
+  const std::string_view serverHost = hostOf(serverUrl);
+  const std::string_view host = hostOf(url);
+  if (serverHost.empty() || serverHost.size() != host.size() || !detail::startsWithIgnoreCase(host, serverHost)) {
+    return false;
+  }
+  return detail::startsWithIgnoreCase(url, "https://") || !detail::startsWithIgnoreCase(serverUrl, "https://");
+}
+
 // Absolute path a fetched file is written to. `directory` is the folder the
 // request named; `filename` must already have been through the helpers above.
 inline std::string destinationPath(const std::string_view directory, const std::string_view filename) {
