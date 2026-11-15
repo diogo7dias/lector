@@ -13,7 +13,6 @@ class SettingsActivity final : public UiGridActivity {
   enum class Mode : uint8_t { Hub, Category };
   Mode mode = Mode::Hub;
   int selectedCategory = 0;
-  int selectedSettingIndex = 0;
   int settingsCount = 0;
 
   // The cells the grid is drawing: one category's settings, its group headings dropped.

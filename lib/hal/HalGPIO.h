@@ -23,9 +23,7 @@
 #define BQ27220_CUR_REG 0x0C   // Current() command code (signed mA)
 
 class HalGPIO {
-#if CROSSPOINT_EMULATED == 0
   InputManager inputMgr;
-#endif
 
   bool lastUsbConnected = false;
   bool usbStateChanged = false;

@@ -12,8 +12,6 @@ class UITheme {
   static UITheme instance;
 
  public:
-  enum class TextVerticalAlignment { TOP, CENTER, BOTTOM };
-
   UITheme();
   static UITheme& getInstance() { return instance; }
 
