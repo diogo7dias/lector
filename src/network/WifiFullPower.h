@@ -1,8 +1,6 @@
 #pragma once
 
-#ifndef SIMULATOR
 #include <esp_wifi.h>
-#endif
 
 // Holds the radio at full power for as long as a transfer is running.
 //
@@ -21,19 +19,15 @@ class WifiFullPower {
   WifiFullPower() {
     // cppcheck-suppress knownConditionTrueFalse ; depth is a static refcount
     if (depth++ == 0) {
-#ifndef SIMULATOR
       if (esp_wifi_get_ps(&saved) != ESP_OK) saved = WIFI_PS_MIN_MODEM;
       esp_wifi_set_ps(WIFI_PS_NONE);
-#endif
     }
   }
 
   ~WifiFullPower() {
     // cppcheck-suppress knownConditionTrueFalse ; depth is a static refcount
     if (--depth == 0) {
-#ifndef SIMULATOR
       esp_wifi_set_ps(saved);
-#endif
     }
   }
 
@@ -44,7 +38,5 @@ class WifiFullPower {
   // Every network transfer runs on the same task, so a plain counter is enough;
   // nothing here is reached from an ISR.
   static inline int depth = 0;
-#ifndef SIMULATOR
   static inline wifi_ps_type_t saved = WIFI_PS_MIN_MODEM;
-#endif
 };
