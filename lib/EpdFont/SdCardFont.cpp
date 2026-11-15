@@ -893,8 +893,6 @@ int SdCardFont::prewarm(TextGetter getter, const void* ctx, uint32_t textCount, 
   styleMask = resolveStyleMask(styleMask);
   if (styleMask == 0) return 0;
 
-  unsigned long startMs = millis();
-
   // Cap the unique-codepoint budget by what the heap can actually hold as a
   // full mini arena (glyph structs + bitmaps, working headroom left over).
   // Multi-string batches only: a several-hundred-chapter CJK table of
@@ -1013,7 +1011,6 @@ int SdCardFont::prewarm(TextGetter getter, const void* ctx, uint32_t textCount, 
     totalMissed += missedForStyle;
   }
 
-  stats_.prewarmTotalMs = millis() - startMs;
   return totalMissed;
 }
 
@@ -1222,9 +1219,6 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
     return static_cast<int>(cpCount);
   }
 
-  unsigned long sdStart = millis();
-  uint32_t seekCount = 0;
-
   // Read glyph metadata. lastReadIndex tracks sequential reads to skip redundant
   // seeks; INT32_MIN guarantees the first iteration always seeks to the correct
   // offset (otherwise when gIdx == 0, the "gIdx != lastReadIndex + 1" check would
@@ -1246,7 +1240,6 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
         freeStyleMiniData(s);
         return static_cast<int>(cpCount);
       }
-      seekCount++;
     }
     if (file.read(reinterpret_cast<uint8_t*>(&s.miniGlyphs[mapIdx]), sizeof(EpdGlyph)) != sizeof(EpdGlyph)) {
       LOG_ERR("SDCF", "Prewarm: short glyph read (style %u, glyph %d)", styleIdx, gIdx);
@@ -1322,7 +1315,6 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
           freeStyleMiniData(s);
           return static_cast<int>(cpCount);
         }
-        seekCount++;
       }
       if (file.read(s.miniBitmap + miniBitmapOffset, glyph.dataLength) != static_cast<int>(glyph.dataLength)) {
         LOG_ERR("SDCF", "Prewarm: short bitmap read (style %u)", styleIdx);
@@ -1337,7 +1329,6 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
     }
   }
 
-  uint32_t sdTime = millis() - sdStart;
   delete[] readOrder;
 
   // Full render prewarm: load the persistent kern classes + ligatures (one-time
@@ -1374,12 +1365,6 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   s.miniData.coverageHandler = &SdCardFont::onCoverageQuery;
 
   s.epdFont.data = &s.miniData;
-
-  // Accumulate stats
-  stats_.sdReadTimeMs += sdTime;
-  stats_.seekCount += seekCount;
-  stats_.uniqueGlyphs += validCount;
-  stats_.bitmapBytes += totalBitmapSize;
 
   return missed;
 }
@@ -1612,8 +1597,6 @@ int SdCardFont::buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, 
   styleMask = resolveStyleMask(styleMask);
   if (styleMask == 0) return 0;
 
-  unsigned long startMs = millis();
-
   // Grow nearly full tables now rather than during the merge: the merge runs
   // while the codepoint scratch below is live, and a table grown then lands
   // above it, inside the hole the scratch leaves when it is freed.
@@ -1653,7 +1636,6 @@ int SdCardFont::buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, 
   }
   std::sort(codepoints, codepoints + cpCount);
   int totalMissed = fetchAdvancesForCodepoints(codepoints, cpCount, styleMask);
-  stats_.prewarmTotalMs = millis() - startMs;
   return totalMissed;
 }
 
@@ -1665,15 +1647,6 @@ int SdCardFont::buildAdvanceTable(const std::deque<std::string>& words, uint8_t 
                                   const bool includeSmallCaps) {
   return buildAdvanceTableRange(words.begin(), words.end(), words.size() > 1, styleMask, extraText, includeSmallCaps);
 }
-
-// --- Stats ---
-
-void SdCardFont::logStats(const char* label) {
-  LOG_DBG("SDCF", "[%s] total=%ums sd_read=%ums seeks=%u glyphs=%u bitmap=%u bytes", label, stats_.prewarmTotalMs,
-          stats_.sdReadTimeMs, stats_.seekCount, stats_.uniqueGlyphs, stats_.bitmapBytes);
-}
-
-void SdCardFont::resetStats() { stats_ = Stats{}; }
 
 // --- Public accessors ---
 

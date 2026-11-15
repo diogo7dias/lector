@@ -19,8 +19,6 @@ class SdCardFont {
     return 0;
   }
   uint8_t resolveStyle(uint8_t style) const { return resolvedStyles[style & 0x03]; }
-  void logStats(const char*) {}
-  void resetStats() {}
 
   PrewarmCall prewarmCalls[4] = {};
   int prewarmCallCount = 0;

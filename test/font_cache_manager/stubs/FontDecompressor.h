@@ -19,8 +19,6 @@ class FontDecompressor {
     std::snprintf(call.text, sizeof(call.text), "%s", text);
     return 0;
   }
-  void logStats(const char*) {}
-  void resetStats() {}
 
   PrewarmCall prewarmCalls[4] = {};
   int prewarmCallCount = 0;
