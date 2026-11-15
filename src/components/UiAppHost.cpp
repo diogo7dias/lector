@@ -1,5 +1,6 @@
 #include "UiAppHost.h"
 
+#include "TouchFrameRouting.h"
 #include "UiAppHelpers.h"
 
 namespace fui = freeink::ui;
@@ -113,7 +114,15 @@ UiAppHost::TouchRoute UiAppHost::routeTouch(const MappedInputManager& input, con
   }
   result.routed = true;
   armedThisPass = false;
-  result.event = app.route(result.snap);
+  int liveX = 0;
+  int liveY = 0;
+  if (routeHeld && input.isScreenTouchHeld(liveX, liveY)) {
+    result.event =
+        routePressThenHold(result.snap, static_cast<int16_t>(liveX), static_cast<int16_t>(liveY), app.touchActive(),
+                           [this](const fui::InputSnapshot& snap) { return app.route(snap); });
+  } else {
+    result.event = app.route(result.snap);
+  }
   if (!result.snap.touchReleased) return result;
   if (armedThisPass) {
     // Routing a release clears the SDK's active element, which is what paints
