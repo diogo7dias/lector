@@ -64,12 +64,7 @@ class SDCardManager {
   bool begin() { return true; }
   bool ready() const { return true; }
   FsBlockDeviceInterface* detachFilesystemForRawAccess() { return &device; }
-  std::vector<String> listFiles(const char*, int) { return ++cardCalls, std::vector<String>{"a"}; }
   String readFile(const char*) { return ++cardCalls, String("x"); }
-  template <class P>
-  bool readFileToStream(const char*, P&, size_t) {
-    return ++cardCalls;
-  }
   size_t readFileToBuffer(const char*, char*, size_t, size_t) { return ++cardCalls; }
   bool writeFile(const char*, const String&) { return ++cardCalls; }
   bool ensureDirectoryExists(const char*) { return ++cardCalls; }

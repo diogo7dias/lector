@@ -50,7 +50,6 @@ TEST(UsbDriveStorageGuard, NoCallReachesTheCardWhileTheHostHoldsIt) {
   EXPECT_FALSE(Storage.remove("/log.txt"));
   EXPECT_FALSE(Storage.rename("/log.txt", "/x.txt"));
   EXPECT_FALSE(Storage.removeDir("/dir"));
-  EXPECT_TRUE(Storage.listFiles("/").empty());
   EXPECT_EQ(Storage.sdUsedBytes(), 0u);
 
   {
