@@ -69,3 +69,13 @@ bool InflateReader::read(uint8_t* dest, size_t len) {
   if (res < 0) return false;
   return decomp.dest == decomp.dest_limit;
 }
+
+bool InflateReader::readAtMost(uint8_t* dest, size_t len, size_t* produced) {
+  if (!streamingMode) decomp.dest_start = dest;
+  decomp.dest = dest;
+  decomp.dest_limit = dest + len;
+
+  const int res = uzlib_uncompress(&decomp);
+  *produced = static_cast<size_t>(decomp.dest - dest);
+  return res >= 0;
+}

@@ -8,12 +8,14 @@
 //
 // Used by FontDecompressor for its tiny one-shot flash-resident group
 // decompressions, where uzlib's ~1KB state beats tinfl's ~11KB on the
-// OOM-sensitive render path, and by DictZip for streaming dictionary chunks.
+// OOM-sensitive render path, by DictZip for streaming dictionary chunks, and by
+// the crash symbol table in lib/hal.
 // The throughput paths (zip entries, PNG IDAT) use InflateStream (lib/miniz),
 // which decodes several times faster.
 //
 // Two modes:
-//   init(false)  — one-shot: input is a contiguous buffer, call read() once.
+//   init(false)  — one-shot: call read() or readAtMost() once for the whole output.
+//                  Input is a contiguous buffer or comes from a read callback.
 //   init(true)   — streaming: allocates a 32KB ring buffer for back-references
 //                  across multiple read() calls.
 //
@@ -78,6 +80,10 @@ class InflateReader {
   // Decompress exactly len bytes into dest.
   // Returns false if the stream ends before producing len bytes, or on error.
   bool read(uint8_t* dest, size_t len);
+
+  // Decompress up to len bytes into dest, for a stream whose inflated size is not known.
+  // *produced is the byte count. False only on a stream error; a stream that ends early is fine.
+  bool readAtMost(uint8_t* dest, size_t len, size_t* produced);
 
  private:
   uzlib_uncomp decomp = {};
