@@ -80,6 +80,24 @@ TEST(FetchUrlPolicy, AcceptsOnlyHttpSchemes) {
   EXPECT_FALSE(fetch_url::isSupportedUrl(""));
 }
 
+TEST(FetchUrlPolicy, CredentialsStayWithTheServerTheyWereGivenFor) {
+  EXPECT_TRUE(fetch_url::mayCarryCredentials("https://books.example/opds", "https://books.example/get/1.epub"));
+  EXPECT_TRUE(fetch_url::mayCarryCredentials("192.168.1.5:8083/opds", "http://192.168.1.5:8083/opds/new"));
+  EXPECT_TRUE(fetch_url::mayCarryCredentials("http://Books.Example:8083/opds", "http://books.example:9000/1.epub"));
+  // A server entered as http may answer with https links to itself.
+  EXPECT_TRUE(fetch_url::mayCarryCredentials("http://books.example/opds", "https://books.example/1.epub"));
+  EXPECT_TRUE(fetch_url::mayCarryCredentials("http://[fe80::1]:8083/opds", "http://[fe80::1]:8083/1.epub"));
+
+  // A link the feed points at another host, or one that only starts like the server.
+  EXPECT_FALSE(fetch_url::mayCarryCredentials("https://books.example/opds", "https://cdn.other.example/1.epub"));
+  EXPECT_FALSE(fetch_url::mayCarryCredentials("https://books.example/opds", "https://books.example.evil.test/1.epub"));
+  EXPECT_FALSE(fetch_url::mayCarryCredentials("https://books.example/opds", "https://books.example@evil.test/1"));
+  EXPECT_FALSE(fetch_url::mayCarryCredentials("http://[fe80::1]/opds", "http://[fe80::2]/1.epub"));
+  // Never from https down to plain http.
+  EXPECT_FALSE(fetch_url::mayCarryCredentials("https://books.example/opds", "http://books.example/1.epub"));
+  EXPECT_FALSE(fetch_url::mayCarryCredentials("", "http://books.example/1.epub"));
+}
+
 TEST(FetchUrlPolicy, JoinsDestinationPath) {
   EXPECT_EQ(fetch_url::destinationPath("/Books", "a.epub"), "/Books/a.epub");
   EXPECT_EQ(fetch_url::destinationPath("/Books/", "a.epub"), "/Books/a.epub");

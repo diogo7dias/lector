@@ -7,12 +7,20 @@
 #include <OpdsStream.h>
 
 #include "CrossPointSettings.h"
+#include "network/FetchUrlPolicy.h"
 #include "util/BookCacheUtils.h"
 #include "util/OpdsFilename.h"
-#include "util/StringUtils.h"
 #include "util/UrlUtils.h"
 
 namespace opds {
+namespace {
+// The stored password only reaches the server it was entered for, never a host a
+// feed link points at.
+const std::string& ifSameServer(const OpdsServer& server, const std::string& url, const std::string& secret) {
+  static const std::string none;
+  return fetch_url::mayCarryCredentials(server.url, url) ? secret : none;
+}
+}  // namespace
 
 ClientStatus OpdsClient::fetchFeed(const OpdsServer& server, const std::string& pathOrUrl, FeedResult& outResult,
                                    const ReconnectCallback& onReconnect, bool* cancelFlag, const uint32_t timeoutMs,
@@ -61,7 +69,8 @@ ClientStatus OpdsClient::fetchFeed(const OpdsServer& server, const std::string& 
     {
       OpdsParserStream stream{parser};
       fetched =
-          HttpDownloader::fetchUrl(url, stream, server.username, server.password, &fetchError, &fetchStatus, timeoutMs);
+          HttpDownloader::fetchUrl(url, stream, ifSameServer(server, url, server.username),
+                                   ifSameServer(server, url, server.password), &fetchError, &fetchStatus, timeoutMs);
     }
     if (afterAttempt) afterAttempt();
 
@@ -170,36 +179,41 @@ HttpDownloader::DownloadError OpdsClient::downloadBook(
   for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
     if (isCancelled()) return giveUp(HttpDownloader::ABORTED);
 
-    std::string serverFilename;
+    std::string contentDisposition;
     HttpDownloader::DownloadError result;
 
     if (beforeAttempt) beforeAttempt();
     result = HttpDownloader::downloadToFile(
-        downloadUrl, partPath, progress, cancelFlag, server.username, server.password,
-        /*allowResume=*/true, server.keepFilename ? &serverFilename : nullptr, timeoutMs);
+        downloadUrl, partPath, progress, cancelFlag, ifSameServer(server, downloadUrl, server.username),
+        ifSameServer(server, downloadUrl, server.password),
+        /*allowResume=*/true, server.keepFilename ? &contentDisposition : nullptr, timeoutMs);
     if (afterAttempt) afterAttempt();
 
     if (result == HttpDownloader::OK) {
-      if (Storage.exists(filename.c_str())) Storage.remove(filename.c_str());
-      if (!Storage.rename(partPath.c_str(), filename.c_str())) {
+      // downloadToFile hands back the raw header ("attachment; filename=..."), and
+      // sanitizeFilename never returns empty: sanitizing the header itself renamed
+      // every book to the header text, or to "book" when the server sent none.
+      const std::string offered = fetch_url::filenameFromContentDisposition(contentDisposition);
+      // The part takes the server's name in one step. Landing under the generated
+      // name first and renaming again removed "whatever is at the new name" in
+      // between, and on FAT a name differing only in case is the book itself.
+      const auto place = [&partPath](const std::string& target) {
+        if (Storage.exists(target.c_str())) Storage.remove(target.c_str());
+        return Storage.rename(partPath.c_str(), target.c_str());
+      };
+      bool placed = false;
+      if (server.keepFilename && !offered.empty()) {
+        const std::string named = std::string(haveFolder ? folder : "") + '/' + offered;
+        placed = place(named);
+        if (placed) {
+          filename = named;
+        } else {
+          LOG_ERR("OPDSCLI", "rename to server filename failed, keeping %s", filename.c_str());
+        }
+      }
+      if (!placed && !place(filename)) {
         LOG_ERR("OPDSCLI", "rename of finished download failed: %s", partPath.c_str());
         return giveUp(HttpDownloader::FILE_ERROR);
-      }
-      const std::string sanitized = StringUtils::sanitizeFilename(serverFilename);
-      if (server.keepFilename && !sanitized.empty()) {
-        std::string finalPath;
-        finalPath.reserve(96);
-        if (haveFolder) finalPath += folder;
-        finalPath += '/';
-        finalPath += sanitized;
-        if (finalPath != filename) {
-          if (Storage.exists(finalPath.c_str())) Storage.remove(finalPath.c_str());
-          if (Storage.rename(filename.c_str(), finalPath.c_str())) {
-            filename = finalPath;
-          } else {
-            LOG_ERR("OPDSCLI", "rename to server filename failed, keeping %s", filename.c_str());
-          }
-        }
       }
       clearBookCache(filename);
       outFinalPath = filename;
