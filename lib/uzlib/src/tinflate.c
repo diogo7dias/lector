@@ -416,6 +416,11 @@ static int tinf_inflate_block_data(TINF_DATA *d, TINF_TREE *lt, TINF_TREE *dt)
             return TINF_DATA_ERROR;
         }
 
+        /* tinf_decode_symbol returns TINF_DATA_ERROR (<0) on an overlong code */
+        if (sym < 0) {
+            return TINF_DATA_ERROR;
+        }
+
         /* literal byte */
         if (sym < 256) {
             TINF_PUT(d, sym);
@@ -437,7 +442,7 @@ static int tinf_inflate_block_data(TINF_DATA *d, TINF_TREE *lt, TINF_TREE *dt)
         d->curlen = tinf_read_bits(d, length_bits[sym], length_base[sym]);
 
         dist = tinf_decode_symbol(d, dt);
-        if (dist >= 30) {
+        if (dist < 0 || dist >= 30) {
             return TINF_DATA_ERROR;
         }
 

@@ -346,7 +346,7 @@ int colorLuminance(const std::string_view value) {
     int current = -1;
     for (size_t i = value.find('(', rgb); i != std::string_view::npos && i < value.size() && count < 3; ++i) {
       if (std::isdigit(static_cast<unsigned char>(value[i]))) {
-        current = (current < 0 ? 0 : current * 10) + (value[i] - '0');
+        current = std::min((current < 0 ? 0 : current * 10) + (value[i] - '0'), 9999);  // no overflow on long runs
       } else if (current >= 0) {
         channels[count++] = value[i] == '%' ? current * 255 / 100 : std::min(current, 255);
         current = -1;
@@ -1075,7 +1075,8 @@ void CssParser::parseDeclarationIntoStyle(std::string_view decl, CssStyle& style
     uint32_t lines = 0;
     forEachDelimitedToken(value, isAsciiWhitespace, [&](const std::string_view token) {
       float number = 0;
-      if (lines == 0 && tryParseNumber(token, number) && number >= 1) lines = static_cast<uint32_t>(number + 0.5f);
+      if (lines == 0 && tryParseNumber(token, number) && number >= 1)
+        lines = static_cast<uint32_t>(std::min(number, static_cast<float>(MAX_INITIAL_LETTER)) + 0.5f);
     });
     style.initialLetter = static_cast<uint8_t>(std::min<uint32_t>(lines, MAX_INITIAL_LETTER));
     style.defined.initialLetter = 1;
