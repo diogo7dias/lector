@@ -25,6 +25,25 @@ bool cardLentToUsbHost = false;
 #if FREEINK_CAP_USB_MSC
 freeink::UsbMassStorage usbMassStorage;
 #endif
+
+// Port of freeink-sdk 07567ed syncFilesystem(), built from the SDK's public open(): the
+// pinned SDK's detachFilesystemForRawAccess() only calls FsVolume::end(), which forgets the
+// mount without writing SdFat's dirty FAT/directory cache. Syncing the root handle reaches
+// the volume cache (FatFile/ExFatFile::sync() -> cacheSync()). Caller holds storageMutex and
+// must have drained every writer; a file still open keeps its own unsynced size/date.
+// True when nothing is mounted (nothing to lose); false when the flush failed.
+bool syncVolume() {
+  if (!SDCard.ready()) return true;
+  FsFile root = SDCard.open("/", O_RDONLY);
+  if (!root.isOpen()) {
+    LOG_ERR("SD", "Could not open the volume root to flush it");
+    return false;
+  }
+  const bool synced = root.sync();
+  const bool closed = root.close();
+  if (!synced || !closed) LOG_ERR("SD", "SD volume flush failed");
+  return synced && closed;
+}
 }  // namespace
 
 #if FREEINK_CAP_USB_MSC
@@ -49,14 +68,18 @@ bool HalStorage::begin() { return SDCard.begin(); }
 
 bool HalStorage::ready() const { return SDCard.ready(); }
 
-// Port of upstream SDCardManager::shutdown() (freeink-sdk fad70f28a), built from the
-// SDK's existing public hooks so the pinned submodule stays untouched.
+// Port of upstream SDCardManager::shutdown() (freeink-sdk fad70f28a, flush from 07567ed),
+// built from the SDK's existing public hooks so the pinned submodule stays untouched.
 void HalStorage::prepareForDeepSleep() {
-#if FREEINK_SD_SDMMC
   StorageLock lock;
+#if FREEINK_SD_SDMMC
   if (cardLentToUsbHost) return;
-  // Unmounts the FsVolume (flushing SdFat's cached FAT/dir sectors) and returns the
-  // block device; nullptr when nothing is mounted.
+#endif
+  // Sleep cannot wait on a bad card: log the failure (syncVolume does) and carry on.
+  syncVolume();
+#if FREEINK_SD_SDMMC
+  // Unmounts the FsVolume (FsVolume::end() does NOT flush; syncVolume() above did) and
+  // returns the block device; nullptr when nothing is mounted.
   FsBlockDeviceInterface* dev = SDCard.detachFilesystemForRawAccess();
   if (!dev) return;
   dev->end();  // frees the card and runs sdmmc_host_deinit()
@@ -84,6 +107,13 @@ bool HalStorage::beginUsbDrive() {
   // Lent before the volume is detached: a file opened earlier still points at the
   // detached volume's sectors and must fail from here on, not write through it.
   cardLentToUsbHost = true;
+  // Flush before the host takes the card; on failure keep the mount and the firmware's
+  // access, as freeink-sdk 07567ed does.
+  if (!syncVolume()) {
+    cardLentToUsbHost = false;
+    LOG_ERR("USB", "USB Drive not started: SD flush failed");
+    return false;
+  }
   auto* const blockDevice = SDCard.detachFilesystemForRawAccess();
   if (!blockDevice) {
     LOG_ERR("USB", "USB Drive needs a mounted SD card");
