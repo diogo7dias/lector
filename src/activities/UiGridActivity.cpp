@@ -149,16 +149,6 @@ void UiGridActivity::setSelected(const int index) {
   requestUpdate();
 }
 
-void UiGridActivity::clampSelection() {
-  const int count = cellCount();
-  selected_ = count > 0 ? std::clamp(selected_, 0, count - 1) : 0;
-  if (count <= 0) {
-    scrollRow_ = 0;
-    return;
-  }
-  scrollRow_ = usesWrappedRows() ? keysOnlyWindow().first : settings_grid::scrollToShow(gridLayout(), selected_);
-}
-
 void UiGridActivity::moveSelection(const int deltaRows, const int deltaCells) {
   const int count = cellCount();
   if (count == 0) return;

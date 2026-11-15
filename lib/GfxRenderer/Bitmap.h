@@ -7,38 +7,6 @@
 
 #include "BitmapHelpers.h"
 
-#pragma pack(push, 1)
-struct BmpHeader {
-  struct {
-    uint16_t bfType;
-    uint32_t bfSize;
-    uint16_t bfReserved1;
-    uint16_t bfReserved2;
-    uint32_t bfOffBits;
-  } fileHeader;
-  struct {
-    uint32_t biSize;
-    int32_t biWidth;
-    int32_t biHeight;
-    uint16_t biPlanes;
-    uint16_t biBitCount;
-    uint32_t biCompression;
-    uint32_t biSizeImage;
-    int32_t biXPelsPerMeter;
-    int32_t biYPelsPerMeter;
-    uint32_t biClrUsed;
-    uint32_t biClrImportant;
-  } infoHeader;
-  struct RgbQuad {
-    uint8_t rgbBlue;
-    uint8_t rgbGreen;
-    uint8_t rgbRed;
-    uint8_t rgbReserved;
-  };
-  RgbQuad colors[2];
-};
-#pragma pack(pop)
-
 enum class BmpReaderError : uint8_t {
   Ok = 0,
   FileInvalid,
@@ -65,8 +33,6 @@ enum class BitmapToneMapping : uint8_t { None, Adaptive };
 
 class Bitmap {
  public:
-  static const char* errorToString(BmpReaderError err);
-
   explicit Bitmap(HalFile& file, bool dithering = false, BitmapToneMapping toneMapping = BitmapToneMapping::None)
       : file(file), dithering(dithering), toneMapping(toneMapping) {}
   BmpReaderError parseHeaders();

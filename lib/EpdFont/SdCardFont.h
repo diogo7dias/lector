@@ -126,16 +126,6 @@ class SdCardFont {
   // Used by GfxRenderer::getGlyphBitmap() to recover the SdCardFont from EpdFontData::glyphMissCtx.
   static SdCardFont* fromMissCtx(void* ctx);
 
-  struct Stats {
-    uint32_t prewarmTotalMs = 0;
-    uint32_t sdReadTimeMs = 0;
-    uint32_t seekCount = 0;
-    uint32_t uniqueGlyphs = 0;
-    uint32_t bitmapBytes = 0;
-  };
-  void logStats(const char* label = "SDCF");
-  void resetStats();
-
   // Content hash of the file header + style TOC entries (computed during load).
   // Used to generate deterministic font IDs for section cache invalidation.
   uint32_t contentHash() const { return contentHash_; }
@@ -315,7 +305,6 @@ class SdCardFont {
   // Ensures room for `needed` entries, at least doubling the capacity when it grows.
   bool growAdvanceTable(uint8_t styleIdx, uint32_t needed);
 
-  Stats stats_;
   uint32_t contentHash_ = 0;
   uint32_t fileSize_ = 0;  // bounds glyph bitmap offsets (glyphEntryValid)
   uint8_t corruptGlyphsLogged_ = 0;

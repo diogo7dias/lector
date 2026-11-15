@@ -141,11 +141,6 @@ bool fileListLessC(const char* s1, const char* s2) {
   return naturalLessC(s1, s2);
 }
 
-void sortFileList(std::vector<std::string>& strs) {
-  std::sort(begin(strs), end(strs),
-            [](const std::string& str1, const std::string& str2) { return fileListLessC(str1.c_str(), str2.c_str()); });
-}
-
 bool checkFileExtension(std::string_view fileName, const char* extension) {
   const size_t extLen = strlen(extension);
   if (fileName.length() < extLen) {

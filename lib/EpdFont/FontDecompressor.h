@@ -27,23 +27,7 @@ class FontDecompressor {
   // Returns the number of glyphs that couldn't be loaded (0 on full success).
   int prewarmCache(const EpdFontData* fontData, const char* utf8Text);
 
-  struct Stats {
-    uint32_t cacheHits = 0;
-    uint32_t cacheMisses = 0;
-    uint32_t decompressTimeMs = 0;
-    uint16_t uniqueGroupsAccessed = 0;
-    uint32_t pageBufferBytes = 0;  // pageBuffer allocation
-    uint32_t pageGlyphsBytes = 0;  // pageGlyphs lookup table allocation
-    uint32_t hotGroupBytes = 0;    // current hot group allocation
-    uint32_t peakTempBytes = 0;    // largest temp buffer in prewarm
-    uint32_t getBitmapTimeUs = 0;  // cumulative getBitmap time (micros)
-    uint32_t getBitmapCalls = 0;   // number of getBitmap calls
-  };
-  void logStats(const char* label = "FDC");
-  void resetStats();
-
  private:
-  Stats stats;
   InflateReader inflateReader;
 
   // Page buffer slots: each style gets its own flat glyph buffer with sorted lookup.
