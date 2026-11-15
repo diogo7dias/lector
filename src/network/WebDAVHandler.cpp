@@ -574,23 +574,33 @@ void WebDAVHandler::handleMove(WebServer& s) {
     return;
   }
 
-  if (dstExists) {
-    Storage.remove(dstPath.c_str());
-  }
-
-  HalFile file = Storage.open(srcPath.c_str());
-  if (!file) {
-    s.send(500, "text/plain", "Failed to open source");
-    return;
-  }
-
   clearBookCache(srcPath.c_str());
   // Either end of the move can be a sleep folder (in or out both change it).
   // Out of the indexed folder is a deletion, into it is a creation; both are
   // exact one-entry patches, so neither end needs a walk.
   const auto pendingDelete = crosspoint::sleep::windex::planDeletion(srcPath.c_str());
-  bool success = file.rename(dstPath.c_str());
-  file.close();
+
+  // The destination can be the source under another spelling: FAT ignores case and
+  // trailing dots, and answers to 8.3 aliases, so comparing the two strings proves
+  // nothing. Removing the destination first deleted the very file a client was
+  // renaming ("Book.epub" to "book.epub"). The source steps aside first; whatever
+  // still answers to the destination after that is a different file.
+  String movingPath = srcPath;
+  if (dstExists) {
+    movingPath += ".davtmp";
+    Storage.remove(movingPath.c_str());
+    if (!Storage.rename(srcPath.c_str(), movingPath.c_str())) {
+      s.send(500, "text/plain", "Move failed");
+      return;
+    }
+    if (Storage.exists(dstPath.c_str()) && !Storage.remove(dstPath.c_str())) {
+      Storage.rename(movingPath.c_str(), srcPath.c_str());
+      s.send(409, "text/plain", "Destination could not be replaced");
+      return;
+    }
+  }
+  const bool success = Storage.rename(movingPath.c_str(), dstPath.c_str());
+  if (!success && dstExists) Storage.rename(movingPath.c_str(), srcPath.c_str());
 
   if (success) {
     crosspoint::sleep::windex::commitDeletion(pendingDelete);
