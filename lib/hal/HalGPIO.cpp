@@ -113,7 +113,7 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
   return HalGPIO::DeviceType::X4;
 }
 
-// The display-bus probe costs ~117 ms of reset pulses and BUSY waits (WAKE-BUDGET #3)
+// The display-bus probe costs ~117 ms of reset pulses and BUSY waits
 // and its answer cannot change while the chip only deep-sleeps. RTC slow memory
 // survives deep sleep but is reloaded by a power cut, a reset or a reflash, so the
 // cached verdict never outlives the panel it was read from. (NVS was rejected for
