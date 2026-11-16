@@ -1217,8 +1217,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     return guideOk && k > 0 && !continuesVec[lastBreakAt + k] && !noSpaceBeforeVec[lastBreakAt + k];
   };
 
-  std::vector<std::string> lineRubyTexts(lineWordCount);
+  // Empty unless the line has ruby: most lines would otherwise allocate a string per word.
+  std::vector<std::string> lineRubyTexts;
   if (!rubyTexts.empty() && lastBreakAt < rubyTexts.size()) {
+    lineRubyTexts.resize(lineWordCount);
     const size_t copyCount = std::min(lineBreak, rubyTexts.size()) - lastBreakAt;
     std::copy(rubyTexts.begin() + lastBreakAt, rubyTexts.begin() + lastBreakAt + copyCount, lineRubyTexts.begin());
   }
@@ -1563,12 +1565,12 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         lineWords[out] = std::move(lineWords[i]);
         lineXPos[out] = lineXPos[i];
         lineWordStyles[out] = lineWordStyles[i];
-        lineRubyTexts[out] = std::move(lineRubyTexts[i]);
+        if (!lineRubyTexts.empty()) lineRubyTexts[out] = std::move(lineRubyTexts[i]);
       }
       lineWords.resize(keptIndex.size());
       lineXPos.resize(keptIndex.size());
       lineWordStyles.resize(keptIndex.size());
-      lineRubyTexts.resize(keptIndex.size());
+      if (!lineRubyTexts.empty()) lineRubyTexts.resize(keptIndex.size());
       if (keptIndex.empty()) {
         // A line of images alone (an ornament, a row of icons) is centred like a block image.
         const int shift = (pageWidth - (imagesRight - imagesLeft)) / 2 - imagesLeft;
