@@ -1,0 +1,53 @@
+Subject: [PATCH] Harden the Huffman table builder
+
+The builders test (cc >> (iBitNum-N)) for every code length, which shifts by a
+negative count for lengths below N: undefined behaviour in C. A code that short
+can never start with N 1 bits, so testing the length first keeps every table
+identical. A table with more codes than its lengths hold (not a prefix code)
+made the table fills write past their table; it is rejected, as libjpeg does.
+
+---
+diff --git a/src/jpeg.inl b/src/jpeg.inl
+--- a/src/jpeg.inl
++++ b/src/jpeg.inl
+@@ -923,7 +923,7 @@
+                 while (iLen)
+                 {
+                     //               if (iBitNum > 6) // do long table
+-                    if ((cc >> (iBitNum-5)) == 0x1f) // first 5 bits are 1 - use long table
++                    if (iBitNum >= 5 && (cc >> (iBitNum-5)) == 0x1f) // first 5 bits are 1 - use long table
+                     {
+                         count = iMaxLength - iBitNum;
+                         codestart = cc << count;
+@@ -1011,7 +1011,7 @@
+                 iLen = *pBits++; // get number of codes for this bit length
+                 while (iLen)
+                 {
+-                    if ((cc >> (iBitNum-4)) == 0xf) // first 4 bits are 1 - use long table
++                    if (iBitNum >= 4 && (cc >> (iBitNum-4)) == 0xf) // first 4 bits are 1 - use long table
+                     {
+                         count = 16 - iBitNum;
+                         codestart = cc << count;
+@@ -1111,8 +1111,10 @@
+                 }
+                 while (iLen)
+                 {
++                    if (cc >= (1 << iBitNum)) // Lector patch: more codes than the length holds,
++                        return 0;             // so the table fills below run past their table
+                     //               if (iBitNum > 6) // do long table
+-                    if ((cc >> (iBitNum-5)) == 0x1f) // first 5 bits are 1 - use long table
++                    if (iBitNum >= 5 && (cc >> (iBitNum-5)) == 0x1f) // first 5 bits are 1 - use long table
+                     {
+                         count = iMaxLength - iBitNum;
+                         codestart = cc << count;
+@@ -1197,7 +1199,9 @@
+                 iLen = *pBits++; // get number of codes for this bit length
+                 while (iLen)
+                 {
+-                    if ((cc >> (iBitNum-6)) == 0x3f) // first 6 bits are 1 - use long table
++                    if (cc >= (1 << iBitNum)) // Lector patch: an over-full table, as above
++                        return 0;
++                    if (iBitNum >= 6 && (cc >> (iBitNum-6)) == 0x3f) // first 6 bits are 1 - use long table
+                     {
+                         count = 16 - iBitNum;
+                         codestart = cc << count;

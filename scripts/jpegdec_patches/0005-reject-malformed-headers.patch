@@ -1,0 +1,205 @@
+Subject: [PATCH] Reject malformed JPEGs that read or write out of bounds
+
+Found by test/fuzz/image on the firmware configuration:
+- DHT marked tables used with 1 << ucTable for any index byte, a shift past the
+  int width that can flag an undefined table as defined; an index above 7 never
+  shortened iLen, so the loop walked on past the segment; and DC tables 2-3 were
+  built past the two-table ucHuffDC into usHuffAC. SOS could still name them.
+- SOF wrote up to 255 components into the 4-entry JPCI table.
+- SOF, DHT, DQT and DRI are parsed in place, but a segment length under 2 or past
+  the bytes in the buffer was never checked; DQT also let its length underflow
+  and kept reading.
+- The marker walk compared its buffer offset, not its file position, with the
+  file size, so past the end of a file it seeked on until iFilePos overflowed.
+- EXIF IFD offsets from the file indexed the buffer unchecked (the first one is
+  upstream ff585f2), and TIFFLONG shifted bytes into the int sign bit.
+- JPEGParseInfo ignored JPEGGetSOS errors, and SOS never checked the spectral
+  range. A progressive image must open with its DC scan (Ss = Se = 0), and the
+  first scan is the only one decoded; AC data there overran the per-MCU read
+  margin past ucFileBuf.
+- Once a cut-short file ran out of entropy data the read pointer kept walking,
+  MCU after MCU, past ucFileBuf and the decoder.
+- Sampling other than 1x1, 1x2, 2x1 and 2x2 (4:1:1) left the MCU size at 0 for a
+  division, which traps on the ESP32-S3.
+
+---
+diff --git a/src/jpeg.inl b/src/jpeg.inl
+--- a/src/jpeg.inl
++++ b/src/jpeg.inl
+@@ -846,9 +846,13 @@
+         ucTable = pBuf[iOffset++]; // get table index
+         if (ucTable & 0x10) // convert AC offset of 0x10 into offset of 4
+             ucTable ^= 0x14;
+-        pJPEG->ucHuffTableUsed |= (1 << ucTable); // mark this table as being defined
++        // Lector patch: only DC 0-1 and AC 0-1 have storage (ucHuffDC, usHuffAC), and an
++        // index this loop skipped never shortened iLen, so it walked on past the segment.
++        if (ucTable > 7 || (ucTable & 3) > 1)
++            return -1;
+         if (ucTable <= 7) // tables are 0-3, AC+DC
+         {
++            pJPEG->ucHuffTableUsed |= (1 << ucTable); // mark this table as being defined
+             iTableOffset = ucTable * HUFF_TABLEN;
+             j = 0; // total bits
+             for (i=0; i<16; i++)
+@@ -1303,9 +1307,9 @@
+     uint32_t l;
+ 
+     if (bMotorola)
+-        l = *p * 0x1000000 + *(p+1) * 0x10000 + *(p+2) * 0x100 + *(p+3); // big endian
++        l = (uint32_t)*p * 0x1000000 + *(p+1) * 0x10000 + *(p+2) * 0x100 + *(p+3); // big endian
+     else
+-        l = *p + *(p+1) * 0x100 + *(p+2) * 0x10000 + *(p+3) * 0x1000000; // little endian
++        l = *p + *(p+1) * 0x100 + *(p+2) * 0x10000 + (uint32_t)*(p+3) * 0x1000000; // little endian
+     return l;
+ } /* TIFFLONG() */
+ //
+@@ -1352,9 +1356,13 @@
+     int iTag, iTagCount, i;
+     uint8_t *cBuf = pPage->ucFileBuf;
+     
++    if (iOffset < 0 || iOffset + 2 > JPEG_FILE_BUF_SIZE) // Lector patch: IFD outside the buffer
++        return;
+     iTagCount = TIFFSHORT(&cBuf[iOffset], bMotorola);  /* Number of tags in this dir */
+     if (iTagCount < 1 || iTagCount > 256) // invalid tag count
+         return; /* Bad header info */
++    if (iOffset + 2 + iTagCount * 12 > JPEG_FILE_BUF_SIZE) // Lector patch: tags past the buffer
++        return;
+     /*--- Search the TIFF tags ---*/
+     for (i=0; i<iTagCount; i++)
+     {
+@@ -1411,7 +1419,7 @@
+         }
+         if (j == 4) // error, not found
+             return 1;
+-        if ((c & 0xf) > 3 || (c & 0xf0) > 0x30)
++        if ((c & 0xf) > 1 || (c & 0xf0) > 0x10) // Lector patch: only tables 0-1 are stored
+             return 1; // bogus table numbers
+         pJPEG->JPCI[j].dc_tbl_no = c >> 4;
+         pJPEG->JPCI[j].ac_tbl_no = c & 0xf;
+@@ -1422,6 +1430,13 @@
+     c = buf[iOffset++]; // successive approximation bits
+     pJPEG->cApproxBitsLow = c & 0xf; // also point transform in lossless mode
+     pJPEG->cApproxBitsHigh = c >> 4;
++    // Lector patch: the spectral range indexes the 64 coefficients of a block. Only the
++    // first scan is decoded, and a progressive image must open with its DC scan (Ss = Se
++    // = 0, ITU T.81 G.1.1.1.1); AC data there overruns the buffer's per-MCU read margin.
++    if (pJPEG->iScanStart > 63 || pJPEG->iScanEnd > 63 || pJPEG->iScanStart > pJPEG->iScanEnd)
++        return 1;
++    if (pJPEG->ucMode == 0xc2 && pJPEG->iScanEnd != 0)
++        return 1;
+     
+     *iOff = iOffset;
+     return 0;
+@@ -1612,7 +1627,9 @@
+     }
+     iOffset = 2; /* Start at offset of first marker */
+     usMarker = 0; /* Search for SOFx (start of frame) marker */
+-    while (usMarker != 0xffda && iOffset < pPage->JPEGFile.iSize)
++    // Lector patch: compare the file position, not the buffer offset, with the file size;
++    // past the end of the file the walk otherwise seeks on until iFilePos overflows.
++    while (usMarker != 0xffda && iFilePos - iBytesRead + iOffset < pPage->JPEGFile.iSize)
+     {
+         if (iOffset >= JPEG_FILE_BUF_SIZE/2) // too close to the end, read more data
+         {
+@@ -1648,6 +1665,14 @@
+             iOffset++;
+             continue; // skip 1 byte and try to resync
+         }
++        // Lector patch: the frame, table and restart segments are parsed in place, so the
++        // whole segment must be in the buffer; a bogus length would read past it.
++        if ((usMarker == 0xffc0 || usMarker == 0xffc2 || usMarker == 0xffc4 || usMarker == 0xffdb ||
++             usMarker == 0xffdd) && (usLen < 2 || iOffset + usLen > iBytesRead))
++        {
++            pPage->iError = JPEG_DECODE_ERROR;
++            return 0;
++        }
+         switch (usMarker)
+         {
+             case 0xffc1: // extended mode
+@@ -1664,14 +1689,18 @@
+                     bMotorola = (s[iOffset+8] == 'M');
+                     IFD = TIFFLONG(&s[iOffset+12], bMotorola);
+                     iTagCount = TIFFSHORT(&s[iOffset+16], bMotorola);
++                    if (IFD < 0 || IFD > JPEG_FILE_BUF_SIZE) // Lector patch: an IFD offset from
++                        break;                               // the file, not yet bounded by the buffer
+                     GetTIFFInfo(pPage, bMotorola, IFD+iOffset+8);
+                     // The second IFD defines the thumbnail (if present)
+                     if (iTagCount >= 1 && iTagCount < 32) // valid number of tags for EXIF data 'page'
+                     {
+                        // point to next IFD
+                         IFD += (12 * iTagCount) + 2;
++                        if (IFD + iOffset + 12 > JPEG_FILE_BUF_SIZE) // Lector patch: as above
++                            break;
+                         IFD = TIFFLONG(&s[IFD + iOffset + 8], bMotorola);
+-                        if (IFD != 0 && IFD + iOffset + 8 < JPEG_FILE_BUF_SIZE) // Thumbnail present?
++                        if (IFD > 0 && IFD < JPEG_FILE_BUF_SIZE && IFD + iOffset + 8 < JPEG_FILE_BUF_SIZE) // Thumbnail present?
+                         {
+                             pPage->ucHasThumb = 1;
+                             GetTIFFInfo(pPage, bMotorola, IFD+iOffset+8); // info for second 'page' of TIFF
+@@ -1688,6 +1717,13 @@
+                 pPage->iCropCY = pPage->iHeight = MOTOSHORT(&s[iOffset+3]);
+                 pPage->iCropCX = pPage->iWidth = MOTOSHORT(&s[iOffset+5]);
+                 pPage->ucNumComponents = s[iOffset+7];
++                // Lector patch: JPCI holds 4 components, each taking 3 bytes of the segment.
++                if (pPage->ucNumComponents == 0 || pPage->ucNumComponents > 4 ||
++                    usLen < 8 + 3 * pPage->ucNumComponents)
++                {
++                    pPage->iError = JPEG_DECODE_ERROR;
++                    return 0;
++                }
+                 pPage->ucBpp = pPage->ucBpp * pPage->ucNumComponents; /* Bpp = number of components * bits per sample */
+                 {
+                     usLen -= 8;
+@@ -1742,6 +1778,13 @@
+                         pPage->iError = JPEG_DECODE_ERROR;
+                         return 0;
+                     }
++                    // Lector patch: a table longer than what is left would underflow usLen
++                    // and keep reading past the segment.
++                    if (usLen < ((ucTable & 0xf0) ? DCTSIZE*2 + 1 : DCTSIZE + 1))
++                    {
++                        pPage->iError = JPEG_DECODE_ERROR;
++                        return 0;
++                    }
+                     iTableOffset = (ucTable & 0xf) * DCTSIZE;
+                     if (ucTable & 0xf0) // if word precision
+                     {
+@@ -1770,7 +1813,11 @@
+ //        if (pPage->ucBpp != 8) // need to match up table IDs
+ //        {
+             iOffset -= usLen;
+-            JPEGGetSOS(pPage, &iOffset); // get Start-Of-Scan info for decoding
++            if (JPEGGetSOS(pPage, &iOffset)) // get Start-Of-Scan info for decoding
++            {
++                pPage->iError = JPEG_DECODE_ERROR; // Lector patch: a bad scan header stops here
++                return 0;
++            }
+ //        }
+         if (!JPEGMakeHuffTables(pPage, 0)) //int bThumbnail) DEBUG
+         {
+@@ -5053,10 +5100,10 @@
+             iCb = MCU5;
+             mcuCX = mcuCY = 16;
+             break;
+-        default: // to suppress compiler warning
+-            cx = cy = 0;
+-            iCr = iCb = 0;
+-            break;
++        default: // Lector patch: other sampling (4:1:1) left mcuCX * mcuCY at 0 for the
++            // division below, which the S3 traps on (IntegerDivideByZero)
++            pJPEG->iError = JPEG_UNSUPPORTED_FEATURE;
++            return 0;
+     }
+     // Scale down the MCUs by the requested amount
+     mcuCX >>= iScaleShift;
+@@ -5370,6 +5417,10 @@
+             // See if we need to feed it more data
+             if (pJPEG->iVLCOff >= FILE_HIGHWATER)
+                 JPEGGetMoreData(pJPEG); // need more 'filtered' VLC data
++            // Lector patch: past the last byte of entropy data (a cut-short file) the
++            // read pointer kept walking, MCU after MCU, past ucFileBuf and the decoder.
++            if (pJPEG->iVLCOff > pJPEG->iVLCSize)
++                iErr = 1;
+         } // for x
+     } // for y
+     if (iErr != 0)
