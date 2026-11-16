@@ -84,7 +84,6 @@ class OtaUpdateActivity : public UiStatusActivity {
   void onEnter() override;
   void onExit() override;
   bool preventAutoSleep() override { return state == CHECKING_FOR_UPDATE || state == UPDATE_IN_PROGRESS; }
-  bool skipLoopDelay() override { return true; }  // Prevent power-saving mode
 
  protected:
   StatusView statusView() const override;
