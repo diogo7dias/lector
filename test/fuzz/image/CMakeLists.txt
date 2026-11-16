@@ -1,23 +1,14 @@
 # Image decode for chapter pages and the PNG viewer: ImageDimsProbe, ImageDecoderFactory and
 # the PNG/JPEG framebuffer converters (scaling, dithering, DirectPixelWriter, PixelCache) on
-# the decoder libraries at the firmware's pins, with scripts/{pngdec,jpegdec}_patches applied.
+# the decoder libraries at the firmware's pins, with scripts/{pngdec,jpegdec}_patches applied
+# (jpegdec is declared in test/CMakeLists.txt).
 include(FetchContent)
 file(GLOB PNGDEC_PATCHES ${REPO_ROOT}/scripts/pngdec_patches/*.patch)
-file(GLOB JPEGDEC_PATCHES ${REPO_ROOT}/scripts/jpegdec_patches/*.patch)
 list(SORT PNGDEC_PATCHES)
-list(SORT JPEGDEC_PATCHES)
 FetchContent_Declare(pngdec
   GIT_REPOSITORY https://github.com/bitbank2/PNGdec.git
   GIT_TAG 9a9c585fd39d148c5517597b02ce490e0fdb1bb4  # 1.1.6, as platformio.ini
   PATCH_COMMAND git checkout -- src COMMAND git apply ${PNGDEC_PATCHES}
-  UPDATE_DISCONNECTED ON
-  SOURCE_SUBDIR no-cmake
-)
-FetchContent_Declare(jpegdec
-  GIT_REPOSITORY https://github.com/bitbank2/JPEGDEC.git
-  GIT_TAG 86282979224c8a32fd51e091ed5a35b0c699a52b  # as platformio.ini
-  PATCH_COMMAND git checkout -- src
-    COMMAND git apply ${JPEGDEC_PATCHES} ${CMAKE_CURRENT_SOURCE_DIR}/jpegdec-device-register-width.patch
   UPDATE_DISCONNECTED ON
   SOURCE_SUBDIR no-cmake
 )

@@ -1,0 +1,262 @@
+Subject: [PATCH] Keep dequantizer precision in the C IDCT
+
+JPEGFixQuantD folds the AAN scale into the quantizers as (q * scale) >> 12,
+which leaves 2 fraction bits. A high-quality file has quantizers of 1-2, and
+there the high-frequency entries lose up to all of their value (q = 1 with the
+F(7,7) scale of 0.30 becomes 0). Gray text and line art then come out up to a
+few levels off on every pixel near an edge, against libjpeg.
+
+- JPEGFixQuantD keeps up to 4 more fraction bits (ucQuantShift), as many as
+  keep every entry in 16 bits. The C column pass and the DC-only shortcut shift
+  them out after the multiply, so the intermediate range does not change. The
+  SSE and NEON column passes multiply 16-bit lanes and keep the old 2 bits.
+- The final >> 5 truncated, so output was on average half a level dark; the
+  DC term now carries the rounding, in the IDCT and the DC-only shortcut alike.
+- The 1/4-scale shortcut summed the AAN-scaled F(0,1), F(1,0) and F(1,1) as if
+  they were the weights of a 4x4 mean, 1.5x and 2.3x too heavy; it was only
+  hidden by the truncation above. They are now weighed by 0.653 and 0.427.
+
+---
+diff --git a/src/JPEGDEC.h b/src/JPEGDEC.h
+index 39c5908..0c125ed 100644
+--- a/src/JPEGDEC.h
++++ b/src/JPEGDEC.h
+@@ -233,6 +233,7 @@ typedef struct jpeg_image_tag
+     int16_t sUnalignedMCUs[8+(DCTSIZE * MAX_MCU_COUNT)]; // 4:2:0 needs 6 DCT blocks per MCU
+     void *pFramebuffer;
+     int16_t sQuantTable[DCTSIZE*4]; // quantization tables
++    uint8_t ucQuantShift; // extra fraction bits in sQuantTable, see JPEGFixQuantD
+     uint8_t ucFileBuf[JPEG_FILE_BUF_SIZE]; // holds temp data and pixel stack
+     uint8_t ucHuffDC[DC_TABLE_SIZE * 2]; // up to 2 'short' tables
+     uint16_t usHuffAC[HUFF11SIZE * 2];
+diff --git a/src/jpeg.inl b/src/jpeg.inl
+index 9d43513..643014b 100644
+--- a/src/jpeg.inl
++++ b/src/jpeg.inl
+@@ -1841,7 +1841,7 @@ static void JPEGFixQuantD(JPEGIMAGE *pJPEG)
+ {
+     int iTable, iTableOffset;
+     signed short sTemp[DCTSIZE];
+-    int i;
++    int i, iMax = 0;
+     uint16_t *p;
+     
+     for (iTable=0; iTable<pJPEG->ucNumComponents; iTable++)
+@@ -1852,11 +1852,28 @@ static void JPEGFixQuantD(JPEGIMAGE *pJPEG)
+             sTemp[i] = p[cZigZag[i]];
+         memcpy(&pJPEG->sQuantTable[iTableOffset], sTemp, DCTSIZE*sizeof(short)); // copy back to original spot
+         
++        for (i=0; i<DCTSIZE; i++)
++        {
++            const int iScaled = (uint16_t)sTemp[i] * iScaleBits[i];
++            if (iScaled > iMax) iMax = iScaled;
++        }
++    }
++    // The prescaled quantizers carry 2 fraction bits, so with the small quantizers of a
++    // high-quality file (1-2) the high-frequency ones truncate by up to 100%. The C column
++    // pass keeps up to 4 more and shifts them out after the multiply, as long as every entry
++    // still fits in 16 bits. The SIMD column passes multiply 16-bit lanes, so they keep 2.
++    pJPEG->ucQuantShift = 0;
++#if !defined(HAS_SSE) && !defined(HAS_NEON)
++    while (pJPEG->ucQuantShift < 4 && (iMax >> (11 - pJPEG->ucQuantShift)) <= 32767)
++        pJPEG->ucQuantShift++;
++#endif
++    for (iTable=0; iTable<pJPEG->ucNumComponents; iTable++)
++    {
+         // Prescale for DCT multiplication
+-        p = (uint16_t *)&pJPEG->sQuantTable[iTableOffset];
++        p = (uint16_t *)&pJPEG->sQuantTable[iTable * DCTSIZE];
+         for (i=0; i<DCTSIZE; i++)
+         {
+-            p[i] = (uint16_t)((p[i] * iScaleBits[i]) >> 12);
++            p[i] = (uint16_t)((p[i] * iScaleBits[i]) >> (12 - pJPEG->ucQuantShift));
+         }
+     }
+ } /* JPEGFixQuantD() */
+@@ -2375,16 +2392,19 @@ int16x8_t mmxZ5, mmxZ10, mmxZ11, mmxZ12, mmxZ13;
+     // but the patent is invalidated by prior art:
+     // http://netilium.org/~mad/dtj/DTJ/DTJK04/
+     pQuant = &pJPEG->sQuantTable[iQuantTable * DCTSIZE];
++    const int iShift = pJPEG->ucQuantShift;
+     if (pJPEG->iOptions & JPEG_SCALE_QUARTER) // special case
+     {
+         /* Column 0 */
+-        tmp4 = pMCUSrc[0] * pQuant[0];
+-        tmp5 = pMCUSrc[8] * pQuant[8];
++        tmp4 = ((pMCUSrc[0] * pQuant[0]) >> iShift) + 16; // round the >>5 below
++        // The quantizers carry the AAN scale for the 8-point IDCT; the mean of a 4x4
++        // quadrant weighs F(0,1) and F(1,0) by 0.653 of it and F(1,1) by 0.427.
++        tmp5 = (((pMCUSrc[8] * pQuant[8]) >> iShift) * 167) >> 8;
+         tmp0 = tmp4 + tmp5;
+         tmp2 = tmp4 - tmp5;
+         /* Column 1 */
+-        tmp4 = pMCUSrc[1] * pQuant[1];
+-        tmp5 = pMCUSrc[9] * pQuant[9];
++        tmp4 = (((pMCUSrc[1] * pQuant[1]) >> iShift) * 167) >> 8;
++        tmp5 = (((pMCUSrc[9] * pQuant[9]) >> iShift) * 109) >> 8;
+         tmp1 = tmp4 + tmp5;
+         tmp3 = tmp4 - tmp5;
+         /* Pass 2: process 2 rows, store into output array. */
+@@ -2634,19 +2654,19 @@ int16x8_t mmxZ5, mmxZ10, mmxZ11, mmxZ12, mmxZ13;
+             if ((u16MCUFlags & 0x2000) == 0) // simpler calculations if only half populated
+             {
+                 // even part
+-                tmp10 = pMCUSrc[iCol] * pQuant[iCol];
+-                tmp1 = pMCUSrc[iCol+16] * pQuant[iCol+16]; // get 2nd row
++                tmp10 = (pMCUSrc[iCol] * pQuant[iCol]) >> iShift;
++                tmp1 = (pMCUSrc[iCol+16] * pQuant[iCol+16]) >> iShift; // get 2nd row
+                 tmp12 = ((tmp1*106)>>8); // used to be 362 - 1 (256)
+                 tmp0 = tmp10 + tmp1;
+                 tmp3 = tmp10 - tmp1;
+                 tmp1 = tmp10 + tmp12;
+                 tmp2 = tmp10 - tmp12;
+                 // odd part
+-                tmp4 = pMCUSrc[iCol+8] * pQuant[iCol+8]; // get 1st row
++                tmp4 = (pMCUSrc[iCol+8] * pQuant[iCol+8]) >> iShift; // get 1st row
+                 tmp5 = pMCUSrc[iCol+24];
+                 if (tmp5) // this value is usually 0
+                 {
+-                    tmp5 *= pQuant[iCol+24]; // get 3rd row
++                    tmp5 = (tmp5 * pQuant[iCol+24]) >> iShift; // get 3rd row
+                     tmp7 = tmp4 + tmp5;
+                     tmp11 = (((tmp4 - tmp5) * 362) >> 8);  // 362>>8 = 1.414213562
+                     z5 = (((tmp4-tmp5) * 473) >> 8);  // 473>>8 = 1.8477
+@@ -2675,11 +2695,11 @@ int16x8_t mmxZ5, mmxZ10, mmxZ11, mmxZ12, mmxZ13;
+             else // need to do full column calculation
+             {
+                 // even part
+-                tmp0 = pMCUSrc[iCol] * pQuant[iCol];
++                tmp0 = (pMCUSrc[iCol] * pQuant[iCol]) >> iShift;
+                 tmp2 = pMCUSrc[iCol+32]; // get 4th row
+                 if (tmp2) // 4th row is most likely 0
+                 {
+-                    tmp2 = tmp2 * pQuant[iCol+32];
++                    tmp2 = (tmp2 * pQuant[iCol+32]) >> iShift;
+                     tmp10 = tmp0 + tmp2;
+                     tmp11 = tmp0 - tmp2;
+                 }
+@@ -2687,11 +2707,11 @@ int16x8_t mmxZ5, mmxZ10, mmxZ11, mmxZ12, mmxZ13;
+                 {
+                     tmp10 = tmp11 = tmp0;
+                 }
+-                tmp1 = pMCUSrc[iCol+16] * pQuant[iCol+16]; // get 2nd row
++                tmp1 = (pMCUSrc[iCol+16] * pQuant[iCol+16]) >> iShift; // get 2nd row
+                 tmp3 = pMCUSrc[iCol+48]; // get 6th row
+                 if (tmp3) // 6th row is most likely 0
+                 {
+-                    tmp3 = tmp3 * pQuant[iCol+48];
++                    tmp3 = (tmp3 * pQuant[iCol+48]) >> iShift;
+                     tmp13 = tmp1 + tmp3;
+                     tmp12 = (((tmp1 - tmp3) * 362) >> 8) - tmp13;  // 362>>8 = 1.414213562
+                 }
+@@ -2705,11 +2725,11 @@ int16x8_t mmxZ5, mmxZ10, mmxZ11, mmxZ12, mmxZ13;
+                 tmp1 = tmp11 + tmp12;
+                 tmp2 = tmp11 - tmp12;
+                 // odd part
+-                tmp5 = pMCUSrc[iCol+24] * pQuant[iCol+24]; // get 3rd row
++                tmp5 = (pMCUSrc[iCol+24] * pQuant[iCol+24]) >> iShift; // get 3rd row
+                 tmp6 = pMCUSrc[iCol+40]; // get 5th row
+                 if (tmp6) // very likely that row 5 = 0
+                 {
+-                    tmp6 = tmp6 * pQuant[iCol+40];
++                    tmp6 = (tmp6 * pQuant[iCol+40]) >> iShift;
+                     z13 = tmp6 + tmp5;
+                     z10 = tmp6 - tmp5;
+                 }
+@@ -2718,11 +2738,11 @@ int16x8_t mmxZ5, mmxZ10, mmxZ11, mmxZ12, mmxZ13;
+                     z13 = tmp5;
+                     z10 = -tmp5;
+                 }
+-                tmp4 = pMCUSrc[iCol+8] * pQuant[iCol+8]; // get 1st row
++                tmp4 = (pMCUSrc[iCol+8] * pQuant[iCol+8]) >> iShift; // get 1st row
+                 tmp7 = pMCUSrc[iCol+56]; // get 7th row
+                 if (tmp7) // very likely that row 7 = 0
+                 {
+-                    tmp7 = tmp7 * pQuant[iCol+56];
++                    tmp7 = (tmp7 * pQuant[iCol+56]) >> iShift;
+                     z11 = tmp4 + tmp7;
+                     z12 = tmp4 - tmp7;
+                 }
+@@ -2761,7 +2781,7 @@ int16x8_t mmxZ5, mmxZ10, mmxZ11, mmxZ12, mmxZ13;
+             if ((u16MCUFlags & 0xfc) == 0) // very likely case (1 or 2 columns occupied)
+             {
+                 // even part
+-                tmp0 = tmp1 = tmp2 = tmp3 = pMCUSrc[iRow+0];
++                tmp0 = tmp1 = tmp2 = tmp3 = pMCUSrc[iRow+0] + 16; // round the >>5 below
+                 // odd part
+                 tmp7 = pMCUSrc[iRow+1];
+                 tmp6 = (tmp7 * 217)>>8; // * 0.8477
+@@ -2770,7 +2790,7 @@ int16x8_t mmxZ5, mmxZ10, mmxZ11, mmxZ12, mmxZ13;
+             }
+             else
+             {
+-                tmp10 = pMCUSrc[iRow+0];
++                tmp10 = pMCUSrc[iRow+0] + 16; // round the >>5 below
+                 tmp13 = pMCUSrc[iRow+2];
+                 tmp12 = ((tmp13 * 106)>>8); // 2-6 * 1.414
+                 tmp0 = tmp10 + tmp13;
+@@ -2792,8 +2812,8 @@ int16x8_t mmxZ5, mmxZ10, mmxZ11, mmxZ12, mmxZ13;
+         }
+         else // need to do the full calculation
+         {
+-            tmp10 = pMCUSrc[iRow+0] + pMCUSrc[iRow+4];
+-            tmp11 = pMCUSrc[iRow+0] - pMCUSrc[iRow+4];
++            tmp10 = pMCUSrc[iRow+0] + 16 + pMCUSrc[iRow+4]; // round the >>5 below
++            tmp11 = pMCUSrc[iRow+0] + 16 - pMCUSrc[iRow+4];
+             tmp13 = pMCUSrc[iRow+2] + pMCUSrc[iRow+6];
+             tmp12 = (((pMCUSrc[iRow+2] - pMCUSrc[iRow+6]) * 362)>>8) - tmp13; // 2-6 * 1.414
+             tmp0 = tmp10 + tmp13;
+@@ -5219,7 +5239,7 @@ static int DecodeJPEG(JPEGIMAGE *pJPEG)
+             if (pJPEG->u16MCUFlags == 0 || bThumbnail) // no AC components, save some time
+             {
+                 pl = (uint32_t *)&pJPEG->sMCUs[iLum0];
+-                c = ucRangeTable[((iDCPred0 * iQuant1) >> 5) & 0x3ff];
++                c = ucRangeTable[((((iDCPred0 * iQuant1) >> pJPEG->ucQuantShift) + 16) >> 5) & 0x3ff];
+                 l = c | ((uint32_t) c << 8) | ((uint32_t) c << 16) | ((uint32_t) c << 24);
+                 // dct stores byte values
+                 for (i = 0; i<iMaxFill; i++) // 8x8 bytes = 16 longs
+@@ -5239,7 +5259,7 @@ static int DecodeJPEG(JPEGIMAGE *pJPEG)
+                 }
+                 if (pJPEG->u16MCUFlags == 0 || bThumbnail) // no AC components, save some time
+                 {
+-                    c = ucRangeTable[((iDCPred0 * iQuant1) >> 5) & 0x3ff];
++                    c = ucRangeTable[((((iDCPred0 * iQuant1) >> pJPEG->ucQuantShift) + 16) >> 5) & 0x3ff];
+                     l = c | ((uint32_t) c << 8) | ((uint32_t) c << 16) | ((uint32_t) c << 24);
+                     // dct stores byte values
+                     pl = (uint32_t *)&pJPEG->sMCUs[iLum1];
+@@ -5259,7 +5279,7 @@ static int DecodeJPEG(JPEGIMAGE *pJPEG)
+                     }
+                     if (pJPEG->u16MCUFlags == 0 || bThumbnail) // no AC components, save some time
+                     {
+-                        c = ucRangeTable[((iDCPred0 * iQuant1) >> 5) & 0x3ff];
++                        c = ucRangeTable[((((iDCPred0 * iQuant1) >> pJPEG->ucQuantShift) + 16) >> 5) & 0x3ff];
+                         l = c | ((uint32_t) c << 8) | ((uint32_t) c << 16) | ((uint32_t) c << 24);
+                         // dct stores byte values
+                         pl = (uint32_t *)&pJPEG->sMCUs[iLum2];
+@@ -5277,7 +5297,7 @@ static int DecodeJPEG(JPEGIMAGE *pJPEG)
+                     }
+                     if (pJPEG->u16MCUFlags == 0 || bThumbnail) // no AC components, save some time
+                     {
+-                        c = ucRangeTable[((iDCPred0 * iQuant1) >> 5) & 0x3ff];
++                        c = ucRangeTable[((((iDCPred0 * iQuant1) >> pJPEG->ucQuantShift) + 16) >> 5) & 0x3ff];
+                         l = c | ((uint32_t) c << 8) | ((uint32_t) c << 16) | ((uint32_t) c << 24);
+                         // dct stores byte values
+                         pl = (uint32_t *)&pJPEG->sMCUs[iLum3];
+@@ -5319,7 +5339,7 @@ static int DecodeJPEG(JPEGIMAGE *pJPEG)
+                     }
+                     if (pJPEG->u16MCUFlags == 0 || bThumbnail) // no AC components, save some time
+                     {
+-                        c = ucRangeTable[((iDCPred1 * iQuant2) >> 5) & 0x3ff];
++                        c = ucRangeTable[((((iDCPred1 * iQuant2) >> pJPEG->ucQuantShift) + 16) >> 5) & 0x3ff];
+                         l = c | ((uint32_t) c << 8) | ((uint32_t) c << 16) | ((uint32_t) c << 24);
+                         // dct stores byte values
+                         pl = (uint32_t *)&pJPEG->sMCUs[iCr];
+@@ -5340,7 +5360,7 @@ static int DecodeJPEG(JPEGIMAGE *pJPEG)
+                     }
+                     if (pJPEG->u16MCUFlags == 0 || bThumbnail) // no AC components, save some time
+                     {
+-                        c = ucRangeTable[((iDCPred2 * iQuant3) >> 5) & 0x3ff];
++                        c = ucRangeTable[((((iDCPred2 * iQuant3) >> pJPEG->ucQuantShift) + 16) >> 5) & 0x3ff];
+                         l = c | ((uint32_t) c << 8) | ((uint32_t) c << 16) | ((uint32_t) c << 24);
+                         // dct stores byte values
+                         pl = (uint32_t *)&pJPEG->sMCUs[iCb];

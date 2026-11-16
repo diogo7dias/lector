@@ -33,8 +33,9 @@ void ImageBlock::setExtractor(void* ctx, ExtractFn fn) {
 namespace {
 
 // The image's extension becomes the pixel-cache suffix. Bump the tag when decoded pixels change
-// so old caches go unread: t1 = display-tuned grays.
-constexpr char PIXEL_CACHE_SUFFIX[] = ".t1.pxc";
+// so old caches go unread: t1 = display-tuned grays, t2 = JPEGDEC AC refill and dequantizer
+// precision (scripts/jpegdec_patches 0006, 0007).
+constexpr char PIXEL_CACHE_SUFFIX[] = ".t2.pxc";
 
 std::string getCachePath(const std::string& imagePath) {
   const size_t dotPos = imagePath.rfind('.');

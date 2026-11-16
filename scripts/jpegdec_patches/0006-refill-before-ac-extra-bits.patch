@@ -1,0 +1,47 @@
+Subject: [PATCH] Refill the bit buffer before reading AC extra bits
+
+JPEGDecodeMCU refills the bit buffer at the top of the AC loop, which leaves
+at least 17 unread bits, and then reads a Huffman code and its SSSS extra bits
+with no refill in between. When the code length plus SSSS is over 17, the
+extra bits run off the end of the loaded word: the low bits come in as zeros,
+the coefficient is wrong, and the bit offset still moves the right amount, so
+the stream stays in sync and nothing reports an error.
+
+The Annex K luminance AC table already has such codes: symbol 0x08 is 10 bits
+long (10 + 8 = 18), and 0x09 and 0x0A are 16 bits long. High-quality files
+(quantizers 1-2) put large AC coefficients on every hard edge, so text and
+line art come out with smeared edges: up to 70-95 levels off libjpeg on the
+gray test images in test/epubs/test_jpeg_images.epub. The fix refills before
+the extra bits, the same check the DC path already makes.
+
+---
+diff --git a/src/jpeg.inl b/src/jpeg.inl
+index 0b00da5..9d43513 100644
+--- a/src/jpeg.inl
++++ b/src/jpeg.inl
+@@ -2261,6 +2261,12 @@ static int JPEGDecodeMCU(JPEGIMAGE *pJPEG, int iMCU, int *iDCPredictor)
+             usHuff &= 0xf; // get (SSSS) - extra length
+             if (pZig < pEnd2 && usHuff)
+             {
++                if (ulBitOff > (REGISTER_WIDTH - 17)) // a long code can leave fewer bits than SSSS
++                {
++                    pBuf += (ulBitOff >> 3);
++                    ulBitOff &= 7;
++                    ulBits = MOTOLONG(pBuf);
++                }
+                 ulCode = ulBits << ulBitOff;
+                 ulTemp = ~(my_ulong) (((my_long) ulCode) >> (REGISTER_WIDTH-1)); // slide sign bit across other 63 bits
+                 ulCode >>= (REGISTER_WIDTH - usHuff);
+@@ -2307,6 +2313,12 @@ static int JPEGDecodeMCU(JPEGIMAGE *pJPEG, int iMCU, int *iDCPredictor)
+             usHuff &= 0xf; // get (SSSS) - extra length
+             if (pZig < pEnd2 && usHuff)
+             {
++                if (ulBitOff > (REGISTER_WIDTH - 17)) // a long code can leave fewer bits than SSSS
++                {
++                    pBuf += (ulBitOff >> 3);
++                    ulBitOff &= 7;
++                    ulBits = MOTOLONG(pBuf);
++                }
+                 ulCode = ulBits << ulBitOff;
+                 ulTemp = ~(my_ulong) (((my_long) ulCode) >> (REGISTER_WIDTH-1)); // slide sign bit across other 63 bits
+                 ulCode >>= (REGISTER_WIDTH - usHuff);
