@@ -39,7 +39,9 @@ class ImageBlock final : public Block {
 
   void render(GfxRenderer& renderer, const int x, const int y);
   bool serialize(HalFile& file);
-  static std::unique_ptr<ImageBlock> deserialize(HalFile& file);
+  // imageDir is the book's cache dir now. The stored path names the dir the section was
+  // built in, which filing renames (cache dirs are keyed by the book's path).
+  static std::unique_ptr<ImageBlock> deserialize(HalFile& file, const std::string& imageDir);
 
  private:
   std::string imagePath;

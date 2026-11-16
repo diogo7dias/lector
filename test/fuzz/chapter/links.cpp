@@ -17,7 +17,7 @@ bool ImageBlock::serialize(HalFile& file) {
   return true;
 }
 
-std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile&) { return nullptr; }
+std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile&, const std::string&) { return nullptr; }
 void ImageBlock::render(GfxRenderer&, int, int) {}
 void ImageBlock::renderPlaceholder(GfxRenderer&, int, int) const {}
 

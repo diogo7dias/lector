@@ -122,13 +122,13 @@ bool PageImage::serialize(HalFile& file) {
   return imageBlock->serialize(file);
 }
 
-std::unique_ptr<PageImage> PageImage::deserialize(HalFile& file) {
+std::unique_ptr<PageImage> PageImage::deserialize(HalFile& file, const std::string& imageDir) {
   int16_t xPos;
   int16_t yPos;
   serialization::readPod(file, xPos);
   serialization::readPod(file, yPos);
 
-  auto ib = ImageBlock::deserialize(file);
+  auto ib = ImageBlock::deserialize(file, imageDir);
   if (!ib) {
     LOG_ERR("PAGE", "OOM: ImageBlock");
     return nullptr;
@@ -346,7 +346,7 @@ bool Page::serialize(HalFile& file) const {
   return true;
 }
 
-std::unique_ptr<Page> Page::deserialize(HalFile& file) {
+std::unique_ptr<Page> Page::deserialize(HalFile& file, const std::string& imageDir) {
   auto page = makeUniqueNoThrow<Page>();
   if (!page) {
     LOG_ERR("PAGE", "OOM: Page");
@@ -377,7 +377,7 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
       }
       page->elements.push_back(std::move(pl));
     } else if (tag == TAG_PageImage) {
-      auto pi = PageImage::deserialize(file);
+      auto pi = PageImage::deserialize(file, imageDir);
       if (!pi) {
         return nullptr;
       }
