@@ -16,7 +16,6 @@ class ClearCacheActivity final : public UiStatusActivity {
 
   void onEnter() override;
   void onExit() override;
-  bool skipLoopDelay() override { return true; }  // Prevent power-saving mode
 
  protected:
   StatusView statusView() const override;

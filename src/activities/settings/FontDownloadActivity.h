@@ -53,7 +53,6 @@ class FontDownloadActivity : public UiStatusActivity {
     sleepClockState_ = state_;
     return true;
   }
-  bool skipLoopDelay() override { return true; }
 
  protected:
   StatusView statusView() const override;
