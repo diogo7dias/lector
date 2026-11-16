@@ -420,10 +420,12 @@ bool ImageBlock::serialize(HalFile& file) {
   return true;
 }
 
-std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile& file) {
+std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile& file, const std::string& imageDir) {
   std::string path;
   std::string src;
   serialization::readString(file, path);
+  const size_t slash = path.rfind('/');
+  if (slash != std::string::npos) path = imageDir + path.substr(slash);
   serialization::readString(file, src);
   int16_t w, h;
   serialization::readPod(file, w);

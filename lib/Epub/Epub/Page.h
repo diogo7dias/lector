@@ -61,7 +61,7 @@ class PageImage final : public PageElement {
   void renderPlaceholder(GfxRenderer& renderer, int xOffset, int yOffset) const;
   bool serialize(HalFile& file) override;
   PageElementTag getTag() const override { return TAG_PageImage; }
-  static std::unique_ptr<PageImage> deserialize(HalFile& file);
+  static std::unique_ptr<PageImage> deserialize(HalFile& file, const std::string& imageDir);
   const ImageBlock& getImageBlock() const { return *imageBlock; }
 };
 
@@ -151,7 +151,7 @@ class Page {
   void renderWithImagePlaceholders(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
   void centerFullTextPage(GfxRenderer& renderer, int fontId, float lineCompression, int viewportHeight);
   bool serialize(HalFile& file) const;
-  static std::unique_ptr<Page> deserialize(HalFile& file);
+  static std::unique_ptr<Page> deserialize(HalFile& file, const std::string& imageDir);
 
   // Check if page contains any images (used to force full refresh)
   bool hasImages() const {

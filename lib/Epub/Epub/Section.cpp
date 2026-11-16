@@ -283,7 +283,7 @@ std::unique_ptr<Page> Section::loadPageDuringBuild(const int page) {
   // the write cursor so the next onPageComplete keeps appending where it left off.
   const uint32_t writePos = file.position();
   file.seek(pos);
-  auto p = Page::deserialize(file);
+  auto p = Page::deserialize(file, epub.getCachePath());
   file.seek(writePos);
   if (p) {
     p->visibleTextOffset = build_->lut[page].visibleTextOffset;
@@ -322,7 +322,7 @@ std::unique_ptr<Page> Section::loadPageAt(const int page) const {
   }
 
   f.seek(pagePos);
-  auto p = Page::deserialize(f);
+  auto p = Page::deserialize(f, epub.getCachePath());
   if (p) {
     p->visibleTextOffset = visibleTextOffset;
   }
