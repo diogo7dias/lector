@@ -27,18 +27,27 @@ struct CssLength {
 
   // Resolve to pixels given the current em size (font line height)
   // containerWidth is needed for percentage units (e.g. viewport width)
+  // Clamped to the int16 range, NaN to 0: callers cast the result to an integer, and a
+  // stylesheet value like text-indent:99999999999px made that cast undefined behaviour.
   [[nodiscard]] float toPixels(const float emSize, const float containerWidth = 0) const {
+    float px;
     switch (unit) {
       case CssUnit::Em:
       case CssUnit::Rem:
-        return value * emSize;
+        px = value * emSize;
+        break;
       case CssUnit::Points:
-        return value * 1.33f;  // Approximate pt to px conversion
+        px = value * 1.33f;  // Approximate pt to px conversion
+        break;
       case CssUnit::Percent:
-        return value * containerWidth / 100.0f;
+        px = value * containerWidth / 100.0f;
+        break;
       default:
-        return value;
+        px = value;
     }
+    if (px >= INT16_MAX) return INT16_MAX;
+    if (px <= INT16_MIN) return INT16_MIN;
+    return px == px ? px : 0.0f;
   }
 
   // Resolve to int16_t pixels (for BlockStyle fields)
