@@ -147,6 +147,12 @@ orientation, font family and size, sleep image quality, Wake Straight to Book, r
 frequency, and the open book. Then the previous wake's stage breakdown, then
 one row per refresh.
 
+The first line and the closing `sleep` line both end with a power stamp:
+`battery=87% mv=4012 up=412s utc=2026-11-16T22:40` (`utc` only on a board that knows the
+date). Inside one file the two stamps give the drain while awake; from one file's `sleep`
+line to the next file's first line, the drain while asleep. This is the only battery
+measurement that needs no meter.
+
 ### Reading the wake line
 
 `# wake w5 pre 272 sys 0 gpio 156 hal 2 sd 67 cfg 129 in 303 disp 138 push 710 act 229 = 2006`

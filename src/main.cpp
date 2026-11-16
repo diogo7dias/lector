@@ -167,10 +167,12 @@ static void finishDeepSleep(const unsigned long sleepT0, const unsigned long sle
   // when the stages were first measured, and only about 4800 ms of that was the panel.
   char paintStages[320];
   SleepTiming::format(paintStages, sizeof(paintStages));
-  char sleepNote[448];
-  snprintf(sleepNote, sizeof(sleepNote), "sleep state=%lu paint=%lu frame=%lu wifi=%lu save=%lu [%s]",
+  char power[72];
+  formatPowerStamp(power, sizeof(power));
+  char sleepNote[520];
+  snprintf(sleepNote, sizeof(sleepNote), "sleep state=%lu paint=%lu frame=%lu wifi=%lu save=%lu [%s] %s",
            sleepTState - sleepT0, sleepTPaint - sleepTState, sleepTFrame - sleepTPaint, sleepTWifi - sleepTFrame,
-           sleepTBudget - sleepTWifi, paintStages);
+           sleepTBudget - sleepTWifi, paintStages, power);
   PerfLog::note(sleepNote);
   PerfLog::flush();
   // Ordinarily empty: attempts and failures flush as they happen. This is the
