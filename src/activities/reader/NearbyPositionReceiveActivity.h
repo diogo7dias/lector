@@ -14,7 +14,11 @@ class NearbyPositionReceiveActivity final : public UiStatusActivity {
       : UiStatusActivity("NearbyPositionReceive", renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
-  bool preventAutoSleep() override { return true; }
+  // Only while a reader may still answer. Every result screen follows Time to Sleep:
+  // the radio stays up until Back, so a screen left open must not hold the device awake.
+  bool preventAutoSleep() override {
+    return state == State::Searching || state == State::Matching || state == State::Waiting;
+  }
   bool skipLoopDelay() override { return state == State::Matching; }
 
  protected:
