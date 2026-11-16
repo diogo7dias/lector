@@ -434,6 +434,10 @@ void SettingsActivity::onEnter() {
 void SettingsActivity::onExit() {
   SETTINGS.saveToFile();
   Activity::onExit();
+  // The Wi-Fi Networks screen has no session of its own, and its result handler never
+  // runs when Home or a bound key replaces the whole stack. Left up, the radio stays
+  // joined and holds the CPU at full clock until the next sleep. No-op when Wi-Fi is off.
+  teardownWifiAndRestart();
 }
 
 void SettingsActivity::startDownloadActivity(std::unique_ptr<Activity> activity) {
