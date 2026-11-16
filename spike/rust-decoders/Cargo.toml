@@ -9,6 +9,8 @@ crate-type = ["staticlib", "rlib"]
 
 [features]
 std = []
+# Panic without formatting the message, to measure the flash the formatter costs.
+plain-panic = []
 
 [dependencies]
 miniz_oxide = { version = "0.9.1", default-features = false }

@@ -112,7 +112,11 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
         }
     }
     let mut buf = Buf([0; 160], 0);
-    let _ = write!(buf, "{}", info);
+    if cfg!(feature = "plain-panic") {
+        let _ = buf.write_str("panic");
+    } else {
+        let _ = write!(buf, "{}", info);
+    }
     unsafe { rdec_on_panic(buf.0.as_ptr()) }
 }
 

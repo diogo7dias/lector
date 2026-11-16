@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Flash cost of each side as a whole (code, tables and strings): the bench image's flash
 # sections with both sides, minus the same image built without one side.
+# RDEC_FEATURES=plain-panic measures the Rust side without the panic message formatter.
 set -euo pipefail
 cd "$(dirname "$0")"
 for env in c3 s3; do

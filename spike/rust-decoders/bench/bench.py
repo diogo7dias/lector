@@ -31,6 +31,8 @@ def patch(lib, folder):
 def rust():
     target = env.GetProjectOption("custom_rust_target")  # noqa: F821
     cmd = ["cargo", "build", "--release", "--target", target, "--manifest-path", os.path.join(CRATE, "Cargo.toml")]
+    if os.environ.get("RDEC_FEATURES"):
+        cmd += ["--features", os.environ["RDEC_FEATURES"]]
     if target.startswith("xtensa"):
         cmd[1:1] = ["+esp"]
         cmd += ["-Zbuild-std=core,alloc"]

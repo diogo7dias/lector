@@ -46,14 +46,18 @@ build/compare <image>                     # C vs Rust frame difference
 Rust needs `rustup target add riscv32imc-unknown-none-elf` for the C3 and `espup install` (the
 `esp` toolchain, `-Zbuild-std=core,alloc`) for the S3.
 
+The bench uses the stock Arduino framework without the firmware's `custom_sdkconfig`. The first
+bench build therefore reinstalls the shared framework package, and the next firmware build
+rebuilds it.
+
 ## How to read the numbers
 
 - The time is QEMU virtual time under `-icount shift=3`, so one guest instruction is 8 ns. The
   same loop gives the same count on every run (`CALIB` lines). Compare C with Rust on one target
   only. QEMU does not model caches or PSRAM latency, so the S3 numbers with buffers in PSRAM
   favour the decoder that buffers more.
-- Both sides are built at `-Os` / `opt-level = "s"`, with LTO, `panic = "abort"`, and
-  `--gc-sections`.
+- C is built at the platform's `-Os` without LTO. Rust is built at `opt-level = "s"` with LTO
+  and `panic = "abort"`. Both are linked with `--gc-sections`.
 - JPEGDEC on the S3 links its ESP32-S3 SIMD colour converters, as the `x4pro` firmware does. The
   EPUB JPEGs are single-channel gray, so those converters do not run.
 - The decode is at full scale on both sides. The firmware asks JPEGDEC for 1/2 to 1/8 scale on
