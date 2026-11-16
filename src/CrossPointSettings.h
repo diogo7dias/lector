@@ -470,8 +470,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t MAX_LINE_SPACING_PERCENT = reader_defaults::MAX_LINE_SPACING_PERCENT;
   uint8_t lineSpacingPercent = 95;
   uint8_t paragraphAlignment = JUSTIFIED;
-  // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
-  uint8_t sleepTimeoutMinutes = 10;
+  // Auto-sleep timeout setting. Legacy sleepTimeout enum values are migration-only.
+  uint8_t sleepTimeoutMinutes = 5;
   // Touch Sleep (touch boards): after this long without input the touch controller
   // sleeps and the chip waits on the buttons alone. The next button press wakes
   // touch; until then a touch does nothing, the capacitive Home key included (the
