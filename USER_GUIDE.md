@@ -117,7 +117,7 @@ sleep screen.
 ### Sleep
 
 The device sleeps after the inactivity set in **Settings > System > Time to Sleep**, anywhere
-from 1 to 30 minutes, or Never. The default is 10 minutes. What it shows while asleep is the sleep screen, covered in
+from 1 to 30 minutes, or Never. The default is 5 minutes. What it shows while asleep is the sleep screen, covered in
 [section 8](#8-sleep-screen-and-wallpapers).
 
 A wake from sleep goes straight back into the book, without stopping at any other screen.
@@ -1201,7 +1201,7 @@ Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Al
 
 ### 12.4 System
 
-**Power** — **Time to Sleep**: 1 to 30 minutes, or Never. Default 10 minutes.
+**Power** — **Time to Sleep**: 1 to 30 minutes, or Never. Default 5 minutes.
 
 **Library**
 
