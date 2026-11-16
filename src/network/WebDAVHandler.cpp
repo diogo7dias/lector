@@ -98,18 +98,13 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
     }
 
   } else if (raw.status == RAW_END) {
-    if (_putFile) _putFile.close();
+    // close() writes the final size: a failed close must not replace the original.
+    if (_putFile && !_putFile.close()) _putOk = false;
     if (_putOk) {
-      String tempPath = _putPath + ".davtmp";
-      if (_putExisted) Storage.remove(_putPath.c_str());
-      HalFile tmp = Storage.open(tempPath.c_str());
-      if (tmp) {
-        _putOk = tmp.rename(_putPath.c_str());
-        tmp.close();
-      } else {
-        _putOk = false;
-      }
-      if (!_putOk) Storage.remove(tempPath.c_str());
+      const String tempPath = _putPath + ".davtmp";
+      // FAT rename never overwrites, so the original goes first.
+      _putOk = (!_putExisted || Storage.remove(_putPath.c_str())) && Storage.rename(tempPath.c_str(), _putPath.c_str());
+      // A failed rename after the remove leaves the temp as the only copy; handlePut keeps it.
     }
     // A wallpaper written over WebDAV reaches the rotation index right here: a
     // fresh file appends its own record (no folder walk at the next boot), an
@@ -408,8 +403,8 @@ void WebDAVHandler::handlePut(WebServer& s) {
   if (busyWithFetch(s, path)) return;
 
   if (!_putOk) {
-    String tempPath = path + ".davtmp";
-    Storage.remove(tempPath.c_str());
+    // A failed replace may already have removed the original; the temp is then the only copy.
+    if (!_putExisted || Storage.exists(path.c_str())) Storage.remove((path + ".davtmp").c_str());
     s.send(500, "text/plain", "Write failed - incomplete upload or disk full");
     return;
   }
