@@ -83,11 +83,21 @@ class HalStorage {
   // Recursive, so nesting it inside HalStorage's own calls is safe.
   class StorageLock {
    public:
-    StorageLock() { xSemaphoreTakeRecursive(HalStorage::getInstance().storageMutex, portMAX_DELAY); }
+    StorageLock() {
+      xSemaphoreTakeRecursive(HalStorage::getInstance().storageMutex, portMAX_DELAY);
+      holdNormalSpeed();
+    }
     ~StorageLock() { xSemaphoreGiveRecursive(HalStorage::getInstance().storageMutex); }
     StorageLock(const StorageLock&) = delete;
     StorageLock& operator=(const StorageLock&) = delete;
+
+   private:
+    static void holdNormalSpeed();  // HalPowerManager::holdNormalSpeedForStorage()
   };
+
+  // For HalPowerManager only: it lowers the CPU clock with the card idle and locked out.
+  bool tryLock() { return xSemaphoreTakeRecursive(storageMutex, 0) != 0; }
+  void unlock() { xSemaphoreGiveRecursive(storageMutex); }
 
  private:
   static HalStorage instance;

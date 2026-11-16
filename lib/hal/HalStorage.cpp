@@ -8,6 +8,8 @@
 #include <UsbMassStorage.h>
 #endif
 
+#include <HalPowerManager.h>
+
 #include <cassert>
 
 #if FREEINK_SD_SDMMC
@@ -17,6 +19,8 @@
 #define SDCard SDCardManager::getInstance()
 
 HalStorage HalStorage::instance;
+
+void HalStorage::StorageLock::holdNormalSpeed() { powerManager.holdNormalSpeedForStorage(); }
 
 namespace {
 // Set once beginUsbDrive() hands the card to the host, read under storageMutex, never
