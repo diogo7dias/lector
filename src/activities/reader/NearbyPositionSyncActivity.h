@@ -32,8 +32,13 @@ class NearbyPositionSyncActivity final : public UiStatusActivity {
   void onEnter() override;
   void onExit() override;
   // The radio is only up while this screen is, so sleeping mid-sync would strand
-  // the other reader waiting on a peer that stopped answering.
-  bool preventAutoSleep() override { return true; }
+  // the other reader waiting on a peer that stopped answering. Once the exchange
+  // has ended or failed nobody is waiting, and the screen follows Time to Sleep.
+  bool preventAutoSleep() override {
+    if (noLocalPosition || radioFailed || saveFailed) return false;
+    const nearby_position::SyncState state = session.state();
+    return state == nearby_position::SyncState::SEARCHING || state == nearby_position::SyncState::EXCHANGING;
+  }
   bool isReaderActivity() const override { return true; }
 
  protected:
