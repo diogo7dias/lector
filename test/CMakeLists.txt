@@ -38,6 +38,19 @@ FetchContent_MakeAvailable(googletest)
 
 set(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
+# JPEGDEC at the firmware pin with scripts/jpegdec_patches and the device's 32-bit bit reader,
+# for jpeg_decode_accuracy and fuzz/image.
+file(GLOB JPEGDEC_PATCHES ${REPO_ROOT}/scripts/jpegdec_patches/*.patch)
+list(SORT JPEGDEC_PATCHES)
+FetchContent_Declare(jpegdec
+  GIT_REPOSITORY https://github.com/bitbank2/JPEGDEC.git
+  GIT_TAG 86282979224c8a32fd51e091ed5a35b0c699a52b  # as platformio.ini
+  PATCH_COMMAND git checkout -- src
+    COMMAND git apply ${JPEGDEC_PATCHES} ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/image/jpegdec-device-register-width.patch
+  UPDATE_DISCONNECTED ON
+  SOURCE_SUBDIR no-cmake
+)
+
 add_library(crosspoint_test_common INTERFACE)
 target_include_directories(crosspoint_test_common INTERFACE
   ${REPO_ROOT}
@@ -220,6 +233,7 @@ add_subdirectory(scale_to_fit)
 add_subdirectory(dither_utils)
 add_subdirectory(usb_drive_storage_guard)
 add_subdirectory(bitmap_resample)
+add_subdirectory(jpeg_decode_accuracy)
 add_subdirectory(pinch_font_resize)
 
 if(LECTOR_FUZZ)
