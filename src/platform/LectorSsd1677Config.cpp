@@ -22,8 +22,7 @@
 // it on costs one extra power-up activation on the sleep path and is a no-op on the
 // fast paths, where powerOn() returns immediately because the panel is already on.
 //
-// Selected with -DFREEINK_SSD1677_CONFIG=lectorSsd1677Config, set only on the X3/X4
-// environments so the Seeed Sticky environment keeps its own SSD1677 config.
+// Selected with -DFREEINK_SSD1677_CONFIG=lectorSsd1677Config on the X3/X4 environments.
 //
 // The X4 Pro ships with either an SSD1677 or a UC8279, and the units with an SSD1677 take
 // the same HALF base, so they need the same power-up. They select lectorSsd1677X4ProConfig:

@@ -144,52 +144,6 @@ jobs:
           path: .pio/build/default/*.bin
           if-no-files-found: error
 
-  # Compile-only coverage for the Sticky board, beside the other builds: in the default
-  # build job it added ~7 min before the C3 sims could start.
-  build-sticky:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.14'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "latest"
-          enable-cache: false
-
-      - name: Install PlatformIO Core
-        run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
-
-      - name: Cache PlatformIO packages
-        # Own key, like x4pro: its custom_sdkconfig framework rebuild must not leak into the others.
-        uses: actions/cache@v4
-        with:
-          path: ~/.platformio
-          key: pio-sticky-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
-          restore-keys: pio-sticky-${{ runner.os }}-
-
-      - name: Cache compiled objects
-        # SCons CacheDir keyed by source+flag signatures, so a hit is only ever an identical
-        # object. A fresh key per run (actions/cache never overwrites one) restores the newest.
-        # prune-object-caches keeps only the newest per branch. v2: fresh start after #412.
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/pio-build-cache
-          key: pio-obj-v2-sticky-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-${{ github.run_id }}
-          restore-keys: pio-obj-v2-sticky-${{ runner.os }}-${{ hashFiles('platformio.ini') }}-
-
-      - name: Build Sticky
-        env:
-          PLATFORMIO_BUILD_CACHE_DIR: ${{ runner.temp }}/pio-build-cache
-        # Retry once: the platform re-downloads its Python dependencies on every run and a failed fetch stops the build before it compiles.
-        run: pio run -e sticky || { sleep 60; pio run -e sticky; }
-
   build-x4pro:
     runs-on: ubuntu-latest
     steps:
@@ -360,7 +314,7 @@ jobs:
   # entries: a PR falls back to main's. Not a gate: a fork PR's token cannot delete.
   # ponytail: the cache dir itself still grows by the objects each commit changes; bump v2 if it bloats.
   prune-object-caches:
-    needs: [build, build-sticky, build-x4pro]
+    needs: [build, build-x4pro]
     if: always()
     runs-on: ubuntu-latest
     continue-on-error: true
@@ -372,7 +326,7 @@ jobs:
     steps:
       - name: Delete older object caches
         run: |
-          for e in default sticky x4pro; do
+          for e in default x4pro; do
             gh cache list -k "pio-obj-v2-$e-" -r "$GITHUB_REF" -S created_at -O desc -L 100 \
               --json id -q '.[1:][].id' | xargs -r -n1 gh cache delete
           done
@@ -388,7 +342,6 @@ jobs:
     name: Test Status
     needs:
       - build
-      - build-sticky
       - build-x4pro
       - sim-x4pro
       - sim-c3
