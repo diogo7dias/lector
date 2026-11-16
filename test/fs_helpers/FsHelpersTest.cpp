@@ -89,6 +89,16 @@ TEST(FsHelpers, NormaliseWebPathIsAbsoluteWithoutTrailingSlash) {
   EXPECT_EQ(FsHelpers::normaliseWebPath("//books//a.epub/"), "/books/a.epub");
   EXPECT_EQ(FsHelpers::normaliseWebPath("/../../.crosspoint"), "/.crosspoint");
   EXPECT_EQ(FsHelpers::normaliseWebPath("/books/../x"), "/x");
+  EXPECT_EQ(FsHelpers::normaliseWebPath("/./books/./a.epub"), "/books/a.epub");
+}
+
+// EPUB hrefs ("./Text/ch.xhtml", "./img.jpg") resolve to the zip entry's own name: a "."
+// segment is dropped, never kept for a ".." to pop instead of the folder above it.
+TEST(FsHelpers, NormalisePathDropsDotSegments) {
+  EXPECT_EQ(FsHelpers::normalisePath("OEBPS/./Text/ch.xhtml"), "OEBPS/Text/ch.xhtml");
+  EXPECT_EQ(FsHelpers::normalisePath("a/b/c/./../x/./y.jpeg"), "a/b/x/y.jpeg");
+  EXPECT_EQ(FsHelpers::normalisePath("./cover.jpg"), "cover.jpg");
+  EXPECT_EQ(FsHelpers::normalisePath("."), "");
 }
 
 namespace {

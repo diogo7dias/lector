@@ -19,7 +19,9 @@ namespace {
 // that still resolves to nothing is left out of the cache entirely.
 // v13 = an EPUB 3 page-list is saved beside book.bin as pages.txt (Go to Page); caches
 // built before it never parsed one.
-constexpr uint8_t BOOK_CACHE_VERSION = 13;
+// v14 = a "." path segment is dropped ("./Text/ch.xhtml"), so spine and TOC hrefs name
+// the zip entry; caches built before it hold "OEBPS/./Text/ch.xhtml", which no entry matches.
+constexpr uint8_t BOOK_CACHE_VERSION = 14;
 constexpr char bookBinFile[] = "/book.bin";
 // book.bin is built here and renamed into place only when complete: its header is
 // written first, so a build cut by power loss would otherwise pass load()'s checks.

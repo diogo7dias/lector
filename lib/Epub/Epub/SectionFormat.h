@@ -152,7 +152,9 @@ namespace {
 //      keeps the group's alignment under a reader override (CrossInk cb58ab50d). A container's
 //      closing spacing sits above the next paragraph, not below it (CrossInk 63a682578).
 // v87: TrueType advances defer rounding until pixel placement (upstream #4431).
-constexpr uint8_t SECTION_FILE_VERSION = 87;
+// v88: an image src with a "." segment ("./img.jpg") resolves to the zip entry, so it
+//      is laid out and drawn instead of left out of the page.
+constexpr uint8_t SECTION_FILE_VERSION = 88;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

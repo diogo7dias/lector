@@ -52,7 +52,7 @@ std::string normalisePath(const std::string& path) {
           if (!components.empty()) {
             components.pop_back();
           }
-        } else {
+        } else if (component != ".") {
           components.push_back(component);
         }
       }

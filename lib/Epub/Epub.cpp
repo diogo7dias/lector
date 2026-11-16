@@ -11,48 +11,12 @@
 
 #include <unordered_map>
 
+#include "Epub/OpfText.h"
 #include "Epub/SpineFileNameIndex.h"
 #include "Epub/parsers/ContainerParser.h"
 #include "Epub/parsers/ContentOpfParser.h"
 #include "Epub/parsers/TocNavParser.h"
 #include "Epub/parsers/TocNcxParser.h"
-
-namespace {
-
-// dc:description is prose, but publishers stuff HTML into it and expat hands that
-// markup back as literal text. The Book Info screen draws plain wrapped text, so
-// flatten it here, once, at cache-build time: drop anything between angle
-// brackets and collapse every run of whitespace to a single space.
-std::string sanitizeDescription(const std::string& raw) {
-  std::string out;
-  out.reserve(raw.size());
-
-  bool inTag = false;
-  bool pendingSpace = false;
-  for (const char c : raw) {
-    if (c == '<') {
-      inTag = true;
-      pendingSpace = true;  // a tag boundary is a word boundary
-      continue;
-    }
-    if (inTag) {
-      if (c == '>') inTag = false;
-      continue;
-    }
-    if (static_cast<unsigned char>(c) <= ' ') {
-      pendingSpace = true;
-      continue;
-    }
-    if (pendingSpace && !out.empty()) {
-      out.push_back(' ');
-    }
-    pendingSpace = false;
-    out.push_back(c);
-  }
-  return out;
-}
-
-}  // namespace
 
 bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
   const auto containerPath = "META-INF/container.xml";
@@ -121,7 +85,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
   bookMetadata.author = opfParser.author;
   bookMetadata.language = opfParser.language;
   bookMetadata.coverItemHref = opfParser.coverItemHref;
-  bookMetadata.description = utf8ComposeNfc(sanitizeDescription(opfParser.description));
+  bookMetadata.description = utf8ComposeNfc(OpfText::sanitizeDescription(opfParser.description));
 
   // Guide-based cover fallback: if no cover found via metadata/properties,
   // try extracting the image reference from the guide's cover page XHTML
@@ -133,36 +97,8 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
       const std::string coverPageHtml(reinterpret_cast<char*>(coverPageData), coverPageSize);
       free(coverPageData);
 
-      // Determine base path of the cover page for resolving relative image references
-      std::string coverPageBase;
-      const auto lastSlash = opfParser.guideCoverPageHref.rfind('/');
-      if (lastSlash != std::string::npos) {
-        coverPageBase = opfParser.guideCoverPageHref.substr(0, lastSlash + 1);
-      }
-
-      // Search for image references: xlink:href="..." (SVG) and src="..." (img)
-      std::string imageRef;
-      for (const char* pattern : {"xlink:href=\"", "src=\""}) {
-        auto pos = coverPageHtml.find(pattern);
-        while (pos != std::string::npos) {
-          pos += strlen(pattern);
-          const auto endPos = coverPageHtml.find('"', pos);
-          if (endPos != std::string::npos) {
-            const auto ref = std::string_view{coverPageHtml}.substr(pos, endPos - pos);
-            // Cover BMP generation supports JPG/PNG only; skip GIF so an unsupported wrapper image
-            // does not block a later supported cover reference.
-            if (FsHelpers::hasPngExtension(ref) || FsHelpers::hasJpgExtension(ref)) {
-              imageRef = ref;
-              break;
-            }
-          }
-          pos = coverPageHtml.find(pattern, pos);
-        }
-        if (!imageRef.empty()) break;
-      }
-
-      if (!imageRef.empty()) {
-        bookMetadata.coverItemHref = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(coverPageBase + imageRef));
+      bookMetadata.coverItemHref = OpfText::findGuideCoverImage(coverPageHtml, opfParser.guideCoverPageHref);
+      if (!bookMetadata.coverItemHref.empty()) {
         LOG_DBG("EBP", "Found cover image from guide: %s", bookMetadata.coverItemHref.c_str());
       }
     }

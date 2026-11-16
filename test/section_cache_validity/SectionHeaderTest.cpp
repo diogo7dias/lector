@@ -39,8 +39,8 @@ TEST(SectionCacheValidity, OldHeadersRejectedBeforeSpecReadAndNewHeadersRoundTri
     EXPECT_FALSE(section.file.opened);
   }
 
-  EXPECT_EQ(87, SECTION_FILE_VERSION);
-  EXPECT_EQ(195, SECTION_FILE_PARTIAL_VERSION);
+  EXPECT_EQ(88, SECTION_FILE_VERSION);
+  EXPECT_EQ(194, SECTION_FILE_PARTIAL_VERSION);
   for (uint8_t version : {SECTION_FILE_VERSION, SECTION_FILE_PARTIAL_VERSION}) {
     Section writer;
     writer.writeSectionFileHeader(spec);
