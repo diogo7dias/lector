@@ -6,6 +6,12 @@ All POD fields are written in the ESP32 little-endian representation used by
 
 ## `book.bin`
 
+### Version 14
+
+The serialized layout is unchanged. A `.` path segment is now dropped when an href is
+resolved, so `./Text/ch.xhtml` in the OPF becomes `OEBPS/Text/ch.xhtml`, the zip entry's
+own name. Caches built before it hold `OEBPS/./Text/ch.xhtml`, which matches no entry.
+
 ### Version 13
 
 The serialized layout is unchanged. Version 13 forces one TOC re-parse so an EPUB 3
@@ -111,6 +117,12 @@ if (parsedSize != fileSize) {
 ```
 
 ## `section.bin`
+
+### Version 88
+
+Path fix; the binary layout is unchanged. An image `src` with a `.` segment (`./img.jpg`)
+resolves to the zip entry's own name, so the image is laid out and drawn instead of left out
+of the page. The partial version is 194.
 
 ### Version 87
 
