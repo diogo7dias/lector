@@ -1,6 +1,7 @@
 #include "PerfLogSink.h"
 
 #include <FsHelpers.h>
+#include <HalClock.h>
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
@@ -41,6 +42,17 @@ void commit() {
 
 }  // namespace
 
+void formatPowerStamp(char* out, const size_t size) {
+  int used =
+      snprintf(out, size, "battery=%u%% mv=%u up=%lus", static_cast<unsigned>(powerManager.getBatteryPercentage()),
+               static_cast<unsigned>(powerManager.getBatteryMillivolts()), millis() / 1000UL);
+  uint16_t year = 0;
+  uint8_t month = 0, day = 0, hour = 0, minute = 0;
+  if (used > 0 && static_cast<size_t>(used) < size && halClock.getDateTime(year, month, day, hour, minute)) {
+    snprintf(out + used, size - used, " utc=%04u-%02u-%02uT%02u:%02u", year, month, day, hour, minute);
+  }
+}
+
 void startPerfLogSink(const char* device) {
   // The setting is the switch. Off means no directory is created, no file is opened, and
   // PerfLog stays inert for the whole session.
@@ -62,8 +74,9 @@ void startPerfLogSink(const char* device) {
   // things wrong. Panel temperature is deliberately absent: neither driver can read one
   // back — the temperature values in the driver are constants written TO the panel.
   char header[192];
-  snprintf(header, sizeof(header), "# device=%s version=%s battery=%u%%\n", device, CROSSPOINT_VERSION,
-           static_cast<unsigned>(powerManager.getBatteryPercentage()));
+  char power[72];
+  formatPowerStamp(power, sizeof(power));
+  snprintf(header, sizeof(header), "# device=%s version=%s %s\n", device, CROSSPOINT_VERSION, power);
   writeLine(header);
   // Keep the historical sleepQuality and straightToBook fields for log consumers; both
   // settings are gone.
