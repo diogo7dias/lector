@@ -1,0 +1,15 @@
+Fuzz build only: keep the 32-bit bit reader the ESP32-C3 and S3 run. JPEGDEC picks a
+64-bit one on x86-64, and its progressive decoder hard-codes 32-bit shifts.
+
+diff --git a/src/JPEGDEC.h b/src/JPEGDEC.h
+--- a/src/JPEGDEC.h
++++ b/src/JPEGDEC.h
+@@ -81,7 +81,7 @@
+ #define MCU4 (DCTSIZE * 4)
+ #define MCU5 (DCTSIZE * 5)
+ 
+-#if defined(__arm64__) || defined(__aarch64__) || defined (__x86_64__)
++#if (defined(__arm64__) || defined(__aarch64__) || defined (__x86_64__)) && !defined(LECTOR_DEVICE_REGISTER_WIDTH)
+ #define REGISTER_WIDTH 64
+ typedef uint64_t my_ulong;
+ typedef int64_t my_long;
