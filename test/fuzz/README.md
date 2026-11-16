@@ -1,6 +1,7 @@
 # Fuzzing and sanitizers
 
-The parsers that read untrusted input (EPUB zips, deflate streams, CSS, OPDS feeds) have
+The parsers that read untrusted input (EPUB zips, deflate streams, CSS, OPDS feeds, chapter
+XHTML, EPUB metadata) have
 libFuzzer harnesses here. All host tests can also be built with ASan and UBSan.
 
 ## Sanitized host tests (GCC or clang)
@@ -15,7 +16,7 @@ cmake --build build/test-asan -j4 && ctest --test-dir build/test-asan -j4 --outp
 
 ```bash
 CC=clang CXX=clang++ cmake -S test -B build/fuzz -G Ninja -DLECTOR_FUZZ=ON
-cmake --build build/fuzz --target fuzz_zip fuzz_inflate fuzz_css fuzz_opds
+cmake --build build/fuzz --target fuzz_zip fuzz_inflate fuzz_css fuzz_opds fuzz_chapter fuzz_metadata
 ctest --test-dir build/fuzz -R fuzz_                     # replay every corpus once
 
 # Fuzz one target for 10 minutes; new inputs go to a scratch dir, never the corpus.
@@ -30,7 +31,15 @@ build/fuzz/fuzz/css/fuzz_css /tmp/fz/new test/fuzz/css/corpus -dict=test/fuzz/cs
 | `inflate` | `lib/InflateReader` + `lib/uzlib` | 2 mode bytes, then raw deflate |
 | `css` | `lib/Epub/Epub/css/CssParser` | 1 mode byte, then CSS |
 | `opds` | `lib/OpdsParser` + `lib/expat` (firmware config) | 1 chunk-size byte, then XML |
+| `chapter` | `ChapterHtmlSlimParser` + layout (`ParsedText`, `Page`, `CssParser`) on expat | 4 setting bytes, CSS, NUL, chapter XHTML |
+| `metadata` | container, OPF, NCX and nav parsers + `BookMetadataCache` | 1 mode byte, then 4 NUL-separated docs (or a raw book.bin) |
 
 On a crash: minimize it (`fuzz_<t> -minimize_crash=1 -runs=20000 <crash>`), fix the root
 cause in `lib/` or `src/`, then add the minimized file to `<t>/corpus/` as `regress_<what>.bin`
 so the ctest replay keeps it fixed. Keep corpus files small (under 16 KB).
+
+`chapter` and `metadata` share the in-memory storage in `common/` (nothing touches the real
+disk). `FUZZ_TRACE=1` prints the firmware's log lines while replaying an input, to check a
+seed reaches the code it was written for; `fuzz_chapter` also prints the bytes of pages built.
+Chapter seeds need a DOCTYPE for HTML entities like `&nbsp;`: without one expat rejects them,
+as on the device.

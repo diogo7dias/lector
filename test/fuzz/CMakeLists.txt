@@ -15,7 +15,7 @@ function(lector_add_fuzzer name)
 endfunction()
 
 # One folder per target; a folder joins the build once it has a CMakeLists.txt.
-foreach(target zip inflate css opds)
+foreach(target zip inflate css opds chapter metadata)
   if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${target}/CMakeLists.txt)
     add_subdirectory(${target})
   endif()
