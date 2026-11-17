@@ -19,10 +19,11 @@ class GfxRenderer;
 // how the wallpaper itself is redrawn per pass.
 void drawSleepInfoOverlay(GfxRenderer& renderer);
 
-// A thin band across the foot of every wallpaper and cover face: the last seven days of
-// reading, from the journal. Read from the card here, once, so the per-pass overlay only draws it; nothing
-// when showSleepReadingStats is off, the clock is unset or no session falls in the week. clearSleepReadingLine() after
-// the render.
+// A thin band across the foot of every wallpaper and cover face: the sitting this lock just
+// closed (when it left a book), above the last seven days of reading from the journal. Read
+// here, once, so the per-pass overlay only draws it; nothing when showSleepReadingStats is
+// off, or there is neither a sitting nor a dated session in the week.
+// clearSleepReadingLine() after the render.
 void prepareSleepReadingLine();
 void clearSleepReadingLine();
 

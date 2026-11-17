@@ -490,6 +490,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t refreshFrequencyNight = NIGHT_REFRESH_SAME;
   // Full refresh on the first page of each chapter entered, on top of the page count.
   uint8_t chapterStartRefresh = 0;
+  // A crosshatch frame before the first page of each chapter entered (one extra refresh).
+  uint8_t chapterWipe = 0;
 
   // Reader screen margins. screenMargin is the horizontal (left/right) margin, shared by
   // both sides. The vertical margins always live in screenMarginTop/Bottom;

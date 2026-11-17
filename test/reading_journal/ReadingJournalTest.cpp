@@ -125,3 +125,44 @@ TEST(ReadingJournal, DurationAndMonthLength) {
   EXPECT_EQ(28, daysInMonth(2100, 2));
   EXPECT_EQ(31, daysInMonth(2026, 12));
 }
+
+TEST(ReadingJournal, BookHistoryKeepsOnlyItsTitle) {
+  char a[MAX_LINE], b[MAX_LINE], c[MAX_LINE], d[MAX_LINE];
+  const Civil oct{2026, 10, 3, 21, 0};
+  const Civil nov{2026, 11, 17, 9, 30};
+  formatLine(a, sizeof(a), &nov, 600, 20, true, "Dune");
+  formatLine(b, sizeof(b), &oct, 1200, 40, false, "Dune");
+  formatLine(c, sizeof(c), &oct, 999, 99, false, "Dune Messiah");                      // a prefix is not the book
+  formatLine(d, sizeof(d), nullptr, 300, 5, false, "Dune");                            // undated: counts, no start
+  const std::string text = std::string(a) + b + c + d + "2026-11-17T10:00\t60\t1\t0";  // cut last line
+
+  BookHistory h;
+  h.title = "Dune";
+  EXPECT_GT(h.addText(text.data(), text.size()), 0u);  // the cut line is carried, not read
+  EXPECT_EQ(3u, h.totals.sessions);
+  EXPECT_EQ(2100u, h.totals.seconds);
+  EXPECT_EQ(65u, h.totals.pages);
+  EXPECT_EQ(1u, h.totals.finished);
+  ASSERT_TRUE(h.haveStart);
+  EXPECT_EQ(10, h.start.month);
+  EXPECT_EQ(3, h.start.day);
+}
+
+TEST(ReadingJournal, SameTitleFollowsFormatLine) {
+  char buf[MAX_LINE];
+  // Tabs became spaces on the way in.
+  const size_t n = formatLine(buf, sizeof(buf), nullptr, 60, 1, false, "War\tand Peace");
+  std::string_view field;
+  Entry e;
+  ASSERT_TRUE(parseLine(std::string_view(buf, n - 1), e, &field));
+  EXPECT_TRUE(sameTitle(field, "War\tand Peace", n - 1));
+  EXPECT_FALSE(sameTitle(field, "War and Peace, Part 2", n - 1));
+
+  // A title cut at the line's cap matches on what was kept, and only when the line is full.
+  const std::string longTitle(300, 'y');
+  const size_t full = formatLine(buf, sizeof(buf), nullptr, 60, 1, false, longTitle.c_str());
+  ASSERT_TRUE(parseLine(std::string_view(buf, full - 1), e, &field));
+  EXPECT_LT(field.size(), longTitle.size());
+  EXPECT_TRUE(sameTitle(field, longTitle.c_str(), full - 1));
+  EXPECT_FALSE(sameTitle("yyy", longTitle.c_str(), 20));
+}

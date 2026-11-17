@@ -11,6 +11,19 @@
 
 namespace reading_journal {
 
+namespace {
+bool g_haveLast = false;
+uint32_t g_lastSeconds = 0;
+uint32_t g_lastPages = 0;
+}  // namespace
+
+bool lastSitting(uint32_t& seconds, uint32_t& pages) {
+  if (!g_haveLast) return false;
+  seconds = g_lastSeconds;
+  pages = g_lastPages;
+  return true;
+}
+
 bool localNow(Civil& out) {
   uint16_t year;
   uint8_t month, day, hour, minute;
@@ -28,7 +41,11 @@ bool localNow(Civil& out) {
 void append(Session& session, const uint32_t nowMs, const char* title) {
   session.clock.touch(nowMs);
   const uint32_t seconds = session.clock.seconds();
-  if (seconds < MIN_SESSION_S) return;
+  // Set before the write: a sitting the card failed to keep was still read.
+  g_haveLast = seconds >= MIN_SESSION_S;
+  g_lastSeconds = seconds;
+  g_lastPages = session.pages;
+  if (!g_haveLast) return;
 
   Civil now;
   const bool dated = localNow(now);
@@ -55,10 +72,12 @@ void append(Session& session, const uint32_t nowMs, const char* title) {
           static_cast<unsigned long>(session.pages));
 }
 
-bool summarize(Summary& summary, const size_t tailBytes) {
-  Civil today;
-  if (localNow(today)) summary.setToday(today);
+namespace {
 
+// Streams the journal through `fold.addText`, never holding it whole. tailBytes > 0 starts
+// that far from the end, at the first whole line.
+template <class Fold>
+bool foldJournal(Fold& fold, const size_t tailBytes) {
   HalFile f;
   if (!Storage.exists(PATH) || !Storage.openFileForRead("JRN", PATH, f)) return false;
   const size_t size = f.fileSize();
@@ -91,7 +110,7 @@ bool summarize(Summary& summary, const size_t tailBytes) {
       start = static_cast<size_t>(nl - buf) + 1;
       skipToNewline = false;
     }
-    size_t carry = summary.addText(buf + start, len - start);
+    size_t carry = fold.addText(buf + start, len - start);
     // A line longer than any we write is not ours: drop it rather than overflow.
     if (carry > MAX_LINE) carry = 0;
     memmove(buf, buf + len - carry, carry);
@@ -99,5 +118,15 @@ bool summarize(Summary& summary, const size_t tailBytes) {
   }
   return true;
 }
+
+}  // namespace
+
+bool summarize(Summary& summary, const size_t tailBytes) {
+  Civil today;
+  if (localNow(today)) summary.setToday(today);
+  return foldJournal(summary, tailBytes);
+}
+
+bool bookHistory(BookHistory& history) { return foldJournal(history, 0); }
 
 }  // namespace reading_journal
