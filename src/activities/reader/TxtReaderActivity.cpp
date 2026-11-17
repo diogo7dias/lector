@@ -181,7 +181,8 @@ void TxtReaderActivity::initializeReader() {
   renderer.getOrientedViewableTRBL(&cachedOrientedMarginTop, &cachedOrientedMarginRight, &cachedOrientedMarginBottom,
                                    &cachedOrientedMarginLeft);
   // v2 status bar: reserve a band at the top and/or bottom edge (whichever holds
-  // items), overlapping the reading margin (max, not sum) like the old bottom bar.
+  // items), added on top of the reading margin like the EPUB reader, so a thick
+  // progress bar never eats the margin (upstream #4444).
   // TXT has no chapters, so chapter-only items are hidden. A greedy (truncate-off)
   // book-source title wraps, needing extra band height.
   const StatusBarBlock sb = SETTINGS.statusBar();
@@ -192,10 +193,10 @@ void TxtReaderActivity::initializeReader() {
   const int sbTitleExtraPx = (sbTitleLines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
   const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(sb, false, sbTitleTop ? sbTitleExtraPx : 0);
   const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(sb, false, sbTitleTop ? 0 : sbTitleExtraPx);
-  cachedOrientedMarginTop += std::max<int>(topMargin, sbTop);
+  cachedOrientedMarginTop += topMargin + sbTop;
   cachedOrientedMarginLeft += cachedScreenMargin;
   cachedOrientedMarginRight += cachedScreenMargin;
-  cachedOrientedMarginBottom += std::max<int>(bottomMargin, sbBottom);
+  cachedOrientedMarginBottom += bottomMargin + sbBottom;
 
   viewportWidth = renderer.getScreenWidth() - cachedOrientedMarginLeft - cachedOrientedMarginRight;
   const int viewportHeight = renderer.getScreenHeight() - cachedOrientedMarginTop - cachedOrientedMarginBottom;
