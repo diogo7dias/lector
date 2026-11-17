@@ -7,6 +7,7 @@ class HalPowerManager {
     Lock() {}  // user-provided, like the real one: no unused-variable warning
   };
   void rearmBatteryLatch() const {}
+  void holdNormalSpeedForStorage() {}
 };
 
 inline HalPowerManager powerManager;

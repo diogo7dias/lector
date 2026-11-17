@@ -19,6 +19,7 @@ extern HalPowerManager powerManager;  // Singleton
 class HalPowerManager {
   int normalFreq = 0;  // MHz
   bool isLowPower = false;
+  unsigned long storageWokeAtMs = 0;  // last time a card access had to restore full speed
 
   mutable BatteryPercentPoll _batteryPoll;
 
@@ -28,7 +29,11 @@ class HalPowerManager {
 
  public:
 #if BOARD_HAS_PSRAM
-  static constexpr int LOW_POWER_FREQ = 80;  // MHz
+  // The crystal, the lowest clock the S3 datasheet gives an idle current for: 13.2 mA
+  // against 22.0 mA at 80 MHz (Table 5-9, peripheral clocks off). Below 80 MHz the CPU
+  // leaves the PLL, which the flash, the PSRAM and the SD host are timed against: see
+  // setCpuClock() and holdNormalSpeedForStorage() for what that takes.
+  static constexpr int LOW_POWER_FREQ = 40;  // MHz
 #else
   static constexpr int LOW_POWER_FREQ = 10;  // MHz
 #endif
@@ -52,6 +57,12 @@ class HalPowerManager {
 
   // Control CPU frequency for power saving
   void setPowerSaving(bool enabled);
+
+  // Called with the storage mutex held, before the card is touched. The S3's SD host
+  // must not run a transfer on the crystal clock (ESP-IDF's own driver holds an APB lock
+  // for the same reason), so a card access made while idle brings full speed back first.
+  // Lowering the clock takes the same mutex, which makes the two exclusive.
+  void holdNormalSpeedForStorage();
 
   // Setup wake up GPIO and enter deep sleep
   [[noreturn]] void startDeepSleep() const;

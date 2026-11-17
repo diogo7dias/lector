@@ -7,12 +7,58 @@
 #include <driver/gpio.h>
 #include <esp_sleep.h>
 #include <soc/soc_caps.h>
+#if CONFIG_IDF_TARGET_ESP32S3
+#include <esp_private/mspi_timing_tuning.h>
+#endif
 
 #include <cassert>
 
 #include "HalGPIO.h"
+#include "HalStorage.h"
 
 HalPowerManager powerManager;  // Singleton instance
+
+// On the S3 the flash and PSRAM bus takes its clock from the CPU's source, and its 80 MHz
+// timing is tuned against the PLL. Under 80 MHz the CPU runs from the crystal, so the bus
+// goes to its untuned low-speed mode before the switch and returns after the switch back.
+// Same order as ESP-IDF's frequency scaling (esp_clk_utils_mspi_speed_mode_sync_*), which
+// setCpuFrequencyMhz() does not do by itself.
+#if CONFIG_IDF_TARGET_ESP32S3
+// The bus switch freezes the cache and does not mask interrupts itself: ESP-IDF calls it
+// with them masked, because an interrupt handler that lives in flash would hang on the
+// frozen cache.
+static void setMemoryBusLowSpeed(const bool low) {
+  static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+  portENTER_CRITICAL(&mux);
+  mspi_timing_change_speed_mode_cache_safe(low);
+  portEXIT_CRITICAL(&mux);
+}
+#endif
+
+static bool setCpuClock(const int mhz) {
+#if CONFIG_IDF_TARGET_ESP32S3
+  if (mhz < 80) {
+    setMemoryBusLowSpeed(true);
+    if (setCpuFrequencyMhz(mhz)) return true;
+    setMemoryBusLowSpeed(false);
+    return false;
+  }
+  if (!setCpuFrequencyMhz(mhz)) return false;
+  setMemoryBusLowSpeed(false);
+  return true;
+#else
+  return setCpuFrequencyMhz(mhz);
+#endif
+}
+
+void HalPowerManager::holdNormalSpeedForStorage() {
+#if CONFIG_IDF_TARGET_ESP32S3
+  // Unlocked read: the clock only goes down under the storage mutex, which the caller holds.
+  if (!isLowPower) return;
+  storageWokeAtMs = millis();
+  setPowerSaving(false);
+#endif
+}
 
 // GPIO13 is the flash SPIWP pad (unused in DIO flash mode), rewired on the Xteink boards to
 // different things per board:
@@ -48,17 +94,35 @@ void HalPowerManager::setPowerSaving(bool enabled) {
   const LockMode mode = currentLockMode;
 
   if (mode == None && enabled && !isLowPower) {
-    LOG_DBG("PWR", "Going to low-power mode");
-    if (!setCpuFrequencyMhz(LOW_POWER_FREQ)) {
+#if CONFIG_IDF_TARGET_ESP32S3
+    // Not in the middle of a card transfer, and not straight after one: work that keeps
+    // reading the card would otherwise bounce the clock on every loop pass.
+    if (storageWokeAtMs != 0 && millis() - storageWokeAtMs < IDLE_POWER_SAVING_MS) {
+      xSemaphoreGive(modeMutex);
+      return;
+    }
+    if (!Storage.tryLock()) {
+      xSemaphoreGive(modeMutex);
+      return;
+    }
+#endif
+    // INF, not DBG: the released X4 Pro image logs at level 1, and its sim suite checks
+    // that an idle device gets here and comes back.
+    LOG_INF("PWR", "Going to low-power mode");
+    const bool lowered = setCpuClock(LOW_POWER_FREQ);
+    if (lowered) isLowPower = true;
+#if CONFIG_IDF_TARGET_ESP32S3
+    Storage.unlock();
+#endif
+    if (!lowered) {
       LOG_DBG("PWR", "Failed to set CPU frequency = %d MHz", LOW_POWER_FREQ);
       xSemaphoreGive(modeMutex);
       return;
     }
-    isLowPower = true;
 
   } else if ((!enabled || mode != None) && isLowPower) {
-    LOG_DBG("PWR", "Restoring normal CPU frequency");
-    if (!setCpuFrequencyMhz(normalFreq)) {
+    LOG_INF("PWR", "Restoring normal CPU frequency");
+    if (!setCpuClock(normalFreq)) {
       LOG_DBG("PWR", "Failed to set CPU frequency = %d MHz", normalFreq);
       xSemaphoreGive(modeMutex);
       return;

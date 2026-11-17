@@ -917,15 +917,12 @@ void loop() {
   // card (sleep, screenshots, bindings, screen changes), so only the activity runs.
   if (activityManager.requiresExclusiveStorageLoop()) {
     activityManager.loop();
-    if (activityManager.preventAutoSleep()) {
-      powerManager.setPowerSaving(false);
-      delay(10);
-    } else {
-      // No host is active, so a slower loop is safe. The activity itself times
-      // out the raw-storage handoff rather than entering deep sleep detached.
-      powerManager.setPowerSaving(true);
-      delay(50);
-    }
+    // Full clock throughout. The host reads the card through TinyUSB, behind the storage
+    // lock that guards the idle clock, and this loop only runs on a USB cable's power.
+    powerManager.setPowerSaving(false);
+    // With no host active a slower loop is safe. The activity itself times out the
+    // raw-storage handoff rather than entering deep sleep detached.
+    delay(activityManager.preventAutoSleep() ? 10 : 50);
     return;
   }
 
