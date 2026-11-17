@@ -1095,6 +1095,21 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
   dp[totalWordCount - 1] = 0;
   ans[totalWordCount - 1] = totalWordCount - 1;
 
+  // The gap before word j depends only on words j-1 and j, never on the line start, so it is
+  // computed once here rather than once per candidate line (about words-per-line times over).
+  // gaps[0] is unused: a line-leading word has no gap.
+  std::vector<int16_t> gaps(totalWordCount, 0);
+  for (size_t j = 1; j < totalWordCount; ++j) {
+    if (continuesVec[j]) {
+      // Attached and breakable-attached boundaries both use kerning when kept on one line.
+      gaps[j] = renderer.getKerning(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]);
+    } else if (!noSpaceBeforeVec[j]) {
+      gaps[j] = guideOk ? guideDotNaturalGap(renderer, fontId, words[j - 1], words[j], wordStyles[j - 1])
+                        : spaceAdvance(renderer, fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]),
+                                       wordStyles[j - 1]);
+    }
+  }
+
   for (int i = totalWordCount - 2; i >= 0; --i) {
     int currlen = 0;
     dp[i] = MAX_COST;
@@ -1103,18 +1118,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     const int effectivePageWidth = i == 0 ? pageWidth - firstLineIndent : pageWidth;
 
     for (size_t j = i; j < totalWordCount; ++j) {
-      // Add space before word j, unless it's the first word on the line or a continuation
-      int gap = 0;
-      if (j > static_cast<size_t>(i) && continuesVec[j]) {
-        // Attached and breakable-attached boundaries both use kerning when kept on one line.
-        gap = renderer.getKerning(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]);
-      } else if (j > static_cast<size_t>(i) && noSpaceBeforeVec[j]) {
-        gap = 0;
-      } else if (j > static_cast<size_t>(i)) {
-        gap = guideOk ? guideDotNaturalGap(renderer, fontId, words[j - 1], words[j], wordStyles[j - 1])
-                      : spaceAdvance(renderer, fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]),
-                                     wordStyles[j - 1]);
-      }
+      const int gap = j > static_cast<size_t>(i) ? gaps[j] : 0;
 
       // Calculate extraStartOffset for the first word on the line (i) (protect left margin)
       const int extraStartOffset = (j == i) ? calculateRubyExtraStartOffset(i, totalWordCount, renderer, fontId) : 0;
