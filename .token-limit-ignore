@@ -20,3 +20,6 @@ USER_GUIDE.md
 # The always-loaded agent guide (AGENTS.md and CLAUDE.md link here): inherited from
 # CrossPoint and read whole by every agent, so it is one file by design
 .skills/SKILL.md
+
+# Rust decoder spike: bench output written by run.py
+spike/rust-decoders/bench/results/

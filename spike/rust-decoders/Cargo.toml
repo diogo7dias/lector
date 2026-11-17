@@ -1,0 +1,29 @@
+[package]
+name = "lector_rdec"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[features]
+std = []
+# Panic without formatting the message, to measure the flash the formatter costs.
+plain-panic = []
+
+[dependencies]
+miniz_oxide = { version = "0.9.1", default-features = false }
+zune-core = { version = "0.5.3", default-features = false }
+zune-jpeg = { version = "0.5.15", default-features = false }
+zune-png = { version = "0.5.2", default-features = false }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+debug = true
+
+[profile.dev]
+panic = "abort"
