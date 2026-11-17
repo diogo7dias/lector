@@ -1,3 +1,5 @@
+#include <FontCacheManager.h>
+#include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Serialization.h>
@@ -115,6 +117,12 @@ bool Section::finalizeBuild() {
   const bool committed = commitBuildFile(SECTION_FILE_VERSION, 0, 0);
   if (build_->cssParser) build_->cssParser->clear();
   build_.reset();
+  // Glyph and advance caches grown beside the parser's buffers now sit between the
+  // holes those buffers left. Drop them so they re-grow compactly on the next page and
+  // a 32 KB ZIP inflate block can still be found (upstream #4469).
+  if (auto* fontCache = renderer.getFontCacheManager()) {
+    fontCache->releaseSdFontCaches();
+  }
   if (!committed) {
     // commitBuildFile removed filePath before the failed swap, so nothing valid remains.
     partial_ = false;
