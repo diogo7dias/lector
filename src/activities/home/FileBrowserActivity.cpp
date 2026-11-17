@@ -1,5 +1,6 @@
 #include "FileBrowserActivity.h"
 
+#include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -16,6 +17,7 @@
 #include "activities/boot_sleep/PxcSleepRenderer.h"
 #include "activities/home/LibrarySearch.h"
 #include "activities/network/NearbyFileTransferActivity.h"
+#include "activities/reader/DictionaryDefinitionActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/BusyBanner.h"
@@ -606,14 +608,18 @@ void FileBrowserActivity::loop() {
         // A folder is not sent anywhere and is not moved from here, so its hold goes
         // straight to the delete confirmation rather than opening a pop-up.
         const bool sendable = nearby_file::isAcceptedFilename(entry);
-        StrId actions[4];
+        StrId actions[5];
         int count = 0;
+        if (FsHelpers::hasEpubExtension(entry)) actions[count++] = StrId::STR_BOOK_INFO;
         if (sendable) actions[count++] = StrId::STR_NEARBY_SEND_FILE;
         actions[count++] = StrId::STR_RENAME;
         actions[count++] = StrId::STR_MOVE_TO_FOLDER;
         actions[count++] = StrId::STR_DELETE;
         fileActionPopup.show(StrId::STR_FILE_ACTIONS, actions, count, 0, [this, fullPath, actions](const int choice) {
           switch (actions[choice]) {
+            case StrId::STR_BOOK_INFO:
+              showBookInfo(fullPath);
+              break;
             case StrId::STR_NEARBY_SEND_FILE:
               activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
                   renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, fullPath));
@@ -938,6 +944,37 @@ void FileBrowserActivity::render(RenderLock&&) {
 void FileBrowserActivity::promptMoveToFolder(const std::string& fullPath) {
   startActivityForResult(std::make_unique<FileBrowserActivity>(renderer, mappedInput, "/", Mode::PickFolder),
                          [this, fullPath](const ActivityResult& result) { onMoveDestinationResult(fullPath, result); });
+}
+
+void FileBrowserActivity::showBookInfo(const std::string& fullPath) {
+  std::string title;
+  std::string text;
+  {
+    // A book never opened builds its metadata cache here, which can take a few seconds.
+    RenderLock lock(*this);
+    BusyBanner banner(renderer, tr(STR_LOADING));
+    auto epub = makeUniqueNoThrow<Epub>(fullPath, "/.crosspoint");
+    if (!epub) {
+      LOG_ERR("FileBrowser", "OOM: Epub");
+      requestUpdate();
+      return;
+    }
+    epub->setupCacheDir();
+    if (!epub->load(true, true)) {
+      LOG_ERR("FileBrowser", "Book info: cannot load %s", fullPath.c_str());
+      requestUpdate();
+      return;
+    }
+    title = epub->getTitle();
+    const std::string& author = epub->getAuthor();
+    const std::string& description = epub->getDescription();
+    if (!author.empty()) text = author + "\n\n";
+    text += description.empty() ? tr(STR_NO_DESCRIPTION) : description;
+  }
+  pendingFullRefresh = true;
+  startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(title),
+                                                                        std::move(text), false, false),
+                         [this](const ActivityResult&) { requestUpdate(); });
 }
 
 void FileBrowserActivity::promptRename(const std::string& fullPath) {

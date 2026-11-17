@@ -28,6 +28,8 @@ class FileBrowserActivity final : public Activity {
   void promptMoveToFolder(const std::string& fullPath);
   // New name for a file, keeping its extension; progress, cache and quotes go with it.
   void promptRename(const std::string& fullPath);
+  // Title, author and the publisher description of an EPUB, paged.
+  void showBookInfo(const std::string& fullPath);
   void onMoveDestinationResult(const std::string& fullPath, const ActivityResult& result);
   // Opens the delete confirmation for one entry.
   void confirmDelete(const std::string& fullPath);
