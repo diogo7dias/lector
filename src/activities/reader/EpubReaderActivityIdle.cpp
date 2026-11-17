@@ -2,6 +2,7 @@
 #include <Epub/blocks/TextBlock.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -37,7 +38,8 @@ void EpubReaderActivity::runIdleBackgroundWork() {
       lastRenderCompleteMs != 0 && millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS &&
       ESP.getFreeHeap() > RENDER_MIN_FREE_HEAP && ESP.getMaxAllocHeap() > BACKGROUND_BUILD_MIN_MAX_ALLOC &&
       (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage)) {
-    RenderLock lock;  // the page table must not change under the scan
+    RenderLock lock;                  // the page table must not change under the scan
+    HalPowerManager::Lock fullClock;  // the idle clock drop may already have happened
     // Re-check under the lock: peek() and acquisition are not atomic, so the render
     // task may have reset/replaced the section or moved the page in between.
     // cppcheck-suppress knownConditionTrueFalse ; the render task changes section between the checks
@@ -64,6 +66,7 @@ void EpubReaderActivity::runIdleBackgroundWork() {
   if (progressSaveDue && !inputActive && !RenderLock::peek() && lastRenderCompleteMs != 0 &&
       millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS) {
     RenderLock lock;  // saveProgress reads the section the render task replaces
+    HalPowerManager::Lock fullClock;
     progressSaveDue = false;
     flushQueuedProgress();
   }
@@ -78,6 +81,7 @@ void EpubReaderActivity::runIdleBackgroundWork() {
       buildViewportWidth > 0 && !partialRebuildStartFailed &&
       section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
     RenderLock lock;
+    HalPowerManager::Lock fullClock;
     // Reuse the last render's viewport so the extension paginates identically to the partial.
     const ReaderRenderSpec buildSpec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight, prefs_);
     if (!section->startBuild(buildSpec)) {

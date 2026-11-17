@@ -32,7 +32,16 @@ class HalPowerManager {
 #else
   static constexpr int LOW_POWER_FREQ = 10;  // MHz
 #endif
+  // How long after the last input the clock drops. CrossPoint's 3 s on the C3 boards.
+  // X4 Pro: 1 s. Every wait for the next page turn already runs at the low clock, so this
+  // only removes two seconds of full clock per turn. Work that outlives a render without
+  // input (the reader's idle prewarm and progress save) takes a Lock instead of relying
+  // on the window.
+#if BOARD_HAS_PSRAM
+  static constexpr unsigned long IDLE_POWER_SAVING_MS = 1000;  // ms
+#else
   static constexpr unsigned long IDLE_POWER_SAVING_MS = 3000;  // ms
+#endif
 
   // Panel rails off. The rails only need to be down while the device sits, and powering
   // them back up costs a PON wait on the very next paint. Two seconds is long enough that
