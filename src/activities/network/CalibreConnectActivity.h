@@ -41,7 +41,7 @@ class CalibreConnectActivity final : public UiStatusActivity {
       : UiStatusActivity(activity_name::kCalibreConnect, renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
-  bool skipLoopDelay() override { return webServer && webServer->isRunning(); }
+  bool skipLoopDelay() override { return webServer && webServer->recentlyActive(); }
   bool preventAutoSleep() override { return webServer && webServer->recentlyActive(); }
 
  protected:
