@@ -8,6 +8,8 @@
 #include <WiFi.h>
 #include <esp_attr.h>
 
+#include <vector>
+
 #include "KOReaderCredentialStore.h"
 #include "KOReaderDocumentId.h"
 #include "KOReaderSyncClient.h"
@@ -28,9 +30,12 @@ constexpr size_t MAX_JOINS = 3;
 RTC_NOINIT_ATTR uint32_t pullMagic;
 RTC_NOINIT_ATTR uint32_t pulledPathHash;
 
+// Every book read on another page since the last sleep, oldest first. Each push loads
+// the book and talks TLS behind the sleep face, so the list keeps the newest few.
 // ponytail: RAM only, so a silent restart between the page turn and the sleep drops
 // the push. Every such restart follows a WiFi screen, and a sync is one of them.
-std::string movedPath;
+constexpr size_t MAX_MOVED = 4;
+std::vector<std::string> movedPaths;
 
 // Set when the push on this lock found no saved network in range: the BookOrbit check
 // behind it must not pay the same join timeouts again (3 joins of 7 s, radio on).
@@ -131,7 +136,7 @@ bool push(const std::string& path) {
   }
   progress.progress = local.xpath;
   progress.percentage = local.percentage;
-  if (!joinSavedNetwork()) {
+  if (WiFi.status() != WL_CONNECTED && !joinSavedNetwork()) {
     LOG_DBG("KOAUTO", "No saved network joined; push skipped");
     pushJoinFailed = true;
     return false;
@@ -155,14 +160,23 @@ bool claimPull(const std::string& path) {
   return true;
 }
 
-void markMoved(const std::string& path) { movedPath = path; }
+void markMoved(const std::string& path) {
+  movedPaths.reserve(MAX_MOVED);
+  std::erase(movedPaths, path);
+  if (movedPaths.size() == MAX_MOVED) movedPaths.erase(movedPaths.begin());
+  movedPaths.push_back(path);
+}
 
 void onSleep() {
   pullMagic = 0;
-  const std::string path = std::move(movedPath);
-  movedPath.clear();
+  std::vector<std::string> paths;
+  paths.swap(movedPaths);
   if (!enabled()) return;
-  const bool wifiUp = !path.empty() && push(path);
+  bool wifiUp = false;
+  for (const auto& path : paths) {
+    if (pushJoinFailed) break;
+    wifiUp = push(path) || wifiUp;
+  }
   if (!bookorbit_missing::findServer() || !bookorbit_missing::due(wifiUp)) return;
   if (!wifiUp && (pushJoinFailed || !(haveSavedNetwork() && joinSavedNetwork()))) return;
   bookorbit_missing::refresh();
