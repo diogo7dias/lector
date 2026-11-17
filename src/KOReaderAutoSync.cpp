@@ -32,6 +32,10 @@ RTC_NOINIT_ATTR uint32_t pulledPathHash;
 // the push. Every such restart follows a WiFi screen, and a sync is one of them.
 std::string movedPath;
 
+// Set when the push on this lock found no saved network in range: the BookOrbit check
+// behind it must not pay the same join timeouts again (3 joins of 7 s, radio on).
+bool pushJoinFailed = false;
+
 bool enabled() { return KOREADER_STORE.getAutoSync() && KOREADER_STORE.hasCredentials(); }
 
 // The saved position as KOReader reads it. The Epub is released before returning so
@@ -129,6 +133,7 @@ bool push(const std::string& path) {
   progress.percentage = local.percentage;
   if (!joinSavedNetwork()) {
     LOG_DBG("KOAUTO", "No saved network joined; push skipped");
+    pushJoinFailed = true;
     return false;
   }
   const auto result = KOReaderSyncClient::updateProgress(progress);
@@ -159,7 +164,7 @@ void onSleep() {
   if (!enabled()) return;
   const bool wifiUp = !path.empty() && push(path);
   if (!bookorbit_missing::findServer() || !bookorbit_missing::due(wifiUp)) return;
-  if (!wifiUp && !(haveSavedNetwork() && joinSavedNetwork())) return;
+  if (!wifiUp && (pushJoinFailed || !(haveSavedNetwork() && joinSavedNetwork()))) return;
   bookorbit_missing::refresh();
 }
 
