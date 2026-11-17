@@ -10,26 +10,29 @@
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
-// Paged viewer for one dictionary definition. HTML definitions are laid out
+// Paged viewer for one dictionary definition, also used for a book's description
+// (File actions > Book Info). HTML definitions are laid out
 // through the EPUB chapter parser into styled Pages; anything else (plain
 // text, or HTML too damaged to parse) is word-wrapped once on entry and each
 // page renders spans of the original string, so no per-line copies are held.
 class DictionaryDefinitionActivity final : public Activity {
  public:
   explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string headword,
-                                        std::string definition, bool htmlDefinition = false)
+                                        std::string definition, bool htmlDefinition = false, bool readingSurface = true)
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(std::move(headword)),
         definition(std::move(definition)),
-        htmlDefinition(htmlDefinition) {}
+        htmlDefinition(htmlDefinition),
+        readingSurface(readingSurface) {}
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  // Part of the reading flow (opened from the page mid-read), so it follows
-  // the reading surface's night-mode polarity like the word-select overlay.
-  bool appliesNightMode() const override { return true; }
+  // A lookup is part of the reading flow (opened from the page mid-read), so it
+  // follows the reading surface's night-mode polarity like the word-select
+  // overlay. Book Info opens from the file browser and stays a menu screen.
+  bool appliesNightMode() const override { return readingSurface; }
 
  private:
   // One wrapped display line: a byte span of `definition`. Wrapping keeps
@@ -56,6 +59,7 @@ class DictionaryDefinitionActivity final : public Activity {
   // separators) to newlines so C-string APIs see the whole text.
   std::string definition;
   const bool htmlDefinition;
+  const bool readingSurface;
   // Styled path: reader-identical Pages laid out from the HTML definition.
   // Empty means the plain-text span path below is active.
   std::vector<std::unique_ptr<Page>> pages;

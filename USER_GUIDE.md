@@ -211,8 +211,10 @@ folders in brackets, for example `[folder-name]`.
 - **Move the cursor** — **Left** (or **Volume Up**) and **Right** (or **Volume Down**). Hold
   either one to move a whole page at a time.
 - **Open** — **Confirm** opens the folder, book or image under the cursor.
-- **File actions** — hold **Confirm** on a file to open a small menu: **Send to Nearby
-  Reader** (files another reader can accept), **Rename**, **Move to folder** and **Delete**.
+- **File actions** — hold **Confirm** on a file to open a small menu: **Book Info** (EPUB
+  only), **Send to Nearby Reader** (files another reader can accept), **Rename**, **Move to
+  folder** and **Delete**. **Book Info** shows the title, the author and the publisher's
+  description, paged with the page buttons; **Back** returns to the list.
   A folder goes straight to the delete confirmation. Nothing is deleted without confirming.
 - **Rename** — edit the name on the keyboard; the extension stays. Reading position,
   bookmarks, highlights and saved quotes follow the book, as they do when it is moved.
