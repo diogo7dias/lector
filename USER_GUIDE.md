@@ -181,8 +181,16 @@ not count as reading.
 long you read that day, the longest day full, and today has a thick outline. Under it are the
 last 7 days, this year, all time and the books finished. The sleep screen shows the last 7
 days in a thin black band along its foot, on wallpapers and covers alike, when **Settings >
-Display > Show Reading Stats** is on (off by default). **Reading Stats Position** puts its
+Display > Show Reading Stats** is on (off by default). When you lock straight from a book,
+a **This sitting** line above it shows the time and pages of the sitting you just closed;
+it needs no clock. **Reading Stats Position** puts its
 text in the **Center** (default), or on the **Left** or **Right**.
+
+Turning past the last page shows **End of book** with the title and author, the day you
+started and the day you finished, your total time and pages in that book, and the last quote
+you saved from it. Time and pages come from every sitting the journal kept under that title,
+so two books with the same title share them. Dates need the clock. Any books from the same
+folder follow under **Continue with**.
 
 Days need the clock. The X3 and X4 Pro keep one; the X4 has no clock chip, so a Wi-Fi
 connection sets its clock until it next powers off. With the clock set, a sitting is dated. Without it the sitting
@@ -492,7 +500,7 @@ wallpaper the device just showed. Paused wallpapers move to `/sleep pause` and s
 in the rotation. **Settings > Display > Shuffle Wallpapers** reshuffles the order.
 
 Five Display settings decide what is drawn over a wallpaper: **Show Wallpaper Name**, **Show
-Favorite Badge**, **Show Wallpaper Position**, **Show Reading Stats** (the last 7 days in a
+Favorite Badge**, **Show Wallpaper Position**, **Show Reading Stats** (this sitting and the last 7 days in a
 band along the foot) and **Sleep Footer Text** (your own line of text). **Sleep Image Quality** trades rendering time against how the image looks: **Fast** or
 **Pretty**.
 
@@ -999,6 +1007,8 @@ which turns the extra space between an EPUB's paragraphs on or off for that book
   default) keeps Refresh Frequency; any other value applies only to inverted pages.
 - **Refresh at Chapter Start** — off by default. On adds a full refresh on the first page of
   each chapter you enter, on top of Refresh Frequency, so every chapter opens clean. EPUB only.
+- **Chapter Wipe** — off by default. On shows a crosshatch frame for one refresh (about half a
+  second) before the first page of each chapter you turn into. Not on opening a book. EPUB only.
 - **Screen Calibration** — if the bezel covers the edge of the page, or leaves a gap, move each
   edge until the whole border shows: pick **Top**, **Right**, **Bottom** or **Left**, then drag the
   slider or step it, from 0 to 32 pixels. **Save** applies it to reading pages and the status

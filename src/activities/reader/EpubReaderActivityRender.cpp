@@ -7,6 +7,7 @@
 
 #include <cstdio>
 
+#include "ChapterWipe.h"
 #include "CrossPointSettings.h"
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderActivity.h"
@@ -170,7 +171,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (currentSpineIndex == epub->getSpineItemsCount()) {
     // Sole load site: runs on the render task (serialized by RenderLock); the main
     // task only reads the suggestions once the loaded flag is published
-    endOfBookOptions.loadOnce(epub->getPath());
+    endOfBookOptions.loadOnce(epub->getPath(), epub->getTitle(), epub->getAuthor(), journal);
     renderer.clearScreen();
     endOfBookOptions.render(renderer, mappedInput);
     renderer.displayBuffer(endOfBookPainted ? HalDisplay::FAST_REFRESH : HalDisplay::HALF_REFRESH);
@@ -313,8 +314,19 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     currentPageFootnotes = std::move(p->footnotes);
 
     // Refresh at Chapter Start: the first page of a chapter just entered gets the clean pass.
-    if (SETTINGS.chapterStartRefresh && section->currentPage == 0 && currentSpineIndex != lastRenderedSpine) {
+    const bool enteredChapter = section->currentPage == 0 && currentSpineIndex != lastRenderedSpine;
+    if (SETTINGS.chapterStartRefresh && enteredChapter) {
       scheduleGhostCleanup();
+    }
+    // Chapter Wipe: one crosshatch frame first, from a chapter already shown (not the book's open).
+    if (SETTINGS.chapterWipe && enteredChapter && lastRenderedSpine >= 0) {
+      renderer.clearScreen();
+      chapter_wipe::forEachHatchLine(
+          renderer.getScreenWidth(), renderer.getScreenHeight(),
+          [this](const int x1, const int y1, const int x2, const int y2) { renderer.drawLine(x1, y1, x2, y2, true); });
+      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      renderer.clearScreen();
+      LOG_DBG("ERS", "Chapter wipe into spine %d", currentSpineIndex);
     }
     lastRenderedSpine = currentSpineIndex;
 

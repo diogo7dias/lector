@@ -204,7 +204,7 @@ void XtcReaderActivity::render(RenderLock&&) {
   if (currentPage >= xtc->getPageCount()) {
     // Show end of book screen. Sole load site: runs on the render task (serialized by
     // RenderLock); the main task only reads the suggestions once the flag is published.
-    endOfBookOptions.loadOnce(xtc->getPath());
+    endOfBookOptions.loadOnce(xtc->getPath(), xtc->getTitle(), xtc->getAuthor(), journal);
     renderer.clearScreen();
     endOfBookOptions.render(renderer, mappedInput);
     renderer.displayBuffer();

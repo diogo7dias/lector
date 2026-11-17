@@ -137,8 +137,9 @@ inline std::string_view nextField(std::string_view& rest) {
 }  // namespace detail
 
 // False for anything that is not a whole record (a line cut short by a reset mid-append,
-// a hand edit gone wrong), so one bad line costs only itself.
-inline bool parseLine(std::string_view line, Entry& e) {
+// a hand edit gone wrong), so one bad line costs only itself. `title`, when given, is
+// pointed at the title field inside `line`.
+inline bool parseLine(std::string_view line, Entry& e, std::string_view* title = nullptr) {
   if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
   std::string_view rest = line;
   const std::string_view stamp = detail::nextField(rest);
@@ -165,8 +166,36 @@ inline bool parseLine(std::string_view line, Entry& e) {
                      static_cast<int>(mi)};
     out.day = clock_zones::daysFromCivil(out.date.year, mo, d);
   }
+  if (title) *title = rest.substr(doneEnd + 1);
   e = out;
   return true;
+}
+
+// Splits a buffer of journal text into lines and hands each one to `f`. A trailing
+// fragment with no newline is returned (its length) for the caller to carry over.
+template <class F>
+size_t forEachLine(const char* text, const size_t len, F&& f) {
+  size_t start = 0;
+  for (size_t i = 0; i < len; ++i) {
+    if (text[i] != '\n') continue;
+    f(std::string_view(text + start, i - start));
+    start = i + 1;
+  }
+  return len - start;
+}
+
+// True when a journal line's title field records `title`. formatLine turned tabs and line
+// breaks into spaces, and cut a title that filled the line, so a full line matches on the
+// prefix it kept. Two books with one title share their history.
+inline bool sameTitle(std::string_view field, const char* title, const size_t lineLen) {
+  if (!field.empty() && field.back() == '\r') field.remove_suffix(1);
+  size_t i = 0;
+  for (const char* p = title ? title : ""; *p; ++p, ++i) {
+    const char c = (*p == '\t' || *p == '\n' || *p == '\r') ? ' ' : *p;
+    if (i == field.size()) return i > 0 && lineLen + 2 >= MAX_LINE;
+    if (field[i] != c) return false;
+  }
+  return i == field.size();
 }
 
 struct Totals {
@@ -212,17 +241,36 @@ struct Summary {
     }
   }
 
-  // Splits a buffer of journal text into lines and adds each whole one. A trailing
-  // fragment with no newline is returned (its length) for the caller to carry over.
+  // Adds each whole line of a buffer; returns the trailing fragment's length (forEachLine).
   size_t addText(const char* text, const size_t len) {
-    size_t start = 0;
-    for (size_t i = 0; i < len; ++i) {
-      if (text[i] != '\n') continue;
+    return forEachLine(text, len, [this](const std::string_view line) {
       Entry e;
-      if (parseLine(std::string_view(text + start, i - start), e)) add(e);
-      start = i + 1;
-    }
-    return len - start;
+      if (parseLine(line, e)) add(e);
+    });
+  }
+};
+
+// One book's history for its finished page: every sitting the journal kept under its
+// title, and the day of the first dated one.
+struct BookHistory {
+  const char* title = nullptr;
+  Totals totals;
+  bool haveStart = false;
+  Civil start;
+  int64_t startDay = 0;
+
+  size_t addText(const char* text, const size_t len) {
+    return forEachLine(text, len, [this](const std::string_view line) {
+      Entry e;
+      std::string_view field;
+      if (!parseLine(line, e, &field) || !sameTitle(field, title, line.size())) return;
+      totals.add(e);
+      if (e.dated && (!haveStart || e.day < startDay)) {
+        haveStart = true;
+        start = e.date;
+        startDay = e.day;
+      }
+    });
   }
 };
 

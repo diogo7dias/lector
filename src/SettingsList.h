@@ -292,6 +292,8 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
                          "refreshFrequencyNight", StrId::STR_CAT_DISPLAY));
   emit(SettingInfo::Toggle(StrId::STR_CHAPTER_START_REFRESH, &CrossPointSettings::chapterStartRefresh,
                            "chapterStartRefresh", StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Toggle(StrId::STR_CHAPTER_WIPE, &CrossPointSettings::chapterWipe, "chapterWipe",
+                           StrId::STR_CAT_DISPLAY));
 
   emit(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                            StrId::STR_CAT_DISPLAY));
