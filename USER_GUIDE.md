@@ -315,9 +315,11 @@ position; explicit progress sync saves immediately.
 
 ### Chapters
 
-Chapter jumps live in the in-book menu, under **Navigate > Select Chapter**. Holding a page
-turn button does nothing: page turning fires on the press, so the page never waits to find out
-whether a hold was coming.
+Chapter jumps live in the in-book menu, under **Navigate > Select Chapter**. Page turning
+fires on the press, so the page never waits to find out whether a hold was coming. In an
+`.xtc` book, holding a page button for 0.7 seconds also jumps ten pages in that direction
+(the one page the press turned counts toward them), once per hold. Elsewhere holding a page
+button does nothing, unless you bind that hold in **Buttons**, which then takes precedence.
 
 ### Footnotes
 
@@ -1012,6 +1014,8 @@ which turns the extra space between an EPUB's paragraphs on or off for that book
   **Reset to Defaults** goes back to this model's measurements. It is kept on the device, not on
   the card. Menu screens keep their own spacing.
 - **Sunlight Fading Fix** — software fix for white X4 units fading in direct sunlight. Not shown on the X4 Pro.
+- **Hide Battery %** — Never (default), In Reader or Always. The battery icon stays; In Reader
+  drops the number from the reader's status bar, Always from the screen headers too.
 
 **Home**
 

@@ -311,6 +311,10 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
                           {0, frontlight::SCHEDULE_LAST_STEP, 1}, nullptr, StrId::STR_CAT_DISPLAY)
            .withWebOnly());
 
+  emit(SettingInfo::Enum(StrId::STR_HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
+                         {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideBatteryPercentage",
+                         StrId::STR_CAT_DISPLAY));
+
   emit(SettingInfo::Enum(StrId::STR_AUTHOR_DISPLAY, &CrossPointSettings::authorDisplay,
                          {StrId::STR_AUTHOR_INITIALS, StrId::STR_AUTHOR_FULL_NAME}, "authorDisplay",
                          StrId::STR_CAT_DISPLAY));

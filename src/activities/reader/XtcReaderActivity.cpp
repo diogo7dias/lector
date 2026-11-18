@@ -145,6 +145,20 @@ void XtcReaderActivity::loop() {
     return;
   }
 
+  // Holding a page button SKIP_HOLD_MS jumps ten pages once (the press turned one, so nine
+  // more), stopping short of the end screen.
+  if (const int held = ReaderUtils::heldPageDirection(mappedInput); held == 0) {
+    holdSkipped_ = false;
+  } else if (!holdSkipped_ && !atEndOfBook && mappedInput.getHeldTime() >= ReaderUtils::SKIP_HOLD_MS) {
+    holdSkipped_ = true;
+    const uint32_t last = xtc->getPageCount() - 1;
+    const int64_t target = std::clamp<int64_t>(static_cast<int64_t>(currentPage) + held * 9, 0, last);
+    if (target != currentPage) {
+      currentPage = static_cast<uint32_t>(target);
+      requestUpdate();
+    }
+  }
+
   auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
   prevTriggered = prevTriggered || touch.prev;
   nextTriggered = nextTriggered || touch.next;

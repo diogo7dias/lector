@@ -193,6 +193,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
   // How the reader menu opens on a touch board. Swipe Up is only offered where the
   // Home key is capacitive, since there the bottom edge is otherwise unused.
+  enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
   enum SHOW_READER_MENU { READER_MENU_OFF = 0, READER_MENU_TAP = 1, READER_MENU_SWIPE_UP = 2, SHOW_READER_MENU_COUNT };
 
   // How long Power must be held to wake the device from deep sleep. Normal rejects a
@@ -722,6 +723,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Initials stay the default because a full name competes with the title for the same
   // wrapped lines, and the list is read title-first.
   uint8_t authorDisplay = AUTHOR_INITIALS;
+  // Where the battery percentage is left off (HIDE_BATTERY_PERCENTAGE): Never shows it
+  // everywhere, In Reader hides it in the reader's status bar only, Always also drops it
+  // from the header every other screen carries. The battery icon stays in all three.
+  uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Image rendering mode in EPUB reader (IMAGE_RENDERING)
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Language setting (Language enum index, default 0 = EN)

@@ -112,6 +112,18 @@ inline bool isTouchMenuGesture(const GfxRenderer& renderer, const MappedInputMan
   return false;
 }
 
+// Which way the page button held down right now points: -1 back, +1 forward, 0 none. A held
+// button hidden by a bound hold (the router masks it) reads as not held, so a hold the user
+// bound to an action never also skips pages.
+inline int heldPageDirection(const MappedInputManager& input) {
+  const bool swapFront = input.isNavDirectionSwapped();
+  const auto prevButton = swapFront ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
+  const auto nextButton = swapFront ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
+  if (input.isPressed(MappedInputManager::Button::PageBack) || input.isPressed(prevButton)) return -1;
+  if (input.isPressed(MappedInputManager::Button::PageForward) || input.isPressed(nextButton)) return 1;
+  return 0;
+}
+
 struct PageTurnResult {
   bool prev;
   bool next;

@@ -307,7 +307,7 @@ void SettingsActivity::rebuildSettingsList() {
               {
                   {StrId::STR_GRP_SCREEN,
                    {StrId::STR_REFRESH_FREQ, StrId::STR_CHAPTER_START_REFRESH, StrId::STR_CHAPTER_WIPE,
-                    StrId::STR_SUNLIGHT_FADING_FIX, StrId::STR_SCREEN_CALIBRATION}},
+                    StrId::STR_SUNLIGHT_FADING_FIX, StrId::STR_HIDE_BATTERY, StrId::STR_SCREEN_CALIBRATION}},
                   {StrId::STR_GRP_SLEEP_SCREEN, {StrId::STR_SLEEP_SCREEN, StrId::STR_FAST_UNLOCK}},
                   {StrId::STR_GRP_WALLPAPER,
                    {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER, StrId::STR_SHOW_SLEEP_IMAGE_FILENAME,
