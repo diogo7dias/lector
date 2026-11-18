@@ -158,6 +158,9 @@ void SleepActivity::renderSleepScreen() const {
       return renderBlankSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER):
       return renderCoverSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM):
+      // The cover while reading, a wallpaper otherwise (and when the book has no cover).
+      return APP_STATE.lastSleepFromReader ? renderCoverSleepScreen(CoverFallback::Custom) : renderCustomSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM):
     default:
       return renderCustomSleepScreen();
@@ -261,11 +264,18 @@ void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Fa
   }
 }
 
-// The open book's cover, or the Lector fallback when there is no book, no cover, or the
-// cover cannot be read.
-void SleepActivity::renderCoverSleepScreen() const {
+// What the cover face shows when there is no book, no cover, or the cover cannot be read:
+// the Lector face (Cover), or the wallpaper (Cover + Custom). Custom's own cover fallback is
+// off in the second case, so the two cannot send each other round in a circle.
+void SleepActivity::renderNoCoverSleepScreen(const CoverFallback fallback) const {
+  if (fallback == CoverFallback::Custom) return renderCustomSleepScreen(/*thenCover=*/false);
+  renderDefaultSleepScreen();
+}
+
+// The open book's cover, then `fallback`.
+void SleepActivity::renderCoverSleepScreen(const CoverFallback fallback) const {
   if (APP_STATE.openEpubPath.empty()) {
-    return renderDefaultSleepScreen();
+    return renderNoCoverSleepScreen(fallback);
   }
 
   std::string coverBmpPath;
@@ -276,12 +286,12 @@ void SleepActivity::renderCoverSleepScreen() const {
     Xtc lastXtc(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastXtc.load()) {
       LOG_ERR("SLP", "Failed to load last XTC");
-      return renderDefaultSleepScreen();
+      return renderNoCoverSleepScreen(fallback);
     }
 
     if (!lastXtc.generateCoverBmp()) {
       LOG_ERR("SLP", "Failed to generate XTC cover bmp");
-      return renderDefaultSleepScreen();
+      return renderNoCoverSleepScreen(fallback);
     }
 
     coverBmpPath = lastXtc.getCoverBmpPath();
@@ -290,12 +300,12 @@ void SleepActivity::renderCoverSleepScreen() const {
     Txt lastTxt(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastTxt.load()) {
       LOG_ERR("SLP", "Failed to load last TXT");
-      return renderDefaultSleepScreen();
+      return renderNoCoverSleepScreen(fallback);
     }
 
     if (!lastTxt.generateCoverBmp()) {
       LOG_ERR("SLP", "No cover image found for TXT file");
-      return renderDefaultSleepScreen();
+      return renderNoCoverSleepScreen(fallback);
     }
 
     coverBmpPath = lastTxt.getCoverBmpPath();
@@ -304,17 +314,17 @@ void SleepActivity::renderCoverSleepScreen() const {
     // Skip loading css since we only need metadata here
     if (!lastEpub.load(true, true)) {
       LOG_ERR("SLP", "Failed to load last epub");
-      return renderDefaultSleepScreen();
+      return renderNoCoverSleepScreen(fallback);
     }
 
     if (!lastEpub.generateCoverBmp(cropped)) {
       LOG_ERR("SLP", "Failed to generate cover bmp");
-      return renderDefaultSleepScreen();
+      return renderNoCoverSleepScreen(fallback);
     }
 
     coverBmpPath = lastEpub.getCoverBmpPath(cropped);
   } else {
-    return renderDefaultSleepScreen();
+    return renderNoCoverSleepScreen(fallback);
   }
 
   HalFile file;
@@ -327,5 +337,5 @@ void SleepActivity::renderCoverSleepScreen() const {
     }
   }
 
-  return renderDefaultSleepScreen();
+  return renderNoCoverSleepScreen(fallback);
 }
