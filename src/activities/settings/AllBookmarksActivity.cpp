@@ -67,7 +67,11 @@ void AllBookmarksActivity::load() {
     std::string book;
     if (!BookmarkFile::loadFile(path, entries, &book) || entries.empty()) continue;
     const RecentBook* recent = book.empty() ? recentFor(path) : nullptr;
-    if (recent) book = recent->path;
+    if (recent) {
+      book = recent->path;
+      // Stamp the path in, so the book stays listed once it drops out of Recents.
+      BookmarkFile::save(book, entries);
+    }
     // A book deleted or moved by hand leaves its bookmarks behind; nothing can open them.
     if (book.empty() || !Storage.exists(book.c_str())) continue;
 
@@ -88,7 +92,7 @@ void AllBookmarksActivity::load() {
 
   // Book by book in title order, each book's bookmarks in reading order.
   std::stable_sort(marks.begin(), marks.end(), [this](const Mark& a, const Mark& b) {
-    if (a.book != b.book) return titles[a.book] < titles[b.book];
+    if (a.book != b.book) return titles[a.book] != titles[b.book] ? titles[a.book] < titles[b.book] : a.book < b.book;
     return a.entry.percentage < b.entry.percentage;
   });
   LOG_DBG("ABM", "Loaded %zu bookmarks from %zu books", marks.size(), books.size());

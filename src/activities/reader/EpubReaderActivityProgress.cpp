@@ -76,7 +76,10 @@ void EpubReaderActivity::queueBookmarkJump(std::string bookPath, BookmarkEntry b
 void EpubReaderActivity::takeQueuedBookmarkJump() {
   std::string book;
   book.swap(queuedJumpBook);
-  if (sortesMode || book.empty() || book != epub->getPath()) return;
+  if (!epub || sortesMode || book.empty() || book != epub->getPath()) return;
+  // No page is drawn yet, so the jump has no origin of its own: where reading stopped
+  // becomes the page Return goes back to, as from the book's own Bookmarks list.
+  if (cachedVisibleTextOffset) returnHistory.recordJump({currentSpineIndex, *cachedVisibleTextOffset});
   onBookmarkJumpResult(EpubReaderBookmarksActivity::jumpTo(queuedJump, epub->getSpineItemsCount()));
 }
 

@@ -217,8 +217,9 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
                               int initialRefreshCountdown, bool sortesMode = false)
       : Activity(activity_name::kEpubReader, renderer, mappedInput),
         EpubReaderState(std::move(epub), initialRefreshCountdown, sortesMode) {}
-  // Opens the next book entered at this bookmark instead of its saved position. One shot:
-  // the next onEnter takes it whichever book it opens. Settings > All Bookmarks uses it.
+  // Opens the book at this bookmark instead of its saved position. One shot: the next
+  // reader entry takes it whichever book it opens (a book that fails to load before the
+  // reader starts leaves it queued). Settings > All Bookmarks uses it.
   static void queueBookmarkJump(std::string bookPath, BookmarkEntry bookmark);
   void onEnter() override;
   void onExit() override;

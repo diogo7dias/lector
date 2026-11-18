@@ -460,7 +460,8 @@ Bind **Long press while reading** to **Bookmark** and hold **Confirm** to drop o
 **Toggle Bookmark** in the menu. Open the list from **Navigate > Bookmarks**, press
 **Confirm** on an entry to jump there. To delete one, hold **Confirm** on it, then confirm.
 **Settings > Reader > All Bookmarks** lists the bookmarks of every book; picking one opens
-that book at it.
+that book at it, and **Return** goes back to where you had stopped. Older bookmarks show once
+their book is in Recents or has been opened.
 
 Bookmarks are stored as JSON under `/.crosspoint/bookmarks`.
 

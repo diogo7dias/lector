@@ -70,6 +70,7 @@ void EpubReaderActivity::onEnter() {
   DeferredFavorite::flush();
 
   if (!epub) {
+    takeQueuedBookmarkJump();  // drops it
     return;
   }
 

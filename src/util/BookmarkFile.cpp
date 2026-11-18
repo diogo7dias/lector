@@ -8,7 +8,11 @@
 #include "BookmarkUtil.h"
 
 bool BookmarkFile::load(const std::string& bookPath, std::vector<BookmarkEntry>& bookmarks) {
-  return loadFile(BookmarkUtil::getBookmarkPath(bookPath), bookmarks, nullptr);
+  std::string stored;
+  if (!loadFile(BookmarkUtil::getBookmarkPath(bookPath), bookmarks, &stored)) return false;
+  // A file from before the path was stored gets it once, so All Bookmarks can list it.
+  if (stored.empty() && !bookmarks.empty()) save(bookPath, bookmarks);
+  return true;
 }
 
 bool BookmarkFile::loadFile(const std::string& path, std::vector<BookmarkEntry>& bookmarks, std::string* bookPath) {
