@@ -627,21 +627,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint32_t popupItems = 0;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
-  // Performance timings (1 = on). Switches on the refresh/wake instrumentation: the
-  // on-panel overlay line, and the CSV written to /perf on the card. Off costs nothing —
-  // no file is opened and every record() call returns on its first line. Deliberately not
-  // persisted-by-default-on: a reader who never measures anything should never pay a card
-  // write for it.
-  // Instrumented builds (development, testkit, experimental) force this on and hide the
-  // row: a kit round that comes back without /perf/<device>-NNN.csv has wasted a flash and
-  // half an hour of the tester's time, and asking them to remember a toggle is what makes
-  // that happen. Release builds compile the row out of the settings list entirely and
-  // leave the field at 0.
-#ifdef LECTOR_FORCE_PERF_TIMINGS
-  uint8_t showTimings = 1;
-#else
-  uint8_t showTimings = 0;
-#endif
   // Power button return from footnotes (1 = enabled, 0 = disabled)
   uint8_t pwrBtnFootnoteBack = 1;
   // The book's own CSS, one switch: text styling (weight, slant, decoration, super/sub,

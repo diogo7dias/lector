@@ -1,7 +1,5 @@
 #include <HalDisplay.h>
 #include <HalGPIO.h>
-#include <PerfLog.h>
-#include <PerfStats.h>
 
 #if FREEINK_DEVICE_X4PRO
 #include <BoardConfig.h>
@@ -153,52 +151,20 @@ uint16_t HalDisplay::scoreFrame(const RefreshMode requested) {
   return static_cast<uint16_t>(score > FrameInkMetrics::MAX_SCORE ? FrameInkMetrics::MAX_SCORE : score);
 }
 
-// One place both instrumentation sinks are fed from, so a refresh path can never end up
-// in the card log but missing from the on-panel overlay (or the reverse). PerfStats is
-// unconditional and costs a handful of integer updates; PerfLog returns immediately
-// unless the timings setting opened a file for it.
-void HalDisplay::noteRefreshTiming(const RefreshMode requested, const RefreshMode actual, const uint32_t totalUs,
-                                   const uint32_t asyncStartUs, const uint16_t thinkMs, const uint16_t inkScore) const {
-  const uint16_t debt = refreshPolicy.inkDebt();
-  // Read once, here, so every refresh path reports the split without having to remember
-  // to. The counters were armed by beginRefreshAccounting() at the top of that path.
-  // Every path that reports must have armed them on entry, or it reports the PREVIOUS
-  // refresh's split alongside its own total. All four do: displayBuffer,
-  // displayBufferAsync, displayGrayscaleBase, displayGrayBuffer.
-  const uint32_t wireUs = EInkDisplay::refreshTransferMicros();
-  const uint32_t waveUs = EInkDisplay::refreshBusyMicros();
-  PerfStats::noteRefresh(requested, actual, totalUs, wireUs, waveUs);
-  PerfLog::record(requested, actual, totalUs, asyncStartUs, thinkMs, inkScore, debt, wireUs, waveUs, false,
-                  einkDisplay.lastRefreshDiagnostic(), einkDisplay.lastSettleWaitMs());
-}
-
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   const RefreshMode requested = mode;
-  EInkDisplay::resetRefreshAccounting();
-  const uint32_t startUs = micros();
-  const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
-  const uint16_t inkScore = scoreFrame(requested);
-  mode = applyRefreshPolicy(mode, inkScore);
+  mode = applyRefreshPolicy(mode, scoreFrame(requested));
   if (needsX3HalfResync(requested, mode)) {
     einkDisplay.requestResync(1);
   }
 
   einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
-  // Blocking path: the whole cost is in one call, so there is no async split to report.
-  noteRefreshTiming(requested, mode, micros() - startUs, 0, thinkMs, inkScore);
+  refreshCompleted = true;
 }
 
 void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
   const RefreshMode requested = mode;
-  EInkDisplay::resetRefreshAccounting();
-  pendingAsyncStartUs = micros();
-  // Taken at the start, not at completion: the press this paint answers is outstanding
-  // now, and waitRefreshComplete() may be called long after a later press has landed.
-  pendingAsyncThinkMs = PerfStats::takeThinkMs(millis());
-  pendingAsyncRequested = mode;
-  pendingAsyncInkScore = scoreFrame(requested);
-  mode = applyRefreshPolicy(mode, pendingAsyncInkScore);
-  pendingAsyncActual = mode;
+  mode = applyRefreshPolicy(mode, scoreFrame(requested));
   pendingAsync = true;
   if (needsX3HalfResync(requested, mode)) {
     einkDisplay.requestResync(1);
@@ -208,24 +174,20 @@ void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
   // detached — same trade the pre-rebase fork made.
   if (mode != requested && mode != RefreshMode::FAST_REFRESH) {
     einkDisplay.displayBuffer(convertRefreshMode(mode), false);
-    // Ran blocking despite the async request, so it has no split to report and no wait
-    // for waitRefreshComplete() to time.
-    noteRefreshTiming(requested, mode, micros() - pendingAsyncStartUs, 0, pendingAsyncThinkMs, pendingAsyncInkScore);
+    // Ran blocking despite the async request, so there is no wait left for
+    // waitRefreshComplete().
+    refreshCompleted = true;
     pendingAsync = false;
     return;
   }
 
   einkDisplay.displayBufferAsyncNoShadow(convertRefreshMode(mode));
-  // Time to here is the part that genuinely overlaps: commands issued and bytes pushed,
-  // with the waveform fired but not waited on. waitRefreshComplete() closes the record.
-  pendingAsyncSplitUs = micros() - pendingAsyncStartUs;
 }
 
 void HalDisplay::waitRefreshComplete() {
   einkDisplay.waitRefreshComplete();
   if (pendingAsync) {
-    noteRefreshTiming(pendingAsyncRequested, pendingAsyncActual, micros() - pendingAsyncStartUs, pendingAsyncSplitUs,
-                      pendingAsyncThinkMs, pendingAsyncInkScore);
+    refreshCompleted = true;
     pendingAsync = false;
   }
 }
@@ -260,9 +222,6 @@ void HalDisplay::returnFrameBufferStorage() { einkDisplay.returnBuildStorage(); 
 
 void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) {
   const RefreshMode requested = fallback;
-  EInkDisplay::resetRefreshAccounting();
-  const uint32_t startUs = micros();
-  const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
   // Scored like any other frame. It was charged zero, which made a full-frame image page
   // (an XTC comic panel, a cover) the cheapest thing the panel ever did to the debt, and
   // left inkMetrics describing a frame two pushes old for the next page turn's score.
@@ -279,25 +238,15 @@ void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) 
   }
 
   einkDisplay.displayGrayscaleBase(convertRefreshMode(fallback), turnOffScreen);
-  // Timed like any other refresh: on the X3 wake path and the reader's image pages this
-  // IS the paint the reader waits for, and leaving it out of the log made those screens
-  // look free.
-  noteRefreshTiming(requested, fallback, micros() - startUs, 0, thinkMs, 0);
+  refreshCompleted = true;
 }
 
 void HalDisplay::preconditionGrayscale() { preconditionGrayscale(0, 0, getDisplayWidth(), getDisplayHeight()); }
 
 void HalDisplay::preconditionGrayscale(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
-  // Close any prior async record before measuring this separate conditioning pass.
+  // Finish any prior async refresh before this separate conditioning pass.
   waitRefreshComplete();
-  EInkDisplay::resetRefreshAccounting();
-  const uint32_t startUs = micros();
   einkDisplay.preconditionGrayscale(x, y, w, h);
-  // Only X3 drives a waveform here; other drivers and invalid regions are no-ops.
-  // Do not turn a plane copy or a skipped precondition into a panel submission.
-  if (EInkDisplay::refreshBusyMicros() != 0) {
-    noteRefreshTiming(FAST_REFRESH, FAST_REFRESH, micros() - startUs, 0, PerfStats::kNoThink, 0);
-  }
 }
 
 void HalDisplay::copyGrayscaleLsbBuffers(const uint8_t* lsbBuffer) { einkDisplay.copyGrayscaleLsbBuffers(lsbBuffer); }
@@ -400,9 +349,6 @@ static_assert(!LECTOR_X4PRO_SPLIT_MIDS || (phasesAgree(kSplitGray02) && phasesAg
 // they spend the same anti-ghost budget a FAST pass does — otherwise a page with images
 // or text anti-aliasing ages the panel while the budget stands still.
 void HalDisplay::displayGrayBuffer(bool turnOffScreen, bool fullTone) {
-  EInkDisplay::resetRefreshAccounting();
-  const uint32_t startUs = micros();
-  const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
   refreshPolicy.noteExternalFastPass();
   // Null keeps the driver's own waveform. The override is UC8279-X4 bytes only: an X4 Pro
   // that probes as SSD1677 must never be handed it.
@@ -417,10 +363,7 @@ void HalDisplay::displayGrayBuffer(bool turnOffScreen, bool fullTone) {
   (void)fullTone;
 #endif
   einkDisplay.displayGrayBuffer(turnOffScreen, lut);
-  // Recorded as FAST/FAST: there is no mode to choose here, and charging it to the same
-  // bucket keeps the per-mode totals comparable with a text page turn.
-  noteRefreshTiming(RefreshMode::FAST_REFRESH, RefreshMode::FAST_REFRESH, micros() - startUs, 0, thinkMs,
-                    DisplayRefreshPolicy::EXTERNAL_PASS_SCORE);
+  refreshCompleted = true;
 }
 
 void HalDisplay::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* rows, uint16_t yStart, uint16_t numRows) {

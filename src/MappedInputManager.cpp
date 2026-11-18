@@ -1,17 +1,14 @@
 #include "MappedInputManager.h"
 
 #include <GfxRenderer.h>
-#include <PerfLog.h>
 
 #include <algorithm>
 #include <cstdlib>
 
 #include "CrossPointSettings.h"
-#include "WakeTiming.h"
 #include "components/HintBandGeometry.h"
 #include "components/RowHitTest.h"
 #include "components/UITheme.h"
-#include "util/DebugTrace.h"
 
 // The pure mapping uses the persisted/HAL numbering. Fail here if either changes.
 static_assert(HalGPIO::BTN_BACK == 0 && HalGPIO::BTN_CONFIRM == 1 && HalGPIO::BTN_LEFT == 2 &&
@@ -195,7 +192,7 @@ bool MappedInputManager::wasScreenTapped(int& x, int& y) const {
   // already been spent this frame.
   if (isInHintBand(x, y)) return false;
   rememberTouchHeldTime();
-  return WakeTiming::noteAcceptedInput(true);
+  return true;
 }
 
 bool MappedInputManager::wasScreenTouchDown(int& x, int& y) const {
@@ -205,7 +202,7 @@ bool MappedInputManager::wasScreenTouchDown(int& x, int& y) const {
   if (!gpio.isTouchTapCandidate(nx, ny, heldMs)) return false;
   if (heldMs < TOUCH_DOWN_SELECT_DELAY_MS) return false;
   renderer.tapToLogical(nx, ny, x, y);
-  return WakeTiming::noteAcceptedInput(!isInHintBand(x, y));
+  return !isInHintBand(x, y);
 }
 
 bool MappedInputManager::takeScreenTouchDown(int& x, int& y) {
@@ -266,7 +263,7 @@ bool MappedInputManager::wasBackGesture() const {
   const bool hit = sx <= renderer.getScreenWidth() * LEFT_EDGE_BACK_GESTURE_FRAC_X && ex > sx &&
                    std::abs(ex - sx) > std::abs(ey - sy);
   if (hit) rememberTouchHeldTime();
-  return WakeTiming::noteAcceptedInput(hit);
+  return hit;
 }
 
 bool MappedInputManager::wasMenuGesture() const {
@@ -291,7 +288,6 @@ bool MappedInputManager::wasMenuGesture() const {
       menuDrag_ = MenuDrag::Tracking;
       menuDragStartX_ = tx;
       menuDragStartY_ = ty;
-      debug_trace::note("touch down (%d,%d) topEdge=%d", tx, ty, topEdgeBottom);
     }
     const int travel = ty - menuDragStartY_;
     if (menuDrag_ == MenuDrag::Tracking && menuDragStartY_ <= topEdgeBottom &&
@@ -301,13 +297,11 @@ bool MappedInputManager::wasMenuGesture() const {
       // The rest of the contact belongs to the gesture: without this the finger lifting
       // would tap whatever the panel just drew under it.
       gpio.suppressTouchContact();
-      debug_trace::note("top-edge drag fired: %d px down from y=%d", travel, menuDragStartY_);
       rememberTouchHeldTime();
-      return WakeTiming::noteAcceptedInput(true);
+      return true;
     }
   } else if (menuDrag_ != MenuDrag::Idle) {
     menuDrag_ = MenuDrag::Idle;
-    debug_trace::note("contact ended, started (%d,%d), drag did not fire", menuDragStartX_, menuDragStartY_);
   }
 
   // Downward swipe starting at the top edge (mirror of the bottom-edge home gesture).
@@ -319,13 +313,11 @@ bool MappedInputManager::wasMenuGesture() const {
     // A contact that ended without qualifying as a swipe at all: too slow (over 700 ms),
     // or under the 60 px the flick needs. Logged because the two failures look identical
     // on the device, and only the log can tell them apart.
-    if (gpio.wasTouchReleased()) debug_trace::note("touch released, no flick decoded");
     return false;
   }
   const bool hit = sy <= topEdgeBottom && ey > sy && std::abs(ey - sy) > std::abs(ex - sx);
-  debug_trace::note("flick (%d,%d)->(%d,%d) topEdge=%d menu=%d", sx, sy, ex, ey, topEdgeBottom, hit ? 1 : 0);
   if (hit) rememberTouchHeldTime();
-  return WakeTiming::noteAcceptedInput(hit);
+  return hit;
 }
 
 bool MappedInputManager::wasBottomEdgeUpSwipe() const {
@@ -350,11 +342,11 @@ bool MappedInputManager::wasHomeGesture() const {
   if (gpio.hasHomeKey()) {
     // See setHomeKeyOverride(): the router holds a tap back while it decides whether a
     // second one is coming, and replays it here when it rules the tap a plain single.
-    if (homeKeyInjected) return WakeTiming::noteAcceptedInput(true);
+    if (homeKeyInjected) return true;
     if (homeKeySuppressed) return false;
-    return WakeTiming::noteAcceptedInput(gpio.wasHomeKeyTapped());
+    return gpio.wasHomeKeyTapped();
   }
-  return WakeTiming::noteAcceptedInput(wasBottomEdgeUpSwipe());
+  return wasBottomEdgeUpSwipe();
 }
 
 int MappedInputManager::sideKeySlot(const uint8_t hardware) {
@@ -384,7 +376,7 @@ bool MappedInputManager::wasScreenLongPress(int& x, int& y) const {
   // finger lift cannot also tap whatever the action opened.
   gpio.suppressTouchContact();
   renderer.tapToLogical(nx, ny, x, y);
-  return WakeTiming::noteAcceptedInput(true);
+  return true;
 }
 
 bool MappedInputManager::getTwoFingerTouch(int& x1, int& y1, int& x2, int& y2) const {
@@ -395,9 +387,7 @@ bool MappedInputManager::getTwoFingerTouch(int& x1, int& y1, int& x2, int& y2) c
   return true;
 }
 
-bool MappedInputManager::wasScreenTouchReleased() const {
-  return WakeTiming::noteAcceptedInput(gpio.wasTouchReleased());
-}
+bool MappedInputManager::wasScreenTouchReleased() const { return gpio.wasTouchReleased(); }
 
 bool MappedInputManager::wasReaderMenuSwipeUp() const { return gpio.hasHomeKey() && wasBottomEdgeUpSwipe(); }
 
@@ -442,23 +432,23 @@ list_swipe::Scroll MappedInputManager::wasListScrollSwipe() const {
 }
 
 bool MappedInputManager::wasPressed(const Button button) const {
-  if (button == Button::Back && wasBackGesture()) return WakeTiming::noteAcceptedInput(true);
-  return WakeTiming::noteAcceptedInput(mapButton(button, &HalGPIO::wasPressed));
+  if (button == Button::Back && wasBackGesture()) return true;
+  return mapButton(button, &HalGPIO::wasPressed);
 }
 
 bool MappedInputManager::wasReleased(const Button button) const {
   // A release that belongs to a press already acted on reaches nobody: see
   // suppressHeldButtonRelease(). The keys are gated one by one in mapButton(); the back
   // gesture is a touch event that belongs to no key, so it waits while any release is owed.
-  if (button == Button::Back && wasBackGesture()) return !releaseGate.armed() && WakeTiming::noteAcceptedInput(true);
+  if (button == Button::Back && wasBackGesture()) return !releaseGate.armed();
   // See setPowerReleaseOverride(): the reader's double-click detector holds a power release
   // back for one window and then replays it here, so every consumer keeps its existing code.
   if (button == Button::Power) {
     if (releaseGate.swallowsRelease(HalGPIO::BTN_POWER)) return false;
-    if (powerReleaseInjected) return WakeTiming::noteAcceptedInput(true);
+    if (powerReleaseInjected) return true;
     if (powerReleaseSuppressed) return false;
   }
-  return WakeTiming::noteAcceptedInput(mapButton(button, &HalGPIO::wasReleased));
+  return mapButton(button, &HalGPIO::wasReleased);
 }
 
 bool MappedInputManager::isPressed(const Button button) const { return mapButton(button, &HalGPIO::isPressed); }

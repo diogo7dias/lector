@@ -11,7 +11,6 @@
 
 #include <cstddef>
 
-#include "Diagnostics.h"
 #include "MappedInputManager.h"
 #include "NearbyFileTransferActivity.h"
 #include "NetworkModeSelectionActivity.h"
@@ -304,9 +303,7 @@ void CrossPointWebServerActivity::startWebServer() {
 }
 
 void CrossPointWebServerActivity::closeTransfer(const char* cause) {
-  int adc1 = -1, adc2 = -1;
-  gpio.readButtonAdc(adc1, adc2);
-  diag::recordTransferExit(cause, isApMode ? 0 : WiFi.RSSI(), adc1, adc2);
+  LOG_INF("WEBACT", "Closing the transfer screen: %s", cause);
   onGoHome();
 }
 

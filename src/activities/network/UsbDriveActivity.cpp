@@ -6,9 +6,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
-#include <PerfLog.h>
 
-#include "Diagnostics.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "platform/UsbSerialJtagHandoff.h"
@@ -18,8 +16,6 @@ void UsbDriveActivity::onEnter() {
   // The instructions go up before the card leaves the firmware's hands.
   requestUpdateAndWait();
   // Last writes the firmware owes the card: once it is lent, HalStorage refuses them.
-  PerfLog::flush();
-  diag::flushIfPending();
   persistAntiGhostBudget();
   if (Storage.beginUsbDrive()) {
     enterPhase(Phase::Waiting);

@@ -4,7 +4,6 @@
 #include <I18n.h>
 #include <WiFi.h>
 
-#include "Diagnostics.h"
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
@@ -263,9 +262,6 @@ void OtaUpdateActivity::enterFailed(const OtaUpdater::OtaUpdaterError error, con
     if (manualRetries > 0) retryLine = "Retry attempt " + std::to_string(manualRetries);
     state = FAILED;
   }
-  // Outside the render lock: this one writes the card.
-  diag::recordOtaFailure(step == FailedStep::CHECK ? "check" : "install", OtaUpdater::errorName(error),
-                         failedExtra.c_str());
   requestUpdate();
 }
 
@@ -312,7 +308,7 @@ OtaUpdater::OtaUpdaterError OtaUpdateActivity::runUpdateCheck() {
   {
     RenderLock lock(*this);
     state = CHECKING_FOR_UPDATE;
-    releaseStatusStorage("check");
+    releaseStatusStorage();
   }
   requestUpdateAndWait();
   // The release JSON is ~32 KB over TLS, and this was the one fetch on this
@@ -328,13 +324,10 @@ OtaUpdater::OtaUpdaterError OtaUpdateActivity::runUpdateCheck() {
   return updater.checkForUpdate(allowAnyVersion);
 }
 
-void OtaUpdateActivity::releaseStatusStorage(const char* step) {
-  const uint32_t before = ESP.getFreeHeap();
+void OtaUpdateActivity::releaseStatusStorage() {
   for (auto* line : {&currentVersionLine, &newVersionLine, &failedExtra, &failedHint, &retryLine, &bytesLine}) {
     releaseStorage(*line);
   }
-  const uint32_t after = ESP.getFreeHeap();
-  diag::recordHeapReclaim(step, before, after);
 }
 
 void OtaUpdateActivity::runUpdateInstall() {
@@ -342,7 +335,7 @@ void OtaUpdateActivity::runUpdateInstall() {
   {
     RenderLock lock(*this);
     state = UPDATE_IN_PROGRESS;
-    releaseStatusStorage("install");
+    releaseStatusStorage();
   }
   requestUpdateAndWait();
   // Like CrossPoint, the download runs on the heap so the progress bar keeps

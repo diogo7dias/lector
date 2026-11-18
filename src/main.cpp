@@ -14,8 +14,6 @@
 #include <HalSystem.h>
 #include <I18n.h>
 #include <Logging.h>
-#include <PerfLog.h>
-#include <PerfStats.h>
 #include <SPI.h>
 #include <WiFi.h>
 #include <esp_random.h>
@@ -29,19 +27,16 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
-#include "Diagnostics.h"
 #include "KOReaderAutoSync.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
-#include "PerfLogSink.h"
 #include "ReaderPresetStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
 #include "SleepTiming.h"
 #include "UiFont.h"
-#include "WakeTiming.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/boot_sleep/SleepActivity.h"
@@ -60,7 +55,6 @@
 #include "util/ButtonNavigator.h"
 #include "util/ButtonReplay.h"
 #include "util/ButtonRouter.h"
-#include "util/DebugTrace.h"
 #include "util/DoubleClickDetector.h"
 #include "util/LowBatteryPolicy.h"
 #include "util/ScreenshotUtil.h"
@@ -110,10 +104,8 @@ static std::string pickBootBookPath();
 
 [[noreturn]] void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
-  // Lock cost, stage by stage. The wake side has had WakeTiming since the boot path was
-  // first measured; the sleep side had nothing, so "locking feels slow" could not be
-  // answered with a number. Same split idea: each stamp is taken after the step it names,
-  // and the report prints the difference between neighbours.
+  // Lock cost, stage by stage: each stamp is taken after the step it names, and the serial
+  // report prints the difference between neighbours.
   const unsigned long sleepT0 = millis();
   SleepTiming::begin();
   unsigned long sleepTState = sleepT0;
@@ -155,29 +147,15 @@ static void finishDeepSleep(const unsigned long sleepT0, const unsigned long sle
   // APP_STATE write: everything set above and in SleepActivity lands with it.
   persistAntiGhostBudget();
 
-  // The per-mode totals for the session, written last so the file ends with the summary
-  // of everything above it.
-  logPerfSummary();
-
-  // Written before the flush, so the stages land in the same CSV as the refreshes they
-  // paid for. The panel power-down and the total are serial-only: the file is closed by
-  // then, and a kit log is where those two get read anyway.
   const unsigned long sleepTBudget = millis();
   // The paint stage is the one worth breaking down: it was 10112 ms of a 10258 ms lock
   // when the stages were first measured, and only about 4800 ms of that was the panel.
   char paintStages[320];
   SleepTiming::format(paintStages, sizeof(paintStages));
-  char power[72];
-  formatPowerStamp(power, sizeof(power));
-  char sleepNote[520];
-  snprintf(sleepNote, sizeof(sleepNote), "sleep state=%lu paint=%lu frame=%lu wifi=%lu save=%lu [%s] %s",
+  char sleepNote[400];
+  snprintf(sleepNote, sizeof(sleepNote), "sleep state=%lu paint=%lu frame=%lu wifi=%lu save=%lu [%s]",
            sleepTState - sleepT0, sleepTPaint - sleepTState, sleepTFrame - sleepTPaint, sleepTWifi - sleepTFrame,
-           sleepTBudget - sleepTWifi, paintStages, power);
-  PerfLog::note(sleepNote);
-  PerfLog::flush();
-  // Ordinarily empty: attempts and failures flush as they happen. This is the
-  // safety net for anything recorded since, before the card loses power.
-  diag::flushIfPending();
+           sleepTBudget - sleepTWifi, paintStages);
 
   // LEDC stops in deep sleep with the pads in whatever state isolation leaves
   // them; drive the light to zero first. Not saved: the next boot's
@@ -346,9 +324,6 @@ static bool mountStorage() {
 }
 
 void setup() {
-  // First thing of all: the earliest stamp has to be able to land, and this only zeroes
-  // two small arrays.
-  WakeTiming::beginWake();
   BoardConfig::holdPowerRails();
 
 #ifdef ENABLE_SERIAL_LOG
@@ -381,15 +356,7 @@ void setup() {
 #endif
 #endif
 
-  // First stamp of the wake, and deliberately outside the serial block above: a build
-  // without ENABLE_SERIAL_LOG must still land stamp 0, because every other stage is a
-  // delta from it and the readout prints nothing at all without it. Everything before
-  // this point is the framework's own startup plus, when it is compiled in, serial
-  // bring-up. Neither is ours to shorten.
-  WakeTiming::mark(WakeTiming::Stage::SerialUp);
-
   HalSystem::begin();
-  WakeTiming::mark(WakeTiming::Stage::SysReady);
   const bool rebootedFromPanic = HalSystem::isRebootFromPanic();
 
   const RestartBoot restartBoot = takeRestartBoot();
@@ -404,10 +371,8 @@ void setup() {
   // have settled, and "settled" is time since this call, not time since that check is
   // reached — see the deadline there.
   const unsigned long inputStartedMs = millis();
-  WakeTiming::mark(WakeTiming::Stage::GpioReady);
   powerManager.begin();
   halClock.begin();
-  WakeTiming::mark(WakeTiming::Stage::HalReady);
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
@@ -416,7 +381,6 @@ void setup() {
   bool sdRecoveryChord = false;
   if (!mountStorage()) {
     LOG_ERR("MAIN", "SD card initialization failed");
-    diag::recordSdMountFailure();  // reaches the card only if a retry mounts it
     // Classified here because the panel comes up before the main classification below.
     // That one still reads afresh: the retry loop can hold the boot for minutes first.
     const auto earlyWakeupReason = gpio.getWakeupReason();
@@ -451,28 +415,12 @@ void setup() {
     LOG_INF("MAIN", "SD card mounted on retry; entering recovery firmware mode");
   }
 
-  WakeTiming::mark(WakeTiming::Stage::SdReady);
-  // Neither the perf sink nor the wake-timing card read can run here any more: both are
-  // switched by a setting, and settings have not been loaded yet. Both start immediately
-  // after they are (Stage::ConfigReady), before the wake diagnostics are logged.
-
   HalSystem::checkPanic();
 
   // If a firmware update handed the device to another image and the bootloader
   // refused it, we are running the old firmware right now and nothing else
   // would say so. Write that to the SD card while it is fresh.
   firmware_flash::auditPendingSwitch(CROSSPOINT_VERSION);
-  // A crash, watchdog or brownout boot is recorded too; an ordinary wake is
-  // not, so this costs a card write only on the boots worth one.
-  diag::recordAbnormalBoot();
-  // A restart the rescue timer had to finish, or one that ended some other way (Power
-  // held, a crash) before its first frame. A clean restart leaves no trail.
-  if (restartBoot.rescued) {
-    diag::recordRestartTrail(restartBoot.rescuedStage, true);
-  } else if (restartBoot.trailWorthRecording) {
-    diag::recordRestartTrail(restartBoot.trailStage, false);
-  }
-  diag::flushIfPending();
 
   // Lector: on first install (fresh SD) make sure the folders lector uses exist,
   // so the user can drop files straight in (over WiFi or a card reader) without
@@ -488,7 +436,6 @@ void setup() {
     }
   }
 
-  const uint32_t configStartedMs = millis();
   SETTINGS.loadFromFile();
   // A card that has never held state is a fresh install: nothing on it is new to its
   // reader, so What's New waits for the next update. The badge seeding below saves it.
@@ -513,32 +460,6 @@ void setup() {
   // to fill credentials into rather than typed out on a five-button keyboard.
   OPDS_STORE.seedBuiltInServers();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
-  WakeTiming::noteCost(WakeTiming::Cost::Config, millis() - configStartedMs);
-  WakeTiming::mark(WakeTiming::Stage::ConfigReady);
-
-  // Settings are up, so the timings setting can be honoured. Started before the panel is
-  // constructed, so the very first refresh of the session is recorded rather than missed,
-  // and the previous wake's stage breakdown is appended straight after the header so one
-  // copied file carries both the wake cost and the refresh costs that follow it.
-  const uint32_t logsStartedMs = millis();
-  debug_trace::begin();
-  debug_trace::note("boot: reset=%d silent=%d trail=%s rescued=%s", static_cast<int>(esp_reset_reason()),
-                    isSilentReboot ? 1 : 0, restartBoot.trailStage, restartBoot.rescuedStage);
-  {
-    const DeviceProfile dev = deviceProfileFromHardware();
-    startPerfLogSink(dev.isX3 ? "x3" : dev.isX4Pro ? "x4pro" : "x4");
-  }
-  WakeTiming::noteCost(WakeTiming::Cost::Logs, millis() - logsStartedMs);
-  WakeTiming::setEnabled(SETTINGS.showTimings != 0);
-  WakeTiming::loadPrevious();
-  logWakeTimingToPerfLog();
-  // Also on serial, so a kit log answers the unlock half without the card having to be
-  // read. On the first boot after a flash it says there is no previous wake yet.
-  {
-    char wakeDiag[176];
-    WakeTiming::formatDiagnostic(wakeDiag, sizeof(wakeDiag));
-    LOG_INF("SLP", "Unlock %s", wakeDiag);
-  }
 
 #if FREEINK_DEVICE_X4PRO
   // Refresh Wallpaper: nobody asked for this wake. Draw the lock's wallpaper over itself
@@ -581,7 +502,6 @@ void setup() {
                    frontlight::restoreLightOnAtBoot({SETTINGS.frontlightOn != 0, SETTINGS.frontlightRestoreOnWake != 0,
                                                      isSilentReboot, restartBoot.lightOn, scheduledOn}));
 
-  const uint32_t classifyStartedMs = millis();
   const auto wakeupReason = gpio.getWakeupReason();
   // INF, and on every boot: a device that sleeps and is woken straight back up by its own
   // USB power prints nothing else, so without this line the cycle can only be inferred
@@ -593,7 +513,6 @@ void setup() {
       LOG_DBG("MAIN", "Verifying the power button is still held");
       if (!gpio.verifyPowerButtonWakeup()) {
         LOG_INF("SLP", "Wake press not held through debounce, back to sleep");
-        debug_trace::note("wake press not held, back to sleep");
         sleepAgain();
       }
       wakePowerReleasePending = true;
@@ -608,8 +527,6 @@ void setup() {
     default:
       break;
   }
-
-  WakeTiming::noteCost(WakeTiming::Cost::Classify, millis() - classifyStartedMs);
 
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
@@ -651,7 +568,6 @@ void setup() {
   // (seconds for a CJK one) costs that wake nothing.
   sdFontSystem.begin(renderer);
   LOG_DBG("MAIN", "Fonts setup");
-  WakeTiming::mark(WakeTiming::Stage::DisplayReady);
 
   // Recovery firmware mode: hold a side button together with the power button at boot to skip
   // directly to the SD-card firmware update screen. This is the way back on a device whose USB
@@ -665,16 +581,12 @@ void setup() {
   // does too. Before the move it ran after the window and cost its 138 ms (X3) or 50 ms
   // (X4) on top; now the window absorbs it and what is left to wait for shrinks by the
   // same amount.
-  const uint32_t settleStartedMs = millis();
   bool recoveryFirmwareMode = sdRecoveryChord;
   if (!recoveryFirmwareMode && wakeupReason == HalGPIO::WakeupReason::PowerButton) {
     recoveryFirmwareMode = recoveryChordHeld(inputStartedMs);
   }
   if (recoveryFirmwareMode)
     LOG_INF("MAIN", "Recovery firmware mode (%s + POWER held at boot)", BoardConfig::isX4Pro() ? "DOWN" : "UP");
-
-  WakeTiming::noteCost(WakeTiming::Cost::Settle, millis() - settleStartedMs);
-  WakeTiming::mark(WakeTiming::Stage::InputSettled);
 
   // Picked here rather than before the display bring-up because it reads
   // recoveryFirmwareMode, which is only known once the check above has run. Still ahead
@@ -705,8 +617,6 @@ void setup() {
       activityManager.goToBoot();
       break;
   }
-
-  WakeTiming::mark(WakeTiming::Stage::WakeFaceReady);
 
   // Wallpaper index reconcile. An X4 unlock arrives as ESP_RST_POWERON (see
   // lib/hal/WakeClassify.h), so reset reason alone cannot separate "wake" from
@@ -820,12 +730,6 @@ void setup() {
       enterReader(APP_STATE.openEpubPath, /*withWakeFlags=*/true);
       break;
   }
-
-  WakeTiming::mark(WakeTiming::Stage::ActivityUp);
-  // Last stamp taken, so the record is complete. Written here rather than at sleep entry:
-  // the reader can be powered off from any screen, and a wake that is never followed by a
-  // clean sleep would otherwise report nothing.
-  WakeTiming::persist();
 
   if (resume == BootResume::Silent) {
     // Block until the first paint physically completes. refreshDisplay()
@@ -968,10 +872,6 @@ void loop() {
   const unsigned long touchSleepMs = SETTINGS.touchSleepMs();
   // Not while locked: the timer no longer tracks input, and the Home key may be what unlocks.
   gpio.setTouchAsleep(!quickLocked && touchSleepMs > 0 && millis() - lastActivityTime >= touchSleepMs);
-  // The press, not the release, and not "any activity": this is the instant the reader's
-  // thumb acted, and the refresh that answers it closes the measurement. A release-driven
-  // action (a short power click) still lands within the same press-to-paint window.
-  if (gpio.wasAnyPressed()) PerfStats::noteInput(millis());
 
   // Let wake continue as soon as its hold has been verified. The release can
   // arrive after setup, so consume that one input frame rather than making it
@@ -1097,8 +997,6 @@ void loop() {
         fired = bindingRouter.onRelease(key, now);
       }
       if (!fired.valid) fired = bindingRouter.tick(key, now);
-      if (fired.valid)
-        debug_trace::note("key %u fired action %u replay=%d", key, fired.function, fired.replayRawEdge ? 1 : 0);
       if (fired.valid && !fired.replayRawEdge) runBoundFunction(fired.function);
       return fired;
     };

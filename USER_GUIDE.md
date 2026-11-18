@@ -1217,13 +1217,6 @@ Session**, **Pages to Paragraph**. Alongside them:
 - **Move Finished Books to Read Folder**.
 - **Move Opened Books to Recents Folder**.
 
-**Performance Timings** — off by default, and free while it is off. On, Lector times every
-screen refresh and reports the numbers three ways: a small line in the top-left corner of
-the screen showing what the previous refresh cost, a breakdown of the last wake in place of
-the unlock screen footer, and a `.csv` file per session in the `/perf` folder on the card.
-It is there so a slow page turn can be measured rather than guessed at. Turn it off again
-when you are done; it writes to the card while it is on.
-
 **Network** — **Wi-Fi Networks**, **KOReader Sync**, **OPDS Servers**, **Share WiFi and OPDS**.
 
 **Device**
@@ -1316,15 +1309,6 @@ cache folders.
 
 **A crash happened.** Lector writes a crash report to the SD card without needing a USB
 connection. Attach that file to any bug report.
-
-**A firmware update failed, or ran to the end and the old firmware came back.** Lector keeps
-`lector-flash-diagnostics.txt` at the root of the card: every install attempt from the card or
-over the air, where it stopped and at which byte, the battery and memory at the time, the
-partition table and boot record, the boot after an install, and any crash or watchdog restart.
-It also records Wi-Fi connection progress, so a stall at **Connecting...** leaves evidence
-even before an update starts. Leave it for two minutes, then send the same file.
-Send that whole file. It names no book, network or device. It is kept to the last two days and a
-few kilobytes, and the web interface home page links to it (the *Diagnostics* link).
 
 **More detail is needed.** Connect the device over USB and run the debugging monitor (needs
 Python 3 with `pyserial`, `colorama` and `matplotlib`; install with

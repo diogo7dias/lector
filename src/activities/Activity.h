@@ -17,10 +17,6 @@
 class Activity {
   friend class ActivityManager;
 
-  // Shared bookkeeping for first entry and for a parent revealed by a pop.
-  // Non-virtual: resuming must not rerun the activity's initialization.
-  void becameTopmost();
-
  protected:
   std::string name;
   GfxRenderer& renderer;

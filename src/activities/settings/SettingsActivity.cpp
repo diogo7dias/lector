@@ -15,7 +15,6 @@
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
-#include "Diagnostics.h"
 #include "FontDownloadActivity.h"
 #include "InstalledFontsActivity.h"
 #include "KOReaderSettingsActivity.h"
@@ -396,10 +395,6 @@ void SettingsActivity::rebuildSettingsList() {
           {StrId::STR_GRP_DEVICE,
            {StrId::STR_LANGUAGE, StrId::STR_CLEAN_STORAGE, StrId::STR_CLEAR_READING_CACHE, StrId::STR_CHECK_UPDATES,
             StrId::STR_SD_FIRMWARE_UPDATE, StrId::STR_INSTALL_OTHER_FIRMWARE, StrId::STR_WHATS_NEW}},
-          // Last, and named for what they are: a panel-tuning escape hatch and a
-          // diagnostics readout. Performance Timings is compiled out of some builds, and
-          // applyGroups draws no heading for a group whose rows are all missing.
-          {StrId::STR_GRP_ADVANCED, {StrId::STR_PERF_TIMINGS}},
       });
 }
 
@@ -440,25 +435,18 @@ void SettingsActivity::startDownloadActivity(std::unique_ptr<Activity> activity)
   }
   {
     RenderLock lock(*this);
-    const uint32_t before = ESP.getFreeHeap();
-    size_t capacity = 0;
     // Settings stays on the activity stack. None of these cached rows is used
     // by OTA/fonts, and settings retains capacity for ALL categories even when
     // it only displays System. Destruction also frees each row's enum/callback data.
     closeRouting();
     for (auto* rows : {&settings, &displaySettings, &readerSettings, &controlsSettings, &systemSettings}) {
-      capacity += rows->capacity();
       releaseStorage(*rows);
     }
     settingsCount = 0;
     releaseStorage(cellNameScratch);
     releaseStorage(cellValueScratch);
     releaseStorage(optionPopup);
-    const uint32_t after = ESP.getFreeHeap();
-    diag::recordHeapReclaim("settings", before, after, capacity, sizeof(SettingInfo));
   }
-  // Persist before Wi-Fi checkpoints can fill the bounded diagnostics buffer.
-  diag::flush();
   startActivityForResult(std::move(activity), [this](const ActivityResult&) {
     SETTINGS.saveToFile();
     {
