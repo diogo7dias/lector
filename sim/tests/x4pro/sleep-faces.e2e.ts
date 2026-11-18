@@ -39,7 +39,7 @@ async function device({ app, screen }: any) {
       await tapTwice(240, 729); // Settings
       await expect(activity).toHaveText('Settings', { timeout: 30_000 });
       await tapTwice(100, 84); // Display
-      await tapTwice(150, 503); // Sleep Screen
+      await tapTwice(150, 233); // Sleep Screen
       await tapTwice(240, rowY[face]);
       await screen.getByRole('button', { name: 'Home' }).click();
       await expect(activity).toHaveText('Home', { timeout: 30_000 });
