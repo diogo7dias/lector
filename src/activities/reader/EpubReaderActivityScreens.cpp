@@ -17,7 +17,6 @@
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
-#include "EpubReaderSearchActivity.h"
 #include "MappedInputManager.h"
 #include "QrDisplayActivity.h"
 #include "QuoteSelectActivity.h"
@@ -342,21 +341,4 @@ void EpubReaderActivity::openStatusBarSettings() {
 void EpubReaderActivity::openBookmarks() {
   startActivityForResult(std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, *epub, epub->getPath()),
                          [this](const ActivityResult& result) { onBookmarkJumpResult(result); });
-}
-
-void EpubReaderActivity::openSearch() {
-  startActivityForResult(
-      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, std::string(tr(STR_SEARCH)), lastSearchQuery,
-                                              SearchMatcher::MAX_QUERY, InputType::Text),
-      [this](const ActivityResult& result) {
-        const auto* kr = result.isCancelled ? nullptr : std::get_if<KeyboardResult>(&result.data);
-        if (!kr || kr->text.empty()) {
-          requestUpdate();
-          return;
-        }
-        lastSearchQuery = kr->text;
-        // A picked hit comes back like a bookmark with an exact offset, and lands the same way.
-        startActivityForResult(std::make_unique<EpubReaderSearchActivity>(renderer, mappedInput, *epub, kr->text),
-                               [this](const ActivityResult& found) { onBookmarkJumpResult(found); });
-      });
 }

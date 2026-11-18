@@ -26,11 +26,11 @@ test('All Bookmarks opens the book at the bookmark', async ({ app, screen }) => 
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
   await press('Right', 3);
 
-  // Reader menu > Navigate > Toggle Bookmark, the fifth row while the book has none.
+  // Reader menu > Navigate > Toggle Bookmark, the fourth row while the book has none.
   await press('Confirm');
   await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
   await press('Confirm');
-  await press('Down', 5);
+  await press('Down', 4);
   await press('Confirm');
   await expect.poll(async () => (await log()).includes('Toggle bookmark at spine')).toBe(true);
   const [, spine, page] = lastMatch(await log(), /Toggle bookmark at spine (\d+), page (\d+)/g) ?? [];
@@ -46,7 +46,7 @@ test('All Bookmarks opens the book at the bookmark', async ({ app, screen }) => 
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
   await press('Down'); // Reader
   await press('Confirm');
-  await press('Down', 12); // All Bookmarks, the last row
+  await press('Down', 11); // All Bookmarks, the last row
   await press('Confirm');
   await expect(activity).toHaveText('AllBookmarks', { timeout: 30_000 });
   expect(await log()).toContain('Loaded 1 bookmarks from 1 books');

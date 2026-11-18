@@ -125,9 +125,8 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
   {
     auto& items = page(Tab::Navigate, StrId::STR_SEC_NAVIGATE);
     std::vector<MenuItem> position{{MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER},
-                                   {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT},
-                                   {MenuAction::SEARCH, StrId::STR_SEARCH}};
-    position.reserve(7);  // chapter, percentage, search, optional page, Return, Forward and paragraph
+                                   {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT}};
+    position.reserve(6);  // chapter, percentage, optional page, Return, Forward and paragraph
     // Only books that carry the printed edition's page numbers can jump to one.
     if (hasPageList) position.insert(position.begin() + 2, {MenuAction::GO_TO_PAGE, StrId::STR_GO_TO_PAGE});
     if (hasReturn) position.push_back({MenuAction::RETURN, StrId::STR_RETURN});

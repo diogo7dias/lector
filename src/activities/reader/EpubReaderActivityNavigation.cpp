@@ -8,7 +8,6 @@
 
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderActivity.h"
-#include "EpubReaderSearchActivity.h"
 #include "EpubReaderUtils.h"
 #include "QueuedTurns.h"
 #include "QuoteSelectActivity.h"

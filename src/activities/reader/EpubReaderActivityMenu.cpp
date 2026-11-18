@@ -308,9 +308,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS:
       openBookmarks();
       break;
-    case EpubReaderMenuActivity::MenuAction::SEARCH:
-      openSearch();
-      break;
     case EpubReaderMenuActivity::MenuAction::TOGGLE_BOOKMARK:
       addBookmark();
       break;

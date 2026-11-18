@@ -23,7 +23,6 @@
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
-#include "EpubReaderSearchActivity.h"
 #include "KOReaderAutoSync.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"

@@ -102,7 +102,6 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   int bookPercent() const;
   void openParagraphEntry();
   void openBookmarks();
-  void openSearch();
   // A bookmark picked in the list: jump to it by content offset, else by saved page.
   void onBookmarkJumpResult(const ActivityResult& result);
   // Lands on the bookmark queued by queueBookmarkJump, when it is for this book.

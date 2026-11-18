@@ -318,7 +318,6 @@ struct EpubReaderState {
   // (a build step's image probe) has handed the buffer back white under the shown page, so the
   // Quick Menu must not paint straight onto it. Render task only.
   uint32_t pageLoanCount = 0;
-  std::string lastSearchQuery;  // offered again the next time Search opens
   // The book's look while the Reader Settings screen edits it (a copy of prefs_).
   ReaderPrefs readerEdit_{};
   // The book's bar while the Customise Status Bar screen edits it (a copy of prefs_'s).
