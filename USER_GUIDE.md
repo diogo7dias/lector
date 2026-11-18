@@ -985,14 +985,12 @@ belongs to, so the rows here appear in the same order as on the device.
 
 **Frontlight** (boards with a frontlight)
 
-- **Frontlight**, **Brightness**, **Warmth**, **Restore on Wake** (on by default).
-- **Max Brightness** — the top of the brightness range, 10 to 100 (default 30). The light
-  panel's brightness track runs from 0 to this, and a brightness above it is brought down.
-- **Light Schedule**, **Light On From**, **Light On Until** (boards with a clock) — at each
-  wake inside these hours the light comes on by itself, whatever it was before sleep; 20:00
-  to 07:00 by default, in 15-minute steps. Only the wake reads it: a light you change by hand
-  stays that way until the next one, and the light does not go off by itself at the end time.
-  Outside the hours **Restore on Wake** decides as usual.
+The frontlight has no rows in Settings. The light panel (swipe down from the top edge, or bind
+**Frontlight** to a button) holds on or off, brightness and warmth. **Toggle Frontlight**, a
+button action, flips it without opening the panel. The other frontlight options live on the web
+settings page only: **Max Brightness** (the top of the panel's brightness track, 10 to 100,
+default 30; a brightness above it is brought down), **Restore on Wake** (on by default), and **Light Schedule**
+(at each wake inside the set hours the light comes on by itself).
 
 In a book the light panel also has **Align Left** and **Justify**, which set the book's paragraph
 alignment (for that EPUB alone; in a TXT book, for every TXT book), and **Paragraph Spacing**,
@@ -1032,7 +1030,7 @@ minus at one end and a plus at the other. Touch anywhere along the track to jump
 to that value, or drag along it and the value follows your finger. Left and Right move one
 step, the side buttons move five, and the preview under the band follows, so nothing ever
 covers the page you are judging. Back or Select puts the band away; there is nothing to
-confirm, because every change has already been applied. Sleep timeout, frontlight and the
+confirm, because every change has already been applied. Sleep timeout and the
 other numbers in Settings use the same band.
 
 - **Font** — Noto Serif, Noto Sans, plus any SD card families; opens a full-screen picker.

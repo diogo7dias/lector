@@ -278,29 +278,38 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
   emit(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                            StrId::STR_CAT_DISPLAY));
 
-  // Frontlight. Dropped below on a board the SDK reports no frontlight for,
-  // so these four rows only ever appear on hardware that has one.
+  // Frontlight. Dropped below on a board the SDK reports no frontlight for. On the device
+  // the light panel owns on/off, brightness and warmth; these rows persist and reach the
+  // web settings page only.
   emit(SettingInfo::Toggle(StrId::STR_FRONTLIGHT, &CrossPointSettings::frontlightOn, "frontlightOn",
-                           StrId::STR_CAT_DISPLAY));
+                           StrId::STR_CAT_DISPLAY)
+           .withWebOnly());
 
   // Step 5 rather than 1: the panel's perceived brightness moves in coarse
   // jumps, and a 0-100 row stepped by one takes twenty presses to cross.
   emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_BRIGHTNESS, &CrossPointSettings::frontlightBrightness, {0, 100, 5},
-                          "frontlightBrightness", StrId::STR_CAT_DISPLAY));
+                          "frontlightBrightness", StrId::STR_CAT_DISPLAY)
+           .withWebOnly());
   emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_MAX_BRIGHTNESS, &CrossPointSettings::frontlightMaxBrightness,
-                          {10, 100, 5}, "frontlightMaxBrightness", StrId::STR_CAT_DISPLAY));
+                          {10, 100, 5}, "frontlightMaxBrightness", StrId::STR_CAT_DISPLAY)
+           .withWebOnly());
 
   emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_WARMTH, &CrossPointSettings::frontlightWarmth, {0, 100, 5},
-                          "frontlightWarmth", StrId::STR_CAT_DISPLAY));
+                          "frontlightWarmth", StrId::STR_CAT_DISPLAY)
+           .withWebOnly());
 
   emit(SettingInfo::Toggle(StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
-                           "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY));
+                           "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY)
+           .withWebOnly());
   emit(SettingInfo::Toggle(StrId::STR_FRONTLIGHT_SCHEDULE, &CrossPointSettings::frontlightScheduleEnabled,
-                           "frontlightScheduleEnabled", StrId::STR_CAT_DISPLAY));
+                           "frontlightScheduleEnabled", StrId::STR_CAT_DISPLAY)
+           .withWebOnly());
   emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_SCHEDULE_ON, &CrossPointSettings::frontlightScheduleOn,
-                          {0, frontlight::SCHEDULE_LAST_STEP, 1}, nullptr, StrId::STR_CAT_DISPLAY));
+                          {0, frontlight::SCHEDULE_LAST_STEP, 1}, nullptr, StrId::STR_CAT_DISPLAY)
+           .withWebOnly());
   emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_SCHEDULE_OFF, &CrossPointSettings::frontlightScheduleOff,
-                          {0, frontlight::SCHEDULE_LAST_STEP, 1}, nullptr, StrId::STR_CAT_DISPLAY));
+                          {0, frontlight::SCHEDULE_LAST_STEP, 1}, nullptr, StrId::STR_CAT_DISPLAY)
+           .withWebOnly());
 
   emit(SettingInfo::Enum(StrId::STR_AUTHOR_DISPLAY, &CrossPointSettings::authorDisplay,
                          {StrId::STR_AUTHOR_INITIALS, StrId::STR_AUTHOR_FULL_NAME}, "authorDisplay",
