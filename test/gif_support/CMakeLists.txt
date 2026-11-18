@@ -26,8 +26,10 @@ target_include_directories(GifSupportTest BEFORE PRIVATE
 target_compile_definitions(GifSupportTest PRIVATE __LINUX__ MAX_WIDTH=3072 ALLOWS_UNALIGNED
   LECTOR_DEVICE_REGISTER_WIDTH)
 # The vendored decoder is not built warning-clean; only the firmware's own units get the warnings.
+# It loads words from byte offsets on purpose (ALLOWS_UNALIGNED), so UBSan's alignment check is
+# off in its unit only (as in fuzz/image).
 set_source_files_properties(${animatedgif_SOURCE_DIR}/src/AnimatedGIF.cpp TARGET_DIRECTORY GifSupportTest
-  PROPERTIES COMPILE_OPTIONS -w)
+  PROPERTIES COMPILE_OPTIONS "-w;-fno-sanitize=alignment")
 
 target_link_libraries(GifSupportTest PRIVATE
   crosspoint_test_common
