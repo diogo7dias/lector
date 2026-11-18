@@ -307,6 +307,11 @@ void setup() {
     if (rst != ESP_RST_DEEPSLEEP && rst != ESP_RST_POWERON) delay(250);
   }
   Serial.begin(115200);
+#ifdef CROSSPOINT_WAIT_FOR_USB_SERIAL
+  // Dev env only: hold boot until a serial monitor attaches so the first lines are not lost,
+  // but never longer than a second so a dev build on battery still starts.
+  for (uint32_t waited = 0; !logSerial && waited < 1000; waited += 10) delay(10);
+#endif
   // The loop reads serial commands with readStringUntil; the 1 s default stalls every pass on a partial line.
   logSerial.setTimeout(20);
 #if LOG_SERIAL_HAS_TX_TIMEOUT
