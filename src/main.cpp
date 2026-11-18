@@ -927,7 +927,6 @@ void loop() {
   }
 
   renderer.setFadingFix(SETTINGS.fadingFix);
-  display.setFastPageTurns(SETTINGS.fastPageTurns != 0);
 
   if (Serial && millis() - lastMemPrint >= 10000) {
     LOG_INF("MEM", "Free: %d bytes, Total: %d bytes, Min Free: %d bytes, MaxAlloc: %d bytes", ESP.getFreeHeap(),

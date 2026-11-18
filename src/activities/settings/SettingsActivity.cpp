@@ -16,7 +16,6 @@
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
 #include "Diagnostics.h"
-#include "FastPageTurnsTestActivity.h"
 #include "FontDownloadActivity.h"
 #include "InstalledFontsActivity.h"
 #include "KOReaderSettingsActivity.h"
@@ -116,14 +115,8 @@ void applyGroups(std::vector<SettingInfo>& rows, const std::vector<SettingsGroup
 }  // namespace
 
 namespace {
-// Four settings categories, then the File Transfer activity, then on the X4 Pro the
-// Fast Page Turns trial.
-constexpr int kFastPageTurnsTestCell = 5;
-#if FREEINK_DEVICE_X4PRO
-constexpr int kCategoryCount = 6;
-#else
+// Four settings categories, then the File Transfer activity.
 constexpr int kCategoryCount = 5;
-#endif
 }  // namespace
 
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) const {
@@ -168,8 +161,6 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) const
 
 StrId SettingsActivity::categoryName(const int index) const {
   switch (index) {
-    case kFastPageTurnsTestCell:
-      return StrId::STR_FAST_PAGE_TURNS;
     case 4:
       return StrId::STR_FILE_TRANSFER;
     case 0:
@@ -230,7 +221,6 @@ const char* SettingsActivity::cellValue(const int index) const {
   if (mode == Mode::Hub) {
     if (index == 4) return nullptr;
     if (index < 0 || index >= kCategoryCount) return nullptr;
-    if (index == kFastPageTurnsTestCell) return SETTINGS.fastPageTurns ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     // Settings only: the group headings applyGroups inserts are rows too.
     const auto& rows = const_cast<SettingsActivity*>(this)->categoryRows(index);
     const auto settingCount =
@@ -409,7 +399,7 @@ void SettingsActivity::rebuildSettingsList() {
           // Last, and named for what they are: a panel-tuning escape hatch and a
           // diagnostics readout. Performance Timings is compiled out of some builds, and
           // applyGroups draws no heading for a group whose rows are all missing.
-          {StrId::STR_GRP_ADVANCED, {StrId::STR_FAST_PAGE_TURNS, StrId::STR_PERF_TIMINGS}},
+          {StrId::STR_GRP_ADVANCED, {StrId::STR_PERF_TIMINGS}},
       });
 }
 
@@ -492,17 +482,6 @@ void SettingsActivity::activateCell(const int index) {
       activityManager.goToFileTransfer();
       return;
     }
-#if FREEINK_DEVICE_X4PRO
-    if (index == kFastPageTurnsTestCell) {
-      const uint8_t before = SETTINGS.fastPageTurns;
-      startActivityForResult(std::make_unique<FastPageTurnsTestActivity>(renderer, mappedInput),
-                             [this, before](const ActivityResult&) {
-                               if (SETTINGS.fastPageTurns != before) SETTINGS.saveToFile();
-                               requestUpdate();
-                             });
-      return;
-    }
-#endif
     // A new screen: its first row shares this cell's action and value, so it would
     // inherit the tap flash.
     app.clearTapFlash();

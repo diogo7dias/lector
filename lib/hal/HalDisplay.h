@@ -68,12 +68,6 @@ class HalDisplay {
 
   // The ink half of the same budget, carried across a lock the same way. See
   // DisplayRefreshPolicy's debt thresholds and FrameInkMetrics.
-  // Ask for the panel's cheap partial path on FAST refreshes. Sticky, and only a
-  // request: boards without one, and every promoted pass, ignore it. Off restores the
-  // vendor sequence exactly, with no reflash.
-  void setFastPageTurns(const bool enabled) { turboWanted = enabled; }
-  bool fastPageTurns() const { return turboWanted; }
-
   uint16_t inkDebt() const { return refreshPolicy.inkDebt(); }
   void seedInkDebt(uint16_t value) { refreshPolicy.seedInkDebt(value); }
 
@@ -151,7 +145,7 @@ class HalDisplay {
   // enough to trap charge in the panel.
   // `inkScore` is what FrameInkMetrics made of the frame about to be pushed, or 0 on a
   // path that has no framebuffer to measure (a grayscale plane).
-  RefreshMode applyRefreshPolicy(RefreshMode requested, uint16_t inkScore = 0, bool allowTurbo = true);
+  RefreshMode applyRefreshPolicy(RefreshMode requested, uint16_t inkScore = 0);
   // Scores the framebuffer that is about to go to the panel. Returns 0 when the timings
   // are of no use to the policy (a mode the policy will not promote anyway), so the pass
   // over 48-52 KB is not paid for nothing.
@@ -170,15 +164,8 @@ class HalDisplay {
 
   EInkDisplay einkDisplay;
   DisplayRefreshPolicy refreshPolicy;
-  bool turboWanted = false;
-  // The wake (or any caller) asked the driver to drive every pixel on the next FAST, and
-  // the driver has not consumed that yet. Read by applyRefreshPolicy().
-  bool driveAllArmed = false;
   // False until the first pass after begin() has been through applyRefreshPolicy().
   bool firstPassDone = false;
-  // What the last pass actually ran, for the perf log: what was asked for and what the
-  // reload cadence allowed are not the same thing.
-  bool lastPassWasTurbo = false;
   bool lastPassWasClean = false;
   FrameInkMetrics inkMetrics;
 

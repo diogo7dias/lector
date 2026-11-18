@@ -1217,14 +1217,6 @@ Session**, **Pages to Paragraph**. Alongside them:
 - **Move Finished Books to Read Folder**.
 - **Move Opened Books to Recents Folder**.
 
-**Fast Page Turns** — on by default on the X4, where it is validated. On the X4 Pro it has its
-own row on the main **Settings** page, off by default while it is being tried out. That page
-holds the switch and what to test, and it changes nothing on units with a UC8279 panel.
-Page turns and menu moves use the panel's cheapest waveform, which is several times quicker than the standard
-one. Every eighth pass runs the standard waveform anyway, so the panel never works from a
-stale temperature reading, and the first paint after a wake never uses it. Turn it off if
-you ever see ink left behind that a full refresh does not clear.
-
 **Performance Timings** — off by default, and free while it is off. On, Lector times every
 screen refresh and reports the numbers three ways: a small line in the top-left corner of
 the screen showing what the previous refresh cost, a breakdown of the last wake in place of
