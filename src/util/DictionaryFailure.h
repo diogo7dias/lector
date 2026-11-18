@@ -2,6 +2,8 @@
 
 #include <I18n.h>
 
+#include <string>
+
 #include "util/Dictionary.h"
 
 // Which message a failed lookup shows, in one place, so the two screens that look words up
@@ -46,6 +48,29 @@ inline Message forLookup(const Dictionary::LookupResult result) {
     default:
       return {StrId::STR_DICT_NOT_FOUND, false};
   }
+}
+
+// The lookup every screen runs: open the chosen dictionary, index it first when it has no
+// index yet, then look `word` up. `showBusy(ctx, message)` paints the wait before each slow
+// step. On a miss `failure` names it, so no screen has to map the results itself.
+inline bool lookUp(Dictionary& dict, const char* folder, const char* word, std::string& definition,
+                   std::string& headword, Message& failure, void (*showBusy)(void*, StrId), void* ctx) {
+  const Dictionary::Readiness readiness = dict.prepare(folder);
+  const bool needsIndex = readiness == Dictionary::Readiness::NeedsIndex;
+  showBusy(ctx, needsIndex ? StrId::STR_DICT_INDEXING : StrId::STR_DICT_LOOKING_UP);
+
+  bool ok = readiness != Dictionary::Readiness::Unavailable;
+  Dictionary::IndexResult indexResult = Dictionary::IndexResult::Ok;
+  if (needsIndex) {
+    ok = dict.buildIndex(&indexResult);
+    // The build is over; the wait that remains is the lookup, so say so.
+    if (ok) showBusy(ctx, StrId::STR_DICT_LOOKING_UP);
+  }
+
+  Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
+  if (ok && dict.lookup(word, definition, headword, &result)) return true;
+  failure = ok ? forLookup(result) : forIndex(indexResult);
+  return false;
 }
 
 }  // namespace dict_failure

@@ -44,26 +44,19 @@ bool DictionaryHistoryActivity::isClearRow(const size_t index) const { return wo
 
 void DictionaryHistoryActivity::lookUp(const std::string& word) {
   popup = Popup::Busy;
-  const Dictionary::Readiness readiness = dict.prepare(SETTINGS.dictionaryName);
-  const bool needsIndex = readiness == Dictionary::Readiness::NeedsIndex;
-  popupMsg = needsIndex ? StrId::STR_DICT_INDEXING : StrId::STR_DICT_LOOKING_UP;
-  requestUpdateAndWait();  // paint the list + busy popup before blocking on SD
-
-  bool ok = readiness != Dictionary::Readiness::Unavailable;
-  Dictionary::IndexResult indexResult = Dictionary::IndexResult::Ok;
-  if (needsIndex) {
-    ok = dict.buildIndex(&indexResult);
-    if (ok) {
-      // The build is over; the wait that remains is the lookup, so say so.
-      popupMsg = StrId::STR_DICT_LOOKING_UP;
-      requestUpdateAndWait();
-    }
-  }
-
   std::string definition;
   std::string headword;
-  Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
-  if (ok && dict.lookup(word.c_str(), definition, headword, &result)) {
+  // A word in the history was in the dictionary when it was looked up, so a miss here
+  // usually means the dictionary itself changed — but a read or memory failure must not be
+  // reported as a miss, which is why the wording is shared with the page-side lookup.
+  dict_failure::Message message;
+  const auto showBusy = [](void* ctx, const StrId id) {
+    auto* self = static_cast<DictionaryHistoryActivity*>(ctx);
+    self->popupMsg = id;
+    self->requestUpdateAndWait();  // paint the list + busy popup before blocking on SD
+  };
+  if (dict_failure::lookUp(dict, SETTINGS.dictionaryName, word.c_str(), definition, headword, message, showBusy,
+                           this)) {
     popup = Popup::None;
     startActivityForResult(
         std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
@@ -71,11 +64,6 @@ void DictionaryHistoryActivity::lookUp(const std::string& word) {
         [this](const ActivityResult&) { requestUpdate(); });
     return;
   }
-
-  // A word in the history was in the dictionary when it was looked up, so a miss here
-  // usually means the dictionary itself changed — but a read or memory failure must not be
-  // reported as a miss, which is why the wording is shared with the page-side lookup.
-  const dict_failure::Message message = ok ? dict_failure::forLookup(result) : dict_failure::forIndex(indexResult);
   popup = message.isError ? Popup::Error : Popup::NotFound;
   popupMsg = message.id;
   popupShownAt = millis();

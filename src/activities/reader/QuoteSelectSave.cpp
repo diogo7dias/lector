@@ -1,0 +1,111 @@
+// Grab Quote's save path: append the selected passage to the book's quotes sidecar.
+#include <Arduino.h>
+#include <GrowthBounds.h>
+#include <HalStorage.h>
+#include <I18n.h>
+#include <Logging.h>
+
+#include "QuoteSelectActivity.h"
+#include "QuoteSidecar.h"
+#include "components/UITheme.h"
+#include "util/QuoteText.h"
+
+std::string QuoteSelectActivity::chapterTitle() const {
+  const int tocIndex = epub.getTocIndexForSpineIndex(spineIndex);
+  if (tocIndex >= 0) return epub.getTocItem(tocIndex).title;
+  return std::string(tr(STR_CHAPTER)) + " " + std::to_string(spineIndex + 1);
+}
+
+void QuoteSelectActivity::saveSelectedQuote() {
+  if (startWord < 0) return;
+  const std::string quote = selectedText();
+  if (quote.empty()) return;
+
+  // Where this passage lives, so the reader can underline it on later visits. The
+  // anchor was taken on the start word's own page (see the Confirm handler): the word
+  // index is only a tie-break for a passage repeated inside the same paragraph, and
+  // the quote text itself is what identifies the words.
+  if (!saveQuoteToFile(quote, quote_text::formatAnchorToken(startAnchor))) {
+    // Full sidecar or a failed write: say so before the reader repaints over it.
+    GUI.drawPopup(renderer, tr(STR_QUOTE_SAVE_FAILED));
+    delay(1200);
+  }
+}
+
+// Atomic-ish read-modify-write append of one "[chapter @anchor]\nquote\n---\n\n"
+// entry to the "<book>_QUOTES.txt" sidecar: stream existing bytes + the new entry
+// into a .tmp, then rotate primary -> .bak, .tmp -> primary, drop .bak (restore
+// .bak on promote failure). Refused when the file would exceed MAX_QUOTES_FILE_BYTES.
+bool QuoteSelectActivity::saveQuoteToFile(const std::string& quote, const std::string& anchorToken) {
+  const std::string path = quote_text::quotesFilePathFor(epub.getPath());
+  const std::string tmpPath = path + ".tmp";
+  const std::string entry = quote_text::formatQuoteEntry(chapterTitle(), anchorToken, quote);
+
+  size_t existingSize = 0;
+  if (Storage.exists(path.c_str())) {
+    // Unreadable is not empty: the rewrite below would replace every saved quote with this one.
+    HalFile probe;
+    if (!Storage.openFileForRead("QUOTE", path, probe)) {
+      LOG_ERR("QUOTE", "Cannot read existing quotes file, not saving");
+      return false;
+    }
+    existingSize = probe.size();
+  }
+  if (!memory::canGrowWithinLimit(existingSize, entry.size(), quote_text::MAX_QUOTES_FILE_BYTES)) {
+    LOG_ERR("QUOTE", "Quotes file full: %u + %u > %u", static_cast<unsigned>(existingSize),
+            static_cast<unsigned>(entry.size()), static_cast<unsigned>(quote_text::MAX_QUOTES_FILE_BYTES));
+    return false;
+  }
+
+  // Build the new file content in the temp file.
+  {
+    HalFile out;
+    if (!Storage.openFileForWrite("QUOTE", tmpPath, out)) {
+      LOG_ERR("QUOTE", "Cannot open temp quotes file for write");
+      return false;
+    }
+    if (existingSize > 0) {
+      HalFile in;
+      if (!Storage.openFileForRead("QUOTE", path, in)) {
+        LOG_ERR("QUOTE", "Cannot reopen existing quotes file for copy");
+        out.close();
+        Storage.remove(tmpPath.c_str());
+        return false;
+      }
+      uint8_t buffer[512];
+      size_t copied = 0;
+      int n;
+      while ((n = in.read(buffer, sizeof(buffer))) > 0) {
+        if (out.write(buffer, static_cast<size_t>(n)) != static_cast<size_t>(n)) {
+          LOG_ERR("QUOTE", "Temp quotes write failed (copy)");
+          in.close();
+          out.close();
+          Storage.remove(tmpPath.c_str());
+          return false;
+        }
+        copied += static_cast<size_t>(n);
+      }
+      in.close();
+      if (copied != existingSize) {
+        LOG_ERR("QUOTE", "Short read copying quotes: %u of %u", static_cast<unsigned>(copied),
+                static_cast<unsigned>(existingSize));
+        out.close();
+        Storage.remove(tmpPath.c_str());
+        return false;
+      }
+    }
+    if (out.write(entry.data(), entry.size()) != entry.size()) {
+      LOG_ERR("QUOTE", "Temp quotes write failed (entry)");
+      out.close();
+      Storage.remove(tmpPath.c_str());
+      return false;
+    }
+    out.flush();
+    out.close();
+  }
+
+  // Promote temp -> primary. Keep a backup so a failed promote can be undone.
+  if (!quote_sidecar::promoteTmp(path, "QUOTE")) return false;
+  LOG_INF("QUOTE", "Saved quote (%u bytes) to %s", static_cast<unsigned>(entry.size()), path.c_str());
+  return true;
+}

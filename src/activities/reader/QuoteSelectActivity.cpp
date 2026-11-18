@@ -2,21 +2,19 @@
 
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
-#include <GrowthBounds.h>
 #include <HalStorage.h>
 #include <I18n.h>
-#include <Logging.h>
 
 #include <algorithm>
 #include <climits>
 
-#include "QuoteSidecar.h"
+#include "CrossPointSettings.h"
 #include "components/UITheme.h"
 #include "util/QuoteText.h"
 
 QuoteSelectActivity::QuoteSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Section* section,
                                          int startPageNumber, int marginLeft, int marginTop, Epub& epub, int spineIndex,
-                                         int fontId)
+                                         int fontId, const int holdX, const int holdY)
     : Activity("QuoteSelect", renderer, mappedInput),
       section(section),
       marginLeft(marginLeft),
@@ -24,6 +22,8 @@ QuoteSelectActivity::QuoteSelectActivity(GfxRenderer& renderer, MappedInputManag
       epub(epub),
       spineIndex(spineIndex),
       fontId(fontId),
+      holdX(holdX),
+      holdY(holdY),
       pageNumber(startPageNumber),
       startPageNumber(startPageNumber) {}
 
@@ -31,6 +31,21 @@ void QuoteSelectActivity::onEnter() {
   Activity::onEnter();
   showPage(pageNumber);
   cursor = 0;
+  if (holdX >= 0) {
+    // Opened by a hold in the reader, finger still down: select the held word and let the
+    // drag that may follow move the end.
+    const int hit = nearestWord(holdX, holdY, 4);
+    if (hit < 0) {
+      missedHold = true;
+    } else {
+      cursor = hit;
+      setStartWord(hit);
+      phase = Phase::SelectEnd;
+      drag = Drag::End;
+      touchSelection = true;
+      heldWord = true;
+    }
+  }
   requestUpdate();
 }
 
@@ -217,113 +232,59 @@ void QuoteSelectActivity::moveVertical(const int direction) {
   }
 }
 
-std::string QuoteSelectActivity::chapterTitle() const {
-  const int tocIndex = epub.getTocIndexForSpineIndex(spineIndex);
-  if (tocIndex >= 0) return epub.getTocItem(tocIndex).title;
-  return std::string(tr(STR_CHAPTER)) + " " + std::to_string(spineIndex + 1);
+// Captured whenever the start word moves, while its page is still loaded: the selection
+// may leave this page, and the paragraph ordinal lives in the words of the start page.
+void QuoteSelectActivity::setStartWord(const int index) {
+  startWord = index;
+  startAnchor.spine = static_cast<uint16_t>(spineIndex);
+  startAnchor.paragraph = words[index].paragraphOrdinal;
+  startAnchor.wordHint = static_cast<uint16_t>(index);
+  startAnchor.valid = true;
 }
 
-void QuoteSelectActivity::saveSelectedQuote() {
-  if (startWord < 0) return;
-
+std::string QuoteSelectActivity::selectedText() const {
   // Pages already passed are in committedText; the page on screen contributes the
   // words from its first selected one up to the cursor.
   std::string quote = committedText;
   for (int i = firstSelectedOnPage(); i <= cursor && i < static_cast<int>(words.size()); i++) {
     if (!quote_text::appendQuoteWord(quote, words[i].text())) break;  // at the cap
   }
-  if (quote.empty()) return;
-
-  // Where this passage lives, so the reader can underline it on later visits. The
-  // anchor was taken on the start word's own page (see the Confirm handler): the word
-  // index is only a tie-break for a passage repeated inside the same paragraph, and
-  // the quote text itself is what identifies the words.
-  if (!saveQuoteToFile(quote, quote_text::formatAnchorToken(startAnchor))) {
-    // Full sidecar or a failed write: say so before the reader repaints over it.
-    GUI.drawPopup(renderer, tr(STR_QUOTE_SAVE_FAILED));
-    delay(1200);
-  }
-}
-
-// Atomic-ish read-modify-write append of one "[chapter @anchor]\nquote\n---\n\n"
-// entry to the "<book>_QUOTES.txt" sidecar: stream existing bytes + the new entry
-// into a .tmp, then rotate primary -> .bak, .tmp -> primary, drop .bak (restore
-// .bak on promote failure). Refused when the file would exceed MAX_QUOTES_FILE_BYTES.
-bool QuoteSelectActivity::saveQuoteToFile(const std::string& quote, const std::string& anchorToken) {
-  const std::string path = quote_text::quotesFilePathFor(epub.getPath());
-  const std::string tmpPath = path + ".tmp";
-  const std::string entry = quote_text::formatQuoteEntry(chapterTitle(), anchorToken, quote);
-
-  size_t existingSize = 0;
-  if (Storage.exists(path.c_str())) {
-    // Unreadable is not empty: the rewrite below would replace every saved quote with this one.
-    HalFile probe;
-    if (!Storage.openFileForRead("QUOTE", path, probe)) {
-      LOG_ERR("QUOTE", "Cannot read existing quotes file, not saving");
-      return false;
-    }
-    existingSize = probe.size();
-  }
-  if (!memory::canGrowWithinLimit(existingSize, entry.size(), quote_text::MAX_QUOTES_FILE_BYTES)) {
-    LOG_ERR("QUOTE", "Quotes file full: %u + %u > %u", static_cast<unsigned>(existingSize),
-            static_cast<unsigned>(entry.size()), static_cast<unsigned>(quote_text::MAX_QUOTES_FILE_BYTES));
-    return false;
-  }
-
-  // Build the new file content in the temp file.
-  {
-    HalFile out;
-    if (!Storage.openFileForWrite("QUOTE", tmpPath, out)) {
-      LOG_ERR("QUOTE", "Cannot open temp quotes file for write");
-      return false;
-    }
-    if (existingSize > 0) {
-      HalFile in;
-      if (!Storage.openFileForRead("QUOTE", path, in)) {
-        LOG_ERR("QUOTE", "Cannot reopen existing quotes file for copy");
-        out.close();
-        Storage.remove(tmpPath.c_str());
-        return false;
-      }
-      uint8_t buffer[512];
-      size_t copied = 0;
-      int n;
-      while ((n = in.read(buffer, sizeof(buffer))) > 0) {
-        if (out.write(buffer, static_cast<size_t>(n)) != static_cast<size_t>(n)) {
-          LOG_ERR("QUOTE", "Temp quotes write failed (copy)");
-          in.close();
-          out.close();
-          Storage.remove(tmpPath.c_str());
-          return false;
-        }
-        copied += static_cast<size_t>(n);
-      }
-      in.close();
-      if (copied != existingSize) {
-        LOG_ERR("QUOTE", "Short read copying quotes: %u of %u", static_cast<unsigned>(copied),
-                static_cast<unsigned>(existingSize));
-        out.close();
-        Storage.remove(tmpPath.c_str());
-        return false;
-      }
-    }
-    if (out.write(entry.data(), entry.size()) != entry.size()) {
-      LOG_ERR("QUOTE", "Temp quotes write failed (entry)");
-      out.close();
-      Storage.remove(tmpPath.c_str());
-      return false;
-    }
-    out.flush();
-    out.close();
-  }
-
-  // Promote temp -> primary. Keep a backup so a failed promote can be undone.
-  if (!quote_sidecar::promoteTmp(path, "QUOTE")) return false;
-  LOG_INF("QUOTE", "Saved quote (%u bytes) to %s", static_cast<unsigned>(entry.size()), path.c_str());
-  return true;
+  return quote;
 }
 
 void QuoteSelectActivity::loop() {
+  if (missedHold) {
+    mappedInput.spendTouchContact();  // the hold's lift must not turn the reader's page
+    finish();
+    return;
+  }
+  if (showPopup) {
+    if (popupShownAt != 0 && millis() - popupShownAt >= 1500) {
+      showPopup = false;
+      popupShownAt = 0;
+      requestUpdate();
+    }
+    return;
+  }
+  if (handleTouch()) return;
+
+  if (touchSelection && phase == Phase::SelectEnd) {
+    // The hints now read Cancel / Save / Look Up; Up/Down keep moving the end.
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      finish();
+    } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      saveSelectedQuote();
+      finish();
+    } else if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+      if (SETTINGS.dictionaryName[0] != '\0') lookUpSelection();
+    } else if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+      moveVertical(-1);
+    } else if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+      moveVertical(1);
+    }
+    return;
+  }
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     if (phase == Phase::SelectEnd) {
       // Drop the whole selection, including any pages it had run into.
@@ -345,13 +306,7 @@ void QuoteSelectActivity::loop() {
   const bool canConfirm = !words.empty() || (phase == Phase::SelectEnd && !committedText.empty());
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) && canConfirm) {
     if (phase == Phase::SelectStart) {
-      startWord = cursor;
-      // Capture the anchor now: the selection may leave this page, and the paragraph
-      // ordinal lives in the words of the page the quote starts on.
-      startAnchor.spine = static_cast<uint16_t>(spineIndex);
-      startAnchor.paragraph = words[cursor].paragraphOrdinal;
-      startAnchor.wordHint = static_cast<uint16_t>(cursor);
-      startAnchor.valid = true;
+      setStartWord(cursor);
       phase = Phase::SelectEnd;
       requestUpdate();
     } else {
@@ -425,6 +380,12 @@ void QuoteSelectActivity::drawRangeHighlight() const {
 
 // Front-button bar. Back / Confirm / Left / Right, matching the reader idiom.
 void QuoteSelectActivity::drawHints() const {
+  if (touchSelection && phase == Phase::SelectEnd) {
+    const char* lookUp = SETTINGS.dictionaryName[0] != '\0' ? tr(STR_LOOKUP) : "";
+    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SAVE), lookUp, "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    return;
+  }
   if (words.empty()) {
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -456,5 +417,9 @@ void QuoteSelectActivity::render(RenderLock&&) {
   }
 
   drawHints();
+  if (showPopup) {
+    GUI.drawPopup(renderer, I18N.get(popupMsg));  // refreshes the panel itself
+    return;
+  }
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }

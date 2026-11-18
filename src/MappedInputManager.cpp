@@ -380,9 +380,8 @@ bool MappedInputManager::wasScreenLongPress(int& x, int& y) const {
   float nx = 0.0f;
   float ny = 0.0f;
   if (!gpio.wasTouchLongPress(nx, ny)) return false;
-  // Consuming the long press implies acting on it: drop the rest of the contact so the
-  // finger lift cannot also tap whatever the action opened.
-  gpio.suppressTouchContact();
+  // The contact stays live so the hold can go on into a drag. The caller owns it now and
+  // must spend it (spendTouchContact) by the lift, or the lift taps whatever is under it.
   renderer.tapToLogical(nx, ny, x, y);
   return WakeTiming::noteAcceptedInput(true);
 }

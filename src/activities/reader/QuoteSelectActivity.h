@@ -3,6 +3,7 @@
 #include <Epub.h>
 #include <Epub/Page.h>
 #include <Epub/Section.h>
+#include <I18n.h>
 
 #include <memory>
 #include <string>
@@ -26,14 +27,24 @@
 // The old fork's in-reader "highlight mode" is not used — this is a standalone
 // activity (like DictionaryWordSelectActivity) so it never collides with the
 // reader's grayscale/paperback render path.
+//
+// Touch (QuoteSelectTouch.cpp): touching a word starts a selection there and the end
+// follows the finger; touching again grabs the nearer end and drags it. Holding a word
+// in the reader opens this activity mid-contact (holdX/holdY), so the same hold can be
+// dragged on: lifting without a drag looks the word up, as the hold always did. Once
+// touched, the hints read Cancel / Save / Look Up; Up/Down still move the end and turn
+// pages. A touch drag stays on the page on screen.
 class QuoteSelectActivity final : public Activity {
  public:
   QuoteSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Section* section, int startPageNumber,
-                      int marginLeft, int marginTop, Epub& epub, int spineIndex, int fontId);
+                      int marginLeft, int marginTop, Epub& epub, int spineIndex, int fontId, int holdX = -1,
+                      int holdY = -1);
 
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
+  // Redraws the reader's page, so it follows the reading surface's night-mode polarity.
+  bool appliesNightMode() const override { return true; }
 
  private:
   // Screen box of one page token. `text` points into the owned Page's TextBlock
@@ -55,6 +66,8 @@ class QuoteSelectActivity final : public Activity {
   };
 
   enum class Phase : uint8_t { SelectStart, SelectEnd };
+  // Which end of the selection the finger is moving.
+  enum class Drag : uint8_t { None, Start, End };
 
   void extractWords();
   int closestInRow(uint16_t row, int centerX) const;
@@ -70,7 +83,15 @@ class QuoteSelectActivity final : public Activity {
   // Extend past the last word / pull back before the first, one page at a time.
   bool advancePage();
   bool retreatPage();
+  void setStartWord(int index);
+  // The selected passage, joined as the quote is saved.
+  std::string selectedText() const;
   void saveSelectedQuote();
+  // Touch (QuoteSelectTouch.cpp). handleTouch() owns the pass while it returns true.
+  bool handleTouch();
+  int nearestWord(int x, int y, int maxGap) const;
+  void dragTo(int index);
+  void lookUpSelection();
   bool saveQuoteToFile(const std::string& quote, const std::string& anchorToken);
   std::string chapterTitle() const;
   void drawRangeHighlight() const;
@@ -84,6 +105,16 @@ class QuoteSelectActivity final : public Activity {
   Epub& epub;
   const int spineIndex;
   const int fontId;
+  const int holdX;
+  const int holdY;
+
+  Drag drag = Drag::None;
+  bool touchSelection = false;  // touched once: Cancel / Save / Look Up hints, Back leaves
+  bool heldWord = false;        // opened by a hold that has not dragged: the lift looks it up
+  bool missedHold = false;      // the hold landed on no word: hand the page straight back
+  bool showPopup = false;
+  StrId popupMsg = StrId::STR_DICT_LOOKING_UP;
+  unsigned long popupShownAt = 0;  // 0 while the popup is a busy wait, not a timed message
 
   std::vector<WordBox> words;
   uint16_t rowCount = 0;

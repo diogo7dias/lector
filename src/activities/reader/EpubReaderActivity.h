@@ -132,9 +132,10 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // spine: whose chapter title sizes the status bar band (default: the open chapter).
   void pageMargins(int& top, int& right, int& bottom, int& left, int spine = -1);
   ChapterLabel currentChapterLabel() const;
-  void openDictionaryWordSelect(int anchorX = -1, int anchorY = -1);
+  void openDictionaryWordSelect();
   // Opens the Grab Quote word-range picker on the current page.
-  void openQuoteGrab();
+  // holdX/holdY: a reader hold, finger still down, hands its contact to the picker.
+  void openQuoteGrab(int holdX = -1, int holdY = -1);
   // Runs one of the CrossPointSettings::LONG_PRESS_MENU_FUNCTION actions. Shared by all
   // three bindings (long-press Confirm, hold inside the menu, double-click power) so each
   // one offers exactly the same list. Returns true when the function actually ran.

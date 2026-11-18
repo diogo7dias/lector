@@ -62,7 +62,8 @@ Three things are deliberately left on a single tap, because a confirming tap wou
 way: the on-screen keyboard, sliders (brightness, text size and the rest, which are dragged or
 stepped), and the Yes/No pop-ups, which are already a question being answered. Page turns by
 tap while reading are unchanged. Holding a word on the page for half a second looks it up in
-the dictionary. Spreading two fingers apart on the page makes the text one size
+the dictionary; keep the finger down and drag to select a phrase instead (see **Quotes**).
+Spreading two fingers apart on the page makes the text one size
 larger, pinching them together one size smaller; one step per gesture, for this book only,
 like the size row in the light panel. It needs a font with more than one size installed.
 
@@ -472,6 +473,18 @@ Bookmarks are stored as JSON under `/.crosspoint/bookmarks`.
 card as a plain-text sidecar named after the book, for example `Book_QUOTES.txt`, with the
 chapter and anchor recorded next to each quote. **View Quotes** reads them back on the
 device.
+
+On a touch screen, select a passage with your finger:
+
+1. Hold a word for half a second, then drag without lifting. The highlight follows the
+   finger. Lift without dragging and the word is looked up instead.
+2. To change the selection, touch near its first or last word and drag that end.
+3. Tap **Save** to keep the passage as a quote, or **Look Up** to look the whole phrase up in
+   the dictionary. **Cancel** returns to the page.
+
+Up and Down still move the end of the selection, onto the next page if needed. Inside
+**Grab Quote**, touching a word starts a selection the same way, no hold needed. Look Up
+appears only when a dictionary is set.
 
 ---
 
@@ -934,8 +947,9 @@ Lector reads StarDict dictionaries from `/dictionaries/<name>/` on the card. Pic
 **Settings > Reader > Dictionary**; the row only appears once a dictionary folder exists.
 
 Look a word up from the in-book menu's **Look Up** row, or bind a hold to **Dictionary** in
-**Settings > Controls**. On a touch screen, hold the word itself for half a second: its
-definition opens straight away, and Back returns to the page. A long definition turns pages
+**Settings > Controls**. On a touch screen, hold the word itself for half a second and lift:
+its definition opens straight away, and Back returns to the page. To look up a phrase, hold
+its first word, drag to its last, and tap **Look Up** (see **Quotes**). A long definition turns pages
 with the same taps and side swipes as a book page, under **Touch Reader Controls**. A word with several entries in
 the dictionary shows all of them, each under its own headword. Every successful lookup is remembered: **Lookup History**, in the
 same menu, lists the last 100 words newest first and reopens any of them. Setup and usage

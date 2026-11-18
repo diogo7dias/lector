@@ -156,8 +156,8 @@ void EpubReaderActivity::loop() {
   // already fired its function sets ignoreNextConfirmRelease to keep that release from
   // also opening the menu.
 
-  // Holding a word looks it up. The long press fires mid-contact and suppresses the rest
-  // of it, so the lift neither turns the page nor taps the picker that opens.
+  // Holding a word selects it: the finger may drag on to a phrase (QuoteSelectActivity),
+  // and a lift without a drag looks the word up. The picker spends the contact on the lift.
   // Two fingers spread or pinched step the text size once per gesture, like the size row
   // in the light panel. The contact is suppressed so the lift neither taps nor swipes.
   int pinchX1 = 0;
@@ -178,7 +178,7 @@ void EpubReaderActivity::loop() {
   int holdX = 0;
   int holdY = 0;
   if (mappedInput.wasScreenLongPress(holdX, holdY)) {
-    openDictionaryWordSelect(holdX, holdY);
+    openQuoteGrab(holdX, holdY);
     return;
   }
   // Touch on the open page, read once per loop: a tap or swipe can turn the page or

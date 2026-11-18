@@ -213,12 +213,13 @@ class LectorSim:
         """Touch the upright screen (480x800) at x, y and lift."""
         self.swipe(x, y, x, y, hold, settle)
 
-    def swipe(self, x1, y1, x2, y2, duration=0.3, settle=True):
-        """Put a finger down at x1, y1, slide it to x2, y2 over `duration`, lift."""
+    def swipe(self, x1, y1, x2, y2, duration=0.3, settle=True, hold=0.0):
+        """Put a finger down at x1, y1, keep it still for `hold`, slide it to x2, y2 over `duration`, lift."""
         before = self.frames()
         steps = 1 if (x1, y1) == (x2, y2) else 8
         self._finger(x1, y1)
         self.q.set("/machine/touch", "down", True)
+        time.sleep(hold)
         for i in range(1, steps + 1):
             time.sleep(duration / steps)
             self._finger(x1 + (x2 - x1) * i // steps, y1 + (y2 - y1) * i // steps)
