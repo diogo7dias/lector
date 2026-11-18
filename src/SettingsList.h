@@ -305,11 +305,13 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
                            "frontlightScheduleEnabled", StrId::STR_CAT_DISPLAY)
            .withWebOnly());
   emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_SCHEDULE_ON, &CrossPointSettings::frontlightScheduleOn,
-                          {0, frontlight::SCHEDULE_LAST_STEP, 1}, nullptr, StrId::STR_CAT_DISPLAY)
-           .withWebOnly());
+                          {0, frontlight::SCHEDULE_LAST_STEP, 1}, "frontlightScheduleOn", StrId::STR_CAT_DISPLAY)
+           .withWebOnly()
+           .withMinutesPerStep(frontlight::SCHEDULE_STEP_MINUTES));
   emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_SCHEDULE_OFF, &CrossPointSettings::frontlightScheduleOff,
-                          {0, frontlight::SCHEDULE_LAST_STEP, 1}, nullptr, StrId::STR_CAT_DISPLAY)
-           .withWebOnly());
+                          {0, frontlight::SCHEDULE_LAST_STEP, 1}, "frontlightScheduleOff", StrId::STR_CAT_DISPLAY)
+           .withWebOnly()
+           .withMinutesPerStep(frontlight::SCHEDULE_STEP_MINUTES));
 
   emit(SettingInfo::Enum(StrId::STR_HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
                          {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideBatteryPercentage",

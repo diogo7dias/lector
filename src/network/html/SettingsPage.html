@@ -102,6 +102,7 @@
     }
     .setting-control select,
     .setting-control input[type="number"],
+    .setting-control input[type="time"],
     .setting-control input[type="text"],
     .setting-control input[type="password"] {
       padding: 6px 10px;
@@ -375,6 +376,13 @@
       return html;
     }
 
+    if (setting.type === 'value' && setting.minutesPerStep) {
+      const mins = setting.value * setting.minutesPerStep;
+      const hhmm = String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
+      return '<input type="time" id="' + id + '" value="' + hhmm + '" step="' + (setting.minutesPerStep * 60) + '"' +
+        ' onchange="handleSettingChanged(\'' + setting.key + '\')">';
+    }
+
     if (setting.type === 'value') {
       return '<input type="number" id="' + id + '" value="' + setting.value + '"' +
         ' min="' + setting.min + '" max="' + setting.max + '" step="' + setting.step + '"' +
@@ -391,6 +399,15 @@
     return '';
   }
 
+  // A time-of-day row holds "HH:MM"; the firmware wants the step index.
+  function readNumber(setting, el) {
+    if (!setting.minutesPerStep) return parseInt(el.value, 10);
+    const parts = el.value.split(':');
+    if (parts.length < 2) return setting.value;
+    const steps = Math.round((parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10)) / setting.minutesPerStep);
+    return Math.min(setting.max, Math.max(setting.min, steps));
+  }
+
   function getValue(setting) {
     const el = document.getElementById('setting-' + setting.key);
     if (!el) return undefined;
@@ -402,7 +419,7 @@
       return parseInt(el.value, 10);
     }
     if (setting.type === 'value') {
-      return parseInt(el.value, 10);
+      return readNumber(setting, el);
     }
     if (setting.type === 'string') {
       return el.value;
@@ -430,8 +447,11 @@
     if (setting.type === 'toggle') {
       return el.checked ? 1 : 0;
     }
-    if (setting.type === 'enum' || setting.type === 'value') {
+    if (setting.type === 'enum') {
       return parseInt(el.value, 10);
+    }
+    if (setting.type === 'value') {
+      return readNumber(setting, el);
     }
     return el.value;
   }

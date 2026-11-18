@@ -94,10 +94,6 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   };
   forEachBaseSetting(visit);
 
-  // Keyless rows: a quarter-hour index means nothing on the web settings page.
-  doc["frontlightScheduleOn"] = frontlightScheduleOn;
-  doc["frontlightScheduleOff"] = frontlightScheduleOff;
-
   // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.
   doc["frontButtonBack"] = frontButtonBack;
   doc["frontButtonConfirm"] = frontButtonConfirm;
@@ -197,11 +193,6 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     }
   };
   forEachBaseSetting(visit);
-
-  frontlightScheduleOn =
-      std::min<uint8_t>(doc["frontlightScheduleOn"] | frontlightScheduleOn, frontlight::SCHEDULE_LAST_STEP);
-  frontlightScheduleOff =
-      std::min<uint8_t>(doc["frontlightScheduleOff"] | frontlightScheduleOff, frontlight::SCHEDULE_LAST_STEP);
 
   // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.
   frontButtonBack = clamp(doc["frontButtonBack"] | (uint8_t)FRONT_HW_BACK, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_BACK);

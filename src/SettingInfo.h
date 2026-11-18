@@ -97,6 +97,14 @@ struct SettingInfo {
     return *this;
   }
 
+  // VALUE rows that count steps of this many minutes from midnight (the light schedule's
+  // hours): the web page shows them as a time of day instead of the raw step index.
+  uint8_t minutesPerStep = 0;
+  SettingInfo& withMinutesPerStep(const uint8_t minutes) {
+    minutesPerStep = minutes;
+    return *this;
+  }
+
   SettingInfo& withButtons() {
     inButtons = true;
     return *this;
