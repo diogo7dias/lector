@@ -15,7 +15,6 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
-#include "ReaderFontSizes.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
@@ -38,10 +37,9 @@ void TxtReaderActivity::onEnter() {
 
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
-  // Only one SD font size is resident at a time, and it is the EPUB reader's unless
-  // this is called; without it a TXT-only SD family silently lays out in the built-in
-  // font. A family that has left the card falls back to built-in and persists nothing.
-  sdFontSystem.ensureLoadedFor(renderer, SETTINGS.txtSdFontFamilyName, SETTINGS.txtFontPointSize);
+  // Only one SD font size is resident at a time; make it the reader font. A family that
+  // has left the card falls back to built-in and persists nothing.
+  sdFontSystem.ensureLoadedFor(renderer, SETTINGS.sdFontFamilyName, SETTINGS.fontPointSize);
 
   txt->setupCacheDir();
 
@@ -167,7 +165,7 @@ void TxtReaderActivity::initializeReader() {
 
   // Store current settings for cache validation
   // TXT has its own font selection, independent of the EPUB reader's.
-  cachedFontId = SETTINGS.getTxtReaderFontId();
+  cachedFontId = SETTINGS.getReaderFontId();
   cachedScreenMargin = SETTINGS.screenMargin;
   cachedParagraphAlignment = SETTINGS.paragraphAlignment;
 

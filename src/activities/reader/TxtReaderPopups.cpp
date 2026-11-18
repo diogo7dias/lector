@@ -2,87 +2,15 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
-#include "ReaderFontSizes.h"
 #include "ReaderUtils.h"
-#include "SdCardFontSystem.h"
 #include "TxtReaderActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "util/BookFilingNames.h"
 
 void TxtReaderActivity::openSettingsPopup() {
-  // Rows are fixed, so the indices below are stable and can be compared directly.
-  const std::vector<std::string> rows = {tr(STR_FONT), tr(STR_SIZE), tr(STR_DELETE_BOOK)};
-  settingsPopup.show(StrId::STR_BOOK_MENU, rows, 0, [this](const int index) {
-    switch (index) {
-      case 0:
-        openFontPopup();
-        break;
-      case 1:
-        openSizePopup();
-        break;
-      default:
-        askDeleteBook();
-        break;
-    }
-  });
-  requestUpdate();
-}
-
-void TxtReaderActivity::openFontPopup() {
-  // Entry 0 is the built-in family; the rest are whatever is installed on the card.
-  const auto& families = sdFontSystem.registry().getFamilies();
-  std::vector<std::string> options;
-  options.reserve(families.size() + 1);
-  options.push_back(tr(STR_BUILT_IN_FONT));
-  for (const auto& family : families) {
-    options.push_back(family.name);
-  }
-
-  int current = 0;
-  if (SETTINGS.txtSdFontFamilyName[0] != '\0') {
-    const int idx = sdFontSystem.registry().getFamilyIndex(SETTINGS.txtSdFontFamilyName);
-    if (idx >= 0) current = idx + 1;
-  }
-
-  settingsPopup.show(StrId::STR_FONT, options, current, [this, options](const int index) {
-    if (index == 0) {
-      SETTINGS.txtSdFontFamilyName[0] = '\0';
-    } else {
-      strncpy(SETTINGS.txtSdFontFamilyName, options[index].c_str(), sizeof(SETTINGS.txtSdFontFamilyName) - 1);
-      SETTINGS.txtSdFontFamilyName[sizeof(SETTINGS.txtSdFontFamilyName) - 1] = '\0';
-    }
-    // A family ships only the sizes it ships, so the point size is snapped into the
-    // new family's set before anything tries to resolve a font id from the pair.
-    const auto sizes = readerFontPointSizes(&sdFontSystem.registry(), SETTINGS.txtSdFontFamilyName);
-    SETTINGS.txtFontPointSize = snapToNearestPointSize(sizes, SETTINGS.txtFontPointSize);
-    SETTINGS.saveToFile();
-    sdFontSystem.ensureLoadedFor(renderer, SETTINGS.txtSdFontFamilyName, SETTINGS.txtFontPointSize);
-    relayoutForFontChange();
-  });
-  requestUpdate();
-}
-
-void TxtReaderActivity::openSizePopup() {
-  const auto sizes = readerFontPointSizes(&sdFontSystem.registry(), SETTINGS.txtSdFontFamilyName);
-  std::vector<std::string> options;
-  options.reserve(sizes.size());
-  int current = 0;
-  for (size_t i = 0; i < sizes.size(); i++) {
-    options.push_back(std::to_string(sizes[i]));
-    if (sizes[i] == SETTINGS.txtFontPointSize) current = static_cast<int>(i);
-  }
-
-  settingsPopup.show(StrId::STR_SIZE, options, current, [this, sizes](const int index) {
-    if (index < 0 || index >= static_cast<int>(sizes.size())) return;
-    if (sizes[index] == SETTINGS.txtFontPointSize) {
-      requestUpdate();
-      return;
-    }
-    SETTINGS.txtFontPointSize = sizes[index];
-    SETTINGS.saveToFile();
-    sdFontSystem.ensureLoadedFor(renderer, SETTINGS.txtSdFontFamilyName, SETTINGS.txtFontPointSize);
-    relayoutForFontChange();
-  });
+  // One row: a TXT book follows the EPUB font and size, so Delete Book is all the pop-up holds.
+  const std::vector<std::string> rows = {tr(STR_DELETE_BOOK)};
+  settingsPopup.show(StrId::STR_BOOK_MENU, rows, 0, [this](const int) { askDeleteBook(); });
   requestUpdate();
 }
 

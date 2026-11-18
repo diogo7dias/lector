@@ -705,13 +705,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t paragraphNumberPlace = PARA_NUM_PLACE_TEXT;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
-  // TXT reader font, kept apart from the EPUB reader font above. A plain text file
-  // is usually a dump (a log, a scrape, a note) rather than a typeset book, so it
-  // reads best packed small; the default is deliberately the smallest built-in size
-  // and it never follows the EPUB font. Empty txtSdFontFamilyName = built-in family.
-  static constexpr uint8_t TXT_DEFAULT_FONT_POINT_SIZE = 12;
-  uint8_t txtFontPointSize = TXT_DEFAULT_FONT_POINT_SIZE;
-  char txtSdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
   char dictionaryName[32] = "";
   // Fast Unlock (1 = on). Shortens the recovery-chord settle window the wake waits out
@@ -863,9 +856,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   }
 
   int getReaderFontId() const;
-  // Font id for the TXT reader, resolved from the txt* fields above rather than the
-  // EPUB reader selection, so changing one never moves the other.
-  int getTxtReaderFontId() const;
   // Per-book override: resolve the reader font id from a ReaderPrefs snapshot
   // instead of the live global fields, so a custom book lays out through its own
   // settings without ever mutating the global singleton.

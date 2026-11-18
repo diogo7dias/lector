@@ -61,8 +61,6 @@ class TxtReaderActivity final : public Activity {
   mutable int paraPagesLeft = -1;
 
   void openSettingsPopup();
-  void openFontPopup();
-  void openSizePopup();
   void askDeleteBook();
   // Re-layout after a font or size change: rebuilds the page index against the new
   // font and lands on the page holding the byte the reader was showing before.
