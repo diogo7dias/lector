@@ -39,6 +39,7 @@
 #include "UiFont.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/boot_sleep/QuickResumeFrame.h"
 #include "activities/boot_sleep/SleepActivity.h"
 #include "activities/settings/ReleaseNotesActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
@@ -119,6 +120,8 @@ static std::string pickBootBookPath();
   sleepTPaint = millis();
   // Behind the sleep face: the reader's onExit above has saved the position it pushes.
   ko_auto_sync::onSleep();
+  // Quick Resume keeps the page on the panel, so the wake needs it back in the framebuffer.
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME) quick_resume::saveFrame(renderer);
 
   sleepTFrame = millis();
 
@@ -469,7 +472,7 @@ void setup() {
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
-  // Old retained-frame state is ignored; every ordinary wake clears its sleep face.
+  // Every wake clears its sleep face, except Quick Resume's, which setup() puts back below.
   const BootResume resume = isSilentReboot ? BootResume::Silent : BootResume::Splash;
   bool allowFastInitialReaderRefresh = false;
 
@@ -483,6 +486,16 @@ void setup() {
   setupDisplay(resume != BootResume::Splash || paintedFaceWake, wakeupReason);
   noteRestartDisplayUp();
   setupBuiltinFonts();
+
+  // Quick Resume: the panel still holds the page the lock left. Put it back in the
+  // framebuffer and arm no clear at all. The destination's first paint is promoted to a
+  // clean pass by both X4 drivers anyway, and on the X3 the restored frame is the baseline
+  // of that first paint. A missing or short frame wakes like any other painted face.
+  if (paintedFaceWake && SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME &&
+      quick_resume::restoreFrame()) {
+    wakeInputs.paintedFaceWake = false;
+    if (gpio.deviceIsX3()) renderer.cleanupGrayscaleWithFrameBuffer();
+  }
 
   // How the page gets over the painted sleep face; see wake_sequence::clearStrategy.
   //

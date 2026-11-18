@@ -504,6 +504,7 @@ appears only when a dictionary is set.
 | Custom         | A wallpaper from the SD card. When none is found, the open book's cover; with no book open, the white crow and "Lector" screen. |
 | Cover          | The open book's cover. With no book open, the white crow and "Lector" screen.     |
 | Cover + Custom | The open book's cover when you lock from a book, a wallpaper otherwise. With no cover, the wallpaper; with no wallpaper, the white crow and "Lector" screen. |
+| Quick Resume   | The page you were on stays on the screen with a small moon in the bottom-left corner, and waking puts the same page back. Nothing is cleared or redrawn at lock, so it is the fastest face; a copy of the screen is kept on the card in `.crosspoint`. |
 | None           | An empty white screen. Drawn by the firmware, no SD file. |
 
 Custom is the default. Inactivity uses your selected sleep screen.
@@ -990,7 +991,7 @@ belongs to, so the rows here appear in the same order as on the device.
 
 **Sleep screen**
 
-- **Sleep Screen** — Dark, Light, Custom, Cover, Cover + Custom, None. See [section 8](#8-sleep-screen-and-wallpapers).
+- **Sleep Screen** — Dark, Light, Custom, Cover, Cover + Custom, Quick Resume, None. See [section 8](#8-sleep-screen-and-wallpapers).
 - **Fast Unlock** — shorter recovery-chord wait at wake, and the page painted over the sleep screen in one pass. Off if a wake lands in the recovery picker by itself or the wallpaper ghosts into the first page.
 - **Sleep Footer Text** — your own line of text on the sleep screen.
 

@@ -66,6 +66,12 @@ BitmapPlacement calculateBitmapPlacement(const int bitmapWidth, const int bitmap
   return placement;
 }
 
+// The faces that draw on the page the reader left instead of replacing it.
+bool keepsPage(const uint8_t mode) {
+  return mode == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
+         mode == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM;
+}
+
 }  // namespace
 
 void SleepActivity::onEnter() {
@@ -75,7 +81,13 @@ void SleepActivity::onEnter() {
   // from onEnter (outside ActivityManager's per-render polarity resolution),
   // so clear any inversion left over from a night-mode reader render. Every face
   // repaints the whole panel, so dropping the inversion costs it nothing.
+  //
+  // Quick Resume and Transparent keep the page and draw on it, so night mode's output
+  // inversion is made real in the framebuffer first: the page looks the same, and what the
+  // face adds (and the frame Quick Resume saves) is in normal polarity.
+  const bool frameWasInverted = display.isInverted();
   display.setInverted(false);
+  if (frameWasInverted && keepsPage(SETTINGS.sleepScreen)) renderer.invertScreen();
 
   // Run and land any queued favourite rename before the folder is touched and before the
   // state below is written. The renames DELIBERATELY start here, not at the press: on a
@@ -102,6 +114,9 @@ void SleepActivity::onEnter() {
 }
 
 void SleepActivity::renderSleepScreen() const {
+  // Quick Resume asks nothing of the card and keeps the page: no popup, no scrub.
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME) return renderQuickResumeScreen();
+
   // The "Entering sleep" popup, in the reader's orientation when locking from a book.
   // Both faces read the card and can take seconds, so the press gets a visible answer
   // first.

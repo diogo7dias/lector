@@ -22,6 +22,8 @@ class SleepActivity final : public Activity {
   // Light and Dark faces draw it on purpose; every face that finds nothing to show (no
   // wallpaper, no cover, a decode that failed) lands here, on white.
   void renderDefaultSleepScreen(bool dark = false) const;
+  // Quick Resume: the page stays, a moon is added (SleepQuickResume.cpp).
+  void renderQuickResumeScreen() const;
   // The None face: an empty white page.
   void renderBlankSleepScreen() const;
   // Where a face goes when it has nothing of its own to show.
