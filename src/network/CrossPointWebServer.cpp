@@ -37,6 +37,7 @@
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/StatsPageHtml.generated.h"
+#include "html/js/epub_optimizerJs.generated.h"
 #include "html/js/jszip_minJs.generated.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "util/BookCacheUtils.h"
@@ -170,6 +171,7 @@ void CrossPointWebServer::begin() {
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
+  server->on("/js/epub-optimizer.js", HTTP_GET, [this] { handleEpubOptimizer(); });
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/reading", HTTP_GET, [this] { handleReadingList(); });
@@ -493,6 +495,12 @@ void CrossPointWebServer::handleRoot() const {
 void CrossPointWebServer::handleJszip() const {
   sendStaticContent(server.get(), jszip_minJs, jszip_minJsCompressedSize, jszip_minJsETag, "application/javascript");
   LOG_DBG("WEB", "Served jszip.min.js");
+}
+
+void CrossPointWebServer::handleEpubOptimizer() const {
+  sendStaticContent(server.get(), epub_optimizerJs, epub_optimizerJsCompressedSize, epub_optimizerJsETag,
+                    "application/javascript");
+  LOG_DBG("WEB", "Served epub-optimizer.js");
 }
 
 void CrossPointWebServer::handleNotFound() const {
