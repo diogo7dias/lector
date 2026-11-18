@@ -464,10 +464,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   }
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
-  // The same count while night mode is on: 0 = same as refreshFrequency, otherwise a
-  // REFRESH_FREQUENCY index + 1. Inverted pages ghost differently, so they get their own.
-  static constexpr uint8_t NIGHT_REFRESH_SAME = 0;
-  uint8_t refreshFrequencyNight = NIGHT_REFRESH_SAME;
   // Full refresh on the first page of each chapter entered, on top of the page count.
   uint8_t chapterStartRefresh = 0;
   // A crosshatch frame before the first page of each chapter entered (one extra refresh).

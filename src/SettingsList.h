@@ -286,10 +286,6 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
                          {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
                           StrId::STR_PAGES_30, StrId::STR_REFRESH_NEVER},
                          "refreshFrequency", StrId::STR_CAT_DISPLAY));
-  emit(SettingInfo::Enum(StrId::STR_NIGHT_REFRESH_FREQ, &CrossPointSettings::refreshFrequencyNight,
-                         {StrId::STR_SAME_AS_DAY, StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10,
-                          StrId::STR_PAGES_15, StrId::STR_PAGES_30, StrId::STR_REFRESH_NEVER},
-                         "refreshFrequencyNight", StrId::STR_CAT_DISPLAY));
   emit(SettingInfo::Toggle(StrId::STR_CHAPTER_START_REFRESH, &CrossPointSettings::chapterStartRefresh,
                            "chapterStartRefresh", StrId::STR_CAT_DISPLAY));
   emit(SettingInfo::Toggle(StrId::STR_CHAPTER_WIPE, &CrossPointSettings::chapterWipe, "chapterWipe",
