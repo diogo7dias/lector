@@ -11,7 +11,6 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
-#include "DictionaryHistoryActivity.h"
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderActivity.h"
 #include "EpubReaderBookmarksActivity.h"

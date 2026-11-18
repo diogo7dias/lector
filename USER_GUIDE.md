@@ -405,8 +405,6 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 
 - **Look Up** — pick a word on the page and read its definition. Needs a dictionary, see
   [section 11](#11-fonts-and-dictionaries).
-- **Lookup History** — the last 100 words you looked up, newest first. Pick one to read its
-  definition again.
 - **Grab Quote** — save a passage from this page.
 - **View Quotes** — read back what you saved, shown once the book has quotes.
 - **Remove This Book** — unfile the book from recents; the file stays on the card.
@@ -931,8 +929,7 @@ Look a word up from the in-book menu's **Look Up** row, or bind a hold to **Dict
 **Settings > Controls**. On a touch screen, hold the word itself for half a second: its
 definition opens straight away, and Back returns to the page. A long definition turns pages
 with the same taps and side swipes as a book page, under **Touch Reader Controls**. A word with several entries in
-the dictionary shows all of them, each under its own headword. Every successful lookup is remembered: **Lookup History**, in the
-same menu, lists the last 100 words newest first and reopens any of them. Setup and usage
+the dictionary shows all of them, each under its own headword. Setup and usage
 are covered in [docs/dictionary.md](./docs/dictionary.md).
 
 ---

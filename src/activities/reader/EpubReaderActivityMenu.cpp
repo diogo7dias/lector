@@ -318,9 +318,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::DICTIONARY:
       openDictionaryWordSelect();
       break;
-    case EpubReaderMenuActivity::MenuAction::DICTIONARY_HISTORY:
-      openDictionaryHistory();
-      break;
     case EpubReaderMenuActivity::MenuAction::GRAB_QUOTE:
       openQuoteGrab();
       break;

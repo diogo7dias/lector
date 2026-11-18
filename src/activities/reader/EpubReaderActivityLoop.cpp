@@ -2,7 +2,6 @@
 #include <Logging.h>
 
 #include "CrossPointSettings.h"
-#include "DictionaryHistoryActivity.h"
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderActivity.h"
 #include "EpubReaderBookmarksActivity.h"

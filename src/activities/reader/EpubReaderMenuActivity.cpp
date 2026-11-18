@@ -153,10 +153,7 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
   // --- This Book: what the book says about itself, and what you take out of it ---
   {
     auto& items = page(Tab::ThisBook, StrId::STR_SEC_THIS_BOOK);
-    group(items, {{MenuAction::DICTIONARY, StrId::STR_LOOKUP},
-                  // Recall sits next to the lookup it records, because that is where a reader
-                  // goes looking for a word they have already met.
-                  {MenuAction::DICTIONARY_HISTORY, StrId::STR_LOOKUP_HISTORY}});
+    group(items, {{MenuAction::DICTIONARY, StrId::STR_LOOKUP}});
 
     std::vector<MenuItem> quotes{{MenuAction::GRAB_QUOTE, StrId::STR_GRAB_QUOTE}};
     // Reading the quotes back only makes sense once this book has a sidecar to read;

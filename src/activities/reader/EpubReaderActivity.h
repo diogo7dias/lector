@@ -108,7 +108,6 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // Lands on the bookmark queued by queueBookmarkJump, when it is for this book.
   void takeQueuedBookmarkJump();
   // Reading tools
-  void openDictionaryHistory();
   void openQuotesViewer();
   void openPageQr();
   // Lock-screen wallpaper
