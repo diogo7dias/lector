@@ -882,6 +882,15 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   if (!withAbsentHardware && !gpio.hasTouch()) {
     v.erase(std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_TOUCH_SLEEP; }),
             v.end());
+  } else if (!withAbsentHardware) {
+    // Touch boards: these three do nothing there, so CrossPoint hides them too.
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) {
+                             return s.nameId == StrId::STR_SUNLIGHT_FADING_FIX ||
+                                    s.nameId == StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION ||
+                                    s.nameId == StrId::STR_BACK_SHORT_TO_FILE_BROWSER;
+                           }),
+            v.end());
   }
   if (!withAbsentHardware && !halClock.isAvailable()) {
     // The schedule reads the same clock, at a wake, so the same reasoning drops it.

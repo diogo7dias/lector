@@ -421,10 +421,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t kerning = 1;                                  // pair kerning for the reading font (0 = off)
   uint8_t ligatures = 1;                                // font ligatures for the reading font (0 = off)
   uint8_t linkUnderline = 1;                            // underline in-book links (0 = plain)
-  // Off by default, as in the old fork. The grayscale text pass is imperceptible on
-  // this panel but costs a fading grey refresh on every page turn, which is very
-  // perceptible. The toggle is kept so it can still be tried; only the default moved.
-  uint8_t textAntiAliasing = 0;
+  // On by default, as in CrossPoint (Diogo, 2026-11-18). The grey pass costs an extra
+  // refresh on every page turn; the toggle turns it off.
+  uint8_t textAntiAliasing = 1;
   // How dark anti-aliased greys are drawn (0 Normal, 1 High, 2 Max); only with textAntiAliasing.
   uint8_t textContrast = 0;
   uint8_t bookMargins = 1;       // keep the book's CSS margins and padding (0 = drop them)
@@ -471,7 +470,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t lineSpacingPercent = 95;
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting. Legacy sleepTimeout enum values are migration-only.
-  uint8_t sleepTimeoutMinutes = 5;
+  uint8_t sleepTimeoutMinutes = 10;
   // Touch Sleep (touch boards): after this long without input the touch controller
   // sleeps and the chip waits on the buttons alone. The next button press wakes
   // touch; until then a touch does nothing, the capacitive Home key included (the
@@ -812,10 +811,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   }
   uint8_t frontlightWarmth = 50;  // 0 = cool .. 100 = warm; ignored without warm/cold LEDs
   uint8_t frontlightOn = 0;
-  // Bring the light back by itself on wake. Off by default: a light that
-  // switches itself on in a bright room is worse than one you turn on.
-  // Brightness and warmth are remembered either way. See FrontlightBootPolicy.h.
-  uint8_t frontlightRestoreOnWake = 0;
+  // Bring the light back by itself on wake. On by default, as in CrossPoint (Diogo,
+  // 2026-11-18). Brightness and warmth are remembered either way. See FrontlightBootPolicy.h.
+  uint8_t frontlightRestoreOnWake = 1;
   // Daily schedule, read at each wake: quarter hours since local midnight (see
   // FrontlightBootPolicy.h). Needs a clock, so it is only offered on a board with one.
   uint8_t frontlightScheduleEnabled = 0;
@@ -840,7 +838,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // would sleep on the FIRST press, long before the detector could see a second release,
   // so the bound function would never run. A bound double click therefore wins, and
   // sleeping goes back to the normal hold.
-  uint16_t getSleepHoldMs() const { return shortPressSleeps() ? 10 : 200; }
+  uint16_t getSleepHoldMs() const { return shortPressSleeps() ? 10 : 400; }
   // True when Footnotes is on any of the power button's in-book gestures. Governs the
   // "Power returns from footnote" row, which only describes that binding.
   bool powerOpensFootnotes() const {

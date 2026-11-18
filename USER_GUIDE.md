@@ -117,7 +117,7 @@ sleep screen.
 ### Sleep
 
 The device sleeps after the inactivity set in **Settings > System > Time to Sleep**, anywhere
-from 1 to 30 minutes, or Never. The default is 5 minutes. What it shows while asleep is the sleep screen, covered in
+from 1 to 30 minutes, or Never. The default is 10 minutes. What it shows while asleep is the sleep screen, covered in
 [section 8](#8-sleep-screen-and-wallpapers).
 
 A wake from sleep goes straight back into the book, without stopping at any other screen.
@@ -990,7 +990,7 @@ belongs to, so the rows here appear in the same order as on the device.
 
 **Frontlight** (boards with a frontlight)
 
-- **Frontlight**, **Brightness**, **Warmth**, **Restore on Wake**.
+- **Frontlight**, **Brightness**, **Warmth**, **Restore on Wake** (on by default).
 - **Max Brightness** — the top of the brightness range, 10 to 100 (default 30). The light
   panel's brightness track runs from 0 to this, and a brightness above it is brought down.
 - **Light Schedule**, **Light On From**, **Light On Until** (boards with a clock) — at each
@@ -1020,7 +1020,7 @@ which turns the extra space between an EPUB's paragraphs on or off for that book
   bar, and each book lays itself out again the next time you open it; Back keeps what you had.
   **Reset to Defaults** goes back to this model's measurements. It is kept on the device, not on
   the card. Menu screens keep their own spacing.
-- **Sunlight Fading Fix** — software fix for white X4 units fading in direct sunlight.
+- **Sunlight Fading Fix** — software fix for white X4 units fading in direct sunlight. Not shown on the X4 Pro.
 
 **Home**
 
@@ -1118,7 +1118,7 @@ is centred.
 - **Hidden Dots** — only listed while Guide Dots is on: keeps the widened gaps and draws no dot in them.
 - **Extra Paragraph Spacing** — space between paragraphs instead of a first-line indent.
   When a nested block ends, the enclosing block's top and bottom spacing is not added again.
-- **Text Anti-Aliasing** — smoother edges, slightly slower page turns.
+- **Text Anti-Aliasing** — smoother edges, slightly slower page turns. On by default.
 - **Text Contrast** — Normal, High or Max, shown while Text Anti-Aliasing is on. High draws
   the light grey edge pixels as dark grey; Max also draws the dark grey ones black, for
   crisper, darker anti-aliased text.
@@ -1216,12 +1216,12 @@ Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Al
 
 **Back**
 
-- **Short Back to File Browser** — swap the short and long press of Back in a book.
+- **Short Back to File Browser** — swap the short and long press of Back in a book. Not shown on the X4 Pro.
 - **Home Back Button** — None, Resume (default) or Sortes.
 
 ### 12.4 System
 
-**Power** — **Time to Sleep**: 1 to 30 minutes, or Never. Default 5 minutes.
+**Power** — **Time to Sleep**: 1 to 30 minutes, or Never. Default 10 minutes.
 
 **Library**
 
