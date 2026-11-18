@@ -18,12 +18,14 @@
 class DictionaryDefinitionActivity final : public Activity {
  public:
   explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string headword,
-                                        std::string definition, bool htmlDefinition = false, bool readingSurface = true)
+                                        std::string definition, bool htmlDefinition = false, bool readingSurface = true,
+                                        std::string coverPath = {})
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(std::move(headword)),
         definition(std::move(definition)),
         htmlDefinition(htmlDefinition),
-        readingSurface(readingSurface) {}
+        readingSurface(readingSurface),
+        coverPath(std::move(coverPath)) {}
 
   void onEnter() override;
   void onExit() override;
@@ -53,6 +55,9 @@ class DictionaryDefinitionActivity final : public Activity {
   void wrapText();
   int measureSpan(int fontId, const char* text, size_t len) const;
   void drawBody(int fontId, int x, int startY) const;
+  // Book Info: fits the cover BMP into the top third of page 1 (sets coverW/coverH).
+  void measureCover();
+  void drawCover(int x, int y) const;
 
   const std::string headword;
   // Not const: onEnter() normalizes embedded NULs (StarDict multi-type
@@ -60,6 +65,11 @@ class DictionaryDefinitionActivity final : public Activity {
   std::string definition;
   const bool htmlDefinition;
   const bool readingSurface;
+  // Plain-text path only: a cover drawn above page 1's text, which then holds fewer lines.
+  const std::string coverPath;
+  int coverW = 0;
+  int coverH = 0;
+  int coverLines = 0;  // text lines the cover displaces on page 1
   // Styled path: reader-identical Pages laid out from the HTML definition.
   // Empty means the plain-text span path below is active.
   std::vector<std::unique_ptr<Page>> pages;

@@ -1,7 +1,9 @@
 #include "DictionaryDefinitionActivity.h"
 
+#include <Bitmap.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
 
 #include <algorithm>
@@ -41,6 +43,7 @@ void DictionaryDefinitionActivity::onEnter() {
   std::replace(definition.begin(), definition.end(), '\0', '\n');
   if (!(htmlDefinition && definition.size() <= MAX_STYLED_HTML_BYTES && layoutHtmlPages())) {
     definition = htmlToPlainText(definition);
+    measureCover();
     wrapText();
   }
   requestUpdate();
@@ -113,6 +116,8 @@ void DictionaryDefinitionActivity::wrapText() {
   const int spaceWidth = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR);
   const int lineHeight = renderer.getLineHeight(fontId);
   linesPerPage = std::max(1, body.height / lineHeight);
+  // The cover plus half a line of gap, rounded up to whole lines; page 1 keeps at least one.
+  coverLines = coverH > 0 ? std::min(linesPerPage - 1, (coverH + lineHeight / 2 + lineHeight - 1) / lineHeight) : 0;
 
   const char* text = definition.c_str();
   const uint32_t n = static_cast<uint32_t>(definition.size());
@@ -198,8 +203,32 @@ void DictionaryDefinitionActivity::wrapText() {
   // Trim trailing blank lines so the last page is not empty padding.
   while (!lines.empty() && lines.back().len == 0) lines.pop_back();
 
-  totalPages = std::max(1, (static_cast<int>(lines.size()) + linesPerPage - 1) / linesPerPage);
+  // Page 1 holds coverLines fewer lines; counting it that much longer pages everything else alike.
+  totalPages = std::max(1, (static_cast<int>(lines.size()) + coverLines + linesPerPage - 1) / linesPerPage);
   currentPage = 0;
+}
+
+void DictionaryDefinitionActivity::measureCover() {
+  if (coverPath.empty()) return;
+  HalFile file;
+  if (!Storage.openFileForRead("DICT", coverPath, file)) return;
+  Bitmap bitmap(file);
+  if (bitmap.parseHeaders() != BmpReaderError::Ok || bitmap.getWidth() <= 0 || bitmap.getHeight() <= 0) return;
+  const BodyArea body = bodyArea();
+  const float scale = std::min({1.0f, static_cast<float>(body.width) / bitmap.getWidth(),
+                                static_cast<float>(body.height / 3) / bitmap.getHeight()});
+  coverW = static_cast<int>(bitmap.getWidth() * scale);
+  coverH = static_cast<int>(bitmap.getHeight() * scale);
+}
+
+void DictionaryDefinitionActivity::drawCover(const int x, const int y) const {
+  HalFile file;
+  if (!Storage.openFileForRead("DICT", coverPath, file)) return;
+  Bitmap bitmap(file, /*dithering=*/true);
+  if (bitmap.parseHeaders() != BmpReaderError::Ok) return;
+  // Shrink while decoding, so the dither lands on panel pixels (as the sleep cover does).
+  bitmap.ditherToFit(coverW, coverH);
+  renderer.drawBitmap(bitmap, x, y, coverW, coverH);
 }
 
 void DictionaryDefinitionActivity::loop() {
@@ -244,14 +273,16 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
   }
   const int lineHeight = renderer.getLineHeight(fontId);
   char buf[MAX_LINE_BYTES + 1];
-  const int firstLine = currentPage * linesPerPage;
-  const int lastLine = std::min(firstLine + linesPerPage, static_cast<int>(lines.size()));
+  // Page 1 starts below the cover, so every later page starts coverLines earlier.
+  const int slot = currentPage == 0 ? coverLines : 0;
+  const int firstLine = std::max(0, currentPage * linesPerPage - coverLines);
+  const int lastLine = std::min((currentPage + 1) * linesPerPage - coverLines, static_cast<int>(lines.size()));
   for (int i = firstLine; i < lastLine; i++) {
     if (lines[i].len == 0) continue;
     const size_t len = std::min(static_cast<size_t>(lines[i].len), MAX_LINE_BYTES);
     memcpy(buf, definition.c_str() + lines[i].start, len);
     buf[len] = '\0';
-    renderer.drawText(fontId, x, startY + (i - firstLine) * lineHeight, buf);
+    renderer.drawText(fontId, x, startY + (slot + i - firstLine) * lineHeight, buf);
   }
 }
 
@@ -288,6 +319,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   drawBody(fontId, contentX + SIDE_PADDING, bodyStartY);  // scan pass: records codepoints only
   scope.endScanAndPrewarm();
   drawBody(fontId, contentX + SIDE_PADDING, bodyStartY);
+  if (currentPage == 0 && coverH > 0) drawCover(contentX + SIDE_PADDING + (bodyArea().width - coverW) / 2, bodyStartY);
 
   drawListChromeBottom(renderer, mappedInput, chrome);
   renderer.displayBuffer(firstPaint ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);

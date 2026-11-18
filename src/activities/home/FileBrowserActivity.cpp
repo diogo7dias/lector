@@ -949,6 +949,7 @@ void FileBrowserActivity::promptMoveToFolder(const std::string& fullPath) {
 void FileBrowserActivity::showBookInfo(const std::string& fullPath) {
   std::string title;
   std::string text;
+  std::string cover;
   {
     // A book never opened builds its metadata cache here, which can take a few seconds.
     RenderLock lock(*this);
@@ -970,10 +971,12 @@ void FileBrowserActivity::showBookInfo(const std::string& fullPath) {
     const std::string& description = epub->getDescription();
     if (!author.empty()) text = author + "\n\n";
     text += description.empty() ? tr(STR_NO_DESCRIPTION) : description;
+    // The sleep screen's fit cover: made once per book, reused after.
+    if (epub->generateCoverBmp(false)) cover = epub->getCoverBmpPath(false);
   }
   pendingFullRefresh = true;
-  startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(title),
-                                                                        std::move(text), false, false),
+  startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(
+                             renderer, mappedInput, std::move(title), std::move(text), false, false, std::move(cover)),
                          [this](const ActivityResult&) { requestUpdate(); });
 }
 

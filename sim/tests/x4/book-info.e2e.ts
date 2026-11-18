@@ -1,7 +1,7 @@
 import { test, expect } from 'e2e';
 
-// Hold Confirm on a book, pick Book Info (the first row for an EPUB), see a page of
-// text, and come back to the list. Leaves the device on Home for the next file.
+// Hold Confirm on a book, pick Book Info (the first row for an EPUB), see its cover and a
+// page of text, and come back to the list. Leaves the device on Home for the next file.
 test('File actions opens Book Info for an EPUB and returns to the list', async ({ app, screen }) => {
   await app.open('/');
   const activity = screen.getByTestId('activity');
@@ -26,6 +26,9 @@ test('File actions opens Book Info for an EPUB and returns to the list', async (
   await press('Confirm');
   await expect(activity).toHaveText('DictionaryDefinition', { timeout: 60_000 });
   await expect.poll(async () => Number(await screen.getByTestId('ink').textContent())).toBeGreaterThan(2_000);
+  // The book's cover (mostly black) sits centred above the text on page 1.
+  const cover = await (await fetch(`${app.baseUrl}/ink/160/95/160/230`)).json();
+  expect(cover.ink, 'the cover is drawn above the text').toBeGreaterThan(cover.area / 2);
 
   // A popped screen logs no "Entering", so the activity label keeps the old name: the
   // log says when Book Info handed the screen back to the list.
