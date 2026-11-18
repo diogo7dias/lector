@@ -38,6 +38,7 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   bool openSectionForRender(const ReaderRenderSpec& renderSpec);
   // loop() phase: prewarm, progress save and background builds while input is idle.
   void runIdleBackgroundWork();
+  void prefetchNextChapter();
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
@@ -128,7 +129,8 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // Opens the reader menu for the current position (short-press Confirm)
   void openReaderMenu();
   // Reading margins plus status bar bands: where render() puts the page.
-  void pageMargins(int& top, int& right, int& bottom, int& left);
+  // spine: whose chapter title sizes the status bar band (default: the open chapter).
+  void pageMargins(int& top, int& right, int& bottom, int& left, int spine = -1);
   ChapterLabel currentChapterLabel() const;
   void openDictionaryWordSelect(int anchorX = -1, int anchorY = -1);
   // Opens the Grab Quote word-range picker on the current page.
@@ -232,7 +234,14 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // while it waits for the reader to come within the build window, and while it is
   // heap-paused (no work is happening, so spinning at full speed would only burn
   // battery; the paused gate still retries every loop pass).
-  bool skipLoopDelay() override { return backgroundBuildWanted() && !buildHeapPaused; }
+  bool skipLoopDelay() override {
+    // nextSection only lives while it builds; the pointer is read, never dereferenced, here.
+    return (backgroundBuildWanted() || nextSection != nullptr) && !buildHeapPaused;
+  }
+  void onCovered() override {  // ActivityManager holds the RenderLock here
+    nextSection.reset();
+    prefetchedSpine = -1;  // a dropped prefetch is retried once this screen is back
+  }
   bool isReaderActivity() const override { return true; }
   bool isBookContext() const override { return true; }
   bool applyReaderOrientation(const uint8_t orientation) override {

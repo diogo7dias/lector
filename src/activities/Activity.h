@@ -62,6 +62,9 @@ class Activity {
   // A child screen just closed over this one. Readers clean the next paint so the child
   // (menu, keyboard, popup) does not stay ghosted under the page.
   virtual void onRevealed() {}
+  // A child screen is about to open over this one: drop deferrable work that holds memory.
+  // Runs with the RenderLock held.
+  virtual void onCovered() {}
 
   // Turn the screen. False means this screen does not own an orientation, and the host
   // persists the setting instead: only the readers lay out against it, so everywhere else

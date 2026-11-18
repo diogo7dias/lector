@@ -36,6 +36,10 @@ struct EpubReaderState {
   bool pendingSortesPage;
   uint32_t sortesEmptyChapters = 0;
   std::unique_ptr<Section> section = nullptr;
+  // The next chapter, laid out on idle ticks near the end of this one so turning into it
+  // needs no build. Loop task, under the RenderLock; dropped before any child screen opens.
+  std::unique_ptr<Section> nextSection = nullptr;
+  int prefetchedSpine = -1;  // last spine prefetched or tried, so it is not redone
   // Per-book reader "look" settings. Loaded from <cachePath>/reader_override.bin on
   // enter if present (prefsCustom_ = true), else a snapshot of the global settings.
   // The reader lays out exclusively through prefs_, so the global singleton is never
@@ -288,6 +292,11 @@ struct EpubReaderState {
   // per page rebuilt, this margin gives the rebuild ample runway to catch up (and finalize)
   // before the reader arrives.
   static constexpr int PARTIAL_REBUILD_START_MARGIN = 15;
+  // Prefetch the next chapter once the reader is this many pages from this one's end. Only
+  // spines up to BUILD_POPUP_BYTE_THRESHOLD: inflating a bigger one holds the loop for seconds.
+  // Inflating needs tinfl's 32 KB window in one block.
+  static constexpr int PREFETCH_START_MARGIN = 5;
+  static constexpr size_t PREFETCH_MIN_MAX_ALLOC = 40 * 1024;
   // Show the indexing popup when an initial build must lay out more than this many pages up front
   // (a deep resume/jump into a not-yet-built section), so it isn't a silent wait. Kept independent
   // of the small look-ahead window so ordinary landings stay popup-free.

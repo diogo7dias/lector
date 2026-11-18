@@ -27,6 +27,10 @@
 bool EpubReaderActivity::openSectionForRender(const ReaderRenderSpec& renderSpec) {
   const auto filepath = epub->getSpineItem(currentSpineIndex).href;
   LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);
+  // A prefetch still building persists what it laid out as a partial here, which this load
+  // then serves; a finished one already left its cache.
+  nextSection.reset();
+  prefetchedSpine = -1;  // a relayout (pinch, turn) needs the next chapter laid out again
   section = makeUniqueNoThrow<Section>(*epub, currentSpineIndex, renderer);
   printedMarksStale_ = true;  // a new layout puts the printed pages elsewhere
   if (!section) {

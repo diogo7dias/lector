@@ -135,4 +135,55 @@ void EpubReaderActivity::runIdleBackgroundWork() {
       }
     }
   }
+
+  if (!inputActive && lastRenderCompleteMs != 0 && millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS)
+    prefetchNextChapter();
+}
+
+// Lays out the next chapter a couple of pages per idle tick once the reader nears this
+// one's end, so the turn into it loads a finished cache instead of building on the spot.
+void EpubReaderActivity::prefetchNextChapter() {
+  // The render task resets nextSection when it opens a chapter: every read is under the lock.
+  RenderLock lock(RenderLock::TryOnly{});
+  if (!lock.owns()) return;
+  if (nextSection) {
+    if (!buildTickHeapGate()) return;
+    const uint32_t loansBefore = renderer.frameBufferLoanCount();
+    const bool built = nextSection->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK);
+    // An image probe may have lent the framebuffer, handing it back white under the shown page.
+    if (renderer.frameBufferLoanCount() != loansBefore) requestUpdate();
+    if (!built) {
+      LOG_ERR("ERS", "Prefetch of chapter %d failed", prefetchedSpine);
+      nextSection.reset();
+    } else if (nextSection->isBuildComplete()) {
+      LOG_INF("ERS", "Next chapter %d ready: %u pages, built", prefetchedSpine, nextSection->pageCount);
+      nextSection.reset();
+    }
+    return;
+  }
+  const int next = currentSpineIndex + 1;
+  if (sortesMode || !section || section->isBuilding() || section->isPartial() || buildViewportWidth == 0 ||
+      next >= epub->getSpineItemsCount() || prefetchedSpine == next ||
+      section->currentPage + PREFETCH_START_MARGIN < static_cast<int>(section->pageCount) || !buildTickHeapGate())
+    return;
+  prefetchedSpine = next;  // one attempt per chapter, whatever happens below
+  if (epub->getCumulativeSpineItemSize(next) - epub->getCumulativeSpineItemSize(currentSpineIndex) >
+      BUILD_POPUP_BYTE_THRESHOLD)
+    return;
+  HalPowerManager::Lock fullClock;
+  nextSection = makeUniqueNoThrow<Section>(*epub, next, renderer);
+  if (!nextSection) return;
+  // Its own margins: a title that wraps to more lines makes the status bar band taller.
+  int top, right, bottom, left;
+  pageMargins(top, right, bottom, left, next);
+  const ReaderRenderSpec spec = SETTINGS.readerRenderSpec(renderer.getScreenWidth() - left - right,
+                                                          renderer.getScreenHeight() - top - bottom, prefs_);
+  if (nextSection->loadSectionFile(spec) && !nextSection->isPartial()) {
+    LOG_INF("ERS", "Next chapter %d ready: %u pages, cached", next, nextSection->pageCount);
+    nextSection.reset();
+  } else if ((!nextSection->hasHtmlCache() && ESP.getMaxAllocHeap() < PREFETCH_MIN_MAX_ALLOC) ||
+             !nextSection->startBuild(spec)) {
+    LOG_INF("ERS", "Prefetch of chapter %d skipped", next);
+    nextSection.reset();
+  }
 }
