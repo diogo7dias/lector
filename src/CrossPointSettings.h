@@ -180,15 +180,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
 
   // Short power button press actions
-  // How touch drives the open page. Tap turns from the outer thirds, Inverted Tap
-  // swaps the two sides, Swipe leaves the thirds quiet and turns on a horizontal
-  // swipe. Values match CrossPoint so a settings file moves between the two.
-  enum TOUCH_READER_CONTROLS {
-    TOUCH_READER_OFF = 0,
-    TOUCH_READER_TAP = 1,
-    TOUCH_READER_SWIPE = 2,
-    TOUCH_READER_INVERTED_TAP = 3,
-    TOUCH_READER_CONTROLS_COUNT
+  // How touch drives the open page: a master switch (touchReaderControls, 0 or 1) and one
+  // gesture per page direction, numbered like CrossPoint so a settings file moves between
+  // the two. Inverted Tap is tap-only; either direction on it swaps the shared tap zones.
+  enum PAGE_TURN_GESTURE {
+    TAP_AND_SWIPE = 0,
+    TAP_ONLY = 1,
+    SWIPE_ONLY = 2,
+    INVERTED_TAP = 3,
+    PAGE_TURN_GESTURE_DISABLED = 4,
+    PAGE_TURN_GESTURE_COUNT
   };
   // How the reader menu opens on a touch board. Swipe Up is only offered where the
   // Home key is capacitive, since there the bottom edge is otherwise unused.
@@ -402,9 +403,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textContrast = 0;
   // Whole pixels between letters, offset: 2 is the font as designed, 0..4 shows as -2..+2.
   uint8_t characterSpacing = reader_defaults::CHARACTER_SPACING;
-  // Swipe by default: it works the same wherever the thumb lands, and it leaves the
-  // whole page free of invisible tap targets.
-  uint8_t touchReaderControls = TOUCH_READER_SWIPE;
+  // On, with both directions on Swipe Only by default: a swipe works the same wherever the
+  // thumb lands, and leaves the whole page free of invisible tap targets.
+  uint8_t touchReaderControls = 1;
+  uint8_t pageTurnGesture = SWIPE_ONLY;
+  uint8_t previousPageGesture = SWIPE_ONLY;
   // Persisted under the legacy "tapForReaderMenu" key, whose old values line up:
   // 0 = Off, 1 = Tap.
   uint8_t showReaderMenu = READER_MENU_TAP;

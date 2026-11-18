@@ -43,6 +43,17 @@ bottom-edge buttons **Back**, **Confirm**, **Left** and **Right**.
 The four bottom-edge buttons can be reassigned in **Settings > Controls > Remap Front Buttons**,
 and the side buttons can be swapped or disabled with **Side Button Layout (reader)**.
 
+### Touch page turning
+
+**Settings > Controls > Touch Reader Controls** switches touch page turning on or off. With it
+on, **Next Page** and **Previous Page** each take their own gesture: Tap & Swipe, Tap Only,
+Swipe Only (the default), Inverted Tap or Disabled. A swipe to the left goes on, a swipe to the
+right goes back. Taps turn from the outer thirds of the page, or from the whole page when only
+one direction accepts taps; the centre third opens the reader menu. Inverted Tap on either
+direction swaps the two sides. In a right-to-left book (Hebrew, Arabic, Persian) the swipes and
+the tap sides run the other way. Older settings files carry over: the old Tap, Swipe and
+Inverted Tap become the matching gesture for both directions.
+
 ### Tapping, on a device with a touch screen
 
 A tap takes two steps. The first tap on a row, a button or any other control highlights it

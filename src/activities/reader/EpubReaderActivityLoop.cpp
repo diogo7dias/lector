@@ -162,8 +162,7 @@ void EpubReaderActivity::loop() {
   int pinchY1 = 0;
   int pinchX2 = 0;
   int pinchY2 = 0;
-  if (SETTINGS.touchReaderControls != CrossPointSettings::TOUCH_READER_OFF &&
-      mappedInput.getTwoFingerTouch(pinchX1, pinchY1, pinchX2, pinchY2)) {
+  if (SETTINGS.touchReaderControls != 0 && mappedInput.getTwoFingerTouch(pinchX1, pinchY1, pinchX2, pinchY2)) {
     if (!pinchGesture.isActive()) gpio.suppressTouchContact();
     const auto action = pinchGesture.update(pinchX1, pinchY1, pinchX2, pinchY2);
     if (action != ReaderPinchGesture::Action::None) {

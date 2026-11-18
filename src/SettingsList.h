@@ -306,10 +306,14 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
                          {StrId::STR_AUTHOR_INITIALS, StrId::STR_AUTHOR_FULL_NAME}, "authorDisplay",
                          StrId::STR_CAT_DISPLAY));
 
-  emit(SettingInfo::Enum(
-      StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
-      {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE, StrId::STR_STATE_INVERTED_TAP},
-      "touchReaderControls", StrId::STR_CAT_CONTROLS));
+  emit(SettingInfo::Toggle(StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
+                           "touchReaderControls", StrId::STR_CAT_CONTROLS));
+  const std::vector<StrId> pageGestures = {StrId::STR_TAP_AND_SWIPE, StrId::STR_TAP_ONLY, StrId::STR_SWIPE_ONLY,
+                                           StrId::STR_STATE_INVERTED_TAP, StrId::STR_DISABLED};
+  emit(SettingInfo::Enum(StrId::STR_NEXT_PAGE_GESTURE, &CrossPointSettings::pageTurnGesture, pageGestures,
+                         "pageTurnGesture", StrId::STR_CAT_CONTROLS));
+  emit(SettingInfo::Enum(StrId::STR_PREV_PAGE_GESTURE, &CrossPointSettings::previousPageGesture, pageGestures,
+                         "previousPageGesture", StrId::STR_CAT_CONTROLS));
 
   // Persisted under CrossPoint's legacy "tapForReaderMenu" key: the old values
   // line up (0 = Off, 1 = Tap), so a settings file carries over either way.
