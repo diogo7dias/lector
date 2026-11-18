@@ -369,12 +369,14 @@ void MappedInputManager::clearBindingOverrides() {
   homeKeyInjected = false;
 }
 
-bool MappedInputManager::wasScreenLongPress(int& x, int& y) const {
+bool MappedInputManager::wasScreenLongPress(int& x, int& y, const bool keepContact) const {
   float nx = 0.0f;
   float ny = 0.0f;
   if (!gpio.wasTouchLongPress(nx, ny)) return false;
-  // The contact stays live so the hold can go on into a drag. The caller owns it now and
-  // must spend it (spendTouchContact) by the lift, or the lift taps whatever is under it.
+  // Acting on the long press drops the rest of the contact, so the lift cannot also tap
+  // whatever the action opened. keepContact leaves it live for a hold that goes on into a
+  // drag: that caller owns the contact and must spend it (spendTouchContact) by the lift.
+  if (!keepContact) gpio.suppressTouchContact();
   renderer.tapToLogical(nx, ny, x, y);
   return true;
 }

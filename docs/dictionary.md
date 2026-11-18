@@ -29,7 +29,8 @@ Two ways to start a lookup while reading:
 
 - Open the reader menu (**Confirm**) and choose **Look Up**.
 - Or set **Settings → Controls → Long-press Menu** to "Dictionary", then hold **Confirm** (~0.4s) on the reading page.
-- Or, on a touch screen (X4 Pro), hold the word on the page (~0.5s). Its definition opens straight away and **Back** returns to the page; a hold that lands on no word opens word selection instead.
+- Or, on a touch screen (X4 Pro), hold the word on the page (~0.5s) and lift. Its definition opens straight away and **Back** returns to the page. A hold that lands on no word does nothing.
+- To look up a phrase, hold its first word, keep the finger down and drag to its last word, then tap **Look Up** in the bar at the bottom (**Save** keeps it as a quote instead). The whole selection is looked up as one entry, so it finds headwords like "proof of the pudding".
 
 One word on the page becomes highlighted:
 
