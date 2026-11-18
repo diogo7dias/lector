@@ -66,7 +66,7 @@ inline constexpr uint8_t MAX_CHARACTER_SPACING = 4;
 inline constexpr uint8_t MIN_SCREEN_MARGIN = 5;
 inline constexpr uint8_t MAX_SCREEN_MARGIN = 40;
 inline constexpr uint8_t SCREEN_MARGIN_STEP = 5;
-inline constexpr uint8_t SCREEN_MARGIN = 5;
+inline constexpr uint8_t SCREEN_MARGIN = 20;
 // Image rendering values; CrossPointSettings::IMAGE_RENDERING repeats them (asserted there).
 inline constexpr uint8_t IMAGES_DISPLAY_BW = 3;
 inline constexpr uint8_t IMAGE_RENDERING_COUNT = 4;
