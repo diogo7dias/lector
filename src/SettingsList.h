@@ -261,24 +261,8 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
   emit(SettingInfo::Toggle(StrId::STR_FAST_UNLOCK, &CrossPointSettings::fastUnlock, "fastUnlock",
                            StrId::STR_CAT_DISPLAY));
 
-  emit(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_FAVORITE_BADGE, &CrossPointSettings::showSleepFavoriteBadge,
-                           "showSleepFavoriteBadge", StrId::STR_CAT_DISPLAY));
-
   emit(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, &CrossPointSettings::showSleepWallpaperPosition,
                            "showSleepWallpaperPosition", StrId::STR_CAT_DISPLAY));
-
-  emit(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_READING_STATS, &CrossPointSettings::showSleepReadingStats,
-                           "showSleepReadingStats", StrId::STR_CAT_DISPLAY));
-
-  emit(SettingInfo::Enum(StrId::STR_SLEEP_READING_STATS_ALIGN, &CrossPointSettings::sleepReadingStatsAlign,
-                         {StrId::STR_CENTER, StrId::STR_ALIGN_LEFT, StrId::STR_ALIGN_RIGHT}, "sleepReadingStatsAlign",
-                         StrId::STR_CAT_DISPLAY));
-
-#if FREEINK_DEVICE_X4PRO
-  // Only the X4 Pro has the timed wake behind it (main.cpp), so only it has the row.
-  emit(SettingInfo::Toggle(StrId::STR_REFRESH_SLEEP_WALLPAPER, &CrossPointSettings::refreshSleepWallpaper,
-                           "refreshSleepWallpaper", StrId::STR_CAT_DISPLAY));
-#endif
 
   // "Never" (index 5) is back, matching upstream: the reader skips its own cadence, and
   // DisplayRefreshPolicy still forces a clean after its consecutive-FAST cap.

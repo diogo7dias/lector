@@ -179,12 +179,7 @@ not count as reading.
 
 **Stats** on Home leads with this month as a calendar: each day fills from the bottom by how
 long you read that day, the longest day full, and today has a thick outline. Under it are the
-last 7 days, this year, all time and the books finished. The sleep screen shows the last 7
-days in a thin black band along its foot, on wallpapers and covers alike, when **Settings >
-Display > Show Reading Stats** is on (off by default). When you lock straight from a book,
-a **This sitting** line above it shows the time and pages of the sitting you just closed;
-it needs no clock. **Reading Stats Position** puts its
-text in the **Center** (default), or on the **Left** or **Right**.
+last 7 days, this year, all time and the books finished.
 
 Turning past the last page shows **End of book** with the title and author, the day you
 started and the day you finished, your total time and pages in that book, and the last quote
@@ -505,9 +500,8 @@ Wallpaper rows in the in-book menu's Sleep Screen tab favourite, pause, hold and
 wallpaper the device just showed. Paused wallpapers move to `/sleep pause` and stop appearing
 in the rotation. **Settings > Display > Shuffle Wallpapers** reshuffles the order.
 
-Five Display settings decide what is drawn over a wallpaper: **Show Wallpaper Name**, **Show
-Favorite Badge**, **Show Wallpaper Position**, **Show Reading Stats** (this sitting and the last 7 days in a
-band along the foot) and **Sleep Footer Text** (your own line of text). **Sleep Image Quality** trades rendering time against how the image looks: **Fast** or
+Three Display settings decide what is drawn over a wallpaper: **Show Wallpaper Name**, **Show
+Wallpaper Position** and **Sleep Footer Text** (your own line of text). **Sleep Image Quality** trades rendering time against how the image looks: **Fast** or
 **Pretty**.
 
 ### Cover settings
@@ -979,15 +973,8 @@ belongs to, so the rows here appear in the same order as on the device.
 - **Sleep Screen Cover Mode** — Fit or Crop.
 - **Sleep Screen Cover Filter** — None, Contrast or Inverted.
 - **Sleep Image Quality** — Fast or Pretty.
-- **Show Wallpaper Name**, **Show Favorite Badge**, **Show Wallpaper Position**, **Show
-  Reading Stats** — what is drawn over the wallpaper. All off by default.
-- **Reading Stats Position** — Center, Left or Right.
+- **Show Wallpaper Name**, **Show Wallpaper Position** — what is drawn over the wallpaper. Both off by default.
 - **Shuffle Wallpapers** — reshuffle the rotation now.
-- **Refresh Wallpaper** (X4 Pro) — off by default. A gray wallpaper drawn straight after a page or
-  a menu can keep faint outlines of it. On, the reader wakes by itself one minute after locking,
-  draws the same wallpaper again and goes back to sleep, which clears them. Only wallpapers are
-  redrawn, not book covers, and not when the battery is under 15%. A short Power press during
-  that redraw (a few seconds) is missed: press again.
 
 **Frontlight** (boards with a frontlight)
 

@@ -333,19 +333,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Draw the wallpaper's filename in the bottom-left corner of the sleep screen,
   // with the _F favorite suffix stripped and favorites shown as "[F] name".
   uint8_t showSleepImageFilename = 0;
-  // Draw a small "F" badge instead, for favorites only. Ignored when
-  // showSleepImageFilename is on, which already marks favorites.
-  uint8_t showSleepFavoriteBadge = 0;
   // Draw "position / total" with a progress bar in the bottom-right corner of
   // the sleep screen, showing how far the wallpaper rotation is through its
   // current loop. Only drawn for index picks — the jump-pick fallback has no
   // position to report.
   uint8_t showSleepWallpaperPosition = 0;
-  // Draw the last 7 days of reading in a band across the foot of the sleep screen.
-  uint8_t showSleepReadingStats = 0;
-  // Where that band's text sits: centred, or held to the left or right edge.
-  enum SLEEP_READING_STATS_ALIGN { SLEEP_STATS_CENTER = 0, SLEEP_STATS_LEFT = 1, SLEEP_STATS_RIGHT = 2 };
-  uint8_t sleepReadingStatsAlign = SLEEP_STATS_CENTER;
   // Hold the current wallpaper instead of picking a new one at every sleep.
   // Applies only to the /sleep folder rotation; a fixed /sleep.pxc or /sleep.bmp
   // never rotates in the first place.
@@ -413,8 +405,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textContrast = 0;
   // Whole pixels between letters, offset: 2 is the font as designed, 0..4 shows as -2..+2.
   uint8_t characterSpacing = reader_defaults::CHARACTER_SPACING;
-  // X4 Pro: draw the lock wallpaper a second time a minute after locking (1 = on).
-  uint8_t refreshSleepWallpaper = 0;
   // Swipe by default: it works the same wherever the thumb lands, and it leaves the
   // whole page free of invisible tap targets.
   uint8_t touchReaderControls = TOUCH_READER_SWIPE;
