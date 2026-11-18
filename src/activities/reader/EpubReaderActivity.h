@@ -104,6 +104,8 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   void openSearch();
   // A bookmark picked in the list: jump to it by content offset, else by saved page.
   void onBookmarkJumpResult(const ActivityResult& result);
+  // Lands on the bookmark queued by queueBookmarkJump, when it is for this book.
+  void takeQueuedBookmarkJump();
   // Reading tools
   void openDictionaryHistory();
   void openQuotesViewer();
@@ -215,6 +217,9 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
                               int initialRefreshCountdown, bool sortesMode = false)
       : Activity(activity_name::kEpubReader, renderer, mappedInput),
         EpubReaderState(std::move(epub), initialRefreshCountdown, sortesMode) {}
+  // Opens the next book entered at this bookmark instead of its saved position. One shot:
+  // the next onEnter takes it whichever book it opens. Settings > All Bookmarks uses it.
+  static void queueBookmarkJump(std::string bookPath, BookmarkEntry bookmark);
   void onEnter() override;
   void onExit() override;
   void loop() override;

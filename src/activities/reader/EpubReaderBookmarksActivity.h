@@ -27,6 +27,9 @@ class EpubReaderBookmarksActivity final : public UiListActivity {
   void openBookmark(int index);
 
  public:
+  // The reader's jump to a bookmark, for a book with spineCount spine items.
+  static ProgressChangeResult jumpTo(const BookmarkEntry& bookmark, int spineCount);
+
   explicit EpubReaderBookmarksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Epub& epub,
                                        const std::string& epubPath)
       : UiListActivity("EpubReaderBookmarks", renderer, mappedInput, /*wantsTouchLongPress=*/true),

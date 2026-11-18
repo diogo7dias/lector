@@ -459,6 +459,8 @@ Press **Back** to close the menu.
 Bind **Long press while reading** to **Bookmark** and hold **Confirm** to drop one, or use
 **Toggle Bookmark** in the menu. Open the list from **Navigate > Bookmarks**, press
 **Confirm** on an entry to jump there. To delete one, hold **Confirm** on it, then confirm.
+**Settings > Reader > All Bookmarks** lists the bookmarks of every book; picking one opens
+that book at it.
 
 Bookmarks are stored as JSON under `/.crosspoint/bookmarks`.
 
@@ -1138,6 +1140,11 @@ is centred.
   The in-book menu row cycles OFF, ON, BOLDER.
 - **Night mode** — inverts the screen.
 - **Customise Status Bar** — see below.
+
+**Library**
+
+- **All Bookmarks** — every book's bookmarks in one list, book by book. Pick one to open
+  that book at it.
 
 **Customise Status Bar** places each element in one of six slots (top left, top centre, top
 right, bottom left, bottom centre, bottom right) or turns it off: **Battery**, **Clock**,

@@ -10,6 +10,7 @@
 #include <cstring>
 #include <iterator>
 
+#include "AllBookmarksActivity.h"
 #include "ButtonBindingsActivity.h"
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
@@ -321,6 +322,7 @@ void SettingsActivity::rebuildSettingsList() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WHATS_NEW, SettingAction::ReleaseNotes));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
+  readerSettings.push_back(SettingInfo::Action(StrId::STR_ALL_BOOKMARKS, SettingAction::AllBookmarks));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_INSTALLED_FONTS, SettingAction::InstalledFonts));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
@@ -365,6 +367,7 @@ void SettingsActivity::rebuildSettingsList() {
           {StrId::STR_GRP_LOOK,
            {StrId::STR_PAPERBACK_LOOK, StrId::STR_PAPERBACK_STATUS, StrId::STR_CUSTOMISE_STATUS_BAR,
             StrId::STR_NIGHT_MODE}},
+          {StrId::STR_GRP_LIBRARY, {StrId::STR_ALL_BOOKMARKS}},
       });
 
   applyGroups(controlsSettings,
@@ -770,6 +773,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::ScreenCalibration:
         startActivityForResult(std::make_unique<ScreenCalibrationActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::AllBookmarks:
+        startActivityForResult(std::make_unique<AllBookmarksActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::ReleaseNotes:
         startActivityForResult(std::make_unique<ReleaseNotesActivity>(renderer, mappedInput), resultHandler);

@@ -32,6 +32,7 @@ enum class SettingAction {
   ShareCredentials,
   ReleaseNotes,
   ScreenCalibration,
+  AllBookmarks,
 };
 
 struct SettingInfo {

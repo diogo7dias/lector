@@ -12,6 +12,10 @@ namespace BookmarkFile {
 // empty bookmark file yields an empty list and returns false.
 bool load(const std::string& bookPath, std::vector<BookmarkEntry>& bookmarks);
 
+// Loads one bookmark file by its own path. bookPath, when given, gets the book the
+// file belongs to, or empty for a file saved before the path was stored.
+bool loadFile(const std::string& path, std::vector<BookmarkEntry>& bookmarks, std::string* bookPath);
+
 // Saves the bookmarks for bookPath, creating the bookmarks directory as needed.
 bool save(const std::string& bookPath, const std::vector<BookmarkEntry>& bookmarks);
 

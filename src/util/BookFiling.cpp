@@ -8,6 +8,7 @@
 #include "CrossPointState.h"
 #include "QuoteText.h"
 #include "RecentBooksStore.h"
+#include "util/BookmarkFile.h"
 #include "util/BookmarkUtil.h"
 
 namespace bookfiling {
@@ -52,6 +53,8 @@ std::string moveBookToFolder(const std::string& srcPath, const std::string& dstP
   };
   follow(quote_text::quotesFilePathFor(srcPath), quote_text::quotesFilePathFor(dstPath));
   follow(BookmarkUtil::getBookmarkPath(srcPath), BookmarkUtil::getBookmarkPath(dstPath));
+  // The moved file still names the old path inside; saving it again repoints it.
+  if (std::vector<BookmarkEntry> marks; BookmarkFile::load(dstPath, marks)) BookmarkFile::save(dstPath, marks);
 
   // Keep the book in recents: repoint the entry instead of dropping it. updatePath
   // persists on success.

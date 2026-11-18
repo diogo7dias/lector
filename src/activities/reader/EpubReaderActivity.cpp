@@ -151,6 +151,7 @@ void EpubReaderActivity::onEnter() {
   }
 
   loadCachedBookmarks();
+  takeQueuedBookmarkJump();
 
   requestUpdate();
 }
