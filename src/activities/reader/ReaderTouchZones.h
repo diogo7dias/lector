@@ -56,6 +56,16 @@ inline TapAction tapAction(bool on, Gesture next, Gesture prev, MenuMode menu, b
   return TapAction::None;
 }
 
+// True for a BCP 47 tag of a right-to-left language the reader supports: Hebrew (he, or the
+// old iw), Arabic and Persian. Looks at the primary subtag only, so "ar-EG" and "he_IL" count.
+inline bool isRtlLanguage(const char* tag) {
+  if (tag == nullptr || tag[0] == '\0' || tag[1] == '\0') return false;
+  if (tag[2] != '\0' && tag[2] != '-' && tag[2] != '_') return false;
+  const char a = static_cast<char>(tag[0] | 0x20);
+  const char b = static_cast<char>(tag[1] | 0x20);
+  return (a == 'h' && b == 'e') || (a == 'i' && b == 'w') || (a == 'a' && b == 'r') || (a == 'f' && b == 'a');
+}
+
 // A settings file from before the split held one combined mode under "touchReaderControls":
 // 0 Off, 1 Tap, 2 Swipe, 3 Inverted Tap. It becomes the switch plus one gesture for both
 // directions. Anything else is not an old value and migrates to nothing.

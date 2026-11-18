@@ -83,6 +83,15 @@ TEST(ReaderTouch, ARightToLeftBookSwipesTheOtherWay) {
   EXPECT_EQ(swipeAction(true, Gesture::SwipeOnly, Gesture::SwipeOnly, true, false), TapAction::Next);
 }
 
+TEST(ReaderTouch, HebrewArabicAndPersianTagsAreRightToLeft) {
+  using reader_touch::isRtlLanguage;
+  for (const char* tag : {"he", "iw", "ar", "fa", "AR", "he-IL", "ar_EG", "fa-IR"})
+    EXPECT_TRUE(isRtlLanguage(tag)) << tag;
+  for (const char* tag : {"", "e", "en", "en-US", "heb", "ara", "hex", "fr", "ja"})
+    EXPECT_FALSE(isRtlLanguage(tag)) << tag;
+  EXPECT_FALSE(isRtlLanguage(nullptr));
+}
+
 TEST(ReaderTouch, ADegenerateScreenNeverReportsAnAction) {
   EXPECT_EQ(reader_touch::tapAction(true, Gesture::TapOnly, Gesture::TapOnly, MenuMode::Tap, false, 0, 0, 0, 0),
             TapAction::None);

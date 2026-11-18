@@ -181,7 +181,8 @@ void EpubReaderActivity::loop() {
   // Touch on the open page, read once per loop: a tap or swipe can turn the page or
   // open the menu. Read before the Confirm handling below so the menu opens from
   // either input on the same pass.
-  const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
+  const auto touch =
+      ReaderUtils::detectTouchPageTurn(renderer, mappedInput, reader_touch::isRtlLanguage(epub->getLanguage().c_str()));
   if (ReaderUtils::isTouchMenuGesture(renderer, mappedInput, touch.menu)) {
     openReaderMenu();
     return;
