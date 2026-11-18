@@ -32,6 +32,7 @@
 #include "SilentRestart.h"
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
+#include "TimezonePickerActivity.h"
 #include "WifiCredentialStore.h"
 #include "activities/network/NearbyFileTransferActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -103,6 +104,9 @@ constexpr int kCategoryCount = 5;
 
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) const {
   std::string valueText;
+  if (setting.action == SettingAction::TimeZone) {
+    return clock_zones::TABLE[clock_zones::activeIndex(SETTINGS.clockTimezone)].name;
+  }
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     return SETTINGS.*(setting.valuePtr) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
   }
@@ -231,9 +235,10 @@ void SettingsActivity::rebuildSettingsList() {
 
   for (auto& setting : getSettingsList(&sdFontSystem.registry(), &dictionaries)) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
+    // The light panel owns the frontlight and the Time Zone screen owns the zone; their rows
+    // stay in the shared list for the web page.
+    if (setting.webOnly) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
-      // The light panel owns the frontlight; its rows stay in the shared list for the web page.
-      if (setting.webOnly) continue;
       displaySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_READER) {
       // Settings merged into "Text Settings"
@@ -291,6 +296,7 @@ void SettingsActivity::rebuildSettingsList() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_INSTALL_OTHER_FIRMWARE, SettingAction::InstallOtherFirmware));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_TIMEZONE, SettingAction::TimeZone));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WHATS_NEW, SettingAction::ReleaseNotes));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_ALL_BOOKMARKS, SettingAction::AllBookmarks));
@@ -367,8 +373,9 @@ void SettingsActivity::rebuildSettingsList() {
            {StrId::STR_DEVICE_NAME, StrId::STR_WIFI_NETWORKS, StrId::STR_KOREADER_SYNC, StrId::STR_OPDS_SERVERS,
             StrId::STR_SHARE_CREDENTIALS}},
           {StrId::STR_GRP_DEVICE,
-           {StrId::STR_LANGUAGE, StrId::STR_CLEAN_STORAGE, StrId::STR_CLEAR_READING_CACHE, StrId::STR_CHECK_UPDATES,
-            StrId::STR_SD_FIRMWARE_UPDATE, StrId::STR_INSTALL_OTHER_FIRMWARE, StrId::STR_WHATS_NEW}},
+           {StrId::STR_LANGUAGE, StrId::STR_TIMEZONE, StrId::STR_CLOCK_DST, StrId::STR_CLEAN_STORAGE,
+            StrId::STR_CLEAR_READING_CACHE, StrId::STR_CHECK_UPDATES, StrId::STR_SD_FIRMWARE_UPDATE,
+            StrId::STR_INSTALL_OTHER_FIRMWARE, StrId::STR_WHATS_NEW}},
       });
 }
 
@@ -736,6 +743,17 @@ void SettingsActivity::toggleCurrentSetting() {
                                  rebuildSettingsList();
                                  restoreCursorAfterRebuild();
                                });
+        break;
+      case SettingAction::TimeZone:
+        // About 6 KB of rows, so an allocation that can fail rather than abort.
+        if (auto picker = makeUniqueNoThrow<TimezonePickerActivity>(renderer, mappedInput)) {
+          startActivityForResult(std::move(picker), [this](const ActivityResult&) {
+            SETTINGS.saveToFile();
+            requestUpdate();
+          });
+        } else {
+          LOG_ERR("SET", "OOM: TimezonePickerActivity");
+        }
         break;
       case SettingAction::None:
         // Do nothing

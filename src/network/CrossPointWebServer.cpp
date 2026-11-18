@@ -1637,7 +1637,13 @@ void CrossPointWebServer::handleGetSettings() const {
           doc["value"] = static_cast<int>(s.valueGetter());
         }
         JsonArray options = doc["options"].to<JsonArray>();
-        if (!s.enumStringValues.empty()) {
+        if (s.enumLabel) {
+          char label[64];
+          for (uint8_t i = 0; i < s.enumCount; i++) {
+            s.enumLabel(i, label, sizeof(label));
+            options.add(std::string(label));
+          }
+        } else if (!s.enumStringValues.empty()) {
           for (const auto& opt : s.enumStringValues) {
             options.add(opt);
           }
@@ -1681,8 +1687,23 @@ void CrossPointWebServer::handleGetSettings() const {
         continue;
     }
 
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) {
+    // A row with a long option list (the time zones, about 3 KB) does not fit the stack buffer;
+    // it is written to the heap for the length of this send.
+    char* json = output;
+    size_t jsonSize = outputSize;
+    const size_t needed = measureJson(doc) + 1;
+    auto big = std::unique_ptr<char[]>();
+    if (needed > outputSize) {
+      big = makeUniqueNoThrow<char[]>(needed);
+      if (!big) {
+        LOG_ERR("WEB", "OOM: %u bytes for setting JSON %s", static_cast<unsigned>(needed), s.key);
+        continue;
+      }
+      json = big.get();
+      jsonSize = needed;
+    }
+    const size_t written = serializeJson(doc, json, jsonSize);
+    if (written >= jsonSize) {
       LOG_DBG("WEB", "Skipping oversized setting JSON for: %s", s.key);
       continue;
     }
@@ -1692,7 +1713,7 @@ void CrossPointWebServer::handleGetSettings() const {
     } else {
       seenFirst = true;
     }
-    server->sendContent(output);
+    server->sendContent(json);
     yield();                          // Yield to allow WiFi and other tasks to process during a slow send
     resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
   }
@@ -1725,8 +1746,9 @@ void CrossPointWebServer::handlePostSettings() {
       }
       case SettingType::ENUM: {
         const int val = doc[s.key].as<int>();
-        const int maxVal = s.enumStringValues.empty() ? static_cast<int>(s.enumValues.size())
-                                                      : static_cast<int>(s.enumStringValues.size());
+        const int maxVal = s.enumLabel                  ? s.enumCount
+                           : s.enumStringValues.empty() ? static_cast<int>(s.enumValues.size())
+                                                        : static_cast<int>(s.enumStringValues.size());
         if (val >= 0 && val < maxVal && !s.isEnumValueHidden(static_cast<uint8_t>(val))) {
           if (s.valuePtr) {
             SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);

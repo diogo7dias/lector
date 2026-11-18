@@ -20,7 +20,8 @@ class HalClock {
   // every 10 minutes rather than reading the date from the RTC on every repaint.
   // ponytail: the shown time can lag a switch by up to 10 minutes.
   static constexpr unsigned long ZONE_RECHECK_MS = 600000;
-  mutable uint8_t _zoneCached = 0;
+  // The zone and summer-time override _zoneOffsetMin was worked out for; 0xFFFF = none yet.
+  mutable uint16_t _zoneCached = 0xFFFF;
   mutable int _zoneOffsetMin = 0;
   mutable unsigned long _zoneCheckedMs = 0;
   // 2020-01-01T00:00:00Z. Reject the epoch from an unsynced system clock.
@@ -47,18 +48,17 @@ class HalClock {
   // NTP sync has set since the last power-off.
   bool hasDate() const;
 
-  // Minutes since local midnight (0-1439). Takes the same offset and zone as formatTime.
+  // Minutes since local midnight (0-1439). `zone` is SETTINGS.clockTimezone and `dst`
+  // SETTINGS.clockDst (see ClockZones.h); every caller passes the same two, so the status bar,
+  // Home, the Light Schedule and the reading journal show one local time.
   // Returns false if RTC is not available.
-  bool localMinutes(uint16_t& minutes, uint8_t utcOffsetQuarterHoursBiased = 48, uint8_t zone = 0) const;
+  bool localMinutes(uint16_t& minutes, uint8_t zone, uint8_t dst) const;
 
   // Format time into a caller-provided buffer.
   // 24h mode produces "HH:MM" (needs >=6 bytes); 12h mode produces "H:MM AM"/"HH:MM PM" (needs >=9 bytes).
-  // utcOffsetQuarterHoursBiased: biased quarter-hour offset (48 = UTC+0, 0 = UTC-12, 104 = UTC+14).
   // use12Hour: when true, format as 12-hour clock with AM/PM suffix.
-  // zone: a clock_zones index; 0 uses the fixed offset, any other follows that zone's summer time.
   // Returns false if RTC is not available.
-  bool formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased = 48, bool use12Hour = false,
-                  uint8_t zone = 0) const;
+  bool formatTime(char* buf, size_t bufSize, bool use12Hour, uint8_t zone, uint8_t dst) const;
 
   // Sync from an NTP server. Requires WiFi to be connected. Sets the system clock, and
   // the RTC too on a board that has one.

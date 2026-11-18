@@ -33,6 +33,7 @@ enum class SettingAction {
   ReleaseNotes,
   ScreenCalibration,
   AllBookmarks,
+  TimeZone,
 };
 
 struct SettingInfo {
@@ -63,7 +64,8 @@ struct SettingInfo {
   // but eighteen rows in Controls would bury every other control there.
   bool inButtons = false;
   // Kept off the device's Settings screen: the web settings page is its only row. The
-  // frontlight's rows, whose on-device home is the light panel.
+  // frontlight's rows, whose on-device home is the light panel, and the time zone's drop-down,
+  // whose on-device home is its own screen.
   bool webOnly = false;
 
   // Enum values that are no longer offered but must keep their slot. ENUM settings persist
@@ -75,6 +77,17 @@ struct SettingInfo {
 
   bool isEnumValueHidden(const uint8_t value) const {
     return std::find(hiddenEnumValues.begin(), hiddenEnumValues.end(), value) != hiddenEnumValues.end();
+  }
+
+  // ENUM whose options are a flash table too long for enumValues (the time zones): `enumCount`
+  // of them, each named by enumLabel(index, buf, size). Only the web page lists them, so a
+  // screen never builds the names.
+  uint8_t enumCount = 0;
+  void (*enumLabel)(uint8_t index, char* buf, size_t size) = nullptr;
+  SettingInfo& withTableEnum(const uint8_t count, void (*label)(uint8_t, char*, size_t)) {
+    enumCount = count;
+    enumLabel = label;
+    return *this;
   }
 
   // Direct char[] string fields (for settings stored in CrossPointSettings)

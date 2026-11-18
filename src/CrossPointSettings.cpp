@@ -181,7 +181,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
       const uint8_t fieldDefault = s.*(info.valuePtr);  // struct-initializer default, read before we overwrite it
       uint8_t v = doc[info.key] | fieldDefault;
       if (info.type == SettingType::ENUM) {
-        v = clamp(v, (uint8_t)info.enumValues.size(), fieldDefault);
+        v = clamp(v, info.enumCount ? info.enumCount : (uint8_t)info.enumValues.size(), fieldDefault);
       } else if (info.type == SettingType::TOGGLE) {
         v = clamp(v, (uint8_t)2, fieldDefault);
       } else if (info.type == SettingType::VALUE) {
@@ -267,6 +267,16 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
 bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
   CrossPointSettings& s = *this;
   bool needsResave = false;
+
+  // Time zone: 0.58.0 stored a fixed UTC offset (clockUtcOffsetQ) and a city from a list of ten
+  // (clockTimeZone, 0 = use the offset); CrossPoint 1.x stored the offset alone. A file with no
+  // valid clockTimezone takes the zone those two keys meant, so it keeps showing the same local
+  // time, and the resave drops them.
+  if (clockTimezone >= clock_zones::COUNT) {
+    clockTimezone = clock_zones::fromLegacy(doc["clockTimeZone"] | (uint8_t)0, doc["clockUtcOffsetQ"] | (uint8_t)48);
+    LOG_INF("CPS", "Time zone from the old keys: %s", clock_zones::TABLE[clockTimezone].name);
+    needsResave = true;
+  }
 
   // Title Source left the settings list (see StatusBarBlock::foldTitleSource): a file that
   // chose Book moves that title onto the Book Title item, once, and is written back.

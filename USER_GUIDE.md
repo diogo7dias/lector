@@ -1205,12 +1205,10 @@ Session**, **Pages to Paragraph**. Alongside them:
   starts. A book with more than 64 chapters shows a plain bar.
 - **Progress Bar** — Off, Slim, Medium or Fat, for when the status bar itself is off.
 - **XTC Status Bar** — Hide, Bottom or Top, for XTC books.
-- **Clock UTC Offset**, **Clock Format** (24-hour or 12-hour) and **Clock Synced**. The offset
-  picker has three fields, sign, hours and minutes: Confirm moves between them and the direction
-  keys change the one being edited, or tap a field to move to it and tap it again to step it. The
-  time the offset produces is shown under the fields.
-- **Clock Time Zone** — pick a city and the clock follows its summer time by itself. Left on
-  **Manual (UTC offset)**, the default, the clock uses the offset above.
+- **Clock Format** (24-hour or 12-hour) and **Clock Synced**.
+- **Time Zone** and **Daylight Saving** are in Settings > System, and on the web settings page.
+  Every clock follows them: the status bar and Home clock, the Light Schedule and the dates in
+  your reading history.
 
 ### 12.3 Controls
 
@@ -1269,6 +1267,14 @@ Session**, **Pages to Paragraph**. Alongside them:
   and Brazil), Russian, Swedish, Romanian, Catalan, Ukrainian, Belarusian, Italian, Polish,
   Finnish, Danish, Dutch, Turkish, Kazakh, Hungarian, Lithuanian, Slovenian, Valencian,
   Hebrew, Slovak, Vietnamese, Norwegian, Arabic, Bosnian and Indonesian.
+- **Time Zone** — a list of 104 zones, west to east, each with its standard offset: cities
+  and regions that keep their own summer time (London, Berlin, New York, Sydney and so on), then
+  places that do not, then a plain **UTC-12:00** to **UTC+14:00** at the end for anywhere the list
+  misses. The web settings page offers the same list as a drop-down. Until you pick one the clock
+  shows UTC.
+- **Daylight Saving** — **Auto** follows the zone's own rule. **On** and **Off** override it with a
+  fixed offset (the standard one, plus an hour when On), for a country that changed its law
+  before this firmware did.
 - **Device Name** — how this reader introduces itself to another during Nearby Sync. Left
   empty, it falls back to a generated `Lector-XXXX` name derived from the MAC address.
 - **Clean Up Storage** — removes cached data for books that are no longer on the card. Books

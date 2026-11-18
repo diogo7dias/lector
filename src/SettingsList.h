@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BoardConfig.h>
+#include <ClockZones.h>
 #include <HalClock.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
@@ -724,17 +725,16 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
                          {StrId::STR_HIDE, StrId::STR_BOTTOM, StrId::STR_TOP}, "xtcStatusBarMode",
                          StrId::STR_CUSTOMISE_STATUS_BAR));
 
-  // Clock entries (web settings only).
-  // Range 0..104 = quarter-hour steps from UTC-12:00 to UTC+14:00, biased by 48.
-  emit(SettingInfo::Value(StrId::STR_CLOCK_UTC_OFFSET, &CrossPointSettings::clockUtcOffsetQ, {0, 104, 1},
-                          "clockUtcOffsetQ", StrId::STR_CUSTOMISE_STATUS_BAR));
-
-  // Order matches clock_zones::TZ.
-  emit(SettingInfo::Enum(StrId::STR_CLOCK_TIME_ZONE, &CrossPointSettings::clockTimeZone,
-                         {StrId::STR_TZ_MANUAL, StrId::STR_TZ_LISBON, StrId::STR_TZ_PARIS, StrId::STR_TZ_ATHENS,
-                          StrId::STR_TZ_NEW_YORK, StrId::STR_TZ_CHICAGO, StrId::STR_TZ_DENVER,
-                          StrId::STR_TZ_LOS_ANGELES, StrId::STR_TZ_SYDNEY, StrId::STR_TZ_AUCKLAND},
-                         "clockTimeZone", StrId::STR_CUSTOMISE_STATUS_BAR));
+  // Clock entries (web settings only, except the two time zone rows).
+  // The zone is a pick from CrossPoint's table. The device's row for it is the Time Zone action,
+  // a screen of its own; this row is the web page's drop-down and the file's key.
+  emit(SettingInfo::Enum(StrId::STR_TIMEZONE, &CrossPointSettings::clockTimezone, {}, "clockTimezone",
+                         StrId::STR_CAT_SYSTEM)
+           .withTableEnum(clock_zones::COUNT, clock_zones::label)
+           .withWebOnly());
+  emit(SettingInfo::Enum(StrId::STR_CLOCK_DST, &CrossPointSettings::clockDst,
+                         {StrId::STR_CLOCK_DST_AUTO, StrId::STR_STATE_ON, StrId::STR_STATE_OFF}, "clockDst",
+                         StrId::STR_CAT_SYSTEM));
 
   emit(SettingInfo::Enum(StrId::STR_CLOCK_FORMAT, &CrossPointSettings::clockFormat,
                          {StrId::STR_CLOCK_FORMAT_24H, StrId::STR_CLOCK_FORMAT_12H}, "clockFormat",
