@@ -16,6 +16,7 @@
 #include "LectorFace.h"
 #include "SleepFacePaint.h"
 #include "SleepInfoOverlay.h"
+#include "SleepOverlay.h"
 #include "SleepPreClear.h"
 #include "SleepTiming.h"
 #include "activities/reader/ReaderUtils.h"
@@ -137,6 +138,15 @@ void SleepActivity::renderSleepScreen() const {
   // physically observable (and this one is the user's visible answer to a press that then
   // spends seconds reading the card), and the face's own base is HALF/FULL, not FAST, so
   // the composed pass would put the popup on a different waveform than it runs today.
+  // Transparent draws over the page, so nothing may scrub or replace it: the popup is put up
+  // and taken back out of the framebuffer, and there is no pre-clear. The overlay's own
+  // waveform is the only pass that cleans, as CrossPoint does.
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM) {
+    showPopupKeepingPage();
+    SleepTiming::mark("popup");
+    return renderTransparentCustomSleepScreen();
+  }
+
   if (APP_STATE.lastSleepFromReader) {
     ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
@@ -173,6 +183,9 @@ void SleepActivity::renderSleepScreen() const {
       return renderBlankSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER):
       return renderCoverSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_TRANSPARENT):
+      // The cover with the overlay over it; no cover means the overlay over a blank page.
+      return renderCoverSleepScreen(CoverFallback::Overlay);
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM):
       // The cover while reading, a wallpaper otherwise (and when the book has no cover).
       return APP_STATE.lastSleepFromReader ? renderCoverSleepScreen(CoverFallback::Custom) : renderCustomSleepScreen();
@@ -206,7 +219,8 @@ void SleepActivity::renderBlankSleepScreen() const {
       sleep_face::planFor(sleep_face::Face::PlainLector, /*sourceHasGrayscale=*/false, display.profile()).base);
 }
 
-void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Face face) const {
+void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Face face,
+                                            SleepOverlay* const overlay) const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   // Fit shrinks while decoding, so the dither lands on panel pixels; the renderer would
@@ -227,7 +241,8 @@ void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Fa
   // The cover filter describes how a full-screen image should look: NO_FILTER keeps the
   // tone (grayscale), the others flatten it to black and white.
   // A panel without gray (DeviceProfile::panelHasGray) skips the planes it cannot draw.
-  const bool hasGreyscale = bitmap.hasGreyscale() && display.profile().panelHasGray &&
+  // An overlay can carry grey of its own, so it asks for the planes too.
+  const bool hasGreyscale = (bitmap.hasGreyscale() || overlay) && display.profile().panelHasGray &&
                             SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
 
   renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
@@ -240,6 +255,7 @@ void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Fa
   // and once per pass below for the same reason the bitmap is. On the cover face only
   // the reading line draws: the wallpaper badges need a SleepInfoOverlayScope.
   drawSleepInfoOverlay(renderer);
+  if (overlay && !overlay->draw(renderer)) LOG_ERR("SLP", "Overlay failed on the cover");
 
   // Everything above this point is card reading and decoding; everything below is the
   // panel. The gap between "decode" and "face" is the wallpaper's own refresh cost.
@@ -273,17 +289,19 @@ void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Fa
           bitmap.rewindToData();
           renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
           drawSleepInfoOverlay(renderer);
-          return true;
+          return !overlay || overlay->draw(renderer);
         },
         [](GfxRenderer::RenderMode) {});
   }
 }
 
 // What the cover face shows when there is no book, no cover, or the cover cannot be read:
-// the Lector face (Cover), or the wallpaper (Cover + Custom). Custom's own cover fallback is
-// off in the second case, so the two cannot send each other round in a circle.
+// the Lector face (Cover), the wallpaper (Cover + Custom; Custom's own cover fallback is off
+// there, so the two cannot send each other round in a circle), or the overlay on its own
+// (Cover + Transparent).
 void SleepActivity::renderNoCoverSleepScreen(const CoverFallback fallback) const {
   if (fallback == CoverFallback::Custom) return renderCustomSleepScreen(/*thenCover=*/false);
+  if (fallback == CoverFallback::Overlay) return renderTransparentCustomSleepScreen();
   renderDefaultSleepScreen();
 }
 
@@ -347,7 +365,10 @@ void SleepActivity::renderCoverSleepScreen(const CoverFallback fallback) const {
     Bitmap bitmap(file);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Rendering sleep cover: %s", coverBmpPath.c_str());
-      renderBitmapSleepScreen(bitmap, sleep_face::Face::CoverFallback);
+      // Cover + Transparent: no usable overlay just means the plain cover.
+      SleepOverlay overlay;
+      const bool withOverlay = fallback == CoverFallback::Overlay && overlay.prepare(renderer);
+      renderBitmapSleepScreen(bitmap, sleep_face::Face::CoverFallback, withOverlay ? &overlay : nullptr);
       return;
     }
   }

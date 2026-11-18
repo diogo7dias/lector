@@ -6,6 +6,7 @@
 
 class Bitmap;
 struct PxcRenderOptions;
+class SleepOverlay;
 
 class SleepActivity final : public Activity {
  public:
@@ -22,12 +23,16 @@ class SleepActivity final : public Activity {
   // Light and Dark faces draw it on purpose; every face that finds nothing to show (no
   // wallpaper, no cover, a decode that failed) lands here, on white.
   void renderDefaultSleepScreen(bool dark = false) const;
+  // Transparent: an alpha overlay over the page the reader left (SleepOverlay.cpp).
+  void renderTransparentCustomSleepScreen() const;
+  // The "Entering sleep" popup without the page under it being lost to it.
+  void showPopupKeepingPage() const;
   // Quick Resume: the page stays, a moon is added (SleepQuickResume.cpp).
   void renderQuickResumeScreen() const;
   // The None face: an empty white page.
   void renderBlankSleepScreen() const;
   // Where a face goes when it has nothing of its own to show.
-  enum class CoverFallback : uint8_t { Default, Custom };
+  enum class CoverFallback : uint8_t { Default, Custom, Overlay };
   // `thenCover` false: no wallpaper means the Lector face, not the cover (Cover + Custom
   // has already tried the cover).
   void renderCustomSleepScreen(bool thenCover = true) const;
@@ -40,7 +45,8 @@ class SleepActivity final : public Activity {
   // submission count come from sleep_face::planFor rather than from a literal here. Both
   // faces share this renderer and therefore share those rows; the parameter exists so the
   // call site states its intent and the plan is asked the right question.
-  void renderBitmapSleepScreen(Bitmap& bitmap, sleep_face::Face face) const;
+  // `overlay`, when set, is drawn over the bitmap in every pass (Cover + Transparent).
+  void renderBitmapSleepScreen(Bitmap& bitmap, sleep_face::Face face, SleepOverlay* overlay = nullptr) const;
   bool renderWallpaperFile(const std::string& filename, const PxcRenderOptions* pxcOptions, uint32_t linePosition,
                            uint32_t lineTotal) const;
 
