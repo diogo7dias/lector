@@ -286,8 +286,8 @@ Three System settings move books for you as you read:
 | Previous page | **Left** or **Volume Up**        |
 | Next page     | **Right** or **Volume Down**     |
 
-**Settings > Controls > Side Button Layout (reader)** swaps the two side buttons or disables
-them while reading. **Orient front buttons** turns the bottom-edge buttons along with the
+**Settings > Controls > Side Button Layout (reader)** swaps the two side buttons, makes both turn
+the same way (Next/Next or Prev/Prev, for one-handed reading) or disables them while reading. **Orient front buttons** turns the bottom-edge buttons along with the
 page when you read in landscape.
 
 With **Short Power Button Click** set to **Page Turn**, a short press of **Power** also turns
@@ -336,6 +336,11 @@ of them can be pointed at any action.
 - **Long press while reading** — holding **Confirm** in the book.
 - **Hold in in-book menu** — holding **Confirm** with the menu open.
 - **Double-click power** — two quick presses of **Power**.
+
+On the X4 Pro a fresh device starts with a double press of **Home** and a double click of
+**Power** bound to **Toggle Frontlight**, and holding **Home** in a book bound to **Open Reader
+Menu**. Both are ordinary actions in the list, so any button can take them; a binding you have
+already saved is kept as it is. Other boards start with those gestures unbound.
 
 **Pop-up Items** decides which rows the quick pop-up those bindings can open actually
 contains.
@@ -1151,7 +1156,7 @@ Session**, **Pages to Paragraph**. Alongside them:
 
 - **Remap Front Buttons** — reassign each bottom-edge button (X3/X4 only; unavailable on X4 Pro).
 - **Orient front buttons** — rotate their meaning with the screen.
-- **Side Button Layout (reader)** — Prev/Next, Next/Prev or Disabled.
+- **Side Button Layout (reader)** — Prev/Next, Next/Prev, Disabled, Next/Next or Prev/Prev.
 
 **Power button**
 

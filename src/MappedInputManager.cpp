@@ -16,7 +16,8 @@ static_assert(HalGPIO::BTN_BACK == 0 && HalGPIO::BTN_CONFIRM == 1 && HalGPIO::BT
 static_assert(GfxRenderer::Portrait == 0 && GfxRenderer::LandscapeClockwise == 1 &&
               GfxRenderer::PortraitInverted == 2 && GfxRenderer::LandscapeCounterClockwise == 3);
 static_assert(CrossPointSettings::PREV_NEXT == 0 && CrossPointSettings::NEXT_PREV == 1 &&
-              CrossPointSettings::SIDE_BUTTONS_DISABLED == 2);
+              CrossPointSettings::SIDE_BUTTONS_DISABLED == 2 && CrossPointSettings::NEXT_NEXT == 3 &&
+              CrossPointSettings::PREV_PREV == 4);
 
 button_mapping::Config MappedInputManager::mappingConfig() const {
   return {{SETTINGS.frontButtonBack, SETTINGS.frontButtonConfirm, SETTINGS.frontButtonLeft, SETTINGS.frontButtonRight},

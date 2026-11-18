@@ -45,11 +45,23 @@ constexpr Native NATIVE_HOME_KEY{{bound_action::LP_MENU_GO_HOME, LP_MENU_DISABLE
 constexpr Native NATIVE_POWER_KEY{{LP_MENU_DISABLED, LP_MENU_DISABLED},
                                   {bound_action::LP_MENU_SLEEP, LP_MENU_DISABLED}};
 
-// What `key` already does. In a book, Side button layout Next/Prev makes the left key page
-// forward and the right key back, so their natives trade places with it.
-constexpr const Native& nativeFor(const int key, const bool sidesSwapped) {
-  if (key == 0) return sidesSwapped ? NATIVE_RIGHT_KEY : NATIVE_LEFT_KEY;
-  if (key == 1) return sidesSwapped ? NATIVE_LEFT_KEY : NATIVE_RIGHT_KEY;
+// Which way a side key pages under the Side button layout (CrossPointSettings::
+// SIDE_BUTTON_LAYOUT: 1 Next/Prev, 3 Next/Next, 4 Prev/Prev; anything else, Disabled
+// included, leaves the keys as they are: the left key back, the right key forward).
+constexpr uint8_t sideKeyPage(const int key, const uint8_t layout) {
+  if (layout == 3) return LP_MENU_PAGE_NEXT;
+  if (layout == 4) return LP_MENU_PAGE_PREV;
+  const bool swapped = layout == 1;
+  return (key == 0) != swapped ? LP_MENU_PAGE_PREV : LP_MENU_PAGE_NEXT;
+}
+
+// What `key` already does. In a book, the Side button layout changes which way each side key
+// pages (Next/Prev trades them, Next/Next and Prev/Prev point both one way), so their natives
+// follow it. A plain bool still works: false is Prev/Next, true is Next/Prev.
+constexpr const Native& nativeFor(const int key, const uint8_t layout) {
+  if (key == 0 || key == 1) {
+    return sideKeyPage(key, layout) == LP_MENU_PAGE_PREV ? NATIVE_LEFT_KEY : NATIVE_RIGHT_KEY;
+  }
   return key == 2 ? NATIVE_HOME_KEY : NATIVE_POWER_KEY;
 }
 

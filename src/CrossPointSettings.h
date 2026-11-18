@@ -123,7 +123,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // Side button layout options
   // Default: Up = Previous, Down = Next
-  enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTONS_DISABLED = 2, SIDE_BUTTON_LAYOUT_COUNT };
+  // Numbered like CrossPoint's so a settings file reads the same in both. NEXT_NEXT and
+  // PREV_PREV turn the same way from either side key, for reading one-handed.
+  enum SIDE_BUTTON_LAYOUT {
+    PREV_NEXT = 0,
+    NEXT_PREV = 1,
+    SIDE_BUTTONS_DISABLED = 2,
+    NEXT_NEXT = 3,
+    PREV_PREV = 4,
+    SIDE_BUTTON_LAYOUT_COUNT
+  };
 
   // Font family options (built-in fonts only; SD card fonts use sdFontFamilyName).
   // ChareInk is the sole built-in reading family; more fonts are added from the SD card.
@@ -230,6 +239,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr auto LP_MENU_ALIGN_JUSTIFY = bound_action::LP_MENU_ALIGN_JUSTIFY;
   static constexpr auto LP_MENU_TOGGLE_PARAGRAPH_SPACING = bound_action::LP_MENU_TOGGLE_PARAGRAPH_SPACING;
   static constexpr auto LP_MENU_QUICK_LOCK = bound_action::LP_MENU_QUICK_LOCK;
+  static constexpr auto LP_MENU_TOGGLE_FRONTLIGHT = bound_action::LP_MENU_TOGGLE_FRONTLIGHT;
+  static constexpr auto LP_MENU_OPEN_READER_MENU = bound_action::LP_MENU_OPEN_READER_MENU;
   static constexpr auto LONG_PRESS_MENU_FUNCTION_COUNT = bound_action::LONG_PRESS_MENU_FUNCTION_COUNT;
 
   // The three buttons the Buttons screen binds, in the order it lists them. Left and
@@ -523,6 +534,18 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // the double-click window, and a bound hold takes the press away from the firmware's
   // own hold behaviour (page repeat, list paging). Leaving them Disabled is what keeps
   // both free until the user asks for them.
+  // The X4 Pro, the one board with a frontlight, starts with a Home double press and a
+  // Power double click that toggle it and a Home hold that opens the reader menu (CrossPoint's
+  // defaults). Elsewhere they stay Disabled: a bound double click delays the single by the
+  // double-click window, which a board with nothing to toggle would pay for no reason. Only a
+  // field absent from a saved file takes these; a binding the file holds is kept as it is.
+#if FREEINK_DEVICE_X4PRO
+  static constexpr uint8_t DEFAULT_FRONTLIGHT_TOGGLE = LP_MENU_TOGGLE_FRONTLIGHT;
+  static constexpr uint8_t DEFAULT_HOME_READER_MENU = LP_MENU_OPEN_READER_MENU;
+#else
+  static constexpr uint8_t DEFAULT_FRONTLIGHT_TOGGLE = LP_MENU_DISABLED;
+  static constexpr uint8_t DEFAULT_HOME_READER_MENU = LP_MENU_DISABLED;
+#endif
   uint8_t btnBookLeftSingle = LP_MENU_PAGE_PREV;
   uint8_t btnBookLeftDouble = LP_MENU_DISABLED;
   uint8_t btnBookLeftHold = LP_MENU_DISABLED;
@@ -530,8 +553,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t btnBookRightDouble = LP_MENU_DISABLED;
   uint8_t btnBookRightHold = LP_MENU_DISABLED;
   uint8_t btnBookHomeSingle = LP_MENU_GO_HOME;
-  uint8_t btnBookHomeDouble = LP_MENU_DISABLED;
-  uint8_t btnBookHomeHold = LP_MENU_DISABLED;
+  uint8_t btnBookHomeDouble = DEFAULT_FRONTLIGHT_TOGGLE;
+  uint8_t btnBookHomeHold = DEFAULT_HOME_READER_MENU;
   uint8_t btnUiLeftSingle = LP_MENU_PAGE_PREV;
   uint8_t btnUiLeftDouble = LP_MENU_DISABLED;
   uint8_t btnUiLeftHold = LP_MENU_DISABLED;
@@ -539,16 +562,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t btnUiRightDouble = LP_MENU_DISABLED;
   uint8_t btnUiRightHold = LP_MENU_DISABLED;
   uint8_t btnUiHomeSingle = LP_MENU_GO_HOME;
-  uint8_t btnUiHomeDouble = LP_MENU_DISABLED;
+  uint8_t btnUiHomeDouble = DEFAULT_FRONTLIGHT_TOGGLE;
   uint8_t btnUiHomeHold = LP_MENU_DISABLED;
   // Power. Its defaults are what the old shortPwrBtn / doubleClickPowerFunction pair
   // defaulted to: a click does nothing, a hold sleeps. The hold keeps its own threshold
   // (sleepHoldMs), so leaving it on Sleep leaves the sleep hold exactly as it was.
   uint8_t btnBookPowerSingle = LP_MENU_DISABLED;
-  uint8_t btnBookPowerDouble = LP_MENU_DISABLED;
+  uint8_t btnBookPowerDouble = DEFAULT_FRONTLIGHT_TOGGLE;
   uint8_t btnBookPowerHold = LP_MENU_SLEEP;
   uint8_t btnUiPowerSingle = LP_MENU_DISABLED;
-  uint8_t btnUiPowerDouble = LP_MENU_DISABLED;
+  uint8_t btnUiPowerDouble = DEFAULT_FRONTLIGHT_TOGGLE;
   uint8_t btnUiPowerHold = LP_MENU_SLEEP;
 
   // The binding field for one button and gesture, in or out of a book. Returns a

@@ -471,9 +471,10 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
                            StrId::STR_CAT_READER));
 
   // --- Controls ---
-  emit(SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
-                         {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED}, "sideButtonLayout",
-                         StrId::STR_CAT_CONTROLS));
+  emit(SettingInfo::Enum(
+      StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
+      {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED, StrId::STR_NEXT_NEXT, StrId::STR_PREV_PREV},
+      "sideButtonLayout", StrId::STR_CAT_CONTROLS));
 
   emit(SettingInfo::Toggle(StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION, &CrossPointSettings::frontButtonFollowOrientation,
                            "frontButtonFollowOrientation", StrId::STR_CAT_CONTROLS));

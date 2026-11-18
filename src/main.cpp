@@ -872,29 +872,33 @@ void loop() {
     // the detectors and drop whatever gesture was in flight.
     static uint8_t appliedBindings[button_router::KEY_COUNT][CrossPointSettings::BOUND_GESTURE_COUNT] = {};
     static bool bindingsApplied = false;
-    static bool appliedSidesSwapped = false;
+    static uint8_t appliedLayout = 0;
 
     const bool inBook = activityManager.isBookContext();
-    // The layout swap only reaches the reader's PageBack/PageForward; lists page by key.
-    const bool sidesSwapped = inBook && SETTINGS.sideButtonLayout == CrossPointSettings::NEXT_PREV;
+    // The side layout only reaches the reader's PageBack/PageForward; lists page by key.
+    const uint8_t layout = inBook ? SETTINGS.sideButtonLayout : static_cast<uint8_t>(CrossPointSettings::PREV_NEXT);
     uint8_t wanted[button_router::KEY_COUNT][CrossPointSettings::BOUND_GESTURE_COUNT] = {};
     for (uint8_t key = 0; key < button_router::KEY_COUNT; ++key) {
       for (uint8_t gesture = 0; gesture < CrossPointSettings::BOUND_GESTURE_COUNT; ++gesture) {
         const uint8_t* binding = SETTINGS.buttonBinding(inBook, key, gesture);
         wanted[key][gesture] = binding != nullptr ? *binding : CrossPointSettings::LP_MENU_DISABLED;
       }
+      // A side key still on its factory paging (left back, right forward) pages the way the
+      // layout says; a binding the user set to anything else is theirs and stays absolute.
+      if (key < 2 && wanted[key][CrossPointSettings::BOUND_SINGLE] == button_router::sideKeyPage(key, 0)) {
+        wanted[key][CrossPointSettings::BOUND_SINGLE] = button_router::sideKeyPage(key, layout);
+      }
     }
-    if (!bindingsApplied || sidesSwapped != appliedSidesSwapped ||
-        memcmp(wanted, appliedBindings, sizeof(wanted)) != 0) {
+    if (!bindingsApplied || layout != appliedLayout || memcmp(wanted, appliedBindings, sizeof(wanted)) != 0) {
       for (uint8_t key = 0; key < button_router::KEY_COUNT; ++key) {
         // A key still set to what it already did is left alone entirely (Router::intercepts).
         bindingRouter.configure(key,
                                 button_router::Binding{wanted[key][CrossPointSettings::BOUND_SINGLE],
                                                        wanted[key][CrossPointSettings::BOUND_DOUBLE],
                                                        wanted[key][CrossPointSettings::BOUND_HOLD]},
-                                button_router::nativeFor(key, sidesSwapped));
+                                button_router::nativeFor(key, layout));
       }
-      appliedSidesSwapped = sidesSwapped;
+      appliedLayout = layout;
       // Power holds at the user's own sleepHoldMs, not the shared 500 ms: that is the
       // threshold its hold has always used, and leaving it on Sleep must not change it.
       bindingRouter.setHoldMs(CrossPointSettings::BOUND_BTN_POWER, SETTINGS.getSleepHoldMs());

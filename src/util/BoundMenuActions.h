@@ -94,6 +94,12 @@ enum LONG_PRESS_MENU_FUNCTION {
   // Ignores every input until the same action fires again, so it can only sit on a
   // Buttons binding: the routed gestures are the one path that still runs while locked.
   LP_MENU_QUICK_LOCK = 35,
+  // Flips the frontlight on or off without opening the panel (CrossPoint's Home double press
+  // and Power double click). Works anywhere; a board with no frontlight refuses it.
+  LP_MENU_TOGGLE_FRONTLIGHT = 36,
+  // Opens the reader's own menu, what Confirm does on a press (CrossPoint's Home long press).
+  // Only a book has one, so it is greyed outside a book.
+  LP_MENU_OPEN_READER_MENU = 37,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 
