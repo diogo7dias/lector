@@ -70,6 +70,7 @@ void EpubReaderActivity::onEnter() {
   DeferredFavorite::flush();
 
   if (!epub) {
+    takeQueuedBookmarkJump();  // drops it
     return;
   }
 
@@ -151,6 +152,7 @@ void EpubReaderActivity::onEnter() {
   }
 
   loadCachedBookmarks();
+  takeQueuedBookmarkJump();
 
   requestUpdate();
 }

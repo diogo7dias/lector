@@ -8,15 +8,23 @@
 #include "BookmarkUtil.h"
 
 bool BookmarkFile::load(const std::string& bookPath, std::vector<BookmarkEntry>& bookmarks) {
+  std::string stored;
+  if (!loadFile(BookmarkUtil::getBookmarkPath(bookPath), bookmarks, &stored)) return false;
+  // A file from before the path was stored gets it once, so All Bookmarks can list it.
+  if (stored.empty() && !bookmarks.empty()) save(bookPath, bookmarks);
+  return true;
+}
+
+bool BookmarkFile::loadFile(const std::string& path, std::vector<BookmarkEntry>& bookmarks, std::string* bookPath) {
   bookmarks.clear();
 
   // Read/write go through PersistableStoreBase so the JSON parser and
   // serializer stay instantiated once, in PersistableStore.cpp.
-  const std::string path = BookmarkUtil::getBookmarkPath(bookPath);
   JsonDocument doc;
   if (!PersistableStoreBase::readDocFromFile(path.c_str(), doc)) {
     return false;
   }
+  if (bookPath) *bookPath = doc["book"] | "";
 
   JsonArray arr = doc["bookmarks"].as<JsonArray>();
   bookmarks.reserve(arr.size());
@@ -41,6 +49,9 @@ bool BookmarkFile::load(const std::string& bookPath, std::vector<BookmarkEntry>&
 
 bool BookmarkFile::save(const std::string& bookPath, const std::vector<BookmarkEntry>& bookmarks) {
   JsonDocument doc;
+  // The file name cannot be turned back into the path (slashes and the extension are
+  // gone), so the path rides along for the list of every book's bookmarks.
+  doc["book"] = bookPath;
   JsonArray arr = doc["bookmarks"].to<JsonArray>();
   LOG_DBG("BKM", "Saving %zu bookmarks to file", bookmarks.size());
   for (const auto& bookmark : bookmarks) {

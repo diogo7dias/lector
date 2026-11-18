@@ -12,6 +12,7 @@
 #include "BookmarkEntry.h"
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderActivity.h"
+#include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderSearchActivity.h"
 #include "EpubReaderUtils.h"
 #include "ProgressMapper.h"
@@ -61,6 +62,26 @@ bool bookmarkMatchesProgress(const BookmarkEntry& bookmark, const int spineIndex
          bookmarkProgress - bookmarkProgressEpsilon <= pageRange.end;
 }
 }  // namespace
+
+namespace {
+std::string queuedJumpBook;
+BookmarkEntry queuedJump;
+}  // namespace
+
+void EpubReaderActivity::queueBookmarkJump(std::string bookPath, BookmarkEntry bookmark) {
+  queuedJumpBook = std::move(bookPath);
+  queuedJump = std::move(bookmark);
+}
+
+void EpubReaderActivity::takeQueuedBookmarkJump() {
+  std::string book;
+  book.swap(queuedJumpBook);
+  if (!epub || sortesMode || book.empty() || book != epub->getPath()) return;
+  // No page is drawn yet, so the jump has no origin of its own: where reading stopped
+  // becomes the page Return goes back to, as from the book's own Bookmarks list.
+  if (cachedVisibleTextOffset) returnHistory.recordJump({currentSpineIndex, *cachedVisibleTextOffset});
+  onBookmarkJumpResult(EpubReaderBookmarksActivity::jumpTo(queuedJump, epub->getSpineItemsCount()));
+}
 
 void EpubReaderActivity::onBookmarkJumpResult(const ActivityResult& result) {
   loadCachedBookmarks();

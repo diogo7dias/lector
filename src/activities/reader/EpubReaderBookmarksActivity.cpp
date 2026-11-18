@@ -76,9 +76,7 @@ void EpubReaderBookmarksActivity::buildScreen(UiScreen& screen) {
   screen.list(props);
 }
 
-void EpubReaderBookmarksActivity::openBookmark(const int index) {
-  if (index < 0 || index >= listCount()) return;
-  const BookmarkEntry& bookmark = bookmarks[index];
+ProgressChangeResult EpubReaderBookmarksActivity::jumpTo(const BookmarkEntry& bookmark, const int spineCount) {
   ProgressChangeResult result{};
   result.xpath = bookmark.xpath;
   result.percentage = bookmark.percentage;
@@ -89,12 +87,17 @@ void EpubReaderBookmarksActivity::openBookmark(const int index) {
   // hints below are stale. The reader validates the index.
   result.spineIndex = bookmark.computedSpineIndex;
   if (bookmark.computedChapterPageCount > 0 && bookmark.computedChapterProgress < bookmark.computedChapterPageCount &&
-      bookmark.computedSpineIndex < epub.getSpineItemsCount()) {
+      bookmark.computedSpineIndex < spineCount) {
     result.page = bookmark.computedChapterProgress;
     result.totalPages = bookmark.computedChapterPageCount;
   }
+  return result;
+}
+
+void EpubReaderBookmarksActivity::openBookmark(const int index) {
+  if (index < 0 || index >= listCount()) return;
   app.clearTapFlash();
-  setResult(std::move(result));
+  setResult(jumpTo(bookmarks[index], epub.getSpineItemsCount()));
   finish();
 }
 
