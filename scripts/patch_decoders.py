@@ -5,8 +5,9 @@ The upstream JPEGDEC pin still has progressive grayscale bugs in
 JPEGDecodeMCU_P, including unsafe MCU_SKIP writes and attempts to consume
 chroma components that are absent from the current scan, and both decoder
 pins mishandle malformed files (test/fuzz/image). The patches in
-`scripts/jpegdec_patches/` and `scripts/pngdec_patches/` carry the fixes; this
-script applies each one against its libdep working tree.
+`scripts/jpegdec_patches/`, `scripts/pngdec_patches/` and
+`scripts/animatedgif_patches/` carry the fixes; this script applies each one against
+its libdep working tree.
 
 Each patch's idempotency is decided by git itself:
   * `git apply --check --reverse` succeeds  -> already applied, skip
@@ -24,7 +25,11 @@ import sys
 
 
 # libdep folder name -> patch folder under scripts/
-LIBRARIES = {"JPEGDEC": "jpegdec_patches", "PNGdec": "pngdec_patches"}
+LIBRARIES = {
+    "JPEGDEC": "jpegdec_patches",
+    "PNGdec": "pngdec_patches",
+    "AnimatedGIF": "animatedgif_patches",
+}
 
 
 def patch_decoders(env):

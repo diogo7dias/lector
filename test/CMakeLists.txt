@@ -59,6 +59,19 @@ FetchContent_Declare(arduinojson
 )
 FetchContent_MakeAvailable(arduinojson)
 
+# AnimatedGIF at the firmware pin with scripts/animatedgif_patches, the device's 32-bit register
+# width and its MAX_WIDTH, for gif_support and fuzz/image.
+file(GLOB ANIMATEDGIF_PATCHES ${REPO_ROOT}/scripts/animatedgif_patches/*.patch)
+list(SORT ANIMATEDGIF_PATCHES)
+FetchContent_Declare(animatedgif
+  GIT_REPOSITORY https://github.com/bitbank2/AnimatedGIF.git
+  GIT_TAG 67cfacafe12ef4926c7713342c57d2a4af040e5e  # as platformio.ini
+  PATCH_COMMAND git checkout -- src
+    COMMAND git apply ${ANIMATEDGIF_PATCHES} ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/image/animatedgif-device-register-width.patch
+  UPDATE_DISCONNECTED ON
+  SOURCE_SUBDIR no-cmake
+)
+
 add_library(crosspoint_test_common INTERFACE)
 target_include_directories(crosspoint_test_common INTERFACE
   ${REPO_ROOT}
@@ -242,6 +255,7 @@ add_subdirectory(sortes)
 add_subdirectory(glyph_bitmap)
 add_subdirectory(scale_to_fit)
 add_subdirectory(dither_utils)
+add_subdirectory(gif_support)
 add_subdirectory(usb_drive_storage_guard)
 add_subdirectory(bitmap_resample)
 add_subdirectory(jpeg_decode_accuracy)
