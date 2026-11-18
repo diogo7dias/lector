@@ -992,7 +992,8 @@ The frontlight has no rows in Settings. The light panel (swipe down from the top
 button action, flips it without opening the panel. The other frontlight options live on the web
 settings page only: **Max Brightness** (the top of the panel's brightness track, 10 to 100,
 default 30; a brightness above it is brought down), **Restore on Wake** (on by default), and **Light Schedule**
-(at each wake inside the set hours the light comes on by itself).
+(at each wake inside the set hours the light comes on by itself). The schedule's hours,
+20:00 to 07:00 unless you set others earlier, have no editor now: they keep the values saved.
 
 In a book the light panel also has **Align Left** and **Justify**, which set the book's paragraph
 alignment (for that EPUB alone; in a TXT book, for every TXT book), and **Paragraph Spacing**,

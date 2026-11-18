@@ -302,15 +302,17 @@ void setup() {
   // restart still pay it, because those are the boots a developer is watching. The cost
   // of being wrong is log lines missing from a boot nobody is watching, and replugging
   // brings them back.
-  {
-    const esp_reset_reason_t rst = esp_reset_reason();
-    if (rst != ESP_RST_DEEPSLEEP && rst != ESP_RST_POWERON) delay(250);
-  }
+  const esp_reset_reason_t rst = esp_reset_reason();
+  const bool watchedBoot = rst != ESP_RST_DEEPSLEEP && rst != ESP_RST_POWERON;
+  if (watchedBoot) delay(250);
   Serial.begin(115200);
 #ifdef CROSSPOINT_WAIT_FOR_USB_SERIAL
-  // Dev env only: hold boot until a serial monitor attaches so the first lines are not lost,
-  // but never longer than a second so a dev build on battery still starts.
-  for (uint32_t waited = 0; !logSerial && waited < 1000; waited += 10) delay(10);
+  // Dev env only, and only on the boots a developer watches (the ones above): hold until a
+  // serial monitor attaches so the first lines are not lost, for at most a second more.
+  // Release envs keep the fixed 250 ms above and nothing else.
+  if (watchedBoot) {
+    for (uint32_t waited = 0; !logSerial && waited < 1000; waited += 10) delay(10);
+  }
 #endif
   // The loop reads serial commands with readStringUntil; the 1 s default stalls every pass on a partial line.
   logSerial.setTimeout(20);

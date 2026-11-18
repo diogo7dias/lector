@@ -52,9 +52,13 @@ bool XtcReaderActivity::runBoundAction(const uint8_t function) {
     return true;
   }
 
-  // Wallpaper Hold is the only remaining binding this reader can run itself; everything
-  // else falls through to the shared handler. Resolve can still say None for Wallpaper
-  // Hold, because this is where the card is asked whether the file is still on it.
+  if (function == CrossPointSettings::LP_MENU_OPEN_READER_MENU) {
+    openChapterSelection();  // what Confirm opens here
+    return true;
+  }
+
+  // Wallpaper Hold is the only other binding this reader runs itself; the rest falls through
+  // to the shared handler. Resolve can still say None: the card is asked whether the file is there.
   if (simple_reader_shortcut::resolve(function, /*supportsStatusBarToggle=*/false) !=
       simple_reader_shortcut::Action::WallpaperHold) {
     return false;
