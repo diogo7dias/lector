@@ -103,6 +103,9 @@ class GfxRenderer {
   // vertical strokes gain a second pixel. Plain byte owned by the renderer (lib/ must not
   // depend on src/); callers bracket it per region.
   mutable uint8_t paperbackLook_ = 0;
+  // Images: Display (B/W): image pixels dither to black and white in the B/W pass, and the
+  // grayscale passes leave them alone. Set by the reader for the page it is drawing.
+  bool ditherImagesInBw_ = false;
   mutable uint8_t textContrast_ = 0;
 
   // CJK UI font fallback map: primary (built-in, Latin-only) UI font id -> a
@@ -280,6 +283,8 @@ class GfxRenderer {
   void setTextContrast(const uint8_t level) const { textContrast_ = level; }
   void setPaperbackLook(const uint8_t level) const { paperbackLook_ = level; }
   uint8_t getPaperbackLook() const { return paperbackLook_; }
+  void setDitherImagesInBw(const bool enabled) { ditherImagesInBw_ = enabled; }
+  bool imagesDitheredInBw() const { return ditherImagesInBw_; }
 
   // Drawing
   void drawPixel(int x, int y, bool state = true) const;

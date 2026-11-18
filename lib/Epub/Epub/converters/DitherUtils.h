@@ -11,6 +11,15 @@ inline const uint8_t bayer4x4[4][4] = {
     {15, 7, 13, 5},
 };
 
+// A 4-level image pixel on a pass that has only black and white (Images: Display (B/W)).
+// 2x2 Bayer cell: black inks every pixel, dark gray 3 of 4, light gray 1 of 4, white none.
+// Stateless, so any pixel order works.
+inline bool bwInkFromGray4(const uint8_t pixelValue, const int x, const int y) {
+  static constexpr uint8_t BAYER2[4] = {0, 2, 3, 1};
+  const uint8_t threshold = BAYER2[((y & 1) << 1) | (x & 1)];
+  return pixelValue == 0 || (pixelValue == 1 && threshold < 3) || (pixelValue == 2 && threshold < 1);
+}
+
 // One pixel's 4-level value (0-3) on the display-tuned curve covers use (quantizeGray4).
 // Dithered: an ordered Bayer pick between the two panel levels around gray, in proportion
 // to where gray sits between them. Stateless, so any pixel order works.

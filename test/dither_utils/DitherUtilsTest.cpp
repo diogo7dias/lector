@@ -33,4 +33,20 @@ TEST(Quantize4Level, DitherAveragesToTheInputOnPanelLevels) {
   EXPECT_EQ(3, quantize4Level(255, 3, 1, true));
 }
 
+// Images: Display (B/W): one 2x2 cell inks 4 of 4 for black, 3 for dark gray, 1 for light
+// gray and none for white, whatever the cell's position.
+TEST(BwInkFromGray4, CellCoverageMatchesTheGrayLevel) {
+  constexpr int INKED_OF_FOUR[4] = {4, 3, 1, 0};
+  for (int level = 0; level < 4; ++level) {
+    for (int cellY = 0; cellY < 6; cellY += 2) {
+      for (int cellX = 0; cellX < 6; cellX += 2) {
+        int inked = 0;
+        for (int dy = 0; dy < 2; ++dy)
+          for (int dx = 0; dx < 2; ++dx) inked += bwInkFromGray4(static_cast<uint8_t>(level), cellX + dx, cellY + dy);
+        EXPECT_EQ(INKED_OF_FOUR[level], inked) << level << " at " << cellX << "," << cellY;
+      }
+    }
+  }
+}
+
 }  // namespace

@@ -6,6 +6,8 @@
 
 #include <cassert>
 
+#include "DitherUtils.h"
+
 // Direct framebuffer writer that eliminates per-pixel overhead from the image
 // rendering hot path.  Pre-computes orientation transform as linear coefficients
 // and caches render-mode state so the inner loop is: one multiply, one add,
@@ -17,6 +19,8 @@
 struct DirectPixelWriter {
   uint8_t* fb;
   GfxRenderer::RenderMode mode;
+  bool ditherBw = false;  // Images: Display (B/W): ink in the B/W pass only
+  int rowLogicalY = 0;
   uint16_t displayWidthBytes;  // Runtime framebuffer stride (X4: 100, X3: 99)
   // Active write target: for tiled grayscale, fb is the band scratch, originY is
   // the band's top physical row, and clipRows is the band height. Off-band
@@ -40,6 +44,7 @@ struct DirectPixelWriter {
     originY = renderer.getWriteOriginY();
     clipRows = renderer.getWriteRows();
     mode = renderer.getRenderMode();
+    ditherBw = renderer.imagesDitheredInBw();
     displayWidthBytes = renderer.getDisplayWidthBytes();
 
     const int phyW = renderer.getDisplayWidth();
@@ -97,6 +102,7 @@ struct DirectPixelWriter {
   // Call once per row before the column loop.
   // Pre-computes the Y-dependent portion so writePixel() only needs the X part.
   inline void beginRow(int logicalY) {
+    rowLogicalY = logicalY;
     rowPhyXBase = phyXBase + logicalY * phyXStepY;
     rowPhyYBase = phyYBase + logicalY * phyYStepY;
   }
@@ -150,14 +156,16 @@ struct DirectPixelWriter {
     bool state;
     switch (mode) {
       case GfxRenderer::BW:
-        draw = writeWhiteInBw || pixelValue < 3;
-        state = pixelValue < 3;
+        state = ditherBw ? bwInkFromGray4(pixelValue, logicalX, rowLogicalY) : pixelValue < 3;
+        draw = writeWhiteInBw || state;
         break;
       case GfxRenderer::GRAYSCALE_MSB:
+        if (ditherBw) return;  // the text-AA pass must leave the dithered image as drawn
         draw = (pixelValue == 1 || pixelValue == 2);
         state = false;
         break;
       case GfxRenderer::GRAYSCALE_LSB:
+        if (ditherBw) return;
         draw = (pixelValue == 1);
         state = false;
         break;
