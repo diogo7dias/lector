@@ -52,9 +52,9 @@ std::string findGuideCoverImage(const std::string_view coverPageHtml, const std:
       const auto endPos = coverPageHtml.find('"', pos);
       if (endPos != std::string_view::npos) {
         const auto ref = coverPageHtml.substr(pos, endPos - pos);
-        // Cover BMP generation supports JPG/PNG only; skip GIF so an unsupported wrapper image
-        // does not block a later supported cover reference.
-        if (FsHelpers::hasPngExtension(ref) || FsHelpers::hasJpgExtension(ref)) {
+        // Cover BMP generation supports JPG/PNG/GIF; skip anything else (SVG, WebP) so an
+        // unsupported wrapper image does not block a later supported cover reference.
+        if (FsHelpers::hasPngExtension(ref) || FsHelpers::hasJpgExtension(ref) || FsHelpers::hasGifExtension(ref)) {
           imageRef = ref;
           break;
         }
