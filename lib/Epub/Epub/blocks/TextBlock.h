@@ -50,7 +50,6 @@ class TextBlock final : public Block {
   bool focusPresent = false;
   bool guideDotsPresent = false;
   bool isValid = true;
-  uint8_t letterSpacing = 0;  // Word Expansion: px between this line's letters
   // The ONLY allocation: makeUniqueNoThrow, so OOM yields an invalid block
   // instead of abort() (bare new is not nothrow with -fno-exceptions).
   std::unique_ptr<uint8_t[]> arena;
@@ -89,8 +88,6 @@ class TextBlock final : public Block {
 
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   const BlockStyle& getBlockStyle() const { return blockStyle; }
-  void setLetterSpacing(const uint8_t px) { letterSpacing = px; }
-  uint8_t getLetterSpacing() const { return letterSpacing; }
   // The font this line was laid out in: a CSS font-size override, else the section font.
   int blockFontId(const int sectionFontId) const { return blockStyle.fontId ? blockStyle.fontId : sectionFontId; }
 
@@ -111,7 +108,7 @@ class TextBlock final : public Block {
   // Top of word i's box below the line top: the ruby gap plus the drop to the shared
   // baseline. The box is as tall as wordRenderFont's line height.
   int wordBoxTop(const GfxRenderer& renderer, int sectionFontId, uint16_t i) const;
-  // Word i's width as drawn, Word Expansion included.
+  // Word i's width as drawn.
   int wordWidth(const GfxRenderer& renderer, int sectionFontId, uint16_t i) const;
   // Draws word i over its box at (x, boxTop) exactly as render() does, in either color.
   void drawWord(const GfxRenderer& renderer, int sectionFontId, uint16_t i, int x, int boxTop, bool black) const;

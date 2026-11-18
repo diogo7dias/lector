@@ -341,15 +341,6 @@ bool ChapterHtmlSlimParser::breakPage() {
   return currentPage != nullptr;
 }
 
-// Break Before Headings. Runs once the block before is laid out and before the heading's
-// anchor is recorded, so a link to the heading lands on its new page. A heading straight
-// after a heading ("Part One", "Chapter 1") keeps its page.
-void ChapterHtmlSlimParser::breakBeforeHeading() {
-  if (!breakBeforeBlock_) return;
-  breakBeforeBlock_ = false;
-  if (!lastBlockWasHeading_) breakPage();
-}
-
 void ChapterHtmlSlimParser::emitCurrentPage() {
   // Open boxes are sliced at the page break and continue on the next page.
   for (BoxScope& box : boxScopes) {
@@ -764,7 +755,6 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle, cons
       // The empty block is being re-purposed for the element that just opened, so it
       // adopts that element's heading-ness rather than keeping the previous one's.
       currentTextBlock->setHeading(insideHeading());
-      breakBeforeHeading();
       flushPendingAnchor();
       return;
     }
@@ -781,18 +771,16 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle, cons
       return;
     }
 
-    lastBlockWasHeading_ = currentTextBlock->getIsHeading();
     makePages(true, paragraphEnd);
     anchors.blockEnded(static_cast<uint16_t>(completedPageCount));
   }
-  breakBeforeHeading();
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
   dropCap.firstLetterPending = false;
   inlineSize = InlineSizeState{};
-  currentTextBlock = makeUniqueNoThrow<ParsedText>(focusReadingEnabled, guideDotsMode, blockStyle, firstLineIndentMode,
-                                                   firstLineIndentPercent, wordSpacing, wordExpansion);
+  currentTextBlock =
+      makeUniqueNoThrow<ParsedText>(focusReadingEnabled, guideDotsMode, blockStyle, paragraphIndentSpaces, wordSpacing);
   if (!currentTextBlock) {
     LOG_ERR("EHP", "OOM: ParsedText");
     return;
@@ -1401,7 +1389,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     // Drop whatever the reader is no longer honouring before anything reads it, so the
     // rest of the parser only ever sees properties both switches allow.
-    cssStyle.keepBuckets(self->embeddedTextStyle, self->embeddedLayoutStyle, self->bookMargins);
+    cssStyle.keepBuckets(self->embeddedStyle);
   }
 
   // Resolve explicit inheritance after the cascade, before this element changes the active style.
@@ -1575,9 +1563,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       tableCellBlockStyle.isRtl = cssStyle.direction == CssTextDirection::Rtl;
     }
 
-    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(
-        self->focusReadingEnabled, self->guideDotsMode, tableCellBlockStyle, self->firstLineIndentMode,
-        self->firstLineIndentPercent, self->wordSpacing, self->wordExpansion);
+    self->currentTextBlock =
+        makeUniqueNoThrow<ParsedText>(self->focusReadingEnabled, self->guideDotsMode, tableCellBlockStyle,
+                                      self->paragraphIndentSpaces, self->wordSpacing);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: table cell");
       self->skipUntilDepth = self->depth;
@@ -2042,13 +2030,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->currentFootnote.number[0] = '\0';
       self->currentFootnoteLinkTextLen = 0;
 
-      // Underline the link unless the reader turned Link Underline off.
+      // Links are always underlined.
       StyleStackEntry entry;
       entry.depth = self->depth;
-      if (self->linkUnderline) {
-        entry.hasTextDecoration = true;
-        entry.textDecoration = CssTextDecoration::Underline;
-      }
+      entry.hasTextDecoration = true;
+      entry.textDecoration = CssTextDecoration::Underline;
       applyInlinePresentationToEntry(entry, cssStyle);
       applyDirectionToEntry(entry, cssStyle);
       applyVerticalAlignToEntry(entry, cssStyle);
@@ -2088,9 +2074,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     const auto accumulated =
         self->blockStyleStack.back().getCombinedBlockStyle(headerBlockStyle, BlockStyle::CombineAxis::Horizontal);
     self->pushBlockStyle(accumulated);
-    self->breakBeforeBlock_ = self->headingPageBreak && (name[1] == '1' || name[1] == '2');
     self->startNewTextBlock(accumulated.withoutBottom());
-    self->breakBeforeBlock_ = false;  // spent, or skipped by a bullet-only <li> block
     // A chapter title is not paragraph 1. The watermark keeps that true for every block the
     // heading goes on to open; the heading's own first block is flagged here because
     // startNewTextBlock ran before the watermark was set.
@@ -2336,8 +2320,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     const BlockStyle flowStyle =
         self->blockStyleStack.empty() ? BlockStyle() : self->blockStyleStack.back().withoutBottom();
     self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->focusReadingEnabled, self->guideDotsMode, flowStyle,
-                                                           self->firstLineIndentMode, self->firstLineIndentPercent,
-                                                           self->wordSpacing, self->wordExpansion);
+                                                           self->paragraphIndentSpaces, self->wordSpacing);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: text block for character data");
       return;
@@ -2547,9 +2530,8 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   // words, so flush earlier when embedded CSS is active. We still keep the
   // "exclude last line" behavior to preserve paragraph flow across chunks.
   const size_t blockWordCount = self->currentTextBlock->size();
-  const size_t softFlushThreshold = (self->embeddedTextStyle || self->embeddedLayoutStyle)
-                                        ? TEXT_BLOCK_SOFT_FLUSH_WORDS_WITH_CSS
-                                        : TEXT_BLOCK_SOFT_FLUSH_WORDS;
+  const size_t softFlushThreshold =
+      self->embeddedStyle ? TEXT_BLOCK_SOFT_FLUSH_WORDS_WITH_CSS : TEXT_BLOCK_SOFT_FLUSH_WORDS;
   if (blockWordCount > softFlushThreshold && !self->inRuby) {
     LOG_DBG("EHP", "Text block soft flush (%u words)", static_cast<unsigned>(blockWordCount));
     self->makePages(/*includeLastLine=*/false);
@@ -2731,8 +2713,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     const BlockStyle flowStyle =
         self->blockStyleStack.empty() ? BlockStyle() : self->blockStyleStack.back().withoutBottom();
     self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->focusReadingEnabled, self->guideDotsMode, flowStyle,
-                                                           self->firstLineIndentMode, self->firstLineIndentPercent,
-                                                           self->wordSpacing, self->wordExpansion);
+                                                           self->paragraphIndentSpaces, self->wordSpacing);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: text block after table");
     }
@@ -3023,7 +3004,6 @@ int ChapterHtmlSlimParser::prepareBlockFont(ParsedText& text, const float scale)
 
 size_t ChapterHtmlSlimParser::linesToCarry(size_t& paragraphLines) const {
   paragraphLines = 0;
-  if (fillPages) return 0;
   if (layoutParagraph && !layoutParagraphHasDropCap) {
     if (paragraphLinesOnPage == 1) {
       paragraphLines = 1;  // the paragraph's first line would sit alone at the page bottom
@@ -3042,9 +3022,7 @@ size_t ChapterHtmlSlimParser::linesToCarry(size_t& paragraphLines) const {
   return 0;
 }
 
-size_t ChapterHtmlSlimParser::keepWithNextCarry() const {
-  return !fillPages && canCarry(keepWithNextLines) ? keepWithNextLines : 0;
-}
+size_t ChapterHtmlSlimParser::keepWithNextCarry() const { return canCarry(keepWithNextLines) ? keepWithNextLines : 0; }
 
 // Only the page's trailing text lines move, and never everything on the page.
 bool ChapterHtmlSlimParser::canCarry(const size_t carry) const {
@@ -3252,10 +3230,5 @@ void ChapterHtmlSlimParser::makePages(const bool includeLastLine, const bool par
   // Extra paragraph spacing if enabled (default behavior)
   if (extraParagraphSpacing) {
     currentPageNextY += lineHeight / 2;
-  }
-  // Granular paragraph spacing: an additional block gap as a percentage of the line
-  // height, stacked on top of extraParagraphSpacing (restored from old lector).
-  if (paragraphSpacing > 0) {
-    currentPageNextY += lineHeight * paragraphSpacing / 100;
   }
 }

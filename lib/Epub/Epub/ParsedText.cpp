@@ -674,34 +674,16 @@ void ParsedText::setRubyGroupAt(size_t startIndex, size_t count, const std::stri
   }
 }
 
-// A paragraph always starts with a visible indent, whatever the spacing toggle says:
-// the block gap and the indent are two independent cues, and the indent is the one that
-// still reads correctly at the top of a page where the gap above is invisible. Three
-// space advances is the classic typesetter's em-ish indent at any font size.
-static constexpr int MIN_FIRST_LINE_INDENT_SPACES = 3;
-
-int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const int pageWidth, const GfxRenderer& renderer,
-                                       const int fontId) const {
+// First-line indent: the reader's Paragraph Indent (0 to 5 spaces of the reading font, scaled
+// by Word Spacing), or the hanging indent a book's own CSS asks for. Zero means no indent.
+int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer& renderer, const int fontId) const {
   if (!isFirstLine || paragraphContinues || !isNaturalAlign) {
     return 0;
   }
-  const int floorIndent = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR) * MIN_FIRST_LINE_INDENT_SPACES;
-  // Custom % mode: a user indent as a percentage of the column width (100% = the
-  // column's horizontal middle), overriding any CSS indent. It can only add to the
-  // floor, never go below it.
-  if (firstLineIndentMode == 1) {
-    const int requested = pageWidth * firstLineIndentPercent / 200;
-    return requested > floorIndent ? requested : floorIndent;
-  }
-  // Book mode: respect the publisher/CSS indent. A hanging (negative) indent is kept
-  // as the publisher wrote it; a positive one is raised to the floor if it is smaller.
-  if (blockStyle.textIndentDefined && blockStyle.textIndent < 0) {
-    return blockStyle.textIndent;
-  }
-  if (blockStyle.textIndentDefined && blockStyle.textIndent > floorIndent) {
-    return blockStyle.textIndent;
-  }
-  return floorIndent;
+  if (blockStyle.textIndentDefined && blockStyle.textIndent < 0) return blockStyle.textIndent;
+  if (paragraphIndentSpaces == 0) return 0;
+  const int space = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR);
+  return ((space * wordSpacing + 50) / 100) * paragraphIndentSpaces;
 }
 // Consumes data to minimize memory usage
 void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
@@ -814,7 +796,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
 // attachments, so the line breaker fills each line greedily and justification never spreads them.
 bool ParsedText::splitOverwideHangulRuns(const int pageWidth, const std::vector<uint16_t>& wordWidths,
                                          const GfxRenderer& renderer, const int fontId) {
-  const int firstLineWidth = pageWidth - resolveFirstLineIndent(true, pageWidth, renderer, fontId);
+  const int firstLineWidth = pageWidth - resolveFirstLineIndent(true, renderer, fontId);
   bool split = false;
   for (size_t end = words.size(); end > 0;) {
     size_t start = end - 1;
@@ -1077,7 +1059,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     return {};
   }
 
-  const int firstLineIndent = resolveFirstLineIndent(true, pageWidth, renderer, fontId);
+  const int firstLineIndent = resolveFirstLineIndent(true, renderer, fontId);
 
   const size_t totalWordCount = words.size();
 
@@ -1210,7 +1192,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const size_t lineWordCount = lineBreak - lastBreakAt;
   const uint32_t lineVisibleOffset = visibleOffsetAt(lastBreakAt);
 
-  const int firstLineIndent = resolveFirstLineIndent(breakIndex == 0, pageWidth, renderer, fontId);
+  const int firstLineIndent = resolveFirstLineIndent(breakIndex == 0, renderer, fontId);
 
   // Guide dots (LTR only; never with BiDi reordering). A dot sits in the gap before
   // line word k when k is a fresh-token word (not a continuation, not a no-space break)
@@ -1289,36 +1271,6 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // For justified text, compute per-gap extra to distribute remaining space evenly.
   // extraEndOffset reserves space for any ruby group at the right edge of the line.
   int spareSpace = effectivePageWidth - extraStartOffset - extraEndOffset - lineWordWidthSum - totalNaturalGaps;
-
-  // Word Expansion: once a justified line's gaps would pass 1.5 natural spaces, put up to
-  // maxLetterSpacing px between letters so the slack spreads into the words. Plain LTR
-  // lines only: focus splits, guide dots and ruby are positioned per glyph run elsewhere.
-  uint8_t letterSpacing = 0;
-  std::vector<uint16_t> glyphGaps;  // per line word: the steps letterSpacing widens
-  const bool lineHasRuby =
-      std::any_of(lineRubyTexts.begin(), lineRubyTexts.end(), [](const std::string& r) { return !r.empty(); });
-  if (maxLetterSpacing > 0 && effectiveAlignment == CssTextAlign::Justify && !isLastLine && actualGapCount > 0 &&
-      !blockStyle.isRtl && !hasRtlWord && !focusReadingEnabled && guideDotsMode == GUIDE_DOTS_OFF && !lineHasRuby) {
-    const int excess = spareSpace - totalNaturalGaps / 2;
-    if (excess > 0) {
-      glyphGaps.reserve(lineWordCount);
-      int totalGlyphGaps = 0;
-      for (size_t i = 0; i < lineWordCount; i++) {
-        const int n = lineWords[i] == " " || isInlineImageToken(lineWords[i])
-                          ? 0
-                          : renderer.spacedGlyphCount(fontId, lineWords[i].c_str(), lineWordStyles[i]);
-        glyphGaps.push_back(static_cast<uint16_t>(std::max(0, n - 1)));
-        totalGlyphGaps += glyphGaps.back();
-      }
-      if (totalGlyphGaps > 0) {
-        letterSpacing = static_cast<uint8_t>(std::min<int>(maxLetterSpacing, excess / totalGlyphGaps));
-        spareSpace -= letterSpacing * totalGlyphGaps;
-      }
-    }
-  }
-  const auto wordWidthAt = [&](const size_t wordIdx) {
-    return wordWidths[lastBreakAt + wordIdx] + (letterSpacing ? letterSpacing * glyphGaps[wordIdx] : 0);
-  };
 
   JustifySpacing justifySpacing(effectiveAlignment == CssTextAlign::Justify && !isLastLine ? spareSpace : 0,
                                 actualGapCount);
@@ -1512,7 +1464,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
         const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
         if (nextIsContinuation) {
-          int advance = wordWidthAt(wordIdx);
+          int advance = wordWidths[lastBreakAt + wordIdx];
           advance += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx]),
                                          firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
           // wordIdx > 0 mirrors the gap accounting above (which skips index 0): a leading
@@ -1538,7 +1490,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
           if (wordIdx + 1 < lineWordCount && effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
             gap += justifySpacing.nextExtra();
           }
-          xpos += wordWidthAt(wordIdx) + gap;
+          xpos += wordWidths[lastBreakAt + wordIdx] + gap;
         }
       }
     }
@@ -1640,7 +1592,6 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
       return;
     }
-    block->setLetterSpacing(letterSpacing);
     processLine(processLineCtx, std::move(block), lineVisibleOffset);
     return;
   }

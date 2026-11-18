@@ -1045,45 +1045,48 @@ other numbers in Settings use the same band.
 
 - **Font** — Noto Serif, Noto Sans, plus any SD card families; opens a full-screen picker.
 - **Size**.
-- **Line Spacing**. Full text pages automatically share leftover vertical space above
+- **Line Spacing** — 80% to 175%. Full text pages automatically share leftover vertical space above
   and below the text, inside your margins and status bar. Short pages stay at the top;
   EPUB pages with images, rules or ruby keep their layout. This balances line boxes
   (within one pixel), so letter shapes may still look slightly uneven.
-- **Horizontal Margin** — left and right, one shared value. Listed as **Margin** in All
-  Sides, where it is every side.
+- **Horizontal Margin** — left and right, one shared value, 5 to 40 in steps of 5. Listed as
+  **Margin** in All Sides, where it is every side. A saved margin outside that range or off the
+  step comes back to the nearest step.
 - **Link Margins** — **Off**, **Top+Bottom** or **All Sides**. Off lists **Top Margin** and
   **Bottom Margin** separately; Top+Bottom replaces them with a single **Vertical Margin**;
   All Sides puts one number on all four sides and leaves **Margin** as the only margin row.
   All Sides also turns **Dynamic Margins** off and stops offering it, because Dynamic
   Margins works out a left and right margin of its own that the other two sides cannot
-  match. Switching back does not turn it on again. New devices start at All Sides with 20
+  match. Switching back does not turn it on again. New devices start at All Sides with 5
   on every side; devices updating from an older build keep the margins and the link they
   had, and anyone still on the old **Uniform Margins** switch comes back to All Sides.
 - **Dynamic Margins** — Off, Auto (min 10px) or Auto (min 20px). Not listed in All Sides.
-- **First Line Indent** — Book or Custom %, with **First-Line Indent %** underneath.
+- **Paragraph Indentation** — the first line's indent in spaces of the reading font, 0 to 5
+  (2 by default). The book's own indent is not used; the one exception is a negative indent
+  (a hanging first line), which the book keeps. Word Spacing scales the indent with the gaps.
+  Settings from an older build keep their look: Book becomes 2, a percent becomes the nearest
+  whole number of spaces (about one space per 10%, from 1 to 5).
 - **Paragraph Alignment** — Justify, Left, Center, Right or Book's Style.
   Justify distributes all spare horizontal space between eligible gaps; the last line
   keeps its natural spacing. Korean text wraps and stretches only at the spaces between
   words, never between syllables, unless a single word is wider than the line.
-- **Embedded Text Style** — honour the book's own CSS for how the words look: bold, italic,
-  underline, superscript and subscript, writing direction, passages the book marks as
-  hidden, and lists the book marks as having no bullets or numbers. Bold and italic written
-  as `<b>` or `<i>` tags are always honoured, switch or not. Numbered lists always show
-  their numbers, and a nested list counts from 1 again.
+- **Embedded Style** — honour the book's own CSS: how the words look (bold, italic, underline,
+  superscript and subscript, writing direction, passages the book marks as hidden, and lists
+  the book marks as having no bullets or numbers) and where blocks sit (alignment, the book's
+  margins and padding, image sizes, the boxes and shading around passages, and the page breaks it
+  asks for). Bold and italic written as `<b>` or `<i>` tags are always honoured, switch or not.
+  Numbered lists always show their numbers, and a nested list counts from 1 again.
   An inline passage in another writing direction keeps the enclosing paragraph's base direction.
   Arabic and Persian text is shaped once, preserving Alef and Lam order; Latin ligatures remain supported.
   It also honours drop caps (a large first letter spanning two to four lines), small caps,
   text the book keeps as typed (poetry, code) and the book's relative font sizes for
   headings, paragraphs and words. Sizes need an SD card font that has larger and smaller
-  variants; the built-in font draws every word at your size.
-- **Embedded Layout Style** — honour the book's own CSS for where blocks sit: alignment,
-  first-line indent, margins, padding and image sizes, the boxes and shading the book draws
-  around passages, and the page breaks it asks for. **Paragraph Alignment: Book's Style**
-  and **First Line Indent: Book** both read the book's CSS, so they need this on.
-- **Book Margins** — on by default, shown while Embedded Layout Style is on: the book's own
-  margins and padding. Off drops them, so blocks sit flush with your page margins, and keeps the
-  book's alignment, indents and image sizes. The book's fonts and line height are never
-  used: the reader's own settings always win.
+  variants; the built-in font draws every word at your size. **Paragraph Alignment: Book's
+  Style** reads the book's CSS, so it needs this on. The book's fonts and line height are never
+  used: the reader's own settings always win. Older builds had separate Embedded Text Style and
+  Embedded Layout Style switches: the style is on after the update only if both were on.
+  Footnote and cross-reference links are always underlined, and kerning and ligatures are
+  always on.
 
 A paragraph's lone first or last line never sits by itself at a page edge, and a heading moves
 to the next page with the text that follows it. Tables size each column to its content.
@@ -1091,30 +1094,18 @@ Small pictures in the text (icons, symbols drawn as images, up to two lines tall
 the line; larger ones get their own centred block, and a small picture alone in its paragraph
 is centred.
 - **Bionic Reading** — bolds the first part of each word as a fixation point.
-- **Word Spacing %** — sets the baseline gap between words, from 75% to 150% in steps of 5.
+- **Word Spacing %** — sets the baseline gap between words, from 50% to 200% in steps of 25.
   100% keeps the original spacing. Justified lines still stretch to the right margin;
   this does not limit their gaps. With Guide Dots, it adjusts the spaces on both sides
   of each dot, keeping the dot the same size. Changing it re-paginates the book.
-- **Character Spacing** — the space between letters, from -5 (tighter) to +5 (looser) in
-  half-pixel steps. 0 is the font as designed. Changing it re-paginates the book.
-- **Kerning** — on by default: the font's pair adjustments, such as tucking a V under an A.
-  Off sets every letter at its plain width. Only the reading text changes; menus keep it.
-- **Ligatures** — on by default: joined letter pairs such as fi, fl and ff, where the font has them.
-  Off draws each letter on its own. Only the reading text changes; menus keep it.
-- **Link Underline** — on by default: footnote and cross-reference links in the book are underlined.
-  Off leaves them as plain text; they still open from Footnotes.
-- **Break Before Headings** — off by default. On starts every top-level heading (h1, h2) on a
-  fresh page, for books that run chapters or sections together. A heading straight after another
-  heading ("Part One" then "Chapter 1") stays on the same page.
-- **Fill Pages** — off by default. Lector normally moves a line to the next page so a paragraph's
-  first or last line never sits alone, and so a heading stays with the text under it; that leaves
-  a gap at the bottom of some pages. On keeps every line that fits, so pages end full. Page breaks
-  the book asks for still apply.
-- **Word Expansion** — Off by default. On a justified line whose gaps would grow past one and
-  a half spaces, **Some** adds up to 1 pixel between letters and **More** up to 2, so the slack
-  spreads into the words instead of opening wide holes. Lines with Focus Reading, Guide Dots,
-  ruby or right-to-left text keep plain justification.
-  Changing it re-paginates the book.
+- **Character Spacing** — the space between letters, from -2 (tighter) to +2 (looser) in
+  whole pixels. 0 is the font as designed. Changing it re-paginates the book. Settings from an
+  older build, which counted half pixels, come back to the nearest whole pixel.
+- **Images** — **Display** (default) draws pictures in grey, **Placeholder** keeps only the
+  picture's alt text, **Suppress** hides them, and **Black & White** draws them as
+  a black and white dither, so a page with a picture turns as fast as a text page and skips the
+  extra grey refresh. A saved Placeholder or Suppress from an older build, when the row was
+  gone and the setting did nothing, comes back as Display.
 - **Guide Dots** — draws a middle dot in a widened gap between words.
 - **Hidden Dots** — only listed while Guide Dots is on: keeps the widened gaps and draws no dot in them.
 - **Extra Paragraph Spacing** — space between paragraphs instead of a first-line indent.

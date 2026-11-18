@@ -61,19 +61,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   spec.fontId = 1 + (look & 3);
   spec.lineCompression = (flags & 0x01) ? 0.9f : 1.2f;
   spec.extraParagraphSpacing = flags & 0x02;
-  spec.paragraphSpacing = (flags & 0x02) ? 50 : 0;
   spec.focusReadingEnabled = flags & 0x04;
-  spec.linkUnderline = flags & 0x08;
-  spec.bookMargins = flags & 0x10;
-  spec.headingPageBreak = flags & 0x20;
-  spec.fillPages = flags & 0x40;
-  spec.embeddedTextStyle = spec.embeddedLayoutStyle = !(flags & 0x80);
+  spec.embeddedStyle = !(flags & 0x80);
   spec.guideDotsMode = (look >> 2) % 3;
-  spec.imageRendering = (look >> 4) % 3;
+  spec.imageRendering = (look >> 4) % 4 == 3 ? 0 : (look >> 4) % 4;
   spec.paragraphAlignment = (look >> 6) % 4;
-  spec.firstLineIndentMode = flags & 0x01;
-  spec.firstLineIndentPercent = 5;
-  spec.wordExpansion = (flags >> 1) % 3;
+  spec.paragraphIndentSpaces = (flags >> 3) % 6;
+  spec.characterSpacing = static_cast<int8_t>((flags >> 1) % 5) - 2;
   spec.viewportWidth = vp.w;
   spec.viewportHeight = vp.h;
 

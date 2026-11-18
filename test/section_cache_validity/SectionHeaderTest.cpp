@@ -27,9 +27,10 @@ struct Section {
 
 TEST(SectionCacheValidity, OldHeadersRejectedBeforeSpecReadAndNewHeadersRoundTrip) {
   const ReaderRenderSpec spec;
-  for (uint8_t oldVersion : {61, 221, 81, 201}) {
+  for (uint8_t oldVersion : {61, 221, 81, 201, 88, 194}) {
     // v61 finalized and suspended headers were 47 bytes, including the retired toggle; v81
-    // (and its partial 201) is the layout just before TrueType .notdef fallbacks.
+    // (and its partial 201) is the layout just before TrueType .notdef fallbacks; v88 (and
+    // its partial 194) is the last layout before the lean typography header.
     Storage.bytes.assign(47, 0xFF);
     Storage.bytes[0] = oldVersion;
     Section section;
@@ -39,12 +40,12 @@ TEST(SectionCacheValidity, OldHeadersRejectedBeforeSpecReadAndNewHeadersRoundTri
     EXPECT_FALSE(section.file.opened);
   }
 
-  EXPECT_EQ(88, SECTION_FILE_VERSION);
-  EXPECT_EQ(194, SECTION_FILE_PARTIAL_VERSION);
+  EXPECT_EQ(89, SECTION_FILE_VERSION);
+  EXPECT_EQ(193, SECTION_FILE_PARTIAL_VERSION);
   for (uint8_t version : {SECTION_FILE_VERSION, SECTION_FILE_PARTIAL_VERSION}) {
     Section writer;
     writer.writeSectionFileHeader(spec);
-    ASSERT_EQ(54u, writer.file.size());  // v85 added the fillPages byte
+    ASSERT_EQ(44u, writer.file.size());  // v89 dropped nine switch bytes and merged two indent bytes
     writer.file.seek(0);
     serialization::writePod(writer.file, version);
     if (version == SECTION_FILE_PARTIAL_VERSION) {

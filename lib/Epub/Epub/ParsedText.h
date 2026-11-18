@@ -72,11 +72,8 @@ class ParsedText {
   // with a middle dot in it) or GUIDE_DOTS_HIDDEN (the same widened gap, no dot drawn).
   uint8_t guideDotsMode;
   uint8_t wordSpacing;
-  uint8_t maxLetterSpacing;  // Word Expansion cap, px between letters (0 = off)
-  // First-line paragraph indent (restored old-lector model): mode 0 = Book (respect the
-  // CSS indent), 1 = Custom % of the column width; percent applies in mode 1.
-  uint8_t firstLineIndentMode;
-  uint8_t firstLineIndentPercent;
+  // First-line paragraph indent, in spaces of the reading font (0 = none).
+  uint8_t paragraphIndentSpaces;
   bool isNaturalAlign;
   bool hasRtlWord;
   // True when this block was opened by an h1-h6. The flag has to live on the block, not on
@@ -124,7 +121,7 @@ class ParsedText {
   int calculateRubyExtraStartOffset(size_t wordIdx, size_t maxWordIdx, const GfxRenderer& renderer, int fontId) const;
   int calculateRubyExtraEndOffset(size_t lineStartIdx, size_t lineBreakIdx, const GfxRenderer& renderer,
                                   int fontId) const;
-  int resolveFirstLineIndent(bool isFirstLine, int pageWidth, const GfxRenderer& renderer, int fontId) const;
+  int resolveFirstLineIndent(bool isFirstLine, const GfxRenderer& renderer, int fontId) const;
   std::vector<size_t> computeLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
                                         std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
                                         std::vector<bool>& noSpaceBeforeVec);
@@ -139,16 +136,13 @@ class ParsedText {
 
  public:
   explicit ParsedText(const bool focusReadingEnabled = false, const uint8_t guideDotsMode = GUIDE_DOTS_OFF,
-                      const BlockStyle& blockStyle = BlockStyle(), const uint8_t firstLineIndentMode = 0,
-                      const uint8_t firstLineIndentPercent = 0, const uint8_t wordSpacing = 100,
-                      const uint8_t maxLetterSpacing = 0)
+                      const BlockStyle& blockStyle = BlockStyle(), const uint8_t paragraphIndentSpaces = 2,
+                      const uint8_t wordSpacing = 100)
       : blockStyle(blockStyle),
         focusReadingEnabled(focusReadingEnabled),
         guideDotsMode(guideDotsMode),
-        wordSpacing(std::clamp<uint8_t>(wordSpacing, 75, 150)),
-        maxLetterSpacing(maxLetterSpacing),
-        firstLineIndentMode(firstLineIndentMode),
-        firstLineIndentPercent(firstLineIndentPercent),
+        wordSpacing(std::clamp<uint8_t>(wordSpacing, READER_WORD_SPACING_MIN, READER_WORD_SPACING_MAX)),
+        paragraphIndentSpaces(paragraphIndentSpaces),
         isNaturalAlign(false),
         hasRtlWord(false),
         isHeading(false) {}

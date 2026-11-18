@@ -287,28 +287,16 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
     spec.fontId = SETTINGS.getReaderFontId();
     spec.lineCompression = SETTINGS.getReaderLineCompression();
     spec.extraParagraphSpacing = SETTINGS.extraParagraphSpacing;
-    spec.paragraphSpacing = SETTINGS.paragraphSpacing;
     spec.wordSpacing = SETTINGS.wordSpacing;
-    spec.kerning = SETTINGS.kerning != 0;
-    spec.ligatures = SETTINGS.ligatures != 0;
-    spec.linkUnderline = SETTINGS.linkUnderline != 0;
-    spec.bookMargins = SETTINGS.bookMargins != 0;
-    spec.headingPageBreak = SETTINGS.headingPageBreak != 0;
-    spec.fillPages = SETTINGS.fillPages != 0;
-    spec.wordExpansion = 0;  // definitions stay plainly justified
     spec.paragraphAlignment = SETTINGS.paragraphAlignment;
     spec.viewportWidth = viewportWidth;
     spec.viewportHeight = viewportHeight;
     spec.focusReadingEnabled = SETTINGS.focusReadingEnabled;
     // A definition is a short popup, not a page of the book: guide dots and the
     // first-line indent are reading-surface furniture and only add noise here.
-    // Percent mode at 0 is how "no indent" is spelled: there is no NONE mode, and
-    // BOOK mode would honour whatever indent the definition's own markup carries.
     spec.guideDotsMode = GUIDE_DOTS_OFF;
-    spec.firstLineIndentMode = CrossPointSettings::FIRST_LINE_INDENT_PERCENT;
-    spec.firstLineIndentPercent = 0;
-    spec.embeddedTextStyle = false;
-    spec.embeddedLayoutStyle = false;
+    spec.paragraphIndentSpaces = 0;
+    spec.embeddedStyle = false;
     spec.imageRendering = CrossPointSettings::IMAGES_SUPPRESS;
     auto parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(nullptr, tmpPath, renderer, spec, &collectPage, &collect,
                                                            /*contentBase=*/"", /*imageBasePath=*/"");

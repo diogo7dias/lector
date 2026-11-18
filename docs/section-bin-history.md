@@ -2,6 +2,9 @@
 
 Older entries of [file-formats.md](file-formats.md); newer versions are listed there.
 
+The header pattern near the end of this file is the version 75 layout. Version 89 replaced it:
+see the header list in [file-formats.md](file-formats.md).
+
 ## Version 67
 
 Ordered lists number their items (`1.`, `2.`, ...) instead of drawing bullets, nested lists

@@ -118,6 +118,22 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 89
+
+Lean typography pass; the header and the text line change. The header is 44 bytes (was 54)
+and now holds, in order: `fontId`, `lineCompression`, `extraParagraphSpacing`, `wordSpacing`,
+`paragraphAlignment`, viewport width and height, `embeddedStyle` (one byte, was two),
+`imageRendering`, `focusReadingEnabled`, `guideDotsMode`, `paragraphIndentSpaces` (0 to 5
+spaces, replacing the indent mode and percent), `characterSpacing` (whole pixels, -2 to 2,
+was half pixels), the page count and the five LUT offsets. `paragraphSpacing`, kerning,
+ligatures, link underline, book margins, heading page break, word expansion and fill pages
+are gone from the header; kerning, ligatures, link underline and book margins are now always on. Each `TextBlock` loses
+its letter-spacing byte. Word Spacing runs 50 to 200 and the paragraph indent has no
+3-space floor, so lines lay out again. The partial version is 193. The per-book
+`reader_override.bin` and the presets keep their layout and read old files; see
+`ReaderPrefs.h` (version 27). The pixel cache tag is unchanged: Images: Black & White dithers
+the cached 4-level pixels at draw time.
+
 ### Version 88
 
 Path fix; the binary layout is unchanged. An image `src` with a `.` segment (`./img.jpg`)

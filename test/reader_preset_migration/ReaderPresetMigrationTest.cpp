@@ -83,7 +83,7 @@ TEST(ReaderPresetMigration, TheOldVerticalLinkKeyBecomesTopBottomOrSeparate) {
   }
 }
 
-// A preset written with the modes carries the new key and must not be touched.
+// A preset written with the modes and the lean keys carries both and must not be touched.
 TEST(ReaderPresetMigration, ANewPresetIsLeftAlone) {
   ReaderPrefs p;
   p.screenMargin = 35;
@@ -91,36 +91,109 @@ TEST(ReaderPresetMigration, ANewPresetIsLeftAlone) {
   p.screenMarginBottom = 18;
   p.marginLinkMode = margin_link::toStored(Mode::Separate);
   p.dynamicMargins = 2;
-  p.embeddedTextStyle = 1;
-  p.embeddedLayoutStyle = 0;
+  p.embeddedStyle = 1;
+  p.paragraphIndentSpaces = 4;
+  p.characterSpacing = 3;
+  p.imageRendering = 2;
 
   LegacyKeys keys;
   keys.hasMarginLinkMode = true;
-  keys.hasEmbeddedLayoutStyle = true;
+  keys.hasParagraphIndentSpaces = true;
+  keys.hasCharacterSpacingPx = true;
   reader_preset_migration::apply(keys, p);
 
   EXPECT_EQ(12, p.screenMarginTop);
   EXPECT_EQ(18, p.screenMarginBottom);
+  EXPECT_EQ(35, p.screenMargin);
   EXPECT_EQ(margin_link::toStored(Mode::Separate), p.marginLinkMode);
   EXPECT_EQ(2, p.dynamicMargins);
-  EXPECT_EQ(1, p.embeddedTextStyle);
-  EXPECT_EQ(0, p.embeddedLayoutStyle);
+  EXPECT_EQ(1, p.embeddedStyle);
+  EXPECT_EQ(4, p.paragraphIndentSpaces);
+  EXPECT_EQ(3, p.characterSpacing);
+  EXPECT_EQ(2, p.imageRendering);
 }
 
-// The old single Embedded Style choice lands in the text switch, and the layout switch
-// follows it: a preset saved with the style off must not hand the book's geometry back.
-TEST(ReaderPresetMigration, TheLayoutSwitchFollowsTheOldSingleChoice) {
+// Two Embedded Style switches became one: it stays on only if both were on, because a
+// preset saved with either off wanted the book's own styling gone.
+TEST(ReaderPresetMigration, TheTwoStyleSwitchesBecomeOneAndOffWins) {
+  for (const uint8_t text : {uint8_t{0}, uint8_t{1}}) {
+    for (const uint8_t layout : {uint8_t{0}, uint8_t{1}}) {
+      ReaderPrefs p;
+      p.embeddedStyle = text;
+      LegacyKeys keys;
+      keys.hasEmbeddedLayoutStyle = true;
+      keys.embeddedLayoutStyle = layout;
+      reader_preset_migration::apply(keys, p);
+      EXPECT_EQ(text && layout ? 1 : 0, p.embeddedStyle) << int(text) << int(layout);
+    }
+  }
+  // No layout key: this preset predates the split, so its one switch already says it all.
   for (const uint8_t choice : {uint8_t{0}, uint8_t{1}}) {
     ReaderPrefs p;
-    p.embeddedTextStyle = choice;
-    p.embeddedLayoutStyle = 1;  // the constructed default
-
-    LegacyKeys keys;  // no embeddedLayoutStyle key: this preset predates the split
-    reader_preset_migration::apply(keys, p);
-
-    EXPECT_EQ(choice, p.embeddedTextStyle);
-    EXPECT_EQ(choice, p.embeddedLayoutStyle);
+    p.embeddedStyle = choice;
+    reader_preset_migration::apply(LegacyKeys{}, p);
+    EXPECT_EQ(choice, p.embeddedStyle);
   }
+}
+
+// The indent was Book or a percent of the column; it counts spaces now.
+TEST(ReaderPresetMigration, TheIndentMapsToTheNearestSpaceCount) {
+  const auto migrated = [](uint8_t mode, uint8_t percent) {
+    ReaderPrefs p;
+    LegacyKeys keys;
+    keys.hasFirstLineIndent = true;
+    keys.firstLineIndentMode = mode;
+    keys.firstLineIndentPercent = percent;
+    reader_preset_migration::apply(keys, p);
+    return p.paragraphIndentSpaces;
+  };
+  EXPECT_EQ(2, migrated(0, 40));  // Book mode: there is no publisher choice left, so the default
+  EXPECT_EQ(0, migrated(1, 0));   // flush stays flush
+  EXPECT_EQ(1, migrated(1, 5));   // anything above zero keeps one space
+  EXPECT_EQ(2, migrated(1, 20));  // both old defaults land on the new default
+  EXPECT_EQ(2, migrated(1, 23));
+  EXPECT_EQ(3, migrated(1, 25));
+  EXPECT_EQ(5, migrated(1, 100));  // and the top of the old range on the top of the new
+}
+
+// Character Spacing moved from half pixels under "characterSpacing" to whole pixels under
+// "characterSpacingPx": the old key converts, the new one is never converted again.
+TEST(ReaderPresetMigration, CharacterSpacingMovesToWholePixels) {
+  const auto migrated = [](uint8_t stored) {
+    ReaderPrefs p;
+    LegacyKeys keys;
+    keys.hasLegacyCharacterSpacing = true;
+    keys.legacyCharacterSpacing = stored;
+    reader_preset_migration::apply(keys, p);
+    return p.characterSpacing;
+  };
+  EXPECT_EQ(reader_defaults::CHARACTER_SPACING, migrated(5));      // as designed stays as designed
+  EXPECT_EQ(reader_defaults::CHARACTER_SPACING + 1, migrated(7));  // +1 px (two half pixels)
+  EXPECT_EQ(reader_defaults::CHARACTER_SPACING - 1, migrated(3));
+  EXPECT_EQ(reader_defaults::CHARACTER_SPACING + 1, migrated(6));  // half a pixel rounds away from zero
+  EXPECT_EQ(reader_defaults::CHARACTER_SPACING - 1, migrated(4));
+  EXPECT_EQ(reader_defaults::CHARACTER_SPACING + 2, migrated(10));  // +2.5 clamps to +2
+  EXPECT_EQ(reader_defaults::CHARACTER_SPACING - 2, migrated(0));
+}
+
+// Placeholder and Suppress were inert from 2026-08-11 and the row is back, so an old
+// preset must not start hiding images. The side margin and word spacing land on their grids.
+TEST(ReaderPresetMigration, AnOldPresetGetsDisplayImagesAndTheNewGrids) {
+  ReaderPrefs p;
+  p.imageRendering = 2;
+  p.wordSpacing = 107;
+  p.screenMargin = 60;
+  p.screenMarginTop = 60;
+  p.screenMarginBottom = 60;
+  p.marginLinkMode = margin_link::toStored(Mode::AllSides);
+  LegacyKeys keys;
+  keys.hasMarginLinkMode = true;
+  reader_preset_migration::apply(keys, p);
+  EXPECT_EQ(0, p.imageRendering);
+  EXPECT_EQ(100, p.wordSpacing);
+  EXPECT_EQ(40, p.screenMargin);
+  EXPECT_EQ(40, p.screenMarginTop);  // All Sides carries the clamped side margin onto every side
+  EXPECT_EQ(40, p.screenMarginBottom);
 }
 
 // CrossPointSettings resaves only when the margin rule changed something; the return

@@ -48,7 +48,15 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   scope.endScanAndPrewarm();
   const auto tPrewarm = millis();
 
-  const bool pageHasImages = page->hasImages();
+  // Images: Display (B/W): the page turns as plain B/W, images dither in the B/W pass and
+  // text keeps its anti-aliasing. The layout is the same as Display, so only the draw differs.
+  const bool imagesInBw = prefs_.imageRendering == CrossPointSettings::IMAGES_DISPLAY_BW;
+  struct DitherScope {
+    GfxRenderer& renderer;
+    ~DitherScope() { renderer.setDitherImagesInBw(false); }
+  } ditherScope{renderer};
+  renderer.setDitherImagesInBw(imagesInBw);
+  const bool pageHasImages = !imagesInBw && page->hasImages();
   const bool pageHasImagesNeedingDecode = pageHasImages && page->hasImagesNeedingDecode();
   const bool manualRefreshPending = forcedRefreshPending;
   forcedRefreshPending = false;

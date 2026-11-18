@@ -19,7 +19,7 @@ ReaderPrefs makeSample() {
   p.lineSpacingPercent = 120;
   p.paragraphAlignment = 4;
   p.extraParagraphSpacing = 0;
-  p.paragraphSpacing = 80;
+  p.wordSpacing = 125;
   p.screenMargin = 35;
   p.screenMarginTop = 12;
   p.screenMarginBottom = 18;
@@ -28,15 +28,14 @@ ReaderPrefs makeSample() {
   p.focusReadingEnabled = 1;
   p.guideDotsEnabled = 1;
   p.guideDotsHidden = 1;
-  p.embeddedTextStyle = 0;
-  p.embeddedLayoutStyle = 0;
+  p.embeddedStyle = 0;
   p.textAntiAliasing = 0;
   p.imageRendering = 2;
   p.paragraphNumbering = 2;  // whole book
   p.paperbackLookBody = 0;
   p.paperbackLookStatus = 1;
-  p.firstLineIndentMode = 1;  // Custom %
-  p.firstLineIndentPercent = 40;
+  p.paragraphIndentSpaces = 4;
+  p.characterSpacing = reader_defaults::CHARACTER_SPACING + 1;
   p.paragraphNumberSize = 0;  // Small
   std::memset(p.sdFontFamilyName, 0, sizeof(p.sdFontFamilyName));
   std::strncpy(p.sdFontFamilyName, "Bookerly", sizeof(p.sdFontFamilyName) - 1);
@@ -49,19 +48,12 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.lineSpacingPercent, b.lineSpacingPercent);
   EXPECT_EQ(a.paragraphAlignment, b.paragraphAlignment);
   EXPECT_EQ(a.extraParagraphSpacing, b.extraParagraphSpacing);
-  EXPECT_EQ(a.paragraphSpacing, b.paragraphSpacing);
   EXPECT_EQ(a.wordSpacing, b.wordSpacing);
-  EXPECT_EQ(a.kerning, b.kerning);
-  EXPECT_EQ(a.ligatures, b.ligatures);
-  EXPECT_EQ(a.linkUnderline, b.linkUnderline);
+  EXPECT_EQ(a.characterSpacing, b.characterSpacing);
   EXPECT_EQ(a.sbChapterTimePos, b.sbChapterTimePos);
   EXPECT_EQ(a.sbBookTimePos, b.sbBookTimePos);
   EXPECT_EQ(a.textContrast, b.textContrast);
-  EXPECT_EQ(a.bookMargins, b.bookMargins);
-  EXPECT_EQ(a.headingPageBreak, b.headingPageBreak);
-  EXPECT_EQ(a.fillPages, b.fillPages);
   EXPECT_EQ(a.paragraphNumberPlace, b.paragraphNumberPlace);
-  EXPECT_EQ(a.wordExpansion, b.wordExpansion);
   EXPECT_EQ(a.sbBookTitlePos, b.sbBookTitlePos);
   EXPECT_EQ(a.screenMargin, b.screenMargin);
   EXPECT_EQ(a.screenMarginTop, b.screenMarginTop);
@@ -71,15 +63,13 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.focusReadingEnabled, b.focusReadingEnabled);
   EXPECT_EQ(a.guideDotsEnabled, b.guideDotsEnabled);
   EXPECT_EQ(a.guideDotsHidden, b.guideDotsHidden);
-  EXPECT_EQ(a.embeddedTextStyle, b.embeddedTextStyle);
-  EXPECT_EQ(a.embeddedLayoutStyle, b.embeddedLayoutStyle);
+  EXPECT_EQ(a.embeddedStyle, b.embeddedStyle);
   EXPECT_EQ(a.textAntiAliasing, b.textAntiAliasing);
   EXPECT_EQ(a.imageRendering, b.imageRendering);
   EXPECT_EQ(a.paragraphNumbering, b.paragraphNumbering);
   EXPECT_EQ(a.paperbackLookBody, b.paperbackLookBody);
   EXPECT_EQ(a.paperbackLookStatus, b.paperbackLookStatus);
-  EXPECT_EQ(a.firstLineIndentMode, b.firstLineIndentMode);
-  EXPECT_EQ(a.firstLineIndentPercent, b.firstLineIndentPercent);
+  EXPECT_EQ(a.paragraphIndentSpaces, b.paragraphIndentSpaces);
   EXPECT_EQ(a.paragraphNumberSize, b.paragraphNumberSize);
   EXPECT_STREQ(a.sdFontFamilyName, b.sdFontFamilyName);
   // POD change-detection is a whole-blob memcmp, so the bytes must match exactly.
@@ -93,10 +83,10 @@ TEST(ReaderPrefs, ParagraphNumberingDefaultsOff) {
   EXPECT_EQ(0, p.paragraphNumbering);
 }
 
-TEST(ReaderPrefs, FirstLineIndentDefaultsToBook) {
+TEST(ReaderPrefs, ParagraphIndentDefaultsToTwoSpaces) {
   ReaderPrefs p;
-  EXPECT_EQ(0, p.firstLineIndentMode);  // Book (respect CSS)
-  EXPECT_EQ(0, p.firstLineIndentPercent);
+  EXPECT_EQ(2, p.paragraphIndentSpaces);
+  EXPECT_EQ(reader_defaults::PARAGRAPH_INDENT_SPACES, p.paragraphIndentSpaces);
 }
 
 TEST(ReaderPrefs, StreamRoundTrip) {
@@ -150,9 +140,7 @@ TEST(ReaderPrefs, Version5SidecarIsFoldedNotDropped) {
 // dropping it would discard every per-book setting the user ever chose.
 TEST(ReaderPrefs, Version6SidecarAdoptsNewReadingDefaultsAndKeepsTheRest) {
   ReaderPrefs legacy = makeSample();
-  legacy.paragraphSpacing = 0;
-  legacy.firstLineIndentMode = 0;
-  legacy.firstLineIndentPercent = 0;
+  legacy.paragraphIndentSpaces = 0;
   legacy.paragraphNumbering = 0;
   legacy.fontPointSize = 18;
   legacy.screenMargin = 35;
@@ -165,9 +153,7 @@ TEST(ReaderPrefs, Version6SidecarAdoptsNewReadingDefaultsAndKeepsTheRest) {
   bool migrated = false;
   ASSERT_TRUE(readReaderPrefs(ss, loaded, &migrated));
   EXPECT_TRUE(migrated);
-  EXPECT_EQ(reader_defaults::PARAGRAPH_SPACING_PERCENT, loaded.paragraphSpacing);
-  EXPECT_EQ(reader_defaults::FIRST_LINE_INDENT_MODE, loaded.firstLineIndentMode);
-  EXPECT_EQ(reader_defaults::FIRST_LINE_INDENT_PERCENT, loaded.firstLineIndentPercent);
+  EXPECT_EQ(reader_defaults::PARAGRAPH_INDENT_SPACES, loaded.paragraphIndentSpaces);
   EXPECT_EQ(reader_defaults::PARAGRAPH_NUMBERING, loaded.paragraphNumbering);
   // A v6 point size is already a point size, so it is not folded.
   EXPECT_EQ(18, loaded.fontPointSize);
@@ -182,9 +168,7 @@ TEST(ReaderPrefs, Version6SidecarAdoptsNewReadingDefaultsAndKeepsTheRest) {
 // turned the indent back off keeps it off across every reopen.
 TEST(ReaderPrefs, CurrentVersionIsNotMigrated) {
   ReaderPrefs current = makeSample();
-  current.paragraphSpacing = 0;
-  current.firstLineIndentMode = 0;
-  current.firstLineIndentPercent = 0;
+  current.paragraphIndentSpaces = 0;
   current.paragraphNumbering = 0;
   std::stringstream ss;
   const uint8_t ver = ReaderPrefs::VERSION;
@@ -195,9 +179,7 @@ TEST(ReaderPrefs, CurrentVersionIsNotMigrated) {
   bool migrated = true;
   ASSERT_TRUE(readReaderPrefs(ss, loaded, &migrated));
   EXPECT_FALSE(migrated);
-  EXPECT_EQ(0, loaded.paragraphSpacing);
-  EXPECT_EQ(0, loaded.firstLineIndentMode);
-  EXPECT_EQ(0, loaded.firstLineIndentPercent);
+  EXPECT_EQ(0, loaded.paragraphIndentSpaces);
   EXPECT_EQ(0, loaded.paragraphNumbering);
 }
 
@@ -507,8 +489,8 @@ TEST(ReaderPrefs, AdoptStatusBarFromCopiesTheWholeBlockAndNothingElse) {
 // setting the user ever chose the first time this firmware opens the book.
 TEST(ReaderPrefs, Version11SidecarKeepsEveryFieldItActuallyHeld) {
   ReaderPrefs legacy = makeSample();
-  legacy.embeddedTextStyle = 1;  // the single v11 "Embedded Style" choice
-  legacy.sbOffBar = 3;           // the last field a v11 record really carried
+  legacy.embeddedStyle = 1;  // the single v11 "Embedded Style" choice
+  legacy.sbOffBar = 3;       // the last field a v11 record really carried
   std::stringstream ss;
   const uint8_t v11 = 11;
   ss.write(reinterpret_cast<const char*>(&v11), 1);
@@ -533,7 +515,7 @@ TEST(ReaderPrefs, Version11SidecarKeepsEveryFieldItActuallyHeld) {
 TEST(ReaderPrefs, Version11SidecarSeedsTheLayoutSwitchFromTheOldSingleChoice) {
   for (const uint8_t choice : {uint8_t{0}, uint8_t{1}}) {
     ReaderPrefs legacy = makeSample();
-    legacy.embeddedTextStyle = choice;
+    legacy.embeddedStyle = choice;
     std::stringstream ss;
     const uint8_t v11 = 11;
     ss.write(reinterpret_cast<const char*>(&v11), 1);
@@ -541,15 +523,15 @@ TEST(ReaderPrefs, Version11SidecarSeedsTheLayoutSwitchFromTheOldSingleChoice) {
 
     ReaderPrefs loaded;
     ASSERT_TRUE(readReaderPrefs(ss, loaded));
-    EXPECT_EQ(choice, loaded.embeddedTextStyle);
-    EXPECT_EQ(choice, loaded.embeddedLayoutStyle);
+    EXPECT_EQ(choice, loaded.embeddedStyle);
+    EXPECT_EQ(0, loaded.retiredEmbeddedLayoutStyle);  // folded into the one switch, then zeroed
   }
 }
 
 // The layout switch is the newest field, so it must sit last: every field above it
 // keeps the offset a v11 record wrote it at.
 TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
-  EXPECT_EQ(offsetof(ReaderPrefs, embeddedLayoutStyle), READER_PREFS_V11_SIZE);
+  EXPECT_EQ(offsetof(ReaderPrefs, retiredEmbeddedLayoutStyle), READER_PREFS_V11_SIZE);
   EXPECT_EQ(offsetof(ReaderPrefs, sbParaPagesPos), READER_PREFS_V12_SIZE);
   EXPECT_EQ(READER_PREFS_V11_SIZE + 1, READER_PREFS_V12_SIZE);
   EXPECT_EQ(READER_PREFS_V12_SIZE + 1, READER_PREFS_V13_SIZE);
@@ -583,28 +565,29 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(26, ReaderPrefs::VERSION);
+  EXPECT_EQ(27, ReaderPrefs::VERSION);
+  EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(26));  // v27 moved meanings, not bytes
 }
 
 // A v23 record stops before Character Spacing: it reads back as the font as designed,
-// and the spec carries the signed half pixels.
+// and the spec carries the signed whole pixels.
 TEST(ReaderPrefs, CharacterSpacingDefaultsToNormalAndMapsSigned) {
   ReaderPrefs prefs;
   EXPECT_EQ(reader_defaults::CHARACTER_SPACING, prefs.characterSpacing);
   EXPECT_EQ(0, makeRenderSpec(prefs, 0, 480, 800).characterSpacing);
   prefs.characterSpacing = 0;
-  EXPECT_EQ(-5, makeRenderSpec(prefs, 0, 480, 800).characterSpacing);
-  prefs.characterSpacing = 10;
-  EXPECT_EQ(5, makeRenderSpec(prefs, 0, 480, 800).characterSpacing);
+  EXPECT_EQ(-2, makeRenderSpec(prefs, 0, 480, 800).characterSpacing);
+  prefs.characterSpacing = 4;
+  EXPECT_EQ(2, makeRenderSpec(prefs, 0, 480, 800).characterSpacing);
   prefs.characterSpacing = 200;  // a corrupt byte clamps rather than wrapping
-  EXPECT_EQ(5, makeRenderSpec(prefs, 0, 480, 800).characterSpacing);
+  EXPECT_EQ(2, makeRenderSpec(prefs, 0, 480, 800).characterSpacing);
 }
 
 TEST(ReaderPrefs, AV12RecordKeepsItsFieldsAndLeavesTheNewItemOff) {
   // The byte appended by v13 is not in a v12 record. Everything written before it
   // has to read back unchanged, and the new item has to land on its default.
   ReaderPrefs written;
-  written.embeddedLayoutStyle = 0;
+  written.retiredEmbeddedLayoutStyle = 0;
   written.sbSessionPagesPos = 3;
   written.sbParaPagesPos = 6;
 
@@ -613,7 +596,7 @@ TEST(ReaderPrefs, AV12RecordKeepsItsFieldsAndLeavesTheNewItemOff) {
 
   ReaderPrefs read;
   std::memcpy(&read, record.data(), record.size());
-  EXPECT_EQ(read.embeddedLayoutStyle, 0);
+  EXPECT_EQ(read.retiredEmbeddedLayoutStyle, 0);
   EXPECT_EQ(read.sbSessionPagesPos, 3);
   EXPECT_EQ(read.sbParaPagesPos, 0) << "a v12 record cannot carry this field";
 }
@@ -630,15 +613,15 @@ std::string interimV11Record(const ReaderPrefs& p) {
   constexpr size_t split = offsetof(ReaderPrefs, textAntiAliasing);
   std::string out;
   out.append(reinterpret_cast<const char*>(raw), split);
-  out.push_back(static_cast<char>(p.embeddedLayoutStyle));  // sat here in the interim build
+  out.push_back(static_cast<char>(p.retiredEmbeddedLayoutStyle));  // sat here in the interim build
   out.append(reinterpret_cast<const char*>(raw + split), READER_PREFS_V11_SIZE - split);
   return out;  // READER_PREFS_V11_SIZE + 1 bytes
 }
 
 TEST(ReaderPrefs, TheInterimV11LayoutIsUnshiftedRatherThanMisread) {
   ReaderPrefs written = makeSample();
-  written.embeddedTextStyle = 1;
-  written.embeddedLayoutStyle = 0;
+  written.embeddedStyle = 1;
+  written.retiredEmbeddedLayoutStyle = 0;  // this interim record really did carry its own layout switch
   written.textAntiAliasing = 1;
   written.imageRendering = 2;
   std::strncpy(written.sdFontFamilyName, "Bookerly", sizeof(written.sdFontFamilyName) - 1);
@@ -654,10 +637,9 @@ TEST(ReaderPrefs, TheInterimV11LayoutIsUnshiftedRatherThanMisread) {
 
   ReaderPrefs loaded;
   ASSERT_TRUE(readReaderPrefs(ss, loaded));
-  EXPECT_EQ(1, loaded.embeddedTextStyle);
-  EXPECT_EQ(0, loaded.embeddedLayoutStyle);
+  EXPECT_EQ(0, loaded.embeddedStyle);  // text on, layout off: either off means off
   EXPECT_EQ(1, loaded.textAntiAliasing);
-  EXPECT_EQ(2, loaded.imageRendering);
+  EXPECT_EQ(0, loaded.imageRendering);  // Placeholder was inert before v27, so it resets to Display
   EXPECT_STREQ("Bookerly", loaded.sdFontFamilyName);
   EXPECT_EQ(3, loaded.sbOffBar);
   EXPECT_EQ(written.statusBarEnabled, loaded.statusBarEnabled);
@@ -667,7 +649,7 @@ TEST(ReaderPrefs, TheInterimV11LayoutIsUnshiftedRatherThanMisread) {
 // A stable v11 record is the shorter of the two and must still read as itself.
 TEST(ReaderPrefs, AStableV11RecordIsNotMistakenForTheInterimOne) {
   ReaderPrefs written = makeSample();
-  written.embeddedTextStyle = 0;
+  written.embeddedStyle = 0;
   written.textAntiAliasing = 1;
   written.sbOffBar = 3;
 
@@ -678,8 +660,7 @@ TEST(ReaderPrefs, AStableV11RecordIsNotMistakenForTheInterimOne) {
 
   ReaderPrefs loaded;
   ASSERT_TRUE(readReaderPrefs(ss, loaded));
-  EXPECT_EQ(0, loaded.embeddedTextStyle);
-  EXPECT_EQ(0, loaded.embeddedLayoutStyle);  // seeded from the single old choice
+  EXPECT_EQ(0, loaded.embeddedStyle);  // the layout half was seeded from the single old choice
   EXPECT_EQ(1, loaded.textAntiAliasing);
   EXPECT_EQ(3, loaded.sbOffBar);
 }
@@ -722,13 +703,12 @@ TEST(ReaderPrefs, OldSidecarsKeepTheirLookAndDefaultWordSpacingToHundred) {
     EXPECT_TRUE(migrated);
     EXPECT_EQ(100, loaded.wordSpacing);
     EXPECT_EQ(old.fontPointSize, loaded.fontPointSize);
-    EXPECT_EQ(old.paragraphSpacing, loaded.paragraphSpacing);
     EXPECT_EQ(old.screenMargin, loaded.screenMargin);
   }
 }
 
 TEST(ReaderPrefs, WordSpacingRoundTripsAtEverySetting) {
-  for (uint8_t percent = 75; percent <= 150; percent += 5) {
+  for (uint8_t percent = 50; percent <= 200; percent += 25) {
     auto original = makeSample();
     original.wordSpacing = percent;
     std::stringstream file;
@@ -746,13 +726,14 @@ TEST(ReaderPrefs, RetiredByteKeepsLegacyOffsetsAndDoesNotAffectComparisons) {
   record[0] = 14;
   record[1 + 14] = 1;
   record[1 + 15] = 1;
+  record[1 + READER_PREFS_V11_SIZE] = 1;  // the v12 layout switch, on
   record.replace(1 + 23, 8, "Bookerly");
   record[1 + 76] = 125;
   std::stringstream in(record);
   ReaderPrefs loaded;
   ASSERT_TRUE(readReaderPrefs(in, loaded));
   EXPECT_EQ(0, loaded.reserved14);
-  EXPECT_EQ(1, loaded.embeddedTextStyle);
+  EXPECT_EQ(1, loaded.embeddedStyle);
   EXPECT_STREQ("Bookerly", loaded.sdFontFamilyName);
   EXPECT_EQ(125, loaded.wordSpacing);
   record[1 + 14] = 0;
@@ -763,17 +744,13 @@ TEST(ReaderPrefs, RetiredByteKeepsLegacyOffsetsAndDoesNotAffectComparisons) {
 }
 
 // The EPUB loader decides whether to parse a book's stylesheet from the book's own
-// look, not the global one: a book with either embedded switch on needs its CSS even
-// when both global switches are off.
-TEST(ReaderPrefs, WantsBookCssWhenEitherEmbeddedSwitchIsOn) {
+// look, not the global one: a book with Embedded Style on needs its CSS even when the
+// global switch is off.
+TEST(ReaderPrefs, WantsBookCssWhenTheEmbeddedSwitchIsOn) {
   ReaderPrefs p;
-  p.embeddedTextStyle = 0;
-  p.embeddedLayoutStyle = 0;
+  p.embeddedStyle = 0;
   EXPECT_FALSE(wantsBookCss(p));
-  p.embeddedTextStyle = 1;
-  EXPECT_TRUE(wantsBookCss(p));
-  p.embeddedTextStyle = 0;
-  p.embeddedLayoutStyle = 1;
+  p.embeddedStyle = 1;
   EXPECT_TRUE(wantsBookCss(p));
 }
 
@@ -847,84 +824,6 @@ TEST(StatusBarBlock, HiddenBarKeepsItsProgressBarsOnlyWhenAsked) {
   EXPECT_EQ(2, b.activeBarThickness());
 }
 
-TEST(ReaderPrefs, AV14RecordKeepsItsLookAndLeavesKerningOn) {
-  auto old = makeSample();
-  old.wordSpacing = 125;
-  old.kerning = 0;  // outside the v14 record, must not be read
-  std::stringstream file;
-  file.put(static_cast<char>(14));
-  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(14));
-  ReaderPrefs loaded;
-  bool migrated = false;
-  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
-  EXPECT_TRUE(migrated);
-  EXPECT_EQ(1, loaded.kerning);
-  EXPECT_EQ(125, loaded.wordSpacing);
-  EXPECT_EQ(old.fontPointSize, loaded.fontPointSize);
-}
-
-TEST(ReaderPrefs, KerningOffRoundTripsAndReachesTheSpec) {
-  auto original = makeSample();
-  original.kerning = 0;
-  std::stringstream file;
-  writeReaderPrefs(file, original);
-  ReaderPrefs loaded;
-  ASSERT_TRUE(readReaderPrefs(file, loaded));
-  expectEqual(original, loaded);
-  EXPECT_FALSE(makeRenderSpec(loaded, 1, 480, 800).kerning);
-  EXPECT_TRUE(makeRenderSpec(ReaderPrefs{}, 1, 480, 800).kerning);
-}
-
-TEST(ReaderPrefs, AV15RecordKeepsKerningAndLeavesLigaturesOn) {
-  auto old = makeSample();
-  old.kerning = 0;
-  old.ligatures = 0;  // outside the v15 record, must not be read
-  std::stringstream file;
-  file.put(static_cast<char>(15));
-  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(15));
-  ReaderPrefs loaded;
-  bool migrated = false;
-  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
-  EXPECT_TRUE(migrated);
-  EXPECT_EQ(0, loaded.kerning);
-  EXPECT_EQ(1, loaded.ligatures);
-}
-
-TEST(ReaderPrefs, LigaturesOffRoundTripsAndReachesTheSpec) {
-  auto original = makeSample();
-  original.ligatures = 0;
-  std::stringstream file;
-  writeReaderPrefs(file, original);
-  ReaderPrefs loaded;
-  ASSERT_TRUE(readReaderPrefs(file, loaded));
-  expectEqual(original, loaded);
-  EXPECT_FALSE(makeRenderSpec(loaded, 1, 480, 800).ligatures);
-}
-
-TEST(ReaderPrefs, AV16RecordLeavesLinkUnderlineAtItsDefault) {
-  auto old = makeSample();
-  old.linkUnderline = 0;  // outside the v16 record, must not be read
-  std::stringstream file;
-  file.put(static_cast<char>(16));
-  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(16));
-  ReaderPrefs loaded;
-  bool migrated = false;
-  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
-  EXPECT_TRUE(migrated);
-  EXPECT_EQ(1, loaded.linkUnderline);
-}
-
-TEST(ReaderPrefs, LinkUnderlineFlippedRoundTrips) {
-  auto original = makeSample();
-  original.linkUnderline = 0;
-  std::stringstream file;
-  writeReaderPrefs(file, original);
-  ReaderPrefs loaded;
-  ASSERT_TRUE(readReaderPrefs(file, loaded));
-  expectEqual(original, loaded);
-  EXPECT_EQ(false, makeRenderSpec(loaded, 1, 480, 800).linkUnderline);
-}
-
 TEST(ReaderPrefs, AV17RecordLeavesTheTimeLeftItemsOff) {
   auto old = makeSample();
   old.sbChapterTimePos = 3;  // outside the v17 record, must not be read
@@ -953,78 +852,6 @@ TEST(ReaderPrefs, AV18RecordKeepsNormalContrast) {
   EXPECT_EQ(0, loaded.textContrast);
 }
 
-TEST(ReaderPrefs, AV19RecordLeavesBookMarginsAtItsDefault) {
-  auto old = makeSample();
-  old.bookMargins = 0;  // outside the v19 record, must not be read
-  std::stringstream file;
-  file.put(static_cast<char>(19));
-  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(19));
-  ReaderPrefs loaded;
-  bool migrated = false;
-  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
-  EXPECT_TRUE(migrated);
-  EXPECT_EQ(1, loaded.bookMargins);
-}
-
-TEST(ReaderPrefs, BookMarginsFlippedRoundTrips) {
-  auto original = makeSample();
-  original.bookMargins = 0;
-  std::stringstream file;
-  writeReaderPrefs(file, original);
-  ReaderPrefs loaded;
-  ASSERT_TRUE(readReaderPrefs(file, loaded));
-  expectEqual(original, loaded);
-  EXPECT_EQ(false, makeRenderSpec(loaded, 1, 480, 800).bookMargins);
-}
-
-TEST(ReaderPrefs, AV20RecordLeavesHeadingPageBreakAtItsDefault) {
-  auto old = makeSample();
-  old.headingPageBreak = 1;  // outside the v20 record, must not be read
-  std::stringstream file;
-  file.put(static_cast<char>(20));
-  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(20));
-  ReaderPrefs loaded;
-  bool migrated = false;
-  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
-  EXPECT_TRUE(migrated);
-  EXPECT_EQ(0, loaded.headingPageBreak);
-}
-
-TEST(ReaderPrefs, HeadingPageBreakFlippedRoundTrips) {
-  auto original = makeSample();
-  original.headingPageBreak = 1;
-  std::stringstream file;
-  writeReaderPrefs(file, original);
-  ReaderPrefs loaded;
-  ASSERT_TRUE(readReaderPrefs(file, loaded));
-  expectEqual(original, loaded);
-  EXPECT_EQ(true, makeRenderSpec(loaded, 1, 480, 800).headingPageBreak);
-}
-
-TEST(ReaderPrefs, AV24RecordLeavesFillPagesAtItsDefault) {
-  auto old = makeSample();
-  old.fillPages = 1;  // outside the v24 record, must not be read
-  std::stringstream file;
-  file.put(static_cast<char>(24));
-  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(24));
-  ReaderPrefs loaded;
-  bool migrated = false;
-  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
-  EXPECT_TRUE(migrated);
-  EXPECT_EQ(0, loaded.fillPages);
-}
-
-TEST(ReaderPrefs, FillPagesFlippedRoundTrips) {
-  auto original = makeSample();
-  original.fillPages = 1;
-  std::stringstream file;
-  writeReaderPrefs(file, original);
-  ReaderPrefs loaded;
-  ASSERT_TRUE(readReaderPrefs(file, loaded));
-  expectEqual(original, loaded);
-  EXPECT_EQ(true, makeRenderSpec(loaded, 1, 480, 800).fillPages);
-}
-
 TEST(ReaderPrefs, AV25RecordPutsNumbersByTheText) {
   auto old = makeSample();
   old.paragraphNumberPlace = 0;  // outside the v25 record, must not be read
@@ -1036,31 +863,6 @@ TEST(ReaderPrefs, AV25RecordPutsNumbersByTheText) {
   ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
   EXPECT_TRUE(migrated);
   EXPECT_EQ(1, loaded.paragraphNumberPlace);
-  EXPECT_EQ(old.fillPages, loaded.fillPages);
-}
-
-TEST(ReaderPrefs, AV21RecordLeavesWordExpansionAtItsDefault) {
-  auto old = makeSample();
-  old.wordExpansion = 1;  // outside the v21 record, must not be read
-  std::stringstream file;
-  file.put(static_cast<char>(21));
-  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(21));
-  ReaderPrefs loaded;
-  bool migrated = false;
-  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
-  EXPECT_TRUE(migrated);
-  EXPECT_EQ(0, loaded.wordExpansion);
-}
-
-TEST(ReaderPrefs, WordExpansionFlippedRoundTrips) {
-  auto original = makeSample();
-  original.wordExpansion = 1;
-  std::stringstream file;
-  writeReaderPrefs(file, original);
-  ReaderPrefs loaded;
-  ASSERT_TRUE(readReaderPrefs(file, loaded));
-  expectEqual(original, loaded);
-  EXPECT_EQ(1, makeRenderSpec(loaded, 1, 480, 800).wordExpansion);
 }
 
 TEST(ReaderPrefs, AV22RecordLeavesTheBookTitleItemOff) {
@@ -1120,4 +922,140 @@ TEST(ReaderPrefs, TitleSlotStacksTheBookAboveTheChapterOnOneAnchor) {
 
   b.bookTitlePos = 0;  // chapterless, no Book Title: the chapter anchor shows the book
   EXPECT_EQ(1, b.titleSlot(false).anchor);
+}
+
+// ── v27: the lean typography record ───────────────────────────────────────────
+// v27 keeps v26's layout, so a v26 record is read at full length and converted: the indent
+// byte (Book or percent, in two bytes) becomes a space count, Character Spacing becomes
+// whole pixels, the two style switches become one, and the retired switches are zeroed.
+namespace {
+std::stringstream asRecord(const uint8_t version, const ReaderPrefs& p) {
+  std::stringstream file;
+  file.put(static_cast<char>(version));
+  file.write(reinterpret_cast<const char*>(&p), readerPrefsRecordSize(version));
+  return file;
+}
+
+ReaderPrefs legacyLook() {
+  ReaderPrefs old;
+  old.retiredFirstLineIndentMode = 1;
+  old.paragraphIndentSpaces = 23;  // the old percent byte: the old default
+  old.retiredEmbeddedLayoutStyle = 1;
+  old.embeddedStyle = 1;
+  old.characterSpacing = 7;  // +1 px, in half pixels
+  old.imageRendering = 2;    // Suppress: inert since 2026-08-11
+  old.wordSpacing = 107;
+  old.lineSpacingPercent = 40;
+  old.retiredKerning = old.retiredLigatures = old.retiredLinkUnderline = 0;
+  old.retiredBookMargins = 0;
+  old.retiredHeadingPageBreak = 1;
+  old.retiredWordExpansion = 2;
+  old.retiredFillPages = 1;
+  old.retiredParagraphSpacing = 50;
+  return old;
+}
+}  // namespace
+
+TEST(ReaderPrefs, AV26RecordIsConvertedToTheLeanMeanings) {
+  std::stringstream file = asRecord(26, legacyLook());
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(2, loaded.paragraphIndentSpaces);  // 23 percent of the column, now two spaces
+  EXPECT_EQ(reader_defaults::CHARACTER_SPACING + 1, loaded.characterSpacing);
+  EXPECT_EQ(1, loaded.embeddedStyle);
+  EXPECT_EQ(0, loaded.imageRendering);
+  EXPECT_EQ(100, loaded.wordSpacing);  // 107 lands on the 25 percent grid
+  EXPECT_EQ(reader_defaults::MIN_LINE_SPACING_PERCENT, loaded.lineSpacingPercent);
+  // Every retired byte reads back zero, so the whole-blob comparison stays exact.
+  ReaderPrefs expected = loaded;
+  expected.retiredParagraphSpacing = expected.retiredFirstLineIndentMode = expected.retiredEmbeddedLayoutStyle = 0;
+  expected.retiredKerning = expected.retiredLigatures = expected.retiredLinkUnderline = 0;
+  expected.retiredBookMargins = expected.retiredHeadingPageBreak = expected.retiredWordExpansion = 0;
+  expected.retiredFillPages = 0;
+  EXPECT_EQ(0, std::memcmp(&expected, &loaded, sizeof(ReaderPrefs)));
+}
+
+TEST(ReaderPrefs, AV26RecordWithEitherStyleHalfOffComesBackWithTheStyleOff) {
+  for (const uint8_t layout : {uint8_t{0}, uint8_t{1}}) {
+    for (const uint8_t text : {uint8_t{0}, uint8_t{1}}) {
+      ReaderPrefs old = legacyLook();
+      old.embeddedStyle = text;
+      old.retiredEmbeddedLayoutStyle = layout;
+      std::stringstream file = asRecord(26, old);
+      ReaderPrefs loaded;
+      ASSERT_TRUE(readReaderPrefs(file, loaded));
+      EXPECT_EQ(text && layout ? 1 : 0, loaded.embeddedStyle) << int(text) << int(layout);
+    }
+  }
+}
+
+TEST(ReaderPrefs, TheOldIndentModesMapToSpaces) {
+  const auto indentOf = [](uint8_t mode, uint8_t percent) {
+    ReaderPrefs old = legacyLook();
+    old.retiredFirstLineIndentMode = mode;
+    old.paragraphIndentSpaces = percent;
+    std::stringstream file = asRecord(26, old);
+    ReaderPrefs loaded;
+    EXPECT_TRUE(readReaderPrefs(file, loaded));
+    return loaded.paragraphIndentSpaces;
+  };
+  EXPECT_EQ(2, indentOf(0, 0));  // Book: no publisher choice left, the default
+  EXPECT_EQ(0, indentOf(1, 0));
+  EXPECT_EQ(1, indentOf(1, 5));
+  EXPECT_EQ(2, indentOf(1, 20));
+  EXPECT_EQ(5, indentOf(1, 100));
+}
+
+// A v23 record has no Character Spacing byte, so what sits there is the constructed
+// default and must not be run through the half-pixel conversion.
+TEST(ReaderPrefs, AV23RecordKeepsTheFontAsDesignedAndAV24RecordConverts) {
+  ReaderPrefs old = legacyLook();
+  old.characterSpacing = 9;  // outside a v23 record, must not be read or converted
+  std::stringstream v23 = asRecord(23, old);
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(v23, loaded));
+  EXPECT_EQ(reader_defaults::CHARACTER_SPACING, loaded.characterSpacing);
+
+  old.characterSpacing = 3;  // -1 px, in half pixels: -2 half pixels
+  std::stringstream v24 = asRecord(24, old);
+  ASSERT_TRUE(readReaderPrefs(v24, loaded));
+  EXPECT_EQ(reader_defaults::CHARACTER_SPACING - 1, loaded.characterSpacing);
+}
+
+TEST(ReaderPrefs, AV26RecordSideMarginsLandOnTheNewRangeAndAllSidesCarriesThem) {
+  ReaderPrefs old = legacyLook();
+  old.screenMargin = 60;
+  old.screenMarginTop = 60;
+  old.screenMarginBottom = 60;
+  old.marginLinkMode = 2;  // All Sides
+  std::stringstream file = asRecord(26, old);
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(file, loaded));
+  EXPECT_EQ(40, loaded.screenMargin);
+  EXPECT_EQ(40, loaded.screenMarginTop);
+  EXPECT_EQ(40, loaded.screenMarginBottom);
+
+  old.screenMargin = 17;   // an old default lands on the grid
+  old.marginLinkMode = 0;  // Separate keeps the vertical margins as they were
+  old.screenMarginTop = 60;
+  std::stringstream separate = asRecord(26, old);
+  ASSERT_TRUE(readReaderPrefs(separate, loaded));
+  EXPECT_EQ(15, loaded.screenMargin);
+  EXPECT_EQ(60, loaded.screenMarginTop);
+}
+
+TEST(ReaderPrefs, ACurrentRecordIsNeverConverted) {
+  ReaderPrefs now = makeSample();
+  now.imageRendering = 2;  // Suppress is a real choice again
+  now.characterSpacing = 4;
+  now.wordSpacing = 175;
+  std::stringstream file;
+  writeReaderPrefs(file, now);
+  ReaderPrefs loaded;
+  bool migrated = true;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_FALSE(migrated);
+  expectEqual(now, loaded);
 }

@@ -11,10 +11,10 @@
 namespace {
 
 // Reader Settings rows that do not reach the spec: the font is resolved by the caller,
-// the margins become the viewport, and the rest are draw-only or hard-set.
+// the margins become the viewport, and the rest are draw-only.
 const std::set<std::string> NOT_IN_SPEC = {
     "fontFamily",     "fontPointSize",  "screenMargin",     "screenMarginTop", "screenMarginBottom",
-    "marginLinkMode", "dynamicMargins", "textAntiAliasing", "textContrast",    "imageRendering",
+    "marginLinkMode", "dynamicMargins", "textAntiAliasing", "textContrast",
 };
 
 // Guide dots on, so Hidden Dots has something to change.
@@ -42,19 +42,44 @@ TEST(RenderSpec, ClampsWordSpacingToTheRowRange) {
   EXPECT_EQ(makeRenderSpec(p, 1, 480, 800).wordSpacing, reader_defaults::MAX_WORD_SPACING);
 }
 
-TEST(RenderSpec, NormalisesSwitchesAndHardSetsImages) {
+TEST(RenderSpec, NormalisesSwitches) {
   ReaderPrefs p;
   p.extraParagraphSpacing = 7;
-  p.embeddedTextStyle = 7;
-  p.embeddedLayoutStyle = 7;
+  p.embeddedStyle = 7;
   p.focusReadingEnabled = 7;
-  p.imageRendering = 2;
   const ReaderRenderSpec spec = makeRenderSpec(p, 1, 480, 800);
   EXPECT_TRUE(spec.extraParagraphSpacing);
-  EXPECT_TRUE(spec.embeddedTextStyle);
-  EXPECT_TRUE(spec.embeddedLayoutStyle);
+  EXPECT_TRUE(spec.embeddedStyle);
   EXPECT_TRUE(spec.focusReadingEnabled);
-  EXPECT_EQ(spec.imageRendering, 0);
+}
+
+TEST(RenderSpec, LineSpacingRangeIs80To175) {
+  EXPECT_EQ(80, reader_defaults::MIN_LINE_SPACING_PERCENT);
+  EXPECT_EQ(175, reader_defaults::MAX_LINE_SPACING_PERCENT);
+  ReaderPrefs p;
+  p.lineSpacingPercent = 95;
+  EXPECT_FLOAT_EQ(0.95f, makeRenderSpec(p, 1, 480, 800).lineCompression);
+}
+
+TEST(RenderSpec, BlackAndWhiteImagesLayOutAsDisplayAndOthersKeepTheirMode) {
+  ReaderPrefs p;
+  for (uint8_t mode : {0, 1, 2}) {
+    p.imageRendering = mode;
+    EXPECT_EQ(mode, makeRenderSpec(p, 1, 480, 800).imageRendering);
+  }
+  p.imageRendering = reader_defaults::IMAGES_DISPLAY_BW;
+  EXPECT_EQ(0, makeRenderSpec(p, 1, 480, 800).imageRendering);
+}
+
+TEST(RenderSpec, IndentAndCharacterSpacingReachTheSpecInTheirUnits) {
+  ReaderPrefs p;
+  p.paragraphIndentSpaces = 9;  // out of range: clamped to five spaces
+  p.characterSpacing = reader_defaults::CHARACTER_SPACING + 2;
+  const ReaderRenderSpec spec = makeRenderSpec(p, 1, 480, 800);
+  EXPECT_EQ(5, spec.paragraphIndentSpaces);
+  EXPECT_EQ(2, spec.characterSpacing);
+  p.characterSpacing = 0;
+  EXPECT_EQ(-2, makeRenderSpec(p, 1, 480, 800).characterSpacing);
 }
 
 TEST(RenderSpec, CallerSuppliesFontAndViewport) {
@@ -85,6 +110,6 @@ TEST(RenderSpec, SectionCacheMatchIsMemberwise) {
   const ReaderRenderSpec a = makeRenderSpec(ReaderPrefs{}, 1, 480, 800);
   ReaderRenderSpec b = a;
   EXPECT_TRUE(sectionCacheMatches(a, b));
-  b.firstLineIndentPercent++;
+  b.paragraphIndentSpaces++;
   EXPECT_FALSE(sectionCacheMatches(a, b));
 }

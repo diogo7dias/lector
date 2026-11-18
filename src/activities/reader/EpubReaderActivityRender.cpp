@@ -197,10 +197,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   buildViewportHeight = viewportHeight;
 
   const ReaderRenderSpec renderSpec = SETTINGS.readerRenderSpec(viewportWidth, viewportHeight, prefs_);
-  // Layout and paint below both measure through the renderer, so the switches are set once
-  // here; the deferred extension build in loop() reuses it with the same prefs.
-  renderer.setKerning(renderSpec.fontId, renderSpec.kerning);
-  renderer.setLigatures(renderSpec.fontId, renderSpec.ligatures);
+  // Layout and paint below both measure through the renderer, so Character Spacing is set
+  // once here; the deferred extension build in loop() reuses it with the same prefs.
   renderer.setCharacterSpacing(renderSpec.fontId, renderSpec.characterSpacing);
   renderer.setTextContrast(prefs_.textContrast);
 

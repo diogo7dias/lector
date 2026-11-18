@@ -327,15 +327,27 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
     needsResave = true;
   }
 
-  // Embedded Style split into Embedded Text Style and Embedded Layout Style. The old key
-  // is reused for the text switch, so only the layout switch needs seeding: a file written
-  // before the split has no "embeddedLayoutStyle" key, and its single stored choice covers
-  // both halves. Anyone who had it off wanted the book's own styling gone, so both switches
-  // start off rather than quietly handing back the book's margins and indents.
-  if (!doc["embeddedLayoutStyle"].is<uint8_t>() && doc["embeddedStyle"].is<uint8_t>()) {
-    embeddedLayoutStyle = doc["embeddedStyle"].as<uint8_t>() != 0 ? 1 : 0;
+  // Lean typography: the indent counts spaces (it was Book or a percent of the column),
+  // Character Spacing counts whole pixels under a new key (it was half pixels), and Book
+  // Styling is one switch (it was text and layout). Same rule as a saved preset's. The
+  // pre-0.8.2 defaults block below still wins over the indent this reads.
+  const auto leanKeys = reader_preset_migration::readLegacyKeys(doc);
+  if (!leanKeys.hasParagraphIndentSpaces) {
+    reader_preset_migration::migrateLeanTypography(leanKeys, paragraphIndentSpaces, embeddedStyle, characterSpacing);
+    // Placeholder and Suppress did nothing from 2026-08-11 until the Images row came back.
+    imageRendering = IMAGES_DISPLAY;
     needsResave = true;
   }
+  // Word Spacing and the side margin moved to coarser steps, so a saved value lands on the grid.
+  const uint8_t snappedWordSpacing =
+      reader_defaults::snapToStep(wordSpacing, reader_defaults::MIN_WORD_SPACING, reader_defaults::MAX_WORD_SPACING,
+                                  reader_defaults::WORD_SPACING_STEP);
+  const uint8_t snappedMargin =
+      reader_defaults::snapToStep(screenMargin, reader_defaults::MIN_SCREEN_MARGIN, reader_defaults::MAX_SCREEN_MARGIN,
+                                  reader_defaults::SCREEN_MARGIN_STEP);
+  if (snappedWordSpacing != wordSpacing || snappedMargin != screenMargin) needsResave = true;
+  wordSpacing = snappedWordSpacing;
+  screenMargin = snappedMargin;
 
   // Keep stored IDs stable while migrating retired sleep faces to Custom.
   if (wake_face::migrateSleepScreen(sleepScreen) != sleepScreen) {
@@ -433,10 +445,8 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
   if (!(doc["readingDefaults0820"] | false)) {
     // Same values the per-book sidecar upgrade applies, from the same constants, so
     // global and per-book can never drift apart.
-    paragraphSpacing = DEFAULT_PARAGRAPH_SPACING;
     extraParagraphSpacing = reader_defaults::EXTRA_PARAGRAPH_SPACING;
-    firstLineIndentMode = FIRST_LINE_INDENT_PERCENT;
-    firstLineIndentPercent = DEFAULT_FIRST_LINE_INDENT_PERCENT;
+    paragraphIndentSpaces = reader_defaults::PARAGRAPH_INDENT_SPACES;
     paragraphNumbering = PARA_NUM_CHAPTER;
     needsResave = true;
   }
@@ -587,6 +597,8 @@ bool CrossPointSettings::saveToFile() const {
 
 // ReaderPrefs.h is host-buildable and cannot see this class, so it carries its own copies.
 static_assert(CrossPointSettings::SB_OFFBAR_OFF == StatusBarBlock::OFF_BAR_OFF, "off-bar Off value drifted");
-static_assert(CrossPointSettings::IMAGES_DISPLAY == 0, "makeRenderSpec hard-sets imageRendering to 0");
+static_assert(CrossPointSettings::IMAGES_DISPLAY_BW == reader_defaults::IMAGES_DISPLAY_BW &&
+                  CrossPointSettings::IMAGE_RENDERING_COUNT == reader_defaults::IMAGE_RENDERING_COUNT,
+              "image rendering values drifted");
 static_assert(CrossPointSettings::PARAGRAPH_NUMBERING_COUNT == reader_defaults::PARAGRAPH_NUMBERING_COUNT,
               "paragraph numbering count drifted");

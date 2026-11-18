@@ -68,24 +68,14 @@ class ChapterHtmlSlimParser {
   float lineCompression;
   bool extraParagraphSpacing;
   uint8_t wordSpacing;
-  uint8_t paragraphSpacing;  // extra block gap after each paragraph, % of line height
   uint8_t paragraphAlignment;
   uint16_t viewportWidth;
   uint16_t viewportHeight;
   bool focusReadingEnabled;
   uint8_t guideDotsMode;  // GuideDotsMode: off / visible dots / hidden dots (gap only)
-  uint8_t firstLineIndentMode;
-  uint8_t firstLineIndentPercent;
-  bool linkUnderline;  // underline in-book links; off leaves them plain
+  uint8_t paragraphIndentSpaces;
   const CssParser* cssParser;
-  bool embeddedTextStyle;
-  bool embeddedLayoutStyle;
-  bool bookMargins;
-  uint8_t wordExpansion;              // Word Expansion cap, px between letters
-  bool headingPageBreak;              // h1/h2 start a new page
-  bool fillPages;                     // no orphan, widow or heading carry
-  bool lastBlockWasHeading_ = false;  // the last block laid out was a heading
-  bool breakBeforeBlock_ = false;     // the block being opened is an h1/h2 to break before
+  bool embeddedStyle;
   uint8_t imageRendering;
   std::string contentBase;
   std::string imageBasePath;
@@ -303,7 +293,6 @@ class ChapterHtmlSlimParser {
   void startNewTextBlock(const BlockStyle& blockStyle, bool paragraphEnd = true);
   // Close the current page if it holds anything; false only on OOM for the next one.
   bool breakPage();
-  void breakBeforeHeading();
   void flushPendingAnchor();
   void completeCurrentPage();
   void emitCurrentPage();
@@ -350,7 +339,7 @@ class ChapterHtmlSlimParser {
 
  public:
   // Takes the render settings as the spec they already live in: listing them one by one
-  // put two adjacent uint8_t (paragraphSpacing, wordSpacing) where a swap compiled.
+  // put two adjacent uint8_t (wordSpacing, paragraphIndentSpaces) where a swap compiled.
   explicit ChapterHtmlSlimParser(Epub* epub, const std::string& filepath, GfxRenderer& renderer,
                                  const ReaderRenderSpec& spec, const PageCompleteFn completePageFn,
                                  void* const completePageCtx, const std::string& contentBase,
@@ -365,26 +354,18 @@ class ChapterHtmlSlimParser {
         lineCompression(spec.lineCompression),
         extraParagraphSpacing(spec.extraParagraphSpacing),
         wordSpacing(spec.wordSpacing),
-        paragraphSpacing(spec.paragraphSpacing),
         paragraphAlignment(spec.paragraphAlignment),
         viewportWidth(spec.viewportWidth),
         viewportHeight(spec.viewportHeight),
         focusReadingEnabled(spec.focusReadingEnabled),
         guideDotsMode(spec.guideDotsMode),
-        firstLineIndentMode(spec.firstLineIndentMode),
-        firstLineIndentPercent(spec.firstLineIndentPercent),
-        linkUnderline(spec.linkUnderline),
+        paragraphIndentSpaces(spec.paragraphIndentSpaces),
         completePageFn(completePageFn),
         completePageCtx(completePageCtx),
         popupFn(popupFn),
         popupCtx(popupCtx),
         cssParser(cssParser),
-        embeddedTextStyle(spec.embeddedTextStyle),
-        embeddedLayoutStyle(spec.embeddedLayoutStyle),
-        bookMargins(spec.bookMargins),
-        wordExpansion(spec.wordExpansion),
-        headingPageBreak(spec.headingPageBreak),
-        fillPages(spec.fillPages),
+        embeddedStyle(spec.embeddedStyle),
         imageRendering(spec.imageRendering),
         contentBase(contentBase),
         imageBasePath(imageBasePath),

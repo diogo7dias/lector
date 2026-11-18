@@ -16,6 +16,11 @@ constexpr uint8_t resolveGuideDotsMode(const uint8_t dotsEnabled, const uint8_t 
   return dotsHidden != 0 ? GUIDE_DOTS_HIDDEN : GUIDE_DOTS_VISIBLE;
 }
 
+// Word Spacing range, percent of the font's natural space advance; the settings row and the
+// layout engine clamp to it.
+inline constexpr uint8_t READER_WORD_SPACING_MIN = 50;
+inline constexpr uint8_t READER_WORD_SPACING_MAX = 200;
+
 // The resolved text-rendering configuration a reader hands to the layout
 // engine. Section-cache validation keys on every field: a section file built
 // with a different spec is discarded and rebuilt.
@@ -29,19 +34,14 @@ struct ReaderRenderSpec {
   int fontId = 0;
   float lineCompression = 1.0f;
   bool extraParagraphSpacing = false;
-  // Extra block gap after each paragraph, as a percentage of the line height (0 = none).
-  // Added on top of extraParagraphSpacing. Part of the cache key. Restored (old lector).
-  uint8_t paragraphSpacing = 0;
   // Baseline space-glyph advance, percent (100 = unchanged); justification adds on top.
   uint8_t wordSpacing = 100;
   uint8_t paragraphAlignment = 0;
   uint16_t viewportWidth = 0;
   uint16_t viewportHeight = 0;
-  // Two independent switches. Text = weight, slant, decoration, super/sub, direction and
-  // display:none. Layout = alignment, indent, margins, padding and book-set image sizes.
-  // Both off means the stylesheet is never even parsed.
-  bool embeddedTextStyle = true;
-  bool embeddedLayoutStyle = true;
+  // One switch for the book's own CSS: text styling, alignment, indents, margins, padding
+  // and book-set image sizes. Off means the stylesheet is never even parsed.
+  bool embeddedStyle = true;
   uint8_t imageRendering = 0;
   bool focusReadingEnabled = false;
   // Guide dots: widen the gap between words as a reading aid, with a middle dot
@@ -52,35 +52,13 @@ struct ReaderRenderSpec {
   // One byte holding three states rather than two bools: Hidden Dots itself adds
   // no header bytes and needs no cache rebuild for books that are not using dots.
   uint8_t guideDotsMode = GUIDE_DOTS_OFF;
-  // First-line paragraph indent (restored old-lector model). mode: 0 = Book (respect
-  // the CSS indent), 1 = Custom % of the column width; percent applies in mode 1.
-  // Both are part of the cache key.
-  uint8_t firstLineIndentMode = 0;
-  uint8_t firstLineIndentPercent = 0;
-  // Pair kerning for the reading font. Off widens or narrows almost every word, so it is
-  // part of the cache key; the renderer applies it (GfxRenderer::setKerning).
-  bool kerning = true;
-  // Font ligatures (fi, fl, ff ...) for the reading font, likewise part of the cache key.
-  bool ligatures = true;
-  // Underline in-book links (footnotes, cross-references). Off leaves them plain; baked into the cached words, so part
-  // of the cache key.
-  bool linkUnderline = true;
-  // Keep the book's CSS margins and padding (with Embedded Layout Style on). Off drops them and keeps the rest of the
-  // book's layout; part of the cache key.
-  bool bookMargins = true;
-  // Start each h1/h2 heading on a new page (a heading right after another heading stays with it). Moves page breaks, so
-  // part of the cache key.
-  bool headingPageBreak = false;
-  // Word Expansion: 0 Off, 1 Some, 2 More. Up to that many px between letters on a justified line whose gaps would
-  // pass 1.5 spaces. Moves glyphs, so part of the cache key.
-  uint8_t wordExpansion = 0;
-  // Character Spacing: half pixels added between letters, -5..5 (negative tightens). Every
+  // First-line paragraph indent in spaces of the reading font, 0..5 (0 = none). Part of
+  // the cache key.
+  uint8_t paragraphIndentSpaces = 2;
+  // Character Spacing: whole pixels added between letters, -2..2 (negative tightens). Every
   // word changes width, so part of the cache key; the renderer applies it
   // (GfxRenderer::setCharacterSpacing).
   int8_t characterSpacing = 0;
-  // Fill Pages: never carry lines to the next page to avoid a lone first or last line or
-  // a heading at the page bottom. Moves page breaks, so part of the cache key.
-  bool fillPages = false;
 
   // Memberwise: padding is ignored and float equality keeps its usual semantics.
   constexpr bool operator==(const ReaderRenderSpec&) const = default;

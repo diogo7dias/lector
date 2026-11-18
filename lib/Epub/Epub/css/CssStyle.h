@@ -378,41 +378,34 @@ struct CssStyle {
     return borderTop.visible() || borderRight.visible() || borderBottom.visible() || borderLeft.visible();
   }
 
-  // Embedded Text Style and Embedded Layout Style are two independent reader switches.
-  // A property whose bucket is switched off is dropped here, right after resolution, so
-  // no consumer downstream has to know which switch owns what: an undefined property
-  // already means "the book said nothing, use the reader's own setting".
+  // The reader's one Book Styling switch. With it off, every property the book sets is
+  // dropped here, right after resolution, so no consumer downstream has to know about the
+  // switch: an undefined property already means "the book said nothing, use the reader's
+  // own setting".
   //
-  // Text bucket   — how the glyphs look: weight, slant, decoration, super/sub, writing
-  //                 direction, list markers, font size, small caps, drop caps, preserved
-  //                 whitespace and display:none (the book declaring a run is not content).
-  // Layout bucket — where the block sits: alignment, first-line indent, margins, padding,
-  //                 borders, shading, page breaks and book-set image dimensions. `margins`
-  //                 (Book Margins) drops just the margins and padding out of a kept Layout
-  //                 bucket.
-  void keepBuckets(const bool text, const bool layout, const bool margins = true) {
-    if (!text) {
-      defined.fontStyle = defined.fontWeight = defined.textDecoration = 0;
-      defined.verticalAlign = defined.direction = defined.display = defined.listStyleType = 0;
-      defined.fontSize = defined.smallCaps = defined.floatLeft = defined.initialLetter = defined.whiteSpace = 0;
-    }
-    if (!layout) {
-      defined.textAlign = defined.textIndent = 0;
-      defined.imageWidth = defined.imageHeight = 0;
-      defined.pageBreakBefore = defined.pageBreakAfter = defined.shaded = 0;
-      defined.borderTop = defined.borderRight = defined.borderBottom = defined.borderLeft = 0;
-      // Borders are drawn from the side values, not the flags (hasVisibleBorder).
-      borderTop = borderRight = borderBottom = borderLeft = CssBorderSide{};
-      shaded = false;
-    }
-    if (!layout || !margins) {
-      defined.marginTop = defined.marginBottom = defined.marginLeft = defined.marginRight = 0;
-      defined.paddingTop = defined.paddingBottom = defined.paddingLeft = defined.paddingRight = 0;
-      // The values too: BlockStyle::fromCssStyle reads margins and padding without
-      // asking `defined`, so a dropped flag alone still left the book's insets in place.
-      marginTop = marginBottom = marginLeft = marginRight = CssLength{};
-      paddingTop = paddingBottom = paddingLeft = paddingRight = CssLength{};
-    }
+  // Text   — how the glyphs look: weight, slant, decoration, super/sub, writing
+  //          direction, list markers, font size, small caps, drop caps, preserved
+  //          whitespace and display:none (the book declaring a run is not content).
+  // Layout — where the block sits: alignment, indent, margins, padding, borders, shading,
+  //          page breaks and book-set image dimensions.
+  void keepBuckets(const bool bookStyling) {
+    if (bookStyling) return;
+    defined.fontStyle = defined.fontWeight = defined.textDecoration = 0;
+    defined.verticalAlign = defined.direction = defined.display = defined.listStyleType = 0;
+    defined.fontSize = defined.smallCaps = defined.floatLeft = defined.initialLetter = defined.whiteSpace = 0;
+    defined.textAlign = defined.textIndent = 0;
+    defined.imageWidth = defined.imageHeight = 0;
+    defined.pageBreakBefore = defined.pageBreakAfter = defined.shaded = 0;
+    defined.borderTop = defined.borderRight = defined.borderBottom = defined.borderLeft = 0;
+    // Borders are drawn from the side values, not the flags (hasVisibleBorder).
+    borderTop = borderRight = borderBottom = borderLeft = CssBorderSide{};
+    shaded = false;
+    defined.marginTop = defined.marginBottom = defined.marginLeft = defined.marginRight = 0;
+    defined.paddingTop = defined.paddingBottom = defined.paddingLeft = defined.paddingRight = 0;
+    // The values too: BlockStyle::fromCssStyle reads margins and padding without
+    // asking `defined`, so a dropped flag alone still left the book's insets in place.
+    marginTop = marginBottom = marginLeft = marginRight = CssLength{};
+    paddingTop = paddingBottom = paddingLeft = paddingRight = CssLength{};
   }
 
   void reset() { *this = CssStyle{}; }

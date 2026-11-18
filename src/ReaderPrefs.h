@@ -10,6 +10,7 @@
 #include <string>
 
 #include "ReaderLookFields.h"
+#include "util/MarginLink.h"
 
 // Per-book snapshot of the reader "look" settings that the in-book Reader
 // Settings screen can change.
@@ -43,37 +44,77 @@ inline uint8_t foldLegacyReaderFontSize(const uint8_t stored) {
 // because both the global settings and the per-book sidecar upgrade need them, and this
 // header is the one of the two that the host tests can compile on its own.
 namespace reader_defaults {
-// The separate "Paragraph Spacing %" control was removed in 0.8.2: the half-line gap that
-// Extra Paragraph Spacing already adds, plus the always-on first-line indent, is the whole
-// paragraph break. The field and its cache key stay so old sidecars still deserialize.
-inline constexpr uint8_t PARAGRAPH_SPACING_PERCENT = 0;
-inline constexpr uint8_t EXTRA_PARAGRAPH_SPACING = 1;     // half a line of air between paragraphs, on
-inline constexpr uint8_t FIRST_LINE_INDENT_PERCENT = 20;  // % of the column width
-inline constexpr uint8_t FIRST_LINE_INDENT_MODE = 1;      // CrossPointSettings::FIRST_LINE_INDENT_PERCENT
-inline constexpr uint8_t PARAGRAPH_NUMBERING = 1;         // CrossPointSettings::PARA_NUM_CHAPTER
-inline constexpr uint8_t PARAGRAPH_NUMBERING_COUNT = 2;   // CrossPointSettings::PARAGRAPH_NUMBERING_COUNT
-inline constexpr uint8_t PARAGRAPH_NUMBER_SIZE = 1;       // CrossPointSettings::PARA_NUM_SIZE_MEDIUM
+inline constexpr uint8_t EXTRA_PARAGRAPH_SPACING = 1;    // half a line of air between paragraphs, on
+inline constexpr uint8_t PARAGRAPH_NUMBERING = 1;        // CrossPointSettings::PARA_NUM_CHAPTER
+inline constexpr uint8_t PARAGRAPH_NUMBERING_COUNT = 2;  // CrossPointSettings::PARAGRAPH_NUMBERING_COUNT
+inline constexpr uint8_t PARAGRAPH_NUMBER_SIZE = 1;      // CrossPointSettings::PARA_NUM_SIZE_MEDIUM
+// First-line indent counted in spaces of the reading font (CrossPoint's own unit).
+inline constexpr uint8_t PARAGRAPH_INDENT_SPACES = 2;
+inline constexpr uint8_t MAX_PARAGRAPH_INDENT_SPACES = 5;
 // Ranges the render spec clamps to, shared with the settings rows that edit them.
-inline constexpr uint8_t MIN_LINE_SPACING_PERCENT = 35;
-inline constexpr uint8_t MAX_LINE_SPACING_PERCENT = 150;
-inline constexpr uint8_t MIN_WORD_SPACING = 75;
-inline constexpr uint8_t MAX_WORD_SPACING = 150;
+inline constexpr uint8_t MIN_LINE_SPACING_PERCENT = 80;
+inline constexpr uint8_t MAX_LINE_SPACING_PERCENT = 175;
+inline constexpr uint8_t MIN_WORD_SPACING = READER_WORD_SPACING_MIN;
+inline constexpr uint8_t MAX_WORD_SPACING = READER_WORD_SPACING_MAX;
+inline constexpr uint8_t WORD_SPACING_STEP = 25;
 inline constexpr uint8_t WORD_SPACING = 100;  // percent of the font's natural space advance
-// Character Spacing is stored unsigned: the half pixels between letters plus this, so 5 is
-// the font as designed and 0..10 covers -5..+5.
-inline constexpr uint8_t CHARACTER_SPACING = 5;
-inline constexpr uint8_t MAX_CHARACTER_SPACING = 10;
+// Character Spacing is stored unsigned: whole pixels between letters plus this, so 2 is
+// the font as designed and 0..4 covers -2..+2.
+inline constexpr uint8_t CHARACTER_SPACING = 2;
+inline constexpr uint8_t MAX_CHARACTER_SPACING = 4;
+// The side margin: 5 to 40 px in steps of 5. Top and bottom keep the wider 0 to 100 range.
+inline constexpr uint8_t MIN_SCREEN_MARGIN = 5;
+inline constexpr uint8_t MAX_SCREEN_MARGIN = 40;
+inline constexpr uint8_t SCREEN_MARGIN_STEP = 5;
+inline constexpr uint8_t SCREEN_MARGIN = 20;
+// Image rendering values; CrossPointSettings::IMAGE_RENDERING repeats them (asserted there).
+inline constexpr uint8_t IMAGES_DISPLAY_BW = 3;
+inline constexpr uint8_t IMAGE_RENDERING_COUNT = 4;
+
+// `value` clamped into [lo, hi] and moved to the nearest lo + n * step. Saved values from
+// before a range or step changed land on the new grid through this.
+inline constexpr uint8_t snapToStep(const int value, const int lo, const int hi, const int step) {
+  const int clamped = value < lo ? lo : (value > hi ? hi : value);
+  return static_cast<uint8_t>(lo + ((clamped - lo + step / 2) / step) * step);
+}
+
+// A first-line indent saved as "Book" or a percent of the column width, in whole spaces.
+// A space is a few pixels, so the percent maps by tenths: the old default of 20 or 23
+// percent lands on the new default of 2, 100 percent on 5, and anything above zero keeps
+// at least one space. Book mode followed the publisher's CSS, which no longer exists as a
+// choice, so it takes the default.
+inline constexpr uint8_t indentSpacesFromLegacy(const uint8_t mode, const uint8_t percent) {
+  if (mode == 0) return PARAGRAPH_INDENT_SPACES;
+  if (percent == 0) return 0;
+  const int spaces = (percent + 5) / 10;
+  return static_cast<uint8_t>(
+      spaces < 1 ? 1 : (spaces > MAX_PARAGRAPH_INDENT_SPACES ? MAX_PARAGRAPH_INDENT_SPACES : spaces));
+}
+
+// Half pixels between letters, stored with offset 5 (0..10), in whole pixels with offset 2
+// (0..4): rounded to the nearest pixel, ties away from zero, then clamped.
+inline constexpr uint8_t characterSpacingFromLegacy(const uint8_t storedHalfPixels) {
+  const int half = static_cast<int>(storedHalfPixels) - 5;
+  int px = (half >= 0 ? half + 1 : half - 1) / 2;
+  px = px < -2 ? -2 : (px > 2 ? 2 : px);
+  return static_cast<uint8_t>(px + CHARACTER_SPACING);
+}
 }  // namespace reader_defaults
 
 struct ReaderPrefs {
   // Bump whenever the field set changes: readReaderPrefs rejects a mismatched
   // version, so an old sidecar is ignored and the book falls back to global.
-  // v5 through v25 are the exceptions: they are read and upgraded instead of dropped.
+  // v5 through v26 are the exceptions: they are read and upgraded instead of dropped.
   // Dropping a sidecar silently discards every per-book setting the user ever chose,
   // which is far worse than carrying an old one forward. Each of those older layouts is
   // a strict prefix of this struct, so a record is read at its own length and every
   // field appended since keeps its constructed default — see readerPrefsRecordSize().
-  static constexpr uint8_t VERSION = 26;  // v26: paragraph number position
+  //
+  // v27 keeps v26's byte layout and changes what some bytes mean: the retired switches
+  // (paragraph gap, kerning, ligatures, link underline, book margins, heading page break,
+  // word expansion, fill pages, the layout half of the style switch, indent mode) stay as
+  // zeroed padding, the indent byte counts spaces, character spacing counts whole pixels.
+  static constexpr uint8_t VERSION = 27;  // v27: lean typography
 
   // Bring a sidecar written before the current version onto the current reading
   // defaults. Only these values are re-seeded, and only for books that predate them.
@@ -84,10 +125,8 @@ struct ReaderPrefs {
   // bump from silently re-seeding a book that already made these choices.
   static constexpr uint8_t FIRST_VERSION_WITH_CURRENT_DEFAULTS = 9;
   void adoptCurrentReadingDefaults() {
-    paragraphSpacing = reader_defaults::PARAGRAPH_SPACING_PERCENT;
     extraParagraphSpacing = reader_defaults::EXTRA_PARAGRAPH_SPACING;
-    firstLineIndentMode = reader_defaults::FIRST_LINE_INDENT_MODE;
-    firstLineIndentPercent = reader_defaults::FIRST_LINE_INDENT_PERCENT;
+    paragraphIndentSpaces = reader_defaults::PARAGRAPH_INDENT_SPACES;
     paragraphNumbering = reader_defaults::PARAGRAPH_NUMBERING;
     paragraphNumberSize = reader_defaults::PARAGRAPH_NUMBER_SIZE;
   }
@@ -96,13 +135,13 @@ struct ReaderPrefs {
   uint8_t fontFamily = 0;      // CrossPointSettings::CHAREINK
   uint8_t fontPointSize = 14;  // CrossPointSettings::DEFAULT_FONT_POINT_SIZE
   // Layout tab
-  uint8_t lineSpacingPercent = 100;  // % of natural line height (restored granular)
+  uint8_t lineSpacingPercent = 100;  // % of natural line height
   uint8_t paragraphAlignment = 0;    // CrossPointSettings::JUSTIFIED
   uint8_t extraParagraphSpacing = 1;
-  uint8_t paragraphSpacing = 0;  // % of line height (block gap; restored granular)
-  uint8_t screenMargin = 20;     // horizontal (left/right), shared by both sides
-  uint8_t screenMarginTop = 20;
-  uint8_t screenMarginBottom = 20;
+  uint8_t retiredParagraphSpacing = 0;                    // was the paragraph gap in % of line height
+  uint8_t screenMargin = reader_defaults::SCREEN_MARGIN;  // horizontal (left/right), shared by both sides
+  uint8_t screenMarginTop = reader_defaults::SCREEN_MARGIN;
+  uint8_t screenMarginBottom = reader_defaults::SCREEN_MARGIN;
   // margin_link::Mode as a number: 0 = Separate, 1 = TopBottom, 2 = All Sides.
   uint8_t marginLinkMode = 2;
   uint8_t dynamicMargins = 0;  // 0 = off, 1 = auto (min 10px), 2 = auto (min 20px)
@@ -112,7 +151,7 @@ struct ReaderPrefs {
   uint8_t guideDotsHidden = 0;   // keep the widened guide-dot gap, draw no dot in it
   // Retired setting byte: preserve every later offset in v5-v14 binary sidecars.
   uint8_t reserved14 = 0;
-  uint8_t embeddedTextStyle = 1;
+  uint8_t embeddedStyle = 1;     // the one Book Styling switch
   uint8_t textAntiAliasing = 0;  // see CrossPointSettings: the grey fade per page is not worth it
   // Fed into the render spec (edited from the Reader settings category, snapshotted here).
   uint8_t imageRendering = 0;  // CrossPointSettings::IMAGES_DISPLAY
@@ -124,10 +163,10 @@ struct ReaderPrefs {
   // text, status = the reading-screen status bar.
   uint8_t paperbackLookBody = 1;
   uint8_t paperbackLookStatus = 1;
-  // First-line paragraph indent (restored old-lector model): mode 0 = Book (respect
-  // CSS indent), 1 = Custom % of the column width. Seeded from the global default.
-  uint8_t firstLineIndentMode = 0;
-  uint8_t firstLineIndentPercent = 0;
+  // First-line paragraph indent: the old mode byte is retired padding, the old percent byte
+  // now counts spaces (0 to 5). Seeded from the global default.
+  uint8_t retiredFirstLineIndentMode = 0;
+  uint8_t paragraphIndentSpaces = reader_defaults::PARAGRAPH_INDENT_SPACES;
   // SD card font family name (empty = built-in fontFamily). Fixed width keeps the struct POD.
   char sdFontFamilyName[32] = "";
   // Size of the paragraph numbers as a share of the reading font: 0 = 35%, 1 = 65%,
@@ -174,13 +213,8 @@ struct ReaderPrefs {
   uint8_t sbBarOutline = 0;
   uint8_t sbOffBar = 0;  // SB_OFFBAR_OFF
 
-  // The layout half of the old single "Embedded Style" switch: the book's own margins,
-  // indents and block spacing, separate from its fonts and emphasis.
-  //
-  // APPENDED LAST. See the note above paragraphNumberSize. It belongs beside
-  // embeddedTextStyle, but putting it there would shift every field below it and make
-  // this firmware misread every v11 sidecar on the card.
-  uint8_t embeddedLayoutStyle = 1;
+  // Retired: the layout half of the Embedded Style switch, folded into embeddedStyle by v27.
+  uint8_t retiredEmbeddedLayoutStyle = 0;
 
   // Pages left in the current paragraph (">P.N") anchor. Belongs in the status bar
   // block above, but goes here for the same reason embeddedLayoutStyle did: putting
@@ -193,15 +227,12 @@ struct ReaderPrefs {
   // Appended so v5-v13 sidecars retain every existing field and default to unchanged spacing.
   uint8_t wordSpacing = reader_defaults::WORD_SPACING;
 
-  // Pair kerning for the reading font, on unless turned off. APPENDED LAST, like every
-  // field since paragraphNumberSize; a v14 record stops before it and keeps it on.
-  uint8_t kerning = 1;
-
-  // Font ligatures for the reading font, on unless turned off. APPENDED LAST.
-  uint8_t ligatures = 1;
-
-  // Underline in-book links, on unless turned off. APPENDED LAST.
-  uint8_t linkUnderline = 1;
+  // Retired switches kept as zeroed padding so every later offset holds: kerning,
+  // ligatures and link underline are always on now. Every field since paragraphNumberSize
+  // was APPENDED LAST, and the next one must be too.
+  uint8_t retiredKerning = 0;
+  uint8_t retiredLigatures = 0;
+  uint8_t retiredLinkUnderline = 0;
 
   // Time left in the chapter and in the book (status bar anchors, off by default). APPENDED LAST.
   uint8_t sbChapterTimePos = 0;  // SB_ANCHOR_OFF
@@ -210,24 +241,20 @@ struct ReaderPrefs {
   // How dark anti-aliased greys are drawn: 0 Normal, 1 High, 2 Max. APPENDED LAST.
   uint8_t textContrast = 0;
 
-  // Keep the book's CSS margins and padding, on unless turned off. APPENDED LAST.
-  uint8_t bookMargins = 1;
-
-  // Start each h1/h2 heading on a new page, off unless turned on. APPENDED LAST.
-  uint8_t headingPageBreak = 0;
-
-  // Word Expansion: 0 Off, 1 Some, 2 More (px between letters on loose justified lines). APPENDED LAST.
-  uint8_t wordExpansion = 0;
+  // Retired: Book Margins (always kept), Heading Page Break, Word Expansion.
+  uint8_t retiredBookMargins = 0;
+  uint8_t retiredHeadingPageBreak = 0;
+  uint8_t retiredWordExpansion = 0;
 
   // Book title as its own status bar item, so a chapter Title can sit elsewhere. APPENDED LAST.
   uint8_t sbBookTitlePos = 0;  // SB_ANCHOR_OFF
 
-  // Character Spacing, stored offset by reader_defaults::CHARACTER_SPACING. APPENDED LAST.
+  // Character Spacing in whole pixels, stored offset by reader_defaults::CHARACTER_SPACING
+  // (a record older than v27 held half pixels; see migrateReaderPrefsFields).
   uint8_t characterSpacing = reader_defaults::CHARACTER_SPACING;
 
-  // Fill Pages: keep lines on the page instead of carrying orphans, widows and headings,
-  // off unless turned on. APPENDED LAST.
-  uint8_t fillPages = 0;
+  // Retired: Fill Pages.
+  uint8_t retiredFillPages = 0;
 
   // Paragraph numbers at the page edge (0) or by the first letter (1), per book like
   // paragraphNumberSize. APPENDED LAST.
@@ -269,31 +296,19 @@ inline ReaderRenderSpec makeRenderSpec(const ReaderPrefs& p, const int fontId, c
   spec.fontId = fontId;
   spec.lineCompression = readerLineCompression(p.lineSpacingPercent);
   spec.extraParagraphSpacing = p.extraParagraphSpacing != 0;
-  spec.paragraphSpacing = p.paragraphSpacing;
   spec.wordSpacing = std::clamp(p.wordSpacing, reader_defaults::MIN_WORD_SPACING, reader_defaults::MAX_WORD_SPACING);
   spec.paragraphAlignment = p.paragraphAlignment;
   spec.viewportWidth = viewportWidth;
   spec.viewportHeight = viewportHeight;
-  spec.embeddedTextStyle = p.embeddedTextStyle != 0;
-  spec.embeddedLayoutStyle = p.embeddedLayoutStyle != 0;
-  // Hard-set to CrossPointSettings::IMAGES_DISPLAY, not read: see the note on
-  // IMAGE_RENDERING. This is the choke point that makes a stored placeholder or suppress
-  // value in a per-book override or a reader preset irrelevant without touching the
-  // section file format.
-  spec.imageRendering = 0;
+  spec.embeddedStyle = p.embeddedStyle != 0;
+  // Black & White lays out exactly like Display, so switching between them keeps the
+  // section cache; the reader draws the raw mode (see readerImageMode in the reader).
+  spec.imageRendering = p.imageRendering == reader_defaults::IMAGES_DISPLAY_BW ? 0 : p.imageRendering;
   spec.focusReadingEnabled = p.focusReadingEnabled != 0;
   spec.guideDotsMode = resolveGuideDotsMode(p.guideDotsEnabled, p.guideDotsHidden);
-  spec.firstLineIndentMode = p.firstLineIndentMode;
-  spec.firstLineIndentPercent = p.firstLineIndentPercent;
-  spec.kerning = p.kerning != 0;
-  spec.ligatures = p.ligatures != 0;
-  spec.linkUnderline = p.linkUnderline != 0;
-  spec.bookMargins = p.bookMargins != 0;
-  spec.headingPageBreak = p.headingPageBreak != 0;
-  spec.wordExpansion = std::min<uint8_t>(p.wordExpansion, 2);
+  spec.paragraphIndentSpaces = std::min(p.paragraphIndentSpaces, reader_defaults::MAX_PARAGRAPH_INDENT_SPACES);
   spec.characterSpacing = static_cast<int8_t>(std::min(p.characterSpacing, reader_defaults::MAX_CHARACTER_SPACING) -
                                               reader_defaults::CHARACTER_SPACING);
-  spec.fillPages = p.fillPages != 0;
   return spec;
 }
 
@@ -302,20 +317,20 @@ inline ReaderRenderSpec makeRenderSpec(const ReaderPrefs& p, const int fontId, c
 inline constexpr size_t READER_PREFS_V8_SIZE = offsetof(ReaderPrefs, paragraphNumberSize);
 inline constexpr size_t READER_PREFS_V9_SIZE = offsetof(ReaderPrefs, statusBarEnabled);
 inline constexpr size_t READER_PREFS_V10_SIZE = offsetof(ReaderPrefs, sbBatteryPos);
-inline constexpr size_t READER_PREFS_V11_SIZE = offsetof(ReaderPrefs, embeddedLayoutStyle);
+inline constexpr size_t READER_PREFS_V11_SIZE = offsetof(ReaderPrefs, retiredEmbeddedLayoutStyle);
 inline constexpr size_t READER_PREFS_V12_SIZE = offsetof(ReaderPrefs, sbParaPagesPos);
 inline constexpr size_t READER_PREFS_V13_SIZE = offsetof(ReaderPrefs, wordSpacing);
-inline constexpr size_t READER_PREFS_V14_SIZE = offsetof(ReaderPrefs, kerning);
-inline constexpr size_t READER_PREFS_V15_SIZE = offsetof(ReaderPrefs, ligatures);
-inline constexpr size_t READER_PREFS_V16_SIZE = offsetof(ReaderPrefs, linkUnderline);
+inline constexpr size_t READER_PREFS_V14_SIZE = offsetof(ReaderPrefs, retiredKerning);
+inline constexpr size_t READER_PREFS_V15_SIZE = offsetof(ReaderPrefs, retiredLigatures);
+inline constexpr size_t READER_PREFS_V16_SIZE = offsetof(ReaderPrefs, retiredLinkUnderline);
 inline constexpr size_t READER_PREFS_V17_SIZE = offsetof(ReaderPrefs, sbChapterTimePos);
 inline constexpr size_t READER_PREFS_V18_SIZE = offsetof(ReaderPrefs, textContrast);
-inline constexpr size_t READER_PREFS_V19_SIZE = offsetof(ReaderPrefs, bookMargins);
-inline constexpr size_t READER_PREFS_V20_SIZE = offsetof(ReaderPrefs, headingPageBreak);
-inline constexpr size_t READER_PREFS_V21_SIZE = offsetof(ReaderPrefs, wordExpansion);
+inline constexpr size_t READER_PREFS_V19_SIZE = offsetof(ReaderPrefs, retiredBookMargins);
+inline constexpr size_t READER_PREFS_V20_SIZE = offsetof(ReaderPrefs, retiredHeadingPageBreak);
+inline constexpr size_t READER_PREFS_V21_SIZE = offsetof(ReaderPrefs, retiredWordExpansion);
 inline constexpr size_t READER_PREFS_V22_SIZE = offsetof(ReaderPrefs, sbBookTitlePos);
 inline constexpr size_t READER_PREFS_V23_SIZE = offsetof(ReaderPrefs, characterSpacing);
-inline constexpr size_t READER_PREFS_V24_SIZE = offsetof(ReaderPrefs, fillPages);
+inline constexpr size_t READER_PREFS_V24_SIZE = offsetof(ReaderPrefs, retiredFillPages);
 inline constexpr size_t READER_PREFS_V25_SIZE = offsetof(ReaderPrefs, paragraphNumberPlace);
 
 // A record older than v12 carries one "Embedded Style" choice, in what is now the text
@@ -327,6 +342,31 @@ inline constexpr uint8_t FIRST_VERSION_WITH_SPLIT_EMBEDDED_STYLE = 12;
 // doing it for any upgraded record would replace a per-book bar the reader configured.
 inline constexpr uint8_t FIRST_VERSION_WITH_STATUS_BAR_SWITCH = 10;
 inline constexpr uint8_t FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR = 11;
+// v27 moved meaning without moving bytes (see ReaderPrefs::VERSION). The first record with
+// a Character Spacing byte is v24.
+inline constexpr uint8_t FIRST_VERSION_WITH_CHARACTER_SPACING = 24;
+
+// The values a record older than v27 can hold that the current settings no longer offer,
+// moved onto what they offer now. Shared with the preset reader so both read the same way.
+// Not the retired bytes: those are zeroed by the caller once everything has read them.
+inline void settleLegacyLookValues(ReaderPrefs& p) {
+  p.lineSpacingPercent = std::clamp(p.lineSpacingPercent, reader_defaults::MIN_LINE_SPACING_PERCENT,
+                                    reader_defaults::MAX_LINE_SPACING_PERCENT);
+  p.wordSpacing = reader_defaults::snapToStep(p.wordSpacing, reader_defaults::MIN_WORD_SPACING,
+                                              reader_defaults::MAX_WORD_SPACING, reader_defaults::WORD_SPACING_STEP);
+  // The side margin was 0 to 100. Only All Sides follows it onto the other sides; the
+  // vertical margins of the other modes keep their own 0 to 100 range.
+  p.screenMargin = reader_defaults::snapToStep(p.screenMargin, reader_defaults::MIN_SCREEN_MARGIN,
+                                               reader_defaults::MAX_SCREEN_MARGIN, reader_defaults::SCREEN_MARGIN_STEP);
+  if (margin_link::toMode(p.marginLinkMode) == margin_link::Mode::AllSides) {
+    p.screenMarginTop = p.screenMarginBottom = p.screenMargin;
+    p.dynamicMargins = 0;
+  }
+  // Placeholder and Suppress were hard-set to Display from 2026-08-11, so a stored value
+  // was inert. Now that the row is back it would hide images the reader has been seeing.
+  p.imageRendering = 0;
+}
+
 // `layoutStyleAlreadyRead` is set only for the interim v11 layout, whose record really
 // does carry its own layout switch: seeding it from the text switch there would throw
 // away a choice the reader made.
@@ -334,9 +374,28 @@ inline void migrateReaderPrefsFields(const uint8_t version, ReaderPrefs& p, cons
   p.reserved14 = 0;  // Canonical padding for whole-blob change detection.
   if (version == 5) p.fontPointSize = foldLegacyReaderFontSize(p.fontPointSize);
   if (!layoutStyleAlreadyRead && version < FIRST_VERSION_WITH_SPLIT_EMBEDDED_STYLE) {
-    p.embeddedLayoutStyle = p.embeddedTextStyle;
+    p.retiredEmbeddedLayoutStyle = p.embeddedStyle;
   }
+  // Before v9 the whole reading-defaults block is re-seeded, the indent included, so the
+  // legacy indent bytes below are only read from v9 on.
   if (version < ReaderPrefs::FIRST_VERSION_WITH_CURRENT_DEFAULTS) p.adoptCurrentReadingDefaults();
+  if (version < 27) {
+    if (version >= ReaderPrefs::FIRST_VERSION_WITH_CURRENT_DEFAULTS) {
+      p.paragraphIndentSpaces =
+          reader_defaults::indentSpacesFromLegacy(p.retiredFirstLineIndentMode, p.paragraphIndentSpaces);
+    }
+    // One switch now: off if the reader turned either half off (off meant "the book's own
+    // styling gone", so it must not come back through the other half).
+    p.embeddedStyle = p.embeddedStyle && p.retiredEmbeddedLayoutStyle;
+    if (version >= FIRST_VERSION_WITH_CHARACTER_SPACING) {
+      p.characterSpacing = reader_defaults::characterSpacingFromLegacy(p.characterSpacing);
+    }
+    settleLegacyLookValues(p);
+  }
+  // The retired bytes carry nothing now; zero them so whole-blob comparison is exact.
+  p.retiredParagraphSpacing = p.retiredFirstLineIndentMode = p.retiredEmbeddedLayoutStyle = 0;
+  p.retiredKerning = p.retiredLigatures = p.retiredLinkUnderline = p.retiredBookMargins = 0;
+  p.retiredHeadingPageBreak = p.retiredWordExpansion = p.retiredFillPages = 0;
 }
 
 // Bytes to read for a record written by `version`, or 0 when that version cannot be
@@ -357,7 +416,7 @@ inline void unshiftInterimV11(const uint8_t* record, ReaderPrefs& out) {
   auto* raw = reinterpret_cast<uint8_t*>(&out);
   std::memcpy(raw, record, split);
   std::memcpy(raw + split, record + split + 1, READER_PREFS_V11_SIZE - split);
-  out.embeddedLayoutStyle = record[split];
+  out.retiredEmbeddedLayoutStyle = record[split];
 }
 
 inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
@@ -379,7 +438,8 @@ inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
   if (version == 23) return READER_PREFS_V23_SIZE;
   if (version == 24) return READER_PREFS_V24_SIZE;
   if (version == 25) return READER_PREFS_V25_SIZE;
-  if (version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
+  // v26 and v27 share one layout: v27 only changed what some bytes mean.
+  if (version == 26 || version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
   return 0;
 }
 
@@ -404,7 +464,7 @@ static_assert(READER_PREFS_V18_SIZE == READER_PREFS_V17_SIZE + 2, "v18 adds the 
 static_assert(READER_PREFS_V19_SIZE == READER_PREFS_V18_SIZE + 1, "v19 adds textContrast");
 static_assert(READER_PREFS_V20_SIZE == READER_PREFS_V19_SIZE + 1, "v20 adds bookMargins");
 static_assert(READER_PREFS_V21_SIZE == READER_PREFS_V20_SIZE + 1, "v21 adds headingPageBreak");
-static_assert(READER_PREFS_V22_SIZE == READER_PREFS_V21_SIZE + 1, "v22 adds wordExpansion");
+static_assert(READER_PREFS_V22_SIZE == READER_PREFS_V21_SIZE + 1, "v22 adds wordExpansion (retired in v27)");
 static_assert(READER_PREFS_V23_SIZE == READER_PREFS_V22_SIZE + 1, "v23 adds sbBookTitlePos");
 static_assert(READER_PREFS_V24_SIZE == READER_PREFS_V23_SIZE + 1, "v24 adds characterSpacing");
 static_assert(READER_PREFS_V25_SIZE == READER_PREFS_V24_SIZE + 1, "v25 adds fillPages");
@@ -425,8 +485,11 @@ inline constexpr size_t STATUS_BAR_FIELD_COUNT = 0 READER_STATUS_BAR_FIELDS(CP_C
 #undef CP_COUNT_FIELD
 }  // namespace reader_look
 
+// The retired bytes are padding that keeps every later offset; migrateReaderPrefsFields zeroes them.
+inline constexpr size_t READER_PREFS_RETIRED_BYTES = 10;
 static_assert(reader_look::SCREEN_FIELD_COUNT + reader_look::BOOK_FIELD_COUNT + reader_look::STATUS_BAR_FIELD_COUNT +
-                      sizeof(ReaderPrefs::sdFontFamilyName) + sizeof(ReaderPrefs::reserved14) ==
+                      sizeof(ReaderPrefs::sdFontFamilyName) + sizeof(ReaderPrefs::reserved14) +
+                      READER_PREFS_RETIRED_BYTES ==
                   sizeof(ReaderPrefs),
               "every ReaderPrefs field must appear in exactly one list in ReaderLookFields.h, or "
               "some copier will silently drop it");
@@ -544,9 +607,9 @@ inline void setStatusBarOf(ReaderPrefs& p, const StatusBarBlock& b) {
 
 // ── A book's look on open ─────────────────────────────────────────────────────
 // Whether the book's stylesheet has to be parsed. Decided from the book's own look:
-// a book with either embedded switch on needs its CSS even when both global switches
-// are off, and the loader never builds the CSS cache for a book that skipped it.
-inline bool wantsBookCss(const ReaderPrefs& p) { return p.embeddedTextStyle || p.embeddedLayoutStyle; }
+// a book with its Book Styling switch on needs its CSS even when the global switch is
+// off, and the loader never builds the CSS cache for a book that skipped it.
+inline bool wantsBookCss(const ReaderPrefs& p) { return p.embeddedStyle != 0; }
 
 // Brings a sidecar record read at `fromVersion` in line with this firmware.
 // - A record written before whole-book numbering was removed can still say 2; the

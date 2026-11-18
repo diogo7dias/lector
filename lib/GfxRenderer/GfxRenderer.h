@@ -54,14 +54,7 @@ class GfxRenderer {
   uint32_t frameBufferSize = HalDisplay::BUFFER_SIZE;
   std::vector<uint8_t*> bwBufferChunks;
   std::map<int, EpdFontFamily> fontMap;
-  // The reading font with the reader's Kerning switch off, or NO_FONT. Only that font
-  // loses its kern pairs; UI text keeps them.
   static constexpr int NO_FONT = -1;
-  int kerningOffFontId = NO_FONT;
-  bool kerns(const int fontId) const { return fontId != kerningOffFontId; }
-  // Same, for the reader's Ligatures switch.
-  int ligaturesOffFontId = NO_FONT;
-  bool ligates(const int fontId) const { return fontId != ligaturesOffFontId; }
   // The reader's Character Spacing: extra space between that font's letters, in 12.4
   // fixed point (16 = one pixel), negative to tighten. Every other font draws as designed.
   int trackingFontId = NO_FONT;
@@ -110,6 +103,9 @@ class GfxRenderer {
   // vertical strokes gain a second pixel. Plain byte owned by the renderer (lib/ must not
   // depend on src/); callers bracket it per region.
   mutable uint8_t paperbackLook_ = 0;
+  // Images: Display (B/W): image pixels dither to black and white in the B/W pass, and the
+  // grayscale passes leave them alone. Set by the reader for the page it is drawing.
+  bool ditherImagesInBw_ = false;
   mutable uint8_t textContrast_ = 0;
 
   // CJK UI font fallback map: primary (built-in, Latin-only) UI font id -> a
@@ -287,6 +283,8 @@ class GfxRenderer {
   void setTextContrast(const uint8_t level) const { textContrast_ = level; }
   void setPaperbackLook(const uint8_t level) const { paperbackLook_ = level; }
   uint8_t getPaperbackLook() const { return paperbackLook_; }
+  void setDitherImagesInBw(const bool enabled) { ditherImagesInBw_ = enabled; }
+  bool imagesDitheredInBw() const { return ditherImagesInBw_; }
 
   // Drawing
   void drawPixel(int x, int y, bool state = true) const;
@@ -328,12 +326,10 @@ class GfxRenderer {
   void drawCenteredText(int fontId, int y, const char* text, bool black = true,
                         EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                         BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
-  // letterSpacing: extra pixels after every glyph but the last (Word Expansion). Each word
-  // gains letterSpacing * (spacedGlyphCount - 1), on top of the font's Character Spacing.
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR,
-                BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO, int letterSpacing = 0) const;
-  // Glyphs drawText steps between for `text`: the one count every letter-spacing width uses.
+                BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
+  // Glyphs drawText steps between for `text`: the one count Character Spacing widths use.
   int spacedGlyphCount(int fontId, const char* text, EpdFontFamily::Style style,
                        BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
   // Draws one glyph at scale256/256 of its size with its baseline at baselineY (drop caps).
@@ -350,16 +346,11 @@ class GfxRenderer {
   int getSpaceAdvance(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
   /// Returns the kerning adjustment between two adjacent codepoints.
   int getKerning(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
-  /// Turns kerning off for one font (the reader's Kerning switch), or back on for all
-  /// with on=true. Measuring and drawing both honour it, so layout and paint agree.
-  void setKerning(const int fontId, const bool on) { kerningOffFontId = on ? NO_FONT : fontId; }
-  /// Same for ligatures (fi, fl, ff ...): off draws and measures the letters one by one.
-  void setLigatures(const int fontId, const bool on) { ligaturesOffFontId = on ? NO_FONT : fontId; }
-  /// Character Spacing for one font, in half pixels per letter gap (-5..5); 0 clears it.
+  /// Character Spacing for one font, in whole pixels per letter gap (-2..2); 0 clears it.
   /// Measuring (getTextAdvanceX, getTextWidth) and drawing both honour it.
-  void setCharacterSpacing(const int fontId, const int halfPixels) {
-    trackingFontId = halfPixels != 0 ? fontId : NO_FONT;
-    trackingFP = halfPixels * 8;
+  void setCharacterSpacing(const int fontId, const int pixels) {
+    trackingFontId = pixels != 0 ? fontId : NO_FONT;
+    trackingFP = pixels * 16;
   }
   int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style) const;
   int getFontAscenderSize(int fontId) const;

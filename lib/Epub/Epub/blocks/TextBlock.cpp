@@ -159,7 +159,7 @@ void TextBlock::drawWordInk(const GfxRenderer& renderer, const int wordFont, con
   const EpdFontFamily::Style style = wordStyle(i);
   const uint8_t boundary = focusBoundary(i);
   if (boundary == 0) {
-    renderer.drawText(wordFont, x, y, word, black, style, baseDir, letterSpacing);
+    renderer.drawText(wordFont, x, y, word, black, style, baseDir);
     return;
   }
   // Focus split: draw bold prefix, then the regular suffix at a pre-computed x offset.
@@ -318,17 +318,13 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
       if (wordTextLen(i) >= 3 && static_cast<uint8_t>(word[0]) == 0xE2 && static_cast<uint8_t>(word[1]) == 0x80 &&
           static_cast<uint8_t>(word[2]) == 0x83) {
         decorated = word + 3;
-        // The indent plus the step after it: kerning, Character Spacing and Word Expansion.
+        // The indent plus the step after it: kerning and Character Spacing.
         lineStartX += renderer.getTextAdvanceX(wordFont, word, currentStyle) -
-                      renderer.getTextAdvanceX(wordFont, decorated, currentStyle) + letterSpacing;
+                      renderer.getTextAdvanceX(wordFont, decorated, currentStyle);
         lineWidth = renderer.getTextWidth(wordFont, decorated, currentStyle, baseDir);
         if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
           lineWidth = (lineWidth + 1) / 2;
         }
-      }
-      // Word Expansion widened the word; the underline follows its letters.
-      if (letterSpacing) {
-        lineWidth += letterSpacing * std::max(0, renderer.spacedGlyphCount(wordFont, decorated, currentStyle) - 1);
       }
 
       for (auto& line : decorationLines) {

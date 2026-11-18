@@ -61,5 +61,9 @@ test('an idle reader in a chapter whose build is parked drops to low power', asy
 
   const built = await sinceChapterOpened();
   expect(built, 'the first chunk was laid out').toContain('Page 7 processed');
-  expect(built, 'the build is still parked, so this idle proved the parked case').not.toContain('Page 8 processed');
+  // A parse step can lay out more than one page, so the page count it parks on varies with
+  // the layout settings; the parse finishing is what says the chapter was not parked.
+  expect(built, 'the build is still parked, so this idle proved the parked case').not.toContain(
+    'Time to parse and build pages',
+  );
 });

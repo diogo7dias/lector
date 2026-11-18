@@ -25,7 +25,7 @@ std::string snapshot() {
 }
 
 class WordSpacing : public testing::TestWithParam<int> {};
-INSTANTIATE_TEST_SUITE_P(EverySetting, WordSpacing, testing::Range(75, 151, 5));
+INSTANTIATE_TEST_SUITE_P(EverySetting, WordSpacing, testing::Range(50, 201, 25));
 }  // namespace
 
 // Capture the production layout's constructor arguments at its output boundary.
@@ -42,12 +42,13 @@ TEST_P(WordSpacing, MeasurementAndPositioningAgree) {
   const int percent = GetParam();
   const int gap = (7 * percent + 50) / 100 - 2;  // a -> space -> b kerning remains -2
   const int measured = 10 + gap + 10;
-  // First line keeps the existing three-space indent (21px).
-  layout("a b", percent, measured + 21, CssTextAlign::Left);
+  // The first line is indented three spaces, each scaled by the same percentage.
+  const int indent = 3 * ((7 * percent + 50) / 100);
+  layout("a b", percent, measured + indent, CssTextAlign::Left);
   ASSERT_EQ(1u, lines.size());
-  EXPECT_EQ(measured + 21, rightEdge(lines[0]));
+  EXPECT_EQ(measured + indent, rightEdge(lines[0]));
   EXPECT_EQ(gap, lines[0].x[1] - lines[0].x[0] - 10);
-  layout("a b", percent, measured + 20, CssTextAlign::Left);
+  layout("a b", percent, measured + indent - 1, CssTextAlign::Left);
   EXPECT_EQ(2u, lines.size());  // one pixel less cannot hold the measured line
   layout("a b", percent, 200, CssTextAlign::Right);
   ASSERT_EQ(1u, lines.size());
@@ -56,9 +57,9 @@ TEST_P(WordSpacing, MeasurementAndPositioningAgree) {
 }
 
 TEST(WordSpacing, WiderSettingMeasuresWider) {
-  layout("a b", 75, 200, CssTextAlign::Right);
+  layout("a b", 50, 200, CssTextAlign::Right);
   const int narrowWidth = 200 - lines[0].x[0];
-  layout("a b", 150, 200, CssTextAlign::Right);
+  layout("a b", 200, 200, CssTextAlign::Right);
   EXPECT_GT(200 - lines[0].x[0], narrowWidth);
 }
 
@@ -73,38 +74,40 @@ TEST_P(WordSpacing, JustificationFlushAndLastLineNatural) {
     EXPECT_LT(rightEdge(lines.back()), 260);
   }
   layout("a b", GetParam(), 200, CssTextAlign::Justify);
-  EXPECT_EQ(21 + 20 + (7 * GetParam() + 50) / 100 - 2, rightEdge(lines[0]));
+  EXPECT_EQ(3 * ((7 * GetParam() + 50) / 100) + 20 + (7 * GetParam() + 50) / 100 - 2, rightEdge(lines[0]));
 }
 
 TEST_P(WordSpacing, GuideDotsScaleSpacesAndHiddenMatchesVisible) {
   const int gap = 2 * ((7 * GetParam() + 50) / 100) - 2 + 3;
-  layout("a b", GetParam(), 41 + gap, CssTextAlign::Left, GUIDE_DOTS_VISIBLE);
+  const int indent = 3 * ((7 * GetParam() + 50) / 100);
+  layout("a b", GetParam(), 20 + indent + gap, CssTextAlign::Left, GUIDE_DOTS_VISIBLE);
   ASSERT_EQ(1u, lines.size());
-  EXPECT_EQ(41 + gap, rightEdge(lines[0]));
+  EXPECT_EQ(20 + indent + gap, rightEdge(lines[0]));
   EXPECT_EQ(10 + (gap - 3) / 2, lines[0].dots[0]);
   const auto positions = lines[0].x;
-  layout("a b", GetParam(), 41 + gap, CssTextAlign::Left, GUIDE_DOTS_HIDDEN);
+  layout("a b", GetParam(), 20 + indent + gap, CssTextAlign::Left, GUIDE_DOTS_HIDDEN);
   ASSERT_EQ(1u, lines.size());
   EXPECT_EQ(positions, lines[0].x);
   EXPECT_TRUE(lines[0].dots.empty());
-  layout("a b", GetParam(), 40 + gap, CssTextAlign::Left, GUIDE_DOTS_VISIBLE);
+  layout("a b", GetParam(), 19 + indent + gap, CssTextAlign::Left, GUIDE_DOTS_VISIBLE);
   EXPECT_EQ(2u, lines.size());
 }
 
 TEST_P(WordSpacing, NbspStaysAttachedAndScales) {
   const int measured = 20 + (7 * GetParam() + 50) / 100 - 2;
+  const int indent = 3 * ((7 * GetParam() + 50) / 100);
   layout(
       "a\xC2\xA0"
       "b",
-      GetParam(), measured + 21, CssTextAlign::Left);
+      GetParam(), measured + indent, CssTextAlign::Left);
   ASSERT_EQ(1u, lines.size());
   ASSERT_EQ(3u, lines[0].words.size());
   EXPECT_EQ(" ", lines[0].words[1]);
-  EXPECT_EQ(measured + 21, rightEdge(lines[0]));
+  EXPECT_EQ(measured + indent, rightEdge(lines[0]));
   layout(
       "x a\xC2\xA0"
       "b",
-      GetParam(), measured + 21, CssTextAlign::Left);
+      GetParam(), measured + indent, CssTextAlign::Left);
   ASSERT_EQ(2u, lines.size());
   EXPECT_EQ("a", lines[1].words.front());
   EXPECT_EQ("b", lines[1].words.back());
@@ -147,11 +150,17 @@ TEST(WordSpacing, NbspCarriedToTheNextLineDoesNotIndentIt) {
 TEST_P(WordSpacing, CjkKeepsZeroWidthBoundariesAndFlushJustification) {
   for (uint8_t dots : {GUIDE_DOTS_OFF, GUIDE_DOTS_VISIBLE, GUIDE_DOTS_HIDDEN}) {
     layout("天地玄黃宇宙洪荒日月盈昃辰宿列張", 100, 103, CssTextAlign::Justify, dots);
-    const auto unchanged = snapshot();
-    layout("天地玄黃宇宙洪荒日月盈昃辰宿列張", GetParam(), 103, CssTextAlign::Justify, dots);
-    EXPECT_EQ(unchanged, snapshot());
+    const auto baseline = lines;
+    // Only the first-line indent (three spaces) follows the setting; the CJK glyph gaps stay put.
+    const int shift = 3 * ((7 * GetParam() + 50) / 100) - 21;
+    layout("天地玄黃宇宙洪荒日月盈昃辰宿列張", GetParam(), 103 + shift, CssTextAlign::Justify, dots);
+    ASSERT_EQ(baseline.size(), lines.size());
+    for (size_t i = 0; i < lines.size(); ++i) {
+      EXPECT_EQ(baseline[i].words, lines[i].words);
+      for (size_t w = 0; w < lines[i].x.size(); ++w) EXPECT_EQ(baseline[i].x[w] + (i == 0 ? shift : 0), lines[i].x[w]);
+    }
     ASSERT_GT(lines.size(), 1u);
-    for (size_t i = 0; i + 1 < lines.size(); ++i) EXPECT_EQ(103, rightEdge(lines[i]));
+    for (size_t i = 0; i + 1 < lines.size(); ++i) EXPECT_EQ(103 + (i == 0 ? shift : 0), rightEdge(lines[i]));
     EXPECT_TRUE(lines.back().dots.empty());
   }
 }
@@ -162,8 +171,8 @@ TEST_P(WordSpacing, RtlAndBidiKeepFlushMargins) {
       layout(text, GetParam(), 200, CssTextAlign::Justify, GUIDE_DOTS_VISIBLE, rtl);
       ASSERT_GT(lines.size(), 1u);
       for (size_t i = 0; i + 1 < lines.size(); ++i) {
-        // The existing first-line indent reduces RTL's effective right edge.
-        EXPECT_EQ(rtl && i == 0 ? 179 : 200, rightEdge(lines[i]));
+        // The first-line indent (three scaled spaces) reduces RTL's effective right edge.
+        EXPECT_EQ(rtl && i == 0 ? 200 - 3 * ((7 * GetParam() + 50) / 100) : 200, rightEdge(lines[i]));
         if (text != PROSE || rtl) {
           EXPECT_TRUE(lines[i].dots.empty());
         }
@@ -194,11 +203,11 @@ TEST(WordSpacing, HundredPercentIsByteIdenticalToPreChangeLayout) {
 }
 
 TEST(WordSpacing, InvalidPercentagesClampBeforeLayout) {
-  layout("a b", 75, 200);
+  layout("a b", 50, 200);
   const auto minimum = snapshot();
   layout("a b", 0, 200);
   EXPECT_EQ(minimum, snapshot());
-  layout("a b", 150, 200);
+  layout("a b", 200, 200);
   const auto maximum = snapshot();
   layout("a b", 255, 200);
   EXPECT_EQ(maximum, snapshot());
@@ -227,7 +236,7 @@ TEST(WordSpacing, SoftFlushedParagraphIndentsOnlyItsFirstLine) {
   style.alignment = CssTextAlign::Left;
   style.textAlignDefined = true;
   style.directionDefined = true;
-  ParsedText parsed(false, GUIDE_DOTS_OFF, style, 1, 0, 100);
+  ParsedText parsed(false, GUIDE_DOTS_OFF, style, 3, 100);
   const auto sink = [](void*, std::unique_ptr<TextBlock>, uint32_t) {};
   for (int pass = 0; pass < 3; ++pass) {
     std::istringstream input(PROSE);
@@ -290,7 +299,7 @@ TEST(KoreanLayout, SplitWordPiecesKeepTheirReadingOffsets) {
   style.alignment = CssTextAlign::Justify;
   style.textAlignDefined = true;
   style.directionDefined = true;
-  ParsedText parsed(false, GUIDE_DOTS_OFF, style, 1, 0, 100);
+  ParsedText parsed(false, GUIDE_DOTS_OFF, style, 3, 100);
   parsed.addWord("가나", EpdFontFamily::REGULAR, false, 0);
   parsed.addWord("다라마바사아자차카타파하거너더러머버서어저처", EpdFontFamily::REGULAR, false, 3);
   parsed.addWord("기", EpdFontFamily::REGULAR, false, 26);
@@ -324,7 +333,7 @@ TEST(KoreanLayout, HangulGluedAcrossInlineStyleStaysOneWord) {
   style.alignment = CssTextAlign::Justify;
   style.textAlignDefined = true;
   style.directionDefined = true;
-  ParsedText parsed(false, GUIDE_DOTS_OFF, style, 1, 0, 100);
+  ParsedText parsed(false, GUIDE_DOTS_OFF, style, 3, 100);
   parsed.addWord("가나", EpdFontFamily::REGULAR);
   parsed.addWord("한국", EpdFontFamily::REGULAR);
   parsed.addWord("어", EpdFontFamily::BOLD, true);  // <b>어</b> with no space before it
@@ -335,39 +344,6 @@ TEST(KoreanLayout, HangulGluedAcrossInlineStyleStaysOneWord) {
   EXPECT_EQ((std::vector<std::string>{"한국", "어"}), lines[1].words);
 }
 
-TEST(WordExpansion, LooseJustifiedLineSpreadsSlackIntoLetters) {
-  // 4-letter words are 40 px and spaces 7 px, so a 100 px line holds two words with 13 px
-  // spare. Past half a space (3 px) the 10 px excess over 6 letter steps allows 1 px each.
-  const auto run = [](uint8_t maxSpacing, std::vector<int>& spacings) {
-    lines.clear();
-    spacings.clear();
-    BlockStyle style;
-    style.alignment = CssTextAlign::Justify;
-    style.textAlignDefined = true;
-    ParsedText parsed(false, GUIDE_DOTS_OFF, style, 1, 0, 100, maxSpacing);
-    for (const char* w : {"cccc", "dddd", "eeee", "ffff", "gggg", "hhhh"}) parsed.addWord(w, EpdFontFamily::REGULAR);
-    parsed.layoutAndExtractLines(
-        renderer, FONT, 100,
-        [](void* ctx, std::unique_ptr<TextBlock> block, uint32_t) {
-          static_cast<std::vector<int>*>(ctx)->push_back(block->getLetterSpacing());
-        },
-        &spacings);
-  };
-  std::vector<int> spacings;
-  run(2, spacings);
-  ASSERT_GE(lines.size(), 3u);
-  const Line& middle = lines[1];
-  ASSERT_EQ(2u, middle.words.size());
-  EXPECT_EQ(1, spacings[1]);
-  EXPECT_EQ(40 + 3 + 14, middle.x[1] - middle.x[0]);  // widened word, then 7 + 7 px gap
-  EXPECT_EQ(100, middle.x[1] + 40 + 3);               // still flush with the right margin
-  EXPECT_EQ(0, spacings.back());                      // last line is never justified
-
-  run(0, spacings);
-  EXPECT_EQ(0, spacings[1]);
-  EXPECT_EQ(40 + 20, lines[1].x[1] - lines[1].x[0]);  // Off: all 13 px go to the gap
-}
-
 namespace {
 // Every glyph is 10 px (regular) in the stub renderer; the first line is indented 21 px.
 void layoutGlued(const std::vector<std::pair<const char*, bool>>& words, int width) {
@@ -376,7 +352,7 @@ void layoutGlued(const std::vector<std::pair<const char*, bool>>& words, int wid
   style.alignment = CssTextAlign::Left;
   style.textAlignDefined = true;
   style.directionDefined = true;
-  ParsedText parsed(false, GUIDE_DOTS_OFF, style, 0, 0, 100);
+  ParsedText parsed(false, GUIDE_DOTS_OFF, style, 3, 100);
   for (const auto& [word, glued] : words) parsed.addWord(word, EpdFontFamily::REGULAR, glued);
   parsed.layoutAndExtractLines(renderer, FONT, width, [](void*, std::unique_ptr<TextBlock>, uint32_t) {}, nullptr);
 }
@@ -427,7 +403,7 @@ std::vector<ParsedText::InlineImagePlacement> layoutImages(ParsedText& parsed, i
 TEST(InlineImages, TakeTheirWidthAndLeaveTheLine) {
   BlockStyle style;
   style.textAlignDefined = true;
-  ParsedText parsed(false, GUIDE_DOTS_OFF, style, 1, 0, 100);
+  ParsedText parsed(false, GUIDE_DOTS_OFF, style, 3, 100);
   parsed.addWord("a", EpdFontFamily::REGULAR);
   parsed.addInlineImage(7, 30, 12, /*attachToPrevious=*/false, 1);
   parsed.addWord("b", EpdFontFamily::REGULAR, /*attachToPrevious=*/true);
@@ -442,7 +418,7 @@ TEST(InlineImages, TakeTheirWidthAndLeaveTheLine) {
 }
 
 TEST(InlineImages, ALineOfImagesAloneIsCentred) {
-  ParsedText parsed(false, GUIDE_DOTS_OFF, BlockStyle(), 0, 0, 100);
+  ParsedText parsed(false, GUIDE_DOTS_OFF, BlockStyle(), 3, 100);
   parsed.addInlineImage(1, 40, 20, false, 0);
   EXPECT_FALSE(parsed.hasLetters());
   const auto images = layoutImages(parsed, 200);

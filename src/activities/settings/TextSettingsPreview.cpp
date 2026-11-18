@@ -31,10 +31,8 @@ CssTextAlign toCssAlign(uint8_t align) {
 // The middle dot the guide-dot aid draws between words (U+00B7, UTF-8).
 constexpr char GUIDE_DOT_UTF8[] = "\xc2\xb7";
 
-// The sample's pretend publisher stylesheet: a centred chapter heading and a first-line
-// indent on the body. Without it the Embedded Style toggle and First Line Indent: Book
-// would have nothing to act on, because the sample carries no CSS of its own.
-constexpr int SAMPLE_CSS_INDENT_EM_TENTHS = 15;  // 1.5em, a common publisher indent
+// The sample's pretend publisher stylesheet is a centred chapter heading. Without it the
+// Embedded Style toggle would have nothing to act on, because the sample carries no CSS of its own.
 
 // Placeholder values for the status bar. The pane shows a made-up page, so the bar shows
 // made-up readings; only the anchors are real, and those decide how much of each vertical
@@ -128,17 +126,10 @@ void addWords(ParsedText& parsed, const char* text, EpdFontFamily::Style style) 
   }
 }
 
-BlockStyle bodyStyle(const ReaderPrefs& look, int fontId, const GfxRenderer& renderer) {
+BlockStyle bodyStyle(const ReaderPrefs& look) {
   BlockStyle style;
   style.alignment = toCssAlign(look.paragraphAlignment);
   style.textAlignDefined = true;  // honor the user's choice; RTL auto-detected from text
-  if (look.embeddedLayoutStyle) {
-    // The sample's own stylesheet. First Line Indent: Book defers to exactly this, so
-    // without it that mode would look identical to a 0% custom indent.
-    const int em = std::max(1, renderer.getTextHeight(fontId));
-    style.textIndent = static_cast<int16_t>(em * SAMPLE_CSS_INDENT_EM_TENTHS / 10);
-    style.textIndentDefined = true;
-  }
   return style;
 }
 
@@ -147,7 +138,7 @@ BlockStyle bodyStyle(const ReaderPrefs& look, int fontId, const GfxRenderer& ren
 void appendParagraph(const ReaderPrefs& look, PreviewLayout& layout, const GfxRenderer& renderer, int fontId,
                      int textWidth, const char* text, const BlockStyle& style, bool heading, int gapBefore) {
   ParsedText parsed(look.focusReadingEnabled != 0, resolveGuideDotsMode(look.guideDotsEnabled, look.guideDotsHidden),
-                    style, look.firstLineIndentMode, look.firstLineIndentPercent, look.wordSpacing);
+                    style, look.paragraphIndentSpaces, look.wordSpacing);
   parsed.setHeading(heading);
   addWords(parsed, text, heading ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
 
@@ -166,7 +157,7 @@ void appendParagraph(const ReaderPrefs& look, PreviewLayout& layout, const GfxRe
       &sink);
 }
 
-// Lay the whole sample page out: pretend chapter heading (only while Embedded Layout Style
+// Lay the whole sample page out: pretend chapter heading (only while Embedded Style
 // is on, since it is the sample's CSS that puts it there), then two body paragraphs so the
 // paragraph gap is visible and the bottom of the page holds different text from the top.
 void relayout(const ReaderPrefs& look, PreviewLayout& layout, const GfxRenderer& renderer, int fontId, int textWidth,
@@ -174,8 +165,8 @@ void relayout(const ReaderPrefs& look, PreviewLayout& layout, const GfxRenderer&
   layout.lines.clear();
   layout.secondParagraphLine = 0;
 
-  const BlockStyle body = bodyStyle(look, fontId, renderer);
-  if (look.embeddedLayoutStyle) {
+  const BlockStyle body = bodyStyle(look);
+  if (look.embeddedStyle) {
     BlockStyle heading;
     heading.alignment = CssTextAlign::Center;
     heading.textAlignDefined = true;
@@ -215,16 +206,11 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const Rea
   PreviewKey key{.spec = makeRenderSpec(look, fontId, static_cast<uint16_t>(textWidth), 0),
                  .fontPointSize = look.fontPointSize,
                  .screenMargin = marginLeft};
-  // The sample has no CSS-driven bold or italic, so Embedded Text Style leaves it untouched;
-  // only the layout switch (a first-line indent and a centred heading) changes it.
-  key.spec.embeddedTextStyle = false;
   const float compression = key.spec.lineCompression;
   const int lineAdvance = std::max(1, renderer.getLineHeight(fontId, compression));
-  // Same stack the parser applies after each paragraph: the Extra Spacing toggle adds half
-  // a line, the Paragraph Spacing percentage adds its share on top of it.
-  // See ChapterHtmlSlimParser.cpp finishParagraph.
-  const int paragraphGap =
-      (look.extraParagraphSpacing ? lineAdvance / 2 : 0) + lineAdvance * look.paragraphSpacing / 100;
+  // Same gap the parser applies after each paragraph: the Extra Spacing toggle adds half
+  // a line. See ChapterHtmlSlimParser.cpp finishParagraph.
+  const int paragraphGap = look.extraParagraphSpacing ? lineAdvance / 2 : 0;
 
   // Re-lay-out (and re-prewarm glyphs) only when a layout-affecting setting or the
   // geometry changed; else reuse the cache. The prewarm inputs are (fontId, constant
@@ -242,7 +228,7 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const Rea
       if (look.guideDotsEnabled) prewarmText += GUIDE_DOT_UTF8;
       // Bit 1 is the bold mask the heading needs; bit 0 the regular body.
       uint8_t styleMask = look.focusReadingEnabled ? 0x03 : 0x01;
-      if (look.embeddedLayoutStyle) styleMask |= 0x02;
+      if (look.embeddedStyle) styleMask |= 0x02;
       fcm->prewarmCache(fontId, prewarmText.c_str(), styleMask);
     }
     relayout(look, layout, renderer, fontId, textWidth, lineAdvance, paragraphGap);

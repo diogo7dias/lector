@@ -54,11 +54,8 @@ class TextSettingsActivity final : public UiGridActivity {
     ExtraSpacing,
     WordSpacing,
     CharacterSpacing,
-    Kerning,
-    Ligatures,
     Alignment,
-    IndentMode,
-    IndentPercent,     // only in Custom % mode
+    Indent,
     HorizontalMargin,  // labelled "Margin" in All Sides, where it stands for every side
     MarginLink,
     VerticalMargin,  // shown while top and bottom are linked
@@ -68,13 +65,8 @@ class TextSettingsActivity final : public UiGridActivity {
     FocusReading,
     GuideDots,
     HiddenDots,  // sub-option of GuideDots: only listed while Guide Dots is on
-    EmbeddedTextStyle,
-    EmbeddedLayoutStyle,
-    BookMargins,
-    LinkUnderline,
-    HeadingPageBreak,
-    FillPages,
-    WordExpansion,
+    EmbeddedStyle,
+    Images,
     AntiAliasing,
     TextContrast,  // only listed while Text Anti-Aliasing is on: it darkens the greys
     DebugBorders,

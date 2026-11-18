@@ -32,7 +32,7 @@ void layout(const std::string& text, int percent, int width, CssTextAlign align 
   style.textAlignDefined = true;
   style.directionDefined = true;
   style.isRtl = rtl;
-  ParsedText parsed(false, dots, style, 1, 0, percent);
+  ParsedText parsed(false, dots, style, 3, percent);
   std::istringstream input(text);
   std::string word;
   int i = 0;

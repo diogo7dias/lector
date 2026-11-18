@@ -18,7 +18,17 @@ struct LegacyKeys {
   bool hasVerticalMarginsLinked = false;  // middle: the vertical sides' on/off link
   uint8_t verticalMarginsLinked = 1;      // its value, when present
   bool hasMarginLinkMode = false;         // current: the three link modes
-  bool hasEmbeddedLayoutStyle = false;    // absent = one Embedded Style choice, not two
+  bool hasEmbeddedLayoutStyle = false;    // present = the two-switch Embedded Style vintage
+  uint8_t embeddedLayoutStyle = 1;        // its value, when present
+  // Lean typography (v27): the indent counts spaces, character spacing counts whole pixels,
+  // and the style switch is one. A file without the indent key is older than that.
+  bool hasParagraphIndentSpaces = false;
+  bool hasFirstLineIndent = false;  // the old "Book or percent" pair
+  uint8_t firstLineIndentMode = 1;
+  uint8_t firstLineIndentPercent = 0;
+  bool hasCharacterSpacingPx = false;
+  bool hasLegacyCharacterSpacing = false;  // half pixels, offset 5
+  uint8_t legacyCharacterSpacing = 5;
 };
 
 // Reads those keys from any ArduinoJson object or document; templated so this header
@@ -32,6 +42,17 @@ LegacyKeys readLegacyKeys(const Json& obj) {
   if (keys.hasVerticalMarginsLinked) keys.verticalMarginsLinked = obj["verticalMarginsLinked"].template as<uint8_t>();
   keys.hasMarginLinkMode = obj["marginLinkMode"].template is<uint8_t>();
   keys.hasEmbeddedLayoutStyle = obj["embeddedLayoutStyle"].template is<uint8_t>();
+  if (keys.hasEmbeddedLayoutStyle) keys.embeddedLayoutStyle = obj["embeddedLayoutStyle"].template as<uint8_t>();
+  keys.hasParagraphIndentSpaces = obj["paragraphIndentSpaces"].template is<uint8_t>();
+  keys.hasFirstLineIndent =
+      obj["firstLineIndentMode"].template is<uint8_t>() && obj["firstLineIndentPercent"].template is<uint8_t>();
+  if (keys.hasFirstLineIndent) {
+    keys.firstLineIndentMode = obj["firstLineIndentMode"].template as<uint8_t>();
+    keys.firstLineIndentPercent = obj["firstLineIndentPercent"].template as<uint8_t>();
+  }
+  keys.hasCharacterSpacingPx = obj["characterSpacingPx"].template is<uint8_t>();
+  keys.hasLegacyCharacterSpacing = obj["characterSpacing"].template is<uint8_t>();
+  if (keys.hasLegacyCharacterSpacing) keys.legacyCharacterSpacing = obj["characterSpacing"].template as<uint8_t>();
   return keys;
 }
 
@@ -60,6 +81,25 @@ inline bool migrateMarginLink(const LegacyKeys& keys, uint8_t& screenMargin, uin
   return true;
 }
 
+// Lean typography, over bare fields so a preset and the global settings file run one rule.
+// A file with the "paragraphIndentSpaces" key was written by a lean build and stands as it is.
+// An older one carries the indent as Book or a percent of the column, character spacing in
+// half pixels under the old key, and the style as two switches; a key it does not hold
+// leaves its default.
+inline void migrateLeanTypography(const LegacyKeys& keys, uint8_t& paragraphIndentSpaces, uint8_t& embeddedStyle,
+                                  uint8_t& characterSpacing) {
+  if (keys.hasParagraphIndentSpaces) return;
+  if (keys.hasFirstLineIndent) {
+    paragraphIndentSpaces =
+        reader_defaults::indentSpacesFromLegacy(keys.firstLineIndentMode, keys.firstLineIndentPercent);
+  }
+  // Off if either half was off: off meant "the book's own styling gone".
+  if (keys.hasEmbeddedLayoutStyle) embeddedStyle = (embeddedStyle != 0 && keys.embeddedLayoutStyle != 0) ? 1 : 0;
+  if (!keys.hasCharacterSpacingPx && keys.hasLegacyCharacterSpacing) {
+    characterSpacing = reader_defaults::characterSpacingFromLegacy(keys.legacyCharacterSpacing);
+  }
+}
+
 // A preset saved before it carried the status bar has no bar of its own. It takes the bar
 // this book has now, the same way a missing key takes the default: the bar is never zeroed.
 inline void keepStatusBarWhenAbsent(const bool presetHasStatusBar, const ReaderPrefs& current, ReaderPrefs& incoming) {
@@ -70,11 +110,8 @@ inline void keepStatusBarWhenAbsent(const bool presetHasStatusBar, const ReaderP
 // did not hold is still at its constructed default. Fix up the splits.
 inline void apply(const LegacyKeys& keys, ReaderPrefs& p) {
   migrateMarginLink(keys, p.screenMargin, p.screenMarginTop, p.screenMarginBottom, p.dynamicMargins, p.marginLinkMode);
-
-  // Embedded Style split. The old key is reused for the text switch, so only the layout
-  // switch needs seeding: someone who turned the style off wanted the book's own styling
-  // gone, not just its fonts.
-  if (!keys.hasEmbeddedLayoutStyle) p.embeddedLayoutStyle = p.embeddedTextStyle;
+  migrateLeanTypography(keys, p.paragraphIndentSpaces, p.embeddedStyle, p.characterSpacing);
+  if (!keys.hasParagraphIndentSpaces) settleLegacyLookValues(p);
 }
 
 }  // namespace reader_preset_migration
