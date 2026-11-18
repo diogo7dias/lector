@@ -73,6 +73,7 @@ class Epub {
   const std::string& getPath() const;
   std::string getTitle() const;
   const std::string& getAuthor() const;
+  const std::string& getLanguage() const;
   // The publisher synopsis cached from <dc:description>; empty when the book has none.
   const std::string& getDescription() const;
   std::string getCoverBmpPath(bool cropped = false) const;

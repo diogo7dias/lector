@@ -1,4 +1,3 @@
-#include <PerfStats.h>
 #include <gtest/gtest.h>
 
 #include "sleep/WakeFacePolicy.h"
@@ -49,21 +48,4 @@ TEST(WakeFacePolicy, FirstPageTurnCleansAfterADriveAllWakeExceptOnTheX3) {
   EXPECT_FALSE(wake_face::firstPageTurnCleans(WakeClear::DriveAll, true));  // X3 first paint was the scrub
   EXPECT_FALSE(wake_face::firstPageTurnCleans(WakeClear::Blank, false));    // the blank already cleaned
   EXPECT_FALSE(wake_face::firstPageTurnCleans(WakeClear::Blank, true));
-}
-
-TEST(WakeFacePolicy, WakePanelCaptureStopsAtReadableAndBoundsOutput) {
-  // B/W base and grayscale composite are two submissions, regardless of their
-  // matching mode labels. Later page turns must not change the wake record.
-  PerfStats::noteRefresh(2, 2, 617000, 0, 0);
-  PerfStats::noteRefresh(2, 2, 500000, 0, 0);
-  PerfStats::finishWakePanels();
-  PerfStats::noteRefresh(1, 1, 1800000, 0, 0);
-  EXPECT_EQ(PerfStats::wakePanelCount(), 2u);
-  char out[48];
-  PerfStats::formatWakePanels(out, sizeof(out));
-  EXPECT_STREQ(out, "617/500");
-  char tiny[2] = {};
-  PerfStats::formatWakePanels(tiny, sizeof(tiny));
-  EXPECT_EQ(tiny[1], '\0');
-  PerfStats::formatWakePanels(nullptr, 0);
 }

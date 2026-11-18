@@ -6,7 +6,6 @@
 #include <cstdlib>
 
 #include "CrossPointSettings.h"
-#include "DictHistoryStore.h"
 #include "DictionaryDefinitionActivity.h"
 #include "QuoteSelectActivity.h"
 #include "util/Dictionary.h"
@@ -134,15 +133,10 @@ void QuoteSelectActivity::lookUpSelection() {
   } else if (dict_failure::lookUp(*dict, SETTINGS.dictionaryName, phrase.c_str(), definition, headword, message,
                                   showBusy, this)) {
     showPopup = false;
-    // History records the headword on the way back, never alongside a 64 KB definition.
-    std::string looked = headword;
     startActivityForResult(
         std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
                                                        std::move(definition), dict->definitionsAreHtml()),
-        [this, looked = std::move(looked)](const ActivityResult&) {
-          DICT_HISTORY.add(looked);
-          finish();
-        });
+        [this](const ActivityResult&) { finish(); });
     return;
   }
   popupMsg = message.id;

@@ -28,7 +28,6 @@ class EpubReaderMenuActivity final : public UiListActivity {
     NEARBY_SEND_BOOK,  // send this book itself to another reader over ESP-NOW
     DELETE_CACHE,
     DICTIONARY,
-    DICTIONARY_HISTORY,          // the words looked up before, newest first
     READER_SETTINGS,             // open this book's per-book reader settings
     RESET_READER_SETTINGS,       // clear this book's override, follow global again
     TOGGLE_PARAGRAPH_NUMBERS,    // cycle off / per-chapter / whole-book in place
@@ -52,7 +51,6 @@ class EpubReaderMenuActivity final : public UiListActivity {
     RETURN,                      // back to the last deliberate-jump origin
     VIEW_QUOTES,                 // browse (and delete) the quotes saved in <book>_QUOTES.txt
     FORWARD,                     // redo the last Return
-    SEARCH,                      // find a phrase anywhere in the book
     GO_TO_PAGE                   // jump to a printed page number (books with a page list)
   };
 

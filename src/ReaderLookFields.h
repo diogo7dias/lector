@@ -73,8 +73,6 @@
   X(sbChapterNumPos, sbChapterNumPos, chapterNumPos)       \
   X(sbSessionPagesPos, sbSessionPagesPos, sessionPagesPos) \
   X(sbParaPagesPos, sbParaPagesPos, paraPagesPos)          \
-  X(sbChapterTimePos, sbChapterTimePos, chapterTimePos)    \
-  X(sbBookTimePos, sbBookTimePos, bookTimePos)             \
   X(sbBookTitlePos, sbBookTitlePos, bookTitlePos)          \
   X(sbBookBar, sbBookBar, bookBar)                         \
   X(sbChapterBar, sbChapterBar, chapterBar)                \

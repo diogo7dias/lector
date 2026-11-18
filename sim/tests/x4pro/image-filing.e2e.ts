@@ -54,7 +54,7 @@ test('an image page draws the same after the book is filed into recents', async 
   await panel.tap({ position: { x: 240, y: 400 } }); // centre of the page
   await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
   await tapTwice(100, 198); // Book
-  await tapTwice(100, 358); // Remove from Recents
+  await tapTwice(100, 318); // Remove from Recents
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
   await expect.poll(async () => (await fetch(`${app.baseUrl}/log`)).text()).toContain('-> /test_jpeg_images.epub');
 });

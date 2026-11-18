@@ -145,6 +145,7 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
       // the lock screen actually showed, and it must still be on the card.
       return !APP_STATE.lastSleepWallpaperPath.empty() && Storage.exists(APP_STATE.lastSleepWallpaperPath.c_str());
     case CrossPointSettings::LP_MENU_BOOKMARK:
+    case CrossPointSettings::LP_MENU_OPEN_READER_MENU:
     case CrossPointSettings::LP_MENU_NEARBY_SEND_BOOK:
     case CrossPointSettings::LP_MENU_READER_SETTINGS:
     case CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR:
@@ -246,6 +247,9 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
     case CrossPointSettings::LP_MENU_POPUP:
       openQuickMenu();
       return true;
+    case CrossPointSettings::LP_MENU_OPEN_READER_MENU:
+      openReaderMenu();
+      return true;
     case CrossPointSettings::LP_MENU_WALLPAPER_HOLD:
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::WALLPAPER_HOLD);
       return true;
@@ -308,18 +312,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS:
       openBookmarks();
       break;
-    case EpubReaderMenuActivity::MenuAction::SEARCH:
-      openSearch();
-      break;
     case EpubReaderMenuActivity::MenuAction::TOGGLE_BOOKMARK:
       addBookmark();
       break;
     // Reading tools
     case EpubReaderMenuActivity::MenuAction::DICTIONARY:
       openDictionaryWordSelect();
-      break;
-    case EpubReaderMenuActivity::MenuAction::DICTIONARY_HISTORY:
-      openDictionaryHistory();
       break;
     case EpubReaderMenuActivity::MenuAction::GRAB_QUOTE:
       openQuoteGrab();

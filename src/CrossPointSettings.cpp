@@ -16,6 +16,7 @@
 #include "ReaderFontSizes.h"
 #include "ReaderPresetMigration.h"
 #include "SettingsList.h"
+#include "activities/reader/ReaderTouchZones.h"
 #include "fontIds.h"
 #include "frontlight/FrontlightBootPolicy.h"
 #include "sleep/WakeFacePolicy.h"
@@ -93,10 +94,6 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   };
   forEachBaseSetting(visit);
 
-  // Keyless rows: a quarter-hour index means nothing on the web settings page.
-  doc["frontlightScheduleOn"] = frontlightScheduleOn;
-  doc["frontlightScheduleOff"] = frontlightScheduleOff;
-
   // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.
   doc["frontButtonBack"] = frontButtonBack;
   doc["frontButtonConfirm"] = frontButtonConfirm;
@@ -119,11 +116,6 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["readingDefaults0820"] = true;
   // Marks the one-time Touch Sleep Off migration in migrateFromJson as done.
   doc["touchSleepOff0410"] = true;
-  // TXT reader font — set from the in-book TXT popup, not in SettingsList.
-  doc["txtFontSize"] = txtFontPointSize;
-  if (txtSdFontFamilyName[0] != '\0') {
-    doc["txtSdFontFamilyName"] = txtSdFontFamilyName;
-  }
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, save manually
   if (dictionaryName[0] != '\0') {
     doc["dictionaryName"] = dictionaryName;
@@ -202,11 +194,6 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   };
   forEachBaseSetting(visit);
 
-  frontlightScheduleOn =
-      std::min<uint8_t>(doc["frontlightScheduleOn"] | frontlightScheduleOn, frontlight::SCHEDULE_LAST_STEP);
-  frontlightScheduleOff =
-      std::min<uint8_t>(doc["frontlightScheduleOff"] | frontlightScheduleOff, frontlight::SCHEDULE_LAST_STEP);
-
   // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.
   frontButtonBack = clamp(doc["frontButtonBack"] | (uint8_t)FRONT_HW_BACK, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_BACK);
   frontButtonConfirm =
@@ -251,10 +238,6 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   const char* sfn = doc["sdFontFamilyName"] | "";
   strncpy(sdFontFamilyName, sfn, sizeof(sdFontFamilyName) - 1);
   sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
-  // TXT reader font — absent on any settings file written before the TXT popup
-  // existed, so an upgrade lands on the smallest size, which is the intended default.
-  txtFontPointSize = doc["txtFontSize"] | TXT_DEFAULT_FONT_POINT_SIZE;
-  copyToField(txtSdFontFamilyName, doc["txtSdFontFamilyName"] | "", sizeof(txtSdFontFamilyName));
 
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
   copyToField(dictionaryName, doc["dictionaryName"] | "", sizeof(dictionaryName));
@@ -348,6 +331,20 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
   if (snappedWordSpacing != wordSpacing || snappedMargin != screenMargin) needsResave = true;
   wordSpacing = snappedWordSpacing;
   screenMargin = snappedMargin;
+
+  // Touch page turning used to be one combined mode under "touchReaderControls" (0 Off, 1 Tap,
+  // 2 Swipe, 3 Inverted Tap). It is now that key as an on/off switch plus a gesture per page
+  // direction; a file that has neither gesture key yet is split once. The generic load above
+  // already folded a stored 2 or 3 to the On default.
+  if (doc["pageTurnGesture"].isNull() && doc["previousPageGesture"].isNull() &&
+      doc["touchReaderControls"].is<uint8_t>()) {
+    const auto legacy = reader_touch::migrateLegacyMode(doc["touchReaderControls"].as<uint8_t>());
+    if (legacy.valid) {
+      touchReaderControls = legacy.on;
+      pageTurnGesture = previousPageGesture = legacy.gesture;
+      needsResave = true;
+    }
+  }
 
   // Keep stored IDs stable while migrating retired sleep faces to Custom.
   if (wake_face::migrateSleepScreen(sleepScreen) != sleepScreen) {
@@ -493,8 +490,7 @@ const char* CrossPointSettings::getEffectiveDeviceName() const {
 }
 
 int CrossPointSettings::getRefreshFrequency() const {
-  const bool night = screenInverted && refreshFrequencyNight != NIGHT_REFRESH_SAME;
-  switch (night ? refreshFrequencyNight - 1 : refreshFrequency) {
+  switch (refreshFrequency) {
     case REFRESH_1:
       return 1;
     case REFRESH_5:
@@ -545,10 +541,6 @@ void CrossPointSettings::clearSdFontFamily() {
 
 int CrossPointSettings::getReaderFontId() const {
   return resolveReaderFontId(fontFamily, fontPointSize, sdFontFamilyName);
-}
-
-int CrossPointSettings::getTxtReaderFontId() const {
-  return resolveReaderFontId(fontFamily, txtFontPointSize, txtSdFontFamilyName);
 }
 
 int CrossPointSettings::getReaderFontId(const ReaderPrefs& prefs) const {

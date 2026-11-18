@@ -43,6 +43,17 @@ bottom-edge buttons **Back**, **Confirm**, **Left** and **Right**.
 The four bottom-edge buttons can be reassigned in **Settings > Controls > Remap Front Buttons**,
 and the side buttons can be swapped or disabled with **Side Button Layout (reader)**.
 
+### Touch page turning
+
+**Settings > Controls > Touch Reader Controls** switches touch page turning on or off. With it
+on, **Next Page** and **Previous Page** each take their own gesture: Tap & Swipe, Tap Only,
+Swipe Only (the default), Inverted Tap or Disabled. A swipe to the left goes on, a swipe to the
+right goes back. Taps turn from the outer thirds of the page, or from the whole page when only
+one direction accepts taps; the centre third opens the reader menu. Inverted Tap on either
+direction swaps the two sides. In a right-to-left EPUB (language Hebrew, Arabic or Persian) the swipes and
+the tap sides run the other way. Older settings files carry over: the old Tap, Swipe and
+Inverted Tap become the matching gesture for both directions.
+
 ### Tapping, on a device with a touch screen
 
 A tap takes two steps. The first tap on a row, a button or any other control highlights it
@@ -180,12 +191,7 @@ not count as reading.
 
 **Stats** on Home leads with this month as a calendar: each day fills from the bottom by how
 long you read that day, the longest day full, and today has a thick outline. Under it are the
-last 7 days, this year, all time and the books finished. The sleep screen shows the last 7
-days in a thin black band along its foot, on wallpapers and covers alike, when **Settings >
-Display > Show Reading Stats** is on (off by default). When you lock straight from a book,
-a **This sitting** line above it shows the time and pages of the sitting you just closed;
-it needs no clock. **Reading Stats Position** puts its
-text in the **Center** (default), or on the **Left** or **Right**.
+last 7 days, this year, all time and the books finished.
 
 Turning past the last page shows **End of book** with the title and author, the day you
 started and the day you finished, your total time and pages in that book, and the last quote
@@ -292,8 +298,8 @@ Three System settings move books for you as you read:
 | Previous page | **Left** or **Volume Up**        |
 | Next page     | **Right** or **Volume Down**     |
 
-**Settings > Controls > Side Button Layout (reader)** swaps the two side buttons or disables
-them while reading. **Orient front buttons** turns the bottom-edge buttons along with the
+**Settings > Controls > Side Button Layout (reader)** swaps the two side buttons, makes both turn
+the same way (Next/Next or Prev/Prev, for one-handed reading) or disables them while reading. **Orient front buttons** turns the bottom-edge buttons along with the
 page when you read in landscape.
 
 With **Short Power Button Click** set to **Page Turn**, a short press of **Power** also turns
@@ -310,9 +316,11 @@ position; explicit progress sync saves immediately.
 
 ### Chapters
 
-Chapter jumps live in the in-book menu, under **Navigate > Select Chapter**. Holding a page
-turn button does nothing: page turning fires on the press, so the page never waits to find out
-whether a hold was coming.
+Chapter jumps live in the in-book menu, under **Navigate > Select Chapter**. Page turning
+fires on the press, so the page never waits to find out whether a hold was coming. In an
+`.xtc` book, holding a page button for 0.7 seconds also jumps ten pages in that direction
+(the one page the press turned counts toward them), once per hold. Elsewhere holding a page
+button does nothing, unless you bind that hold in **Buttons**, which then takes precedence.
 
 ### Footnotes
 
@@ -342,6 +350,11 @@ of them can be pointed at any action.
 - **Long press while reading** — holding **Confirm** in the book.
 - **Hold in in-book menu** — holding **Confirm** with the menu open.
 - **Double-click power** — two quick presses of **Power**.
+
+On the X4 Pro a fresh device starts with a double press of **Home** and a double click of
+**Power** bound to **Toggle Frontlight**, and holding **Home** in a book bound to **Open Reader
+Menu**. Both are ordinary actions in the list, so any button can take them; a binding you have
+already saved is kept as it is. Other boards start with those gestures unbound.
 
 **Pop-up Items** decides which rows the quick pop-up those bindings can open actually
 contains.
@@ -376,10 +389,8 @@ and the number of rows it holds. Moving onto a heading opens it (the plus turns 
 and closes the one that was open. **Back** closes the open tab; a second **Back** leaves the
 menu. Rows that do not apply to the open book are not shown at all.
 
-The menu opens on **Sleep Screen**. **Settings > Reader > Book Menu Opens On** changes that to
-**Navigate**, **Book**, **Look** or **Device** instead, and that choice always wins. The
-**Sleep Screen** tab appears alongside the others while the lock screen has a wallpaper to act
-on; on nights it has none, a menu set to open there opens on **Navigate**.
+The menu opens on **Sleep Screen**. That tab appears alongside the others while the lock
+screen has a wallpaper to act on; on nights it has none, the menu opens on **Navigate**.
 
 ### Navigate
 
@@ -391,10 +402,6 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 - **Go to Page** — jump to a page number of the printed edition: type it as the book prints
   it (`147`, or `xii` in the front matter) and **OK**. Shown only in EPUB 3 books that carry
   the printed page numbers (a page list); Return takes you back.
-- **Search** — type a word or phrase and the book is searched chapter by chapter, straight
-  from the card; hits appear as they are found, each with a line of context and its chapter.
-  Case, curly quotes and line breaks do not matter. Up to 100 hits. Pick one to land on its
-  page (Return takes you back); Back stops the search. The last search is offered again.
 - **Return** — go back to where you were before selecting a chapter, jumping by percentage,
   or opening a bookmark. Keeps the last eight jump origins during this reading session;
   ordinary page turns do not add entries. Shown only while there is somewhere to return to.
@@ -411,8 +418,6 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 
 - **Look Up** — pick a word on the page and read its definition. Needs a dictionary, see
   [section 11](#11-fonts-and-dictionaries).
-- **Lookup History** — the last 100 words you looked up, newest first. Pick one to read its
-  definition again.
 - **Grab Quote** — save a passage from this page.
 - **View Quotes** — read back what you saved, shown once the book has quotes.
 - **Remove This Book** — unfile the book from recents; the file stays on the card.
@@ -518,9 +523,8 @@ Wallpaper rows in the in-book menu's Sleep Screen tab favourite, pause, hold and
 wallpaper the device just showed. Paused wallpapers move to `/sleep pause` and stop appearing
 in the rotation. **Settings > Display > Shuffle Wallpapers** reshuffles the order.
 
-Five Display settings decide what is drawn over a wallpaper: **Show Wallpaper Name**, **Show
-Favorite Badge**, **Show Wallpaper Position**, **Show Reading Stats** (this sitting and the last 7 days in a
-band along the foot) and **Sleep Footer Text** (your own line of text). **Sleep Image Quality** trades rendering time against how the image looks: **Fast** or
+Three Display settings decide what is drawn over a wallpaper: **Show Wallpaper Name**, **Show
+Wallpaper Position** and **Sleep Footer Text** (your own line of text). **Sleep Image Quality** trades rendering time against how the image looks: **Fast** or
 **Pretty**.
 
 ### Cover settings
@@ -951,8 +955,7 @@ Look a word up from the in-book menu's **Look Up** row, or bind a hold to **Dict
 its definition opens straight away, and Back returns to the page. To look up a phrase, hold
 its first word, drag to its last, and tap **Look Up** (see **Quotes**). A long definition turns pages
 with the same taps and side swipes as a book page, under **Touch Reader Controls**. A word with several entries in
-the dictionary shows all of them, each under its own headword. Every successful lookup is remembered: **Lookup History**, in the
-same menu, lists the last 100 words newest first and reopens any of them. Setup and usage
+the dictionary shows all of them, each under its own headword. Setup and usage
 are covered in [docs/dictionary.md](./docs/dictionary.md).
 
 ---
@@ -993,26 +996,18 @@ belongs to, so the rows here appear in the same order as on the device.
 - **Sleep Screen Cover Mode** — Fit or Crop.
 - **Sleep Screen Cover Filter** — None, Contrast or Inverted.
 - **Sleep Image Quality** — Fast or Pretty.
-- **Show Wallpaper Name**, **Show Favorite Badge**, **Show Wallpaper Position**, **Show
-  Reading Stats** — what is drawn over the wallpaper. All off by default.
-- **Reading Stats Position** — Center, Left or Right.
+- **Show Wallpaper Name**, **Show Wallpaper Position** — what is drawn over the wallpaper. Both off by default.
 - **Shuffle Wallpapers** — reshuffle the rotation now.
-- **Refresh Wallpaper** (X4 Pro) — off by default. A gray wallpaper drawn straight after a page or
-  a menu can keep faint outlines of it. On, the reader wakes by itself one minute after locking,
-  draws the same wallpaper again and goes back to sleep, which clears them. Only wallpapers are
-  redrawn, not book covers, and not when the battery is under 15%. A short Power press during
-  that redraw (a few seconds) is missed: press again.
 
 **Frontlight** (boards with a frontlight)
 
-- **Frontlight**, **Brightness**, **Warmth**, **Restore on Wake** (on by default).
-- **Max Brightness** — the top of the brightness range, 10 to 100 (default 30). The light
-  panel's brightness track runs from 0 to this, and a brightness above it is brought down.
-- **Light Schedule**, **Light On From**, **Light On Until** (boards with a clock) — at each
-  wake inside these hours the light comes on by itself, whatever it was before sleep; 20:00
-  to 07:00 by default, in 15-minute steps. Only the wake reads it: a light you change by hand
-  stays that way until the next one, and the light does not go off by itself at the end time.
-  Outside the hours **Restore on Wake** decides as usual.
+The frontlight has no rows in Settings. The light panel (swipe down from the top edge, or bind
+**Frontlight** to a button) holds on or off, brightness and warmth. **Toggle Frontlight**, a
+button action, flips it without opening the panel. The other frontlight options live on the web
+settings page only: **Max Brightness** (the top of the panel's brightness track, 10 to 100,
+default 30; a brightness above it is brought down), **Restore on Wake** (on by default), and **Light Schedule**
+(at each wake inside the set hours the light comes on by itself) with its **Light On From** and
+**Light On Until** times (20:00 and 07:00 by default, in quarter-hour steps).
 
 In a book the light panel also has **Align Left** and **Justify**, which set the book's paragraph
 alignment (for that EPUB alone; in a TXT book, for every TXT book), and **Paragraph Spacing**,
@@ -1023,8 +1018,6 @@ which turns the extra space between an EPUB's paragraphs on or off for that book
 - **Refresh Frequency** — a full refresh every 1, 5, 10, 15 or 30 pages, or **Never**. Never
   turns off the page-counted refresh only; the reader still cleans the panel when enough ink
   has moved to need it, so a long session does not end up smeared.
-- **Night Refresh Frequency** — the same choice while night mode is on. **Same as Day** (the
-  default) keeps Refresh Frequency; any other value applies only to inverted pages.
 - **Refresh at Chapter Start** — off by default. On adds a full refresh on the first page of
   each chapter you enter, on top of Refresh Frequency, so every chapter opens clean. EPUB only.
 - **Chapter Wipe** — off by default. On shows a crosshatch frame for one refresh (about half a
@@ -1036,6 +1029,8 @@ which turns the extra space between an EPUB's paragraphs on or off for that book
   **Reset to Defaults** goes back to this model's measurements. It is kept on the device, not on
   the card. Menu screens keep their own spacing.
 - **Sunlight Fading Fix** — software fix for white X4 units fading in direct sunlight. Not shown on the X4 Pro.
+- **Hide Battery %** — Never (default), In Reader or Always. The battery icon stays; In Reader
+  drops the number from the reader's status bar, Always from the screen headers too.
 
 **Home**
 
@@ -1054,7 +1049,7 @@ minus at one end and a plus at the other. Touch anywhere along the track to jump
 to that value, or drag along it and the value follows your finger. Left and Right move one
 step, the side buttons move five, and the preview under the band follows, so nothing ever
 covers the page you are judging. Back or Select puts the band away; there is nothing to
-confirm, because every change has already been applied. Sleep timeout, frontlight and the
+confirm, because every change has already been applied. Sleep timeout and the
 other numbers in Settings use the same band.
 
 - **Font** — Noto Serif, Noto Sans, plus any SD card families; opens a full-screen picker.
@@ -1138,7 +1133,6 @@ is centred.
   (default) tucks each number into the indent just before the paragraph's first letter;
   Page Edge lines them up in a column at the left edge. Either way they sit centred on
   the first line, and a number is left out where there is no room for it.
-- **Book Menu Opens On** — which tab the in-book menu starts on: Sleep Screen (default), Navigate, Book, Look or Device.
 
 **Look**
 
@@ -1156,7 +1150,7 @@ is centred.
 **Customise Status Bar** places each element in one of six slots (top left, top centre, top
 right, bottom left, bottom centre, bottom right) or turns it off: **Battery**, **Clock**,
 **Chapter Title**, **Book Title**, **Page in Chapter**, **Book %**, **Chapter %**, **Chapter Number**, **Pages This
-Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Alongside them:
+Session**, **Pages to Paragraph**. Alongside them:
 
 - **Chapter Title** and **Book Title** can go in different slots, for example the book on top
   and the chapter at the bottom. Put both on the same edge (both top or both bottom) and they
@@ -1172,11 +1166,6 @@ Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Al
 - **Pages to Paragraph** shows `>P.0` on most pages: the paragraph you are in ends before the
   next one starts. `>P.2` means it runs two more pages. In a TXT book each line break starts a
   paragraph, so a file broken into short lines always shows `>P.0`.
-- **Chapter time left** (`C:12m`) and **Book time left** (`B:3h05`) estimate from how long you
-  spend per page this sitting. They appear after three timed pages; turns under 2 seconds or
-  over 10 minutes are not counted. On EPUB the book estimate scales the rest of the book by the
-  current chapter, so it settles as you read. A TXT book has no chapters, so it shows Book time
-  left only, counted from its exact pages left.
 - **Book Bar** and **Chapter Bar** — Off, Top or Bottom, with **Bar Thickness** (Slim 3 px,
   Medium 6 px, Fat 9 px). On EPUB books the Book Bar has a small notch where each chapter
   starts. A book with more than 64 chapters shows a plain bar.
@@ -1195,7 +1184,7 @@ Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Al
 
 - **Remap Front Buttons** — reassign each bottom-edge button (X3/X4 only; unavailable on X4 Pro).
 - **Orient front buttons** — rotate their meaning with the screen.
-- **Side Button Layout (reader)** — Prev/Next, Next/Prev or Disabled.
+- **Side Button Layout (reader)** — Prev/Next, Next/Prev, Disabled, Next/Next or Prev/Prev.
 
 **Power button**
 
@@ -1237,21 +1226,6 @@ Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Al
 - **Clear Read Books from Recent List**.
 - **Move Finished Books to Read Folder**.
 - **Move Opened Books to Recents Folder**.
-
-**Fast Page Turns** — on by default on the X4, where it is validated. On the X4 Pro it has its
-own row on the main **Settings** page, off by default while it is being tried out. That page
-holds the switch and what to test, and it changes nothing on units with a UC8279 panel.
-Page turns and menu moves use the panel's cheapest waveform, which is several times quicker than the standard
-one. Every eighth pass runs the standard waveform anyway, so the panel never works from a
-stale temperature reading, and the first paint after a wake never uses it. Turn it off if
-you ever see ink left behind that a full refresh does not clear.
-
-**Performance Timings** — off by default, and free while it is off. On, Lector times every
-screen refresh and reports the numbers three ways: a small line in the top-left corner of
-the screen showing what the previous refresh cost, a breakdown of the last wake in place of
-the unlock screen footer, and a `.csv` file per session in the `/perf` folder on the card.
-It is there so a slow page turn can be measured rather than guessed at. Turn it off again
-when you are done; it writes to the card while it is on.
 
 **Network** — **Wi-Fi Networks**, **KOReader Sync**, **OPDS Servers**, **Share WiFi and OPDS**.
 
@@ -1345,15 +1319,6 @@ cache folders.
 
 **A crash happened.** Lector writes a crash report to the SD card without needing a USB
 connection. Attach that file to any bug report.
-
-**A firmware update failed, or ran to the end and the old firmware came back.** Lector keeps
-`lector-flash-diagnostics.txt` at the root of the card: every install attempt from the card or
-over the air, where it stopped and at which byte, the battery and memory at the time, the
-partition table and boot record, the boot after an install, and any crash or watchdog restart.
-It also records Wi-Fi connection progress, so a stall at **Connecting...** leaves evidence
-even before an update starts. Leave it for two minutes, then send the same file.
-Send that whole file. It names no book, network or device. It is kept to the last two days and a
-few kilobytes, and the web interface home page links to it (the *Diagnostics* link).
 
 **More detail is needed.** Connect the device over USB and run the debugging monitor (needs
 Python 3 with `pyserial`, `colorama` and `matplotlib`; install with

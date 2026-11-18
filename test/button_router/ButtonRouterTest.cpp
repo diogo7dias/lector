@@ -324,3 +324,22 @@ TEST(ButtonRouter, SwappedSideLayoutTradesTheSideKeysNatives) {
   router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_DISABLED, LP_MENU_DISABLED}, button_router::nativeFor(LEFT, true));
   EXPECT_TRUE(router.intercepts(LEFT));
 }
+
+TEST(ButtonRouter, OneHandedLayoutsPointBothSideKeysTheSameWay) {
+  using button_router::sideKeyPage;
+  EXPECT_EQ(sideKeyPage(0, 0), LP_MENU_PAGE_PREV);
+  EXPECT_EQ(sideKeyPage(1, 0), LP_MENU_PAGE_NEXT);
+  EXPECT_EQ(sideKeyPage(0, 1), LP_MENU_PAGE_NEXT);
+  EXPECT_EQ(sideKeyPage(1, 1), LP_MENU_PAGE_PREV);
+  EXPECT_EQ(sideKeyPage(0, 2), LP_MENU_PAGE_PREV);  // Disabled leaves the keys alone
+  EXPECT_EQ(sideKeyPage(1, 3), LP_MENU_PAGE_NEXT);
+  EXPECT_EQ(sideKeyPage(0, 3), LP_MENU_PAGE_NEXT);
+  EXPECT_EQ(sideKeyPage(0, 4), LP_MENU_PAGE_PREV);
+  EXPECT_EQ(sideKeyPage(1, 4), LP_MENU_PAGE_PREV);
+  // Next/Next: the left key already pages forward, so forward on it is native, back is a remap.
+  Router router;
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED}, button_router::nativeFor(LEFT, 3));
+  EXPECT_FALSE(router.intercepts(LEFT));
+  router.configure(LEFT, {LP_MENU_PAGE_PREV, LP_MENU_DISABLED, LP_MENU_DISABLED}, button_router::nativeFor(LEFT, 3));
+  EXPECT_TRUE(router.intercepts(LEFT));
+}

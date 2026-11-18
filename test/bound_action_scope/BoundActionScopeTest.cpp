@@ -58,3 +58,11 @@ TEST(BoundActionScope, DeletingAWallpaperNeedsAnOpenBook) {
 }
 
 TEST(BoundActionScope, QuickLockWorksAnywhere) { EXPECT_TRUE(allowedOutsideBook(LP_MENU_QUICK_LOCK)); }
+
+TEST(BoundActionScope, ToggleFrontlightWorksAnywhereButTheReaderMenuNeedsABook) {
+  EXPECT_TRUE(allowedOutsideBook(LP_MENU_TOGGLE_FRONTLIGHT));
+  EXPECT_FALSE(allowedOutsideBook(LP_MENU_OPEN_READER_MENU));
+  // Appended after Quick Lock: saved bindings keep their numbers.
+  EXPECT_EQ(LP_MENU_TOGGLE_FRONTLIGHT, LP_MENU_QUICK_LOCK + 1);
+  EXPECT_EQ(LP_MENU_OPEN_READER_MENU, LP_MENU_QUICK_LOCK + 2);
+}

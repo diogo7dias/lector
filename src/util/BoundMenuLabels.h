@@ -90,6 +90,10 @@ inline StrId boundMenuActionLabel(const uint8_t function) {
       return StrId::STR_SLEEP;
     case CrossPointSettings::LP_MENU_QUICK_LOCK:
       return StrId::STR_QUICK_LOCK;
+    case CrossPointSettings::LP_MENU_TOGGLE_FRONTLIGHT:
+      return StrId::STR_TOGGLE_FRONTLIGHT;
+    case CrossPointSettings::LP_MENU_OPEN_READER_MENU:
+      return StrId::STR_OPEN_READER_MENU;
     case CrossPointSettings::LP_MENU_POPUP:
     default:
       return StrId::STR_MENU_POPUP;

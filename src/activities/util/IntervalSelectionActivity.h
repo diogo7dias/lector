@@ -16,21 +16,6 @@ class GfxRenderer;
 // buttons and (on touch) Cancel/OK all get room to be finger-sized.
 class IntervalSelectionActivity final : public UiStatusActivity {
  public:
-  // Applied on every change while the dialog is open, for values judged on the
-  // device rather than on the number (frontlight, margins). Cancel re-applies
-  // whatever the dialog opened with, so backing out really does back out.
-  // Function pointer + context rather than std::function: this is on the
-  // activity-construction path of every numeric row (CLAUDE.md, template and
-  // std::function bloat).
-  struct LiveApply {
-    void (*fn)(void* ctx, int value) = nullptr;
-    void* ctx = nullptr;
-  };
-  void setLiveApply(const LiveApply apply) { liveApply = apply; }
-  // Replaces the readout for a value that is not a plain number (a time of day).
-  using ReadoutFormat = void (*)(int value, char* out, size_t outSize);
-  void setReadoutFormat(const ReadoutFormat format) { readoutFormat = format; }
-
   explicit IntervalSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* activityName,
                                      StrId titleId, int initialValue, int minValue, int maxValue, int smallStep,
                                      int largeStep, StrId valueFormatId = StrId::STR_NONE_OPT,
@@ -71,11 +56,6 @@ class IntervalSelectionActivity final : public UiStatusActivity {
   bool readerActivity;
   bool ignoreConfirmRelease;
   ButtonNavigator buttonNavigator;
-  LiveApply liveApply;
-  ReadoutFormat readoutFormat = nullptr;
-  // What to hand back to liveApply if the reader cancels.
-  int openedWithValue = 0;
-  void applyLive() const;
 
   // The strings the view hands out as pointers, so they outlive it.
   std::string valueText;

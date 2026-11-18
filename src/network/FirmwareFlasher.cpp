@@ -11,7 +11,7 @@
 #include <cstring>
 #include <memory>
 
-#include "Diagnostics.h"
+#include "FirmwareBoardTag.h"
 #include "FirmwareSwitchAudit.h"
 #include "FlashWriteVerify.h"
 #include "OtaBootSwitch.h"
@@ -49,6 +49,8 @@ const char* resultName(Result r) {
       return "BAD_SHA";
     case Result::BAD_CHIP:
       return "BAD_CHIP";
+    case Result::BAD_BOARD:
+      return "BAD_BOARD";
     case Result::BAD_SIZE:
       return "BAD_SIZE";
     case Result::NO_PARTITION:
@@ -97,14 +99,15 @@ namespace {
 // Stream `length` bytes from `file` starting at the current read offset, feeding them through
 // both the XOR-checksum and SHA256 accumulators. Used by validateImageStream so the whole image
 // is verified end-to-end without holding it in RAM (ESP32-C3 only has ~380 KB).
-Result feedHashAndChecksum(ByteSource& src, size_t length, uint8_t* xorAccum, mbedtls_sha256_context* sha,
-                           uint8_t* buf) {
+Result feedHashAndChecksum(ByteSource& src, size_t length, uint8_t* xorAccum, mbedtls_sha256_context* sha, uint8_t* buf,
+                           board_tag::Scanner* tag) {
   size_t remaining = length;
   while (remaining > 0) {
     const size_t want = std::min<size_t>(CHUNK, remaining);
     const int got = src.read(buf, want);
     if (got <= 0 || static_cast<size_t>(got) != want) return Result::READ_FAIL;
     if (sha) mbedtls_sha256_update(sha, buf, want);
+    if (tag) tag->feed(buf, want);
     if (xorAccum) {
       uint8_t acc = *xorAccum;
       for (size_t i = 0; i < want; i++) acc ^= buf[i];
@@ -232,6 +235,7 @@ Result validateImageStream(ByteSource& file, size_t partitionSize) {
 
   uint8_t xorAccum = CHECKSUM_SEED;
   size_t pos = HEADER_SIZE;
+  board_tag::Scanner tag;
 
   for (uint8_t i = 0; i < segCount; i++) {
     if (pos + SEG_HEADER_SIZE > fileSize) {
@@ -256,7 +260,7 @@ Result validateImageStream(ByteSource& file, size_t partitionSize) {
       return Result::BAD_SEGMENTS;
     }
 
-    const Result feedRes = feedHashAndChecksum(file, dataLen, &xorAccum, &shaCtx, buf.get());
+    const Result feedRes = feedHashAndChecksum(file, dataLen, &xorAccum, &shaCtx, buf.get(), &tag);
     if (feedRes != Result::OK) {
       mbedtls_sha256_free(&shaCtx);
       return feedRes;
@@ -315,6 +319,11 @@ Result validateImageStream(ByteSource& file, size_t partitionSize) {
   }
 
   mbedtls_sha256_free(&shaCtx);
+  if (tag.mismatch()) {
+    LOG_ERR("FLASH", "validate: wrong board: image=%s device=%.*s", tag.foundName(),
+            static_cast<int>(board_tag::boardNameLen()), board_tag::boardName());
+    return Result::BAD_BOARD;
+  }
   return Result::OK;
 }
 
@@ -341,22 +350,9 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
   // Resolve destination first so we can size-check during validation. The full image-integrity
   // pass below verifies header, segment table, XOR checksum and SHA256 trailer end-to-end before
   // we touch otadata, so a truncated/corrupted .bin can never become the next boot target.
-  // Opened before anything can fail: a device with no serial console gives us
-  // nothing else, and "no next-update partition" is exactly the case where the
-  // partition table dump is the answer. The size is measured first rather than
-  // taken from the stream opened below: a placeholder 0 in this line once had
-  // a user's perfectly good image diagnosed as an empty file.
-  size_t imageSize = diag::kUnknownSize;
-  {
-    HalFile probe = Storage.open(sdPath, O_RDONLY);
-    if (probe) imageSize = probe.fileSize();
-  }
-  diag::beginAttempt(diag::Source::Sd, sdPath, imageSize);
-
   const esp_partition_t* dest = esp_ota_get_next_update_partition(nullptr);
   if (!dest) {
     LOG_ERR("FLASH", "no next-update partition");
-    diag::endAttempt(resultName(Result::NO_PARTITION), "partition lookup");
     return Result::NO_PARTITION;
   }
 
@@ -368,19 +364,13 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
     const Result validateRes = validateImageFile(sdPath, dest->size);
     if (validateRes != Result::OK) {
       LOG_ERR("FLASH", "image validation failed: %s", resultName(validateRes));
-      diag::note("  validate: %s", resultName(validateRes));
-      diag::endAttempt(resultName(validateRes), "validate");
       return validateRes;
     }
-    diag::note("  validate: OK (header, segments, checksum, sha256)");
-  } else {
-    diag::note("  validate: skipped (caller validated)");
   }
 
   SdFileSource source;
   if (!source.open(sdPath)) {
     LOG_ERR("FLASH", "open failed: %s", sdPath);
-    diag::endAttempt(resultName(Result::OPEN_FAIL), "open");
     return Result::OPEN_FAIL;
   }
   PartitionTarget target(dest);
@@ -392,14 +382,8 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
     LOG_ERR("FLASH", "write failed: %s at %u", resultName(writeRes), static_cast<unsigned>(lastFailureOffset()));
     // READ_FAIL here is the card, not the image: validation already read the
     // whole file once. The offset says how far the second read got.
-    diag::note("  write: %s at byte %u of %u (0x%X)%s", resultName(writeRes),
-               static_cast<unsigned>(lastFailureOffset()), static_cast<unsigned>(source.size()),
-               static_cast<unsigned>(lastFailureOffset()),
-               writeRes == Result::READ_FAIL ? " - card stopped answering mid-read; image had already validated" : "");
-    diag::endAttempt(resultName(writeRes), "write");
     return writeRes;
   }
-  diag::note("  write: OK %u bytes", static_cast<unsigned>(source.size()));
 
   // Readback: what the bootloader will validate is what is in flash now, not
   // what was on the card. Switching otadata to a slot the bootloader then
@@ -407,22 +391,14 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
   const Result verifyRes = verifyImage(source, target, onVerifyProgress, ctx);
   if (verifyRes != Result::OK) {
     const unsigned at = static_cast<unsigned>(lastFailureOffset());
-    LOG_ERR("FLASH", "readback failed: %s (offset %u)", resultName(verifyRes), at);
-    diag::note("  readback: %s at byte %u of %u (0x%X, %s)", resultName(verifyRes), at,
-               static_cast<unsigned>(source.size()), at, failureOffsetHint(at));
-    diag::noteVitals();
-    diag::endAttempt(resultName(verifyRes), "readback");
+    LOG_ERR("FLASH", "readback failed: %s (offset %u, %s)", resultName(verifyRes), at, failureOffsetHint(at));
     return verifyRes;
   }
-  diag::note("  readback: OK %u bytes match flash", static_cast<unsigned>(source.size()));
   const bool switchOk = ota_boot::switchTo(dest);
-  diag::recordSwitch(dest->address, dest->label, dest->subtype, switchOk);
   if (!switchOk) {
     LOG_ERR("FLASH", "otadata switch failed");
-    diag::endAttempt(resultName(Result::OTADATA_FAIL), "switch");
     return Result::OTADATA_FAIL;
   }
-  diag::endAttempt(resultName(Result::OK), nullptr);
   // Leave a breadcrumb the next boot checks: if the bootloader refuses this
   // image it boots the other slot without touching otadata, and that silent
   // fallback is the only trace it leaves.
@@ -475,26 +451,18 @@ Result StreamingInstall::commit() {
   Result validateRes = validateFlashedImage(impl_->dest, imageSize);
   if (validateRes != Result::OK) {
     LOG_ERR("FLASH", "flashed image invalid: %s", resultName(validateRes));
-    diag::note("  readback validate: %s over %u bytes in flash", resultName(validateRes),
-               static_cast<unsigned>(imageSize));
-    diag::endAttempt(resultName(validateRes), "readback validate");
     return validateRes;
   }
-  diag::note("  readback validate: OK (%u bytes in flash: header, segments, checksum, sha256)",
-             static_cast<unsigned>(imageSize));
   // ota_boot::switchTo, not esp_ota_set_boot_partition: the latter marks the
   // slot NEW, which arms the bootloader's rollback. Firmware that is not built
   // on the Arduino core never calls esp_ota_mark_app_valid_cancel_rollback(),
   // so its first boot would be rolled straight back into this one and the
   // device would look permanently stuck on lector. See OtaBootEntry.h.
   const bool switchOk = ota_boot::switchTo(impl_->dest);
-  diag::recordSwitch(impl_->dest->address, impl_->dest->label, impl_->dest->subtype, switchOk);
   if (!switchOk) {
     LOG_ERR("FLASH", "otadata switch failed");
-    diag::endAttempt(resultName(Result::OTADATA_FAIL), "switch");
     return Result::OTADATA_FAIL;
   }
-  diag::endAttempt(resultName(Result::OK), nullptr);
   recordPendingSwitch(impl_->dest->address, imageSize);
   return Result::OK;
 }

@@ -11,19 +11,6 @@
 
 namespace reading_journal {
 
-namespace {
-bool g_haveLast = false;
-uint32_t g_lastSeconds = 0;
-uint32_t g_lastPages = 0;
-}  // namespace
-
-bool lastSitting(uint32_t& seconds, uint32_t& pages) {
-  if (!g_haveLast) return false;
-  seconds = g_lastSeconds;
-  pages = g_lastPages;
-  return true;
-}
-
 bool localNow(Civil& out) {
   uint16_t year;
   uint8_t month, day, hour, minute;
@@ -41,11 +28,7 @@ bool localNow(Civil& out) {
 void append(Session& session, const uint32_t nowMs, const char* title) {
   session.clock.touch(nowMs);
   const uint32_t seconds = session.clock.seconds();
-  // Set before the write: a sitting the card failed to keep was still read.
-  g_haveLast = seconds >= MIN_SESSION_S;
-  g_lastSeconds = seconds;
-  g_lastPages = session.pages;
-  if (!g_haveLast) return;
+  if (seconds < MIN_SESSION_S) return;
 
   Civil now;
   const bool dated = localNow(now);
@@ -74,18 +57,11 @@ void append(Session& session, const uint32_t nowMs, const char* title) {
 
 namespace {
 
-// Streams the journal through `fold.addText`, never holding it whole. tailBytes > 0 starts
-// that far from the end, at the first whole line.
+// Streams the journal through `fold.addText`, never holding it whole.
 template <class Fold>
-bool foldJournal(Fold& fold, const size_t tailBytes) {
+bool foldJournal(Fold& fold) {
   HalFile f;
   if (!Storage.exists(PATH) || !Storage.openFileForRead("JRN", PATH, f)) return false;
-  const size_t size = f.fileSize();
-  bool skipToNewline = false;
-  if (tailBytes > 0 && size > tailBytes) {
-    f.seekSet(size - tailBytes);
-    skipToNewline = true;  // landed mid-line
-  }
 
   // Heap, not stack: 448 bytes is over the stack budget. Held only while folding.
   constexpr size_t CHUNK = 256;
@@ -100,17 +76,7 @@ bool foldJournal(Fold& fold, const size_t tailBytes) {
     const int n = f.read(buf + have, CHUNK);
     if (n <= 0) break;
     const size_t len = have + static_cast<size_t>(n);
-    size_t start = 0;
-    if (skipToNewline) {
-      const char* nl = static_cast<const char*>(memchr(buf, '\n', len));
-      if (!nl) {
-        have = 0;
-        continue;
-      }
-      start = static_cast<size_t>(nl - buf) + 1;
-      skipToNewline = false;
-    }
-    size_t carry = fold.addText(buf + start, len - start);
+    size_t carry = fold.addText(buf, len);
     // A line longer than any we write is not ours: drop it rather than overflow.
     if (carry > MAX_LINE) carry = 0;
     memmove(buf, buf + len - carry, carry);
@@ -121,12 +87,12 @@ bool foldJournal(Fold& fold, const size_t tailBytes) {
 
 }  // namespace
 
-bool summarize(Summary& summary, const size_t tailBytes) {
+bool summarize(Summary& summary) {
   Civil today;
   if (localNow(today)) summary.setToday(today);
-  return foldJournal(summary, tailBytes);
+  return foldJournal(summary);
 }
 
-bool bookHistory(BookHistory& history) { return foldJournal(history, 0); }
+bool bookHistory(BookHistory& history) { return foldJournal(history); }
 
 }  // namespace reading_journal

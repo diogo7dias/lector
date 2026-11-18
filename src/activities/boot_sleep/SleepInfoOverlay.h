@@ -7,8 +7,7 @@ class GfxRenderer;
 
 // Draws the optional sleep-screen info overlays:
 //  - bottom-left: showSleepImageFilename ON -> the wallpaper's
-//    (favorite-suffix-stripped) filename in a filled box; else
-//    showSleepFavoriteBadge ON and the file is a favorite -> a small "F" box.
+//    (favorite-suffix-stripped) filename in a filled box.
 //  - bottom-right: showSleepWallpaperPosition ON and the scope carries a
 //    rotation position -> "position / total" with a progress bar, showing how
 //    far the wallpaper line is through its current loop.
@@ -18,14 +17,6 @@ class GfxRenderer;
 // once per render pass (BW base + LSB + MSB) so it composites solid, mirroring
 // how the wallpaper itself is redrawn per pass.
 void drawSleepInfoOverlay(GfxRenderer& renderer);
-
-// A thin band across the foot of every wallpaper and cover face: the sitting this lock just
-// closed (when it left a book), above the last seven days of reading from the journal. Read
-// here, once, so the per-pass overlay only draws it; nothing when showSleepReadingStats is
-// off, or there is neither a sitting nor a dated session in the week.
-// clearSleepReadingLine() after the render.
-void prepareSleepReadingLine();
-void clearSleepReadingLine();
 
 // Names the wallpaper the overlay describes, for as long as the guard lives.
 // The overlay hook is a plain function pointer with no context parameter, so the

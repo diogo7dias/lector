@@ -20,7 +20,6 @@
 #include <cstring>
 
 #include "CrossPointSettings.h"
-#include "Diagnostics.h"
 #include "FetchUrlPolicy.h"
 #include "FontInstaller.h"
 #include "HttpDownloader.h"
@@ -306,7 +305,8 @@ bool crc32OfFilePrefix(const String& path, const size_t length, uint32_t& outCrc
 }  // namespace
 
 void CrossPointWebServer::abortWsUpload(const char* tag, const bool keepPartial, const char* reason) {
-  diag::recordTransferFailure("ws", reason, wsUploadReceived, wsUploadSize, WiFi.RSSI());
+  LOG_DBG(tag, "Upload stopped at %u of %u bytes: %s", static_cast<unsigned>(wsUploadReceived),
+          static_cast<unsigned>(wsUploadSize), reason);
   // Explicit close() required: file-scope global persists beyond function scope
   wsUploadFile.close();
   if (keepPartial) {
@@ -399,10 +399,6 @@ void CrossPointWebServer::handleClient() {
     wsServer->loop();
     ws_idle::closeIdleClients(*wsServer, wsLastActivity, WEBSOCKETS_SERVER_CLIENT_MAX, millis());
   }
-  // A transfer that failed in the pump above reaches the card here, outside
-  // any render lock; a no-op when nothing was recorded.
-  diag::flushIfPending();
-
   answerDiscovery();
 
   // Last, so the transfer starts from a serviced server rather than from the
@@ -958,8 +954,6 @@ void CrossPointWebServer::handleDownload() const {
   }
 
   String itemPath = normalizeWebPath(server->arg("path"));
-  // The diagnostics file is downloaded to be sent; make sure it is current.
-  if (itemPath == diag::kFilePath) diag::flush();
   if (itemPath.isEmpty() || itemPath == "/") {
     server->send(400, "text/plain", "Invalid path");
     return;
@@ -1217,7 +1211,6 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     }
     state.error = "Upload aborted";
     LOG_DBG("WEB", "Upload aborted");
-    diag::recordTransferFailure("http", "client aborted", state.size, diag::kUnknownSize, WiFi.RSSI());
   }
 }
 
@@ -1226,10 +1219,6 @@ void CrossPointWebServer::handleUploadPost(UploadState& state) const {
     server->send(200, "text/plain", "File uploaded successfully: " + state.fileName);
   } else {
     const String error = state.error.isEmpty() ? "Unknown error during upload" : state.error;
-    // An abort was recorded where it happened; state.error may name the file.
-    if (state.error != "Upload aborted") {
-      diag::recordTransferFailure("http", "rejected or card error", state.size, diag::kUnknownSize, WiFi.RSSI());
-    }
     server->send(400, "text/plain", error);
   }
 }
@@ -1617,8 +1606,6 @@ void CrossPointWebServer::handleGetSettings() const {
 
   for (const auto& s : settings) {
     if (!s.key) continue;  // Skip ACTION-only entries
-    // The X4 Pro trial: its switch sits on the device, beside the instructions for it.
-    if (s.valuePtr == &CrossPointSettings::fastPageTurns && s.category == StrId::STR_NONE_OPT) continue;
 
     doc.clear();
     doc["key"] = s.key;
@@ -1669,6 +1656,7 @@ void CrossPointWebServer::handleGetSettings() const {
         doc["min"] = s.shownValue(s.valueRange.min);
         doc["max"] = s.shownValue(s.valueRange.max);
         doc["step"] = s.valueRange.step;
+        if (s.minutesPerStep) doc["minutesPerStep"] = s.minutesPerStep;
         break;
       }
       case SettingType::STRING: {

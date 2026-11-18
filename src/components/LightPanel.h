@@ -21,7 +21,6 @@
 #include "icons/thermometer24.h"
 #include "util/BoundMenuLabels.h"
 #include "util/ButtonNavigator.h"
-#include "util/DebugTrace.h"
 
 // The light panel: a band pulled down from the top edge holding the frontlight's controls
 // and the actions that make sense where you are. Drawn over the page without clearing it,
@@ -60,7 +59,6 @@ class LightPanel {
   }
 
   void show() {
-    debug_trace::note("light panel show(), present=%d", Frontlight.present() ? 1 : 0);
     if (!Frontlight.present()) return;
     on_ = Frontlight.isOn();
     brightness_ = Frontlight.brightness();
@@ -242,7 +240,6 @@ class LightPanel {
 
   bool processRender(GfxRenderer& renderer) const {
     if (!active_) return false;
-    debug_trace::note("light panel rendering");
     render(renderer);
     renderer.displayBuffer();
     return true;

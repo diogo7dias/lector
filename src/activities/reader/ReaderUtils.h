@@ -14,6 +14,7 @@ namespace ReaderUtils {
 
 constexpr unsigned long GO_HOME_MS = 1000;
 constexpr unsigned long GO_BACK_OR_HOME_MS = GO_HOME_MS;
+constexpr unsigned long SKIP_HOLD_MS = 700;  // holding a page button this long skips pages (.xtc)
 constexpr unsigned long BOOKMARK_HOLD_MS = 400;
 
 constexpr unsigned long BOOKMARK_MESSAGE_DURATION_MS = 2500;
@@ -44,34 +45,36 @@ struct TouchPageTurn {
   unsigned long heldMs;
 };
 
-inline reader_touch::Mode touchMode() { return static_cast<reader_touch::Mode>(SETTINGS.touchReaderControls); }
+inline reader_touch::Gesture nextPageGesture() { return static_cast<reader_touch::Gesture>(SETTINGS.pageTurnGesture); }
+inline reader_touch::Gesture previousPageGesture() {
+  return static_cast<reader_touch::Gesture>(SETTINGS.previousPageGesture);
+}
 inline reader_touch::MenuMode readerMenuMode() { return static_cast<reader_touch::MenuMode>(SETTINGS.showReaderMenu); }
 
 // Touch on the open page: page turns and the tap into the reader menu, in one pass.
-// A swipe is read first so a slow drag never also registers as a tap.
-inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const MappedInputManager& input) {
+// A swipe is read first so a slow drag never also registers as a tap. A right-to-left book
+// (Hebrew, Arabic, Persian) turns pages the other way, for swipes and tap zones alike.
+inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const MappedInputManager& input,
+                                         const bool rtlBook = false) {
   TouchPageTurn result{false, false, false, 0};
-  const reader_touch::Mode mode = touchMode();
-  if (mode == reader_touch::Mode::Off || !input.hasTouch()) return result;
+  const bool on = SETTINGS.touchReaderControls != 0;
+  if (!on || !input.hasTouch()) return result;
 
-  if (reader_touch::swipeTurnsPages(mode)) {
-    const auto dir = input.wasSwipe();
-    if (dir == MappedInputManager::SwipeDir::Left) {
-      result.next = true;
-      return result;
-    }
-    if (dir == MappedInputManager::SwipeDir::Right) {
-      result.prev = true;
-      return result;
-    }
+  const auto dir = input.wasSwipe();
+  if (dir == MappedInputManager::SwipeDir::Left || dir == MappedInputManager::SwipeDir::Right) {
+    const auto turn = reader_touch::swipeAction(on, nextPageGesture(), previousPageGesture(), rtlBook,
+                                                dir == MappedInputManager::SwipeDir::Left);
+    result.next = turn == reader_touch::TapAction::Next;
+    result.prev = turn == reader_touch::TapAction::Prev;
+    if (result.next || result.prev) return result;
   }
 
   int x = 0;
   int y = 0;
   if (!input.wasScreenTapped(x, y)) return result;
 
-  switch (
-      reader_touch::tapAction(mode, readerMenuMode(), renderer.getScreenWidth(), renderer.getScreenHeight(), x, y)) {
+  switch (reader_touch::tapAction(on, nextPageGesture(), previousPageGesture(), readerMenuMode(), rtlBook,
+                                  renderer.getScreenWidth(), renderer.getScreenHeight(), x, y)) {
     case reader_touch::TapAction::Prev:
       result.prev = true;
       break;
@@ -98,7 +101,7 @@ inline bool isTouchMenuGesture(const GfxRenderer& renderer, const MappedInputMan
 
   // With page-turn controls off, detect the centre tap here instead of in
   // detectTouchPageTurn(), which intentionally ignores page input in that mode.
-  if (touchMode() == reader_touch::Mode::Off && readerMenuMode() == reader_touch::MenuMode::Tap) {
+  if (SETTINGS.touchReaderControls == 0 && readerMenuMode() == reader_touch::MenuMode::Tap) {
     int x = 0;
     int y = 0;
     if (!input.wasScreenTapped(x, y)) return false;
@@ -108,6 +111,18 @@ inline bool isTouchMenuGesture(const GfxRenderer& renderer, const MappedInputMan
            y < renderer.getScreenHeight() - thirdHeight;
   }
   return false;
+}
+
+// Which way the page button held down right now points: -1 back, +1 forward, 0 none. A held
+// button hidden by a bound hold (the router masks it) reads as not held, so a hold the user
+// bound to an action never also skips pages.
+inline int heldPageDirection(const MappedInputManager& input) {
+  const bool swapFront = input.isNavDirectionSwapped();
+  const auto prevButton = swapFront ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
+  const auto nextButton = swapFront ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
+  if (input.isPressed(MappedInputManager::Button::PageBack) || input.isPressed(prevButton)) return -1;
+  if (input.isPressed(MappedInputManager::Button::PageForward) || input.isPressed(nextButton)) return 1;
+  return 0;
 }
 
 struct PageTurnResult {

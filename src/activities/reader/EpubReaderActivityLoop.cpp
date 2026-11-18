@@ -2,13 +2,11 @@
 #include <Logging.h>
 
 #include "CrossPointSettings.h"
-#include "DictionaryHistoryActivity.h"
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderActivity.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
-#include "EpubReaderSearchActivity.h"
 #include "KOReaderAutoSync.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
@@ -164,8 +162,7 @@ void EpubReaderActivity::loop() {
   int pinchY1 = 0;
   int pinchX2 = 0;
   int pinchY2 = 0;
-  if (SETTINGS.touchReaderControls != CrossPointSettings::TOUCH_READER_OFF &&
-      mappedInput.getTwoFingerTouch(pinchX1, pinchY1, pinchX2, pinchY2)) {
+  if (SETTINGS.touchReaderControls != 0 && mappedInput.getTwoFingerTouch(pinchX1, pinchY1, pinchX2, pinchY2)) {
     if (!pinchGesture.isActive()) gpio.suppressTouchContact();
     const auto action = pinchGesture.update(pinchX1, pinchY1, pinchX2, pinchY2);
     if (action != ReaderPinchGesture::Action::None) {
@@ -184,7 +181,8 @@ void EpubReaderActivity::loop() {
   // Touch on the open page, read once per loop: a tap or swipe can turn the page or
   // open the menu. Read before the Confirm handling below so the menu opens from
   // either input on the same pass.
-  const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
+  const auto touch =
+      ReaderUtils::detectTouchPageTurn(renderer, mappedInput, reader_touch::isRtlLanguage(epub->getLanguage().c_str()));
   if (ReaderUtils::isTouchMenuGesture(renderer, mappedInput, touch.menu)) {
     openReaderMenu();
     return;

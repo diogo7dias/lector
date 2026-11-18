@@ -83,6 +83,8 @@ TEST(ReaderLookFields, SettingTheWholeListTouchesEveryLiveByte) {
   const auto* bytes = reinterpret_cast<const uint8_t*>(&p);
   // Apart from the font name and the retired bytes, every field gets a distinct non-zero value.
   EXPECT_EQ(0, p.reserved14);
+  EXPECT_EQ(0, p.retiredChapterTime);
+  EXPECT_EQ(0, p.retiredBookTime);
   const size_t retired[] = {offsetof(ReaderPrefs, reserved14),
                             offsetof(ReaderPrefs, retiredParagraphSpacing),
                             offsetof(ReaderPrefs, retiredFirstLineIndentMode),
@@ -93,7 +95,9 @@ TEST(ReaderLookFields, SettingTheWholeListTouchesEveryLiveByte) {
                             offsetof(ReaderPrefs, retiredBookMargins),
                             offsetof(ReaderPrefs, retiredHeadingPageBreak),
                             offsetof(ReaderPrefs, retiredWordExpansion),
-                            offsetof(ReaderPrefs, retiredFillPages)};
+                            offsetof(ReaderPrefs, retiredFillPages),
+                            offsetof(ReaderPrefs, retiredChapterTime),
+                            offsetof(ReaderPrefs, retiredBookTime)};
   static_assert(sizeof(retired) / sizeof(retired[0]) == READER_PREFS_RETIRED_BYTES + 1);
   for (size_t i = 0; i < sizeof(ReaderPrefs); ++i) {
     if (std::find(std::begin(retired), std::end(retired), i) != std::end(retired)) continue;

@@ -7,7 +7,7 @@
 #include "util/Dictionary.h"
 
 // Which message a failed lookup shows, in one place, so the two screens that look words up
-// (the page-side word select and the history list) cannot drift into naming the same
+// (the page-side word select and the touch selection) cannot drift into naming the same
 // failure differently. A word that was found but could not be read is a real error and says
 // so; only a genuine miss says "Not found", because a "Not found" the user cannot act on is
 // worse than an error they can.

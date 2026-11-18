@@ -8,7 +8,6 @@
 
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderActivity.h"
-#include "EpubReaderSearchActivity.h"
 #include "EpubReaderUtils.h"
 #include "QueuedTurns.h"
 #include "QuoteSelectActivity.h"
@@ -144,7 +143,6 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn, const bool repaint) {
   RenderLock lock(*this);
   if (!sortesMode && isForwardTurn && sessionPages < std::numeric_limits<int>::max()) ++sessionPages;
   if (!sortesMode) {
-    pageTimer.onTurn(millis(), isForwardTurn);
     journal.turn(millis(), isForwardTurn);
   }
   returnHistory.finishReturn(false);

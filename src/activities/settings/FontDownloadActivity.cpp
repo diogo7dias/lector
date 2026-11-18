@@ -10,7 +10,6 @@
 
 #include <algorithm>
 
-#include "Diagnostics.h"
 #include "MappedInputManager.h"
 #include "Memory.h"
 #include "SdCardFontSystem.h"
@@ -182,11 +181,9 @@ std::string transferMemoryDetail(const TransferFailure& failure) {
   return buf;
 }
 
-// The heap gate, and a record of what it saw. Both font transfers ask the same
-// question in the same place; the numbers also go to the diagnostics file, so a
-// failure that reaches the card does not depend on someone photographing the
-// screen. Call INSIDE the framebuffer loan: the floor depends on whether the
-// record buffers are coming off the heap (TlsHeapPolicy.h).
+// The heap gate, and a log of what it saw. Both font transfers ask the same
+// question in the same place. Call INSIDE the framebuffer loan: the floor depends on
+// whether the record buffers are coming off the heap (TlsHeapPolicy.h).
 bool gateAllowsTls(const char* step, const bool framebufferLent,
                    const tls_heap::Transfer transfer = tls_heap::Transfer::General) {
   const uint32_t freeHeap = ESP.getFreeHeap();
@@ -194,8 +191,6 @@ bool gateAllowsTls(const char* step, const bool framebufferLent,
   const uint32_t poolFree = tls_scratch::poolFreeBytes();
   const uint32_t poolBlock = tls_scratch::poolLargestBlock();
   const bool allowed = tls_heap::canStartTls(freeHeap, largestBlock, framebufferLent, poolFree, poolBlock, transfer);
-  diag::recordTlsGate(step, freeHeap, largestBlock, framebufferLent, tls_heap::minFree(framebufferLent, transfer),
-                      tls_heap::minBlock(framebufferLent), allowed, poolFree, poolBlock);
   LOG_INF("FONT", "Heap at %s: free %u, largest block %u, framebuffer lent %s, floor %u/%u", step,
           static_cast<unsigned>(freeHeap), static_cast<unsigned>(largestBlock), framebufferLent ? "yes" : "no",
           static_cast<unsigned>(tls_heap::minFree(framebufferLent, transfer)),

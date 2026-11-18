@@ -234,9 +234,11 @@ struct ReaderPrefs {
   uint8_t retiredLigatures = 0;
   uint8_t retiredLinkUnderline = 0;
 
-  // Time left in the chapter and in the book (status bar anchors, off by default). APPENDED LAST.
-  uint8_t sbChapterTimePos = 0;  // SB_ANCHOR_OFF
-  uint8_t sbBookTimePos = 0;     // SB_ANCHOR_OFF
+  // Retired: the time-left status bar anchors (v18). Nothing reads them; the bytes stay so
+  // every later offset holds, and migrateReaderPrefsFields zeroes them so whole-blob
+  // change detection never sees a stale anchor.
+  uint8_t retiredChapterTime = 0;
+  uint8_t retiredBookTime = 0;
 
   // How dark anti-aliased greys are drawn: 0 Normal, 1 High, 2 Max. APPENDED LAST.
   uint8_t textContrast = 0;
@@ -323,7 +325,7 @@ inline constexpr size_t READER_PREFS_V13_SIZE = offsetof(ReaderPrefs, wordSpacin
 inline constexpr size_t READER_PREFS_V14_SIZE = offsetof(ReaderPrefs, retiredKerning);
 inline constexpr size_t READER_PREFS_V15_SIZE = offsetof(ReaderPrefs, retiredLigatures);
 inline constexpr size_t READER_PREFS_V16_SIZE = offsetof(ReaderPrefs, retiredLinkUnderline);
-inline constexpr size_t READER_PREFS_V17_SIZE = offsetof(ReaderPrefs, sbChapterTimePos);
+inline constexpr size_t READER_PREFS_V17_SIZE = offsetof(ReaderPrefs, retiredChapterTime);
 inline constexpr size_t READER_PREFS_V18_SIZE = offsetof(ReaderPrefs, textContrast);
 inline constexpr size_t READER_PREFS_V19_SIZE = offsetof(ReaderPrefs, retiredBookMargins);
 inline constexpr size_t READER_PREFS_V20_SIZE = offsetof(ReaderPrefs, retiredHeadingPageBreak);
@@ -372,6 +374,8 @@ inline void settleLegacyLookValues(ReaderPrefs& p) {
 // away a choice the reader made.
 inline void migrateReaderPrefsFields(const uint8_t version, ReaderPrefs& p, const bool layoutStyleAlreadyRead = false) {
   p.reserved14 = 0;  // Canonical padding for whole-blob change detection.
+  p.retiredChapterTime = 0;
+  p.retiredBookTime = 0;
   if (version == 5) p.fontPointSize = foldLegacyReaderFontSize(p.fontPointSize);
   if (!layoutStyleAlreadyRead && version < FIRST_VERSION_WITH_SPLIT_EMBEDDED_STYLE) {
     p.retiredEmbeddedLayoutStyle = p.embeddedStyle;
@@ -460,7 +464,7 @@ static_assert(READER_PREFS_V14_SIZE == READER_PREFS_V13_SIZE + 1, "v14 adds word
 static_assert(READER_PREFS_V15_SIZE == READER_PREFS_V14_SIZE + 1, "v15 adds kerning");
 static_assert(READER_PREFS_V16_SIZE == READER_PREFS_V15_SIZE + 1, "v16 adds ligatures");
 static_assert(READER_PREFS_V17_SIZE == READER_PREFS_V16_SIZE + 1, "v17 adds linkUnderline");
-static_assert(READER_PREFS_V18_SIZE == READER_PREFS_V17_SIZE + 2, "v18 adds the two time-left anchors");
+static_assert(READER_PREFS_V18_SIZE == READER_PREFS_V17_SIZE + 2, "v18 adds the two time-left anchors (retired since)");
 static_assert(READER_PREFS_V19_SIZE == READER_PREFS_V18_SIZE + 1, "v19 adds textContrast");
 static_assert(READER_PREFS_V20_SIZE == READER_PREFS_V19_SIZE + 1, "v20 adds bookMargins");
 static_assert(READER_PREFS_V21_SIZE == READER_PREFS_V20_SIZE + 1, "v21 adds headingPageBreak");
@@ -486,7 +490,7 @@ inline constexpr size_t STATUS_BAR_FIELD_COUNT = 0 READER_STATUS_BAR_FIELDS(CP_C
 }  // namespace reader_look
 
 // The retired bytes are padding that keeps every later offset; migrateReaderPrefsFields zeroes them.
-inline constexpr size_t READER_PREFS_RETIRED_BYTES = 10;
+inline constexpr size_t READER_PREFS_RETIRED_BYTES = 12;
 static_assert(reader_look::SCREEN_FIELD_COUNT + reader_look::BOOK_FIELD_COUNT + reader_look::STATUS_BAR_FIELD_COUNT +
                       sizeof(ReaderPrefs::sdFontFamilyName) + sizeof(ReaderPrefs::reserved14) +
                       READER_PREFS_RETIRED_BYTES ==
@@ -520,8 +524,6 @@ struct StatusBarBlock {
   uint8_t chapterNumPos = 0;
   uint8_t sessionPagesPos = 0;
   uint8_t paraPagesPos = 0;
-  uint8_t chapterTimePos = 0;
-  uint8_t bookTimePos = 0;
   uint8_t bookTitlePos = 0;
   uint8_t bookBar = 0;
   uint8_t chapterBar = 0;

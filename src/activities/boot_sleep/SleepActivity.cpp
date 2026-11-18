@@ -97,9 +97,7 @@ void SleepActivity::onEnter() {
   previousWallpaper = APP_STATE.lastSleepWallpaperPath;
   APP_STATE.lastSleepWallpaperPath.clear();
 
-  prepareSleepReadingLine();
   renderSleepScreen();
-  clearSleepReadingLine();
   SleepTiming::mark("face");
 }
 

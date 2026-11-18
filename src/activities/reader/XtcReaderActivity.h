@@ -54,6 +54,8 @@ class XtcReaderActivity final : public Activity {
   void saveProgress(uint32_t page);
   void loadProgress();
   ReaderProgressSaveDebouncer progressSaveDebouncer;
+  // The page button held now already skipped ten pages; reset when it is let go.
+  bool holdSkipped_ = false;
 
  public:
   explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc,

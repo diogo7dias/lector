@@ -15,7 +15,6 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
-#include "ReaderFontSizes.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
@@ -38,10 +37,9 @@ void TxtReaderActivity::onEnter() {
 
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
-  // Only one SD font size is resident at a time, and it is the EPUB reader's unless
-  // this is called; without it a TXT-only SD family silently lays out in the built-in
-  // font. A family that has left the card falls back to built-in and persists nothing.
-  sdFontSystem.ensureLoadedFor(renderer, SETTINGS.txtSdFontFamilyName, SETTINGS.txtFontPointSize);
+  // Only one SD font size is resident at a time; make it the reader font. A family that
+  // has left the card falls back to built-in and persists nothing.
+  sdFontSystem.ensureLoadedFor(renderer, SETTINGS.sdFontFamilyName, SETTINGS.fontPointSize);
 
   txt->setupCacheDir();
 
@@ -142,7 +140,6 @@ void TxtReaderActivity::pageTurn(const bool forward) {
   if (!forward) {
     if (currentPage == 0) return;
     journal.turn(millis(), false);
-    pageTimer.onTurn(millis(), false);
     currentPage--;
     journal.finished = false;  // left the last page again: not finished after all
     requestUpdate();
@@ -150,7 +147,6 @@ void TxtReaderActivity::pageTurn(const bool forward) {
   }
   if (currentPage < totalPages - 1) {
     journal.turn(millis(), true);
-    pageTimer.onTurn(millis(), true);
     if (sessionPages < std::numeric_limits<int>::max()) ++sessionPages;
     currentPage++;
     if (currentPage == totalPages - 1) journal.finished = true;
@@ -167,7 +163,7 @@ void TxtReaderActivity::initializeReader() {
 
   // Store current settings for cache validation
   // TXT has its own font selection, independent of the EPUB reader's.
-  cachedFontId = SETTINGS.getTxtReaderFontId();
+  cachedFontId = SETTINGS.getReaderFontId();
   cachedScreenMargin = SETTINGS.screenMargin;
   cachedParagraphAlignment = SETTINGS.paragraphAlignment;
 
@@ -340,11 +336,8 @@ void TxtReaderActivity::renderStatusBar() const {
   d.bookTitle = txt->getTitle();
   d.sessionPages = sessionPages;
   const StatusBarBlock sb = SETTINGS.statusBar();
-  // Both cost a file read or a division only when the item is on, as in the EPUB reader.
+  // Costs a file read only when the item is on, as in the EPUB reader.
   if (sb.paraPagesPos != CrossPointSettings::SB_ANCHOR_OFF) d.paragraphPagesLeft = pagesUntilNextParagraph();
-  if (sb.bookTimePos != CrossPointSettings::SB_ANCHOR_OFF) {
-    d.bookMinutesLeft = reading_time::minutesFor(totalPages - currentPage - 1, pageTimer.msPerPage());
-  }
   // Paperback Look (status bar): thicken only status-bar glyphs, then reset.
   renderer.setPaperbackLook(SETTINGS.paperbackLookStatus);
   GUI.drawStatusBarV2(renderer, d, sb);

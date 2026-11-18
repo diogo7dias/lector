@@ -62,6 +62,9 @@ struct SettingInfo {
   // per-button bindings stay in the shared list so they persist and reach the web API,
   // but eighteen rows in Controls would bury every other control there.
   bool inButtons = false;
+  // Kept off the device's Settings screen: the web settings page is its only row. The
+  // frontlight's rows, whose on-device home is the light panel.
+  bool webOnly = false;
 
   // Enum values that are no longer offered but must keep their slot. ENUM settings persist
   // by index, so a retired option cannot simply be deleted from enumValues without
@@ -86,6 +89,19 @@ struct SettingInfo {
 
   SettingInfo& withTextSettings() {
     inTextSettings = true;
+    return *this;
+  }
+
+  SettingInfo& withWebOnly() {
+    webOnly = true;
+    return *this;
+  }
+
+  // VALUE rows that count steps of this many minutes from midnight (the light schedule's
+  // hours): the web page shows them as a time of day instead of the raw step index.
+  uint8_t minutesPerStep = 0;
+  SettingInfo& withMinutesPerStep(const uint8_t minutes) {
+    minutesPerStep = minutes;
     return *this;
   }
 
