@@ -17,6 +17,7 @@ class GfxRenderer {
   uint16_t panelWidth = 800;
   uint16_t panelHeight = 480;
 
+  bool imagesDitheredInBw() const { return false; }
   bool landscape() const { return orientation == LandscapeClockwise || orientation == LandscapeCounterClockwise; }
   int getScreenWidth() const { return landscape() ? panelWidth : panelHeight; }
   int getScreenHeight() const { return landscape() ? panelHeight : panelWidth; }
