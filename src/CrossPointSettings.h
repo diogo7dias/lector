@@ -17,11 +17,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   friend class PersistableStore<CrossPointSettings>;
 
  public:
-  // Stored numbers are CrossPoint's, so a settings file moves between the two firmwares.
-  // Every lector release since 2026-09-14 (0.58.0 included) wrote only 2 or 3: older faces
-  // were migrated to Custom on load and the file resaved, so 0 to 8 never held a different
-  // meaning in a file those releases wrote. A value above COVER_TRANSPARENT (the old 9, or
-  // anything a future build wrote) becomes Custom; see wake_face::migrateSleepScreen.
+  // Stored numbers are CrossPoint's. Lector's own older numbering differed at 7, 8 and 9;
+  // the file's "sleepFaceNumbering" stamp tells the two apart, see wake_face::sleepFaceFromFile.
   enum SLEEP_SCREEN_MODE {
     DARK = 0,
     LIGHT = 1,

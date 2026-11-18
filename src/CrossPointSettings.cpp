@@ -93,6 +93,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
     }
   };
   forEachBaseSetting(visit);
+  doc["sleepFaceNumbering"] = 1;  // see wake_face::sleepFaceFromFile
 
   // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.
   doc["frontButtonBack"] = frontButtonBack;
@@ -346,10 +347,16 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
     }
   }
 
-  // Keep stored IDs stable while migrating retired sleep faces to Custom.
-  if (wake_face::migrateSleepScreen(sleepScreen) != sleepScreen) {
-    sleepScreen = wake_face::migrateSleepScreen(sleepScreen);
-    needsResave = true;
+  // Sleep face numbers follow CrossPoint's. A file without the stamp is a lector file from
+  // before that; see wake_face::sleepFaceFromFile for what it keeps. Read from the raw
+  // document: the generic loader above clamps an unknown value to the default first.
+  {
+    const bool numbered = doc["sleepFaceNumbering"].is<uint8_t>();
+    const uint8_t face = wake_face::sleepFaceFromFile(doc["sleepScreen"] | sleepScreen, numbered);
+    if (face != sleepScreen || !numbered) {
+      sleepScreen = face;
+      needsResave = true;
+    }
   }
 
   // Bindings still set to a retired action (Select Chapter, Go to Percent, Text Settings)
