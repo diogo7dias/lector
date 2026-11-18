@@ -31,10 +31,6 @@ struct RestartBoot {
   bool silent = false;  // heap-defrag restart: no splash, the panel keeps its frame
   RestartTarget target = RestartTarget::Home;
   bool lightOn = false;  // the frontlight was on when the restart was armed
-  const char* trailStage = "none";
-  const char* rescuedStage = "none";
-  bool rescued = false;              // the rescue timer had to finish the last restart
-  bool trailWorthRecording = false;  // the last restart stopped somewhere unexpected
 };
 RestartBoot takeRestartBoot();
 

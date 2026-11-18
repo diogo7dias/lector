@@ -125,9 +125,8 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
   {
     auto& items = page(Tab::Navigate, StrId::STR_SEC_NAVIGATE);
     std::vector<MenuItem> position{{MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER},
-                                   {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT},
-                                   {MenuAction::SEARCH, StrId::STR_SEARCH}};
-    position.reserve(7);  // chapter, percentage, search, optional page, Return, Forward and paragraph
+                                   {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT}};
+    position.reserve(6);  // chapter, percentage, optional page, Return, Forward and paragraph
     // Only books that carry the printed edition's page numbers can jump to one.
     if (hasPageList) position.insert(position.begin() + 2, {MenuAction::GO_TO_PAGE, StrId::STR_GO_TO_PAGE});
     if (hasReturn) position.push_back({MenuAction::RETURN, StrId::STR_RETURN});
@@ -153,10 +152,7 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
   // --- This Book: what the book says about itself, and what you take out of it ---
   {
     auto& items = page(Tab::ThisBook, StrId::STR_SEC_THIS_BOOK);
-    group(items, {{MenuAction::DICTIONARY, StrId::STR_LOOKUP},
-                  // Recall sits next to the lookup it records, because that is where a reader
-                  // goes looking for a word they have already met.
-                  {MenuAction::DICTIONARY_HISTORY, StrId::STR_LOOKUP_HISTORY}});
+    group(items, {{MenuAction::DICTIONARY, StrId::STR_LOOKUP}});
 
     std::vector<MenuItem> quotes{{MenuAction::GRAB_QUOTE, StrId::STR_GRAB_QUOTE}};
     // Reading the quotes back only makes sense once this book has a sidecar to read;
@@ -256,22 +252,15 @@ void EpubReaderMenuActivity::onEnter() {
   UiListActivity::onEnter();
   {
     RenderLock lock(*this);
-    // Open on the tab Settings > Book Menu Opens On names (indexed by BOOK_MENU_TAB).
-    // A tab that is not there tonight (Sleep, with no wallpaper to act on) falls back
-    // to Navigate, and failing that to the first heading.
-    static constexpr StrId TAB_LABELS[CrossPointSettings::BOOK_MENU_TAB_COUNT] = {
-        StrId::STR_SEC_NAVIGATE, StrId::STR_SEC_THIS_BOOK, StrId::STR_SEC_LOOK, StrId::STR_SEC_DEVICE,
-        StrId::STR_SEC_SLEEP_SCREEN};
+    // Open on Sleep Screen. That tab is not there tonight when there is no wallpaper to
+    // act on, so fall back to Navigate, and failing that to the first heading.
     const auto headerFor = [this](const StrId label) {
       for (int i = 0; i < static_cast<int>(items.size()); ++i) {
         if (items[i].isHeader && items[i].labelId == label) return i;
       }
       return -1;
     };
-    const uint8_t wanted = SETTINGS.bookMenuTab < CrossPointSettings::BOOK_MENU_TAB_COUNT
-                               ? SETTINGS.bookMenuTab
-                               : CrossPointSettings::BOOK_MENU_TAB_NAVIGATE;
-    int first = headerFor(TAB_LABELS[wanted]);
+    int first = headerFor(StrId::STR_SEC_SLEEP_SCREEN);
     if (first < 0) first = headerFor(StrId::STR_SEC_NAVIGATE);
     if (first < 0) {
       first = 0;

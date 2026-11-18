@@ -64,20 +64,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
   enum AUTHOR_DISPLAY { AUTHOR_INITIALS = 0, AUTHOR_FULL_NAME = 1, AUTHOR_DISPLAY_COUNT };
 
-  // Which tab the in-book menu opens on. Index-aligned with the picker labels in
-  // SettingsList.h, and mapped onto EpubReaderMenuActivity::Tab at open time. Sleep
-  // sits last because ENUM settings persist by index: appending it keeps every
-  // settings file written before it valid. It only exists while the lock screen has a
-  // wallpaper to act on, and the menu falls back to Navigate on the nights it does not.
-  enum BOOK_MENU_TAB {
-    BOOK_MENU_TAB_NAVIGATE = 0,
-    BOOK_MENU_TAB_THIS_BOOK = 1,
-    BOOK_MENU_TAB_LOOK = 2,
-    BOOK_MENU_TAB_DEVICE = 3,
-    BOOK_MENU_TAB_SLEEP = 4,
-    BOOK_MENU_TAB_COUNT
-  };
-
   // Status bar: the legacy fixed-slot enums (STATUS_BAR_PROGRESS_BAR / _THICKNESS /
   // _TITLE / _CLOCK_MODE) were removed with the v1 renderer. XTC keeps its own mode.
   enum XTC_STATUS_BAR_MODE {
@@ -333,19 +319,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Draw the wallpaper's filename in the bottom-left corner of the sleep screen,
   // with the _F favorite suffix stripped and favorites shown as "[F] name".
   uint8_t showSleepImageFilename = 0;
-  // Draw a small "F" badge instead, for favorites only. Ignored when
-  // showSleepImageFilename is on, which already marks favorites.
-  uint8_t showSleepFavoriteBadge = 0;
   // Draw "position / total" with a progress bar in the bottom-right corner of
   // the sleep screen, showing how far the wallpaper rotation is through its
   // current loop. Only drawn for index picks — the jump-pick fallback has no
   // position to report.
   uint8_t showSleepWallpaperPosition = 0;
-  // Draw the last 7 days of reading in a band across the foot of the sleep screen.
-  uint8_t showSleepReadingStats = 0;
-  // Where that band's text sits: centred, or held to the left or right edge.
-  enum SLEEP_READING_STATS_ALIGN { SLEEP_STATS_CENTER = 0, SLEEP_STATS_LEFT = 1, SLEEP_STATS_RIGHT = 2 };
-  uint8_t sleepReadingStatsAlign = SLEEP_STATS_CENTER;
   // Hold the current wallpaper instead of picking a new one at every sleep.
   // Applies only to the /sleep folder rotation; a fixed /sleep.pxc or /sleep.bmp
   // never rotates in the first place.
@@ -377,8 +355,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sbChapterNumPos = SB_ANCHOR_BR;    // chapter #/total (Ch N/M) anchor
   uint8_t sbSessionPagesPos = SB_ANCHOR_BC;  // pages turned this sitting (+N) anchor
   uint8_t sbParaPagesPos = SB_ANCHOR_BC;     // pages left in this paragraph (>P.N) anchor
-  uint8_t sbChapterTimePos = SB_ANCHOR_OFF;  // time left in this chapter (C:12m) anchor
-  uint8_t sbBookTimePos = SB_ANCHOR_OFF;     // time left in the book (B:3h05) anchor
   uint8_t sbBookTitlePos = SB_ANCHOR_OFF;    // book title anchor; on the chapter title's, stacked above it
   uint8_t sbBookBar = SB_EDGE_OFF;           // book progress bar edge (Off/Top/Bottom)
   uint8_t sbChapterBar = SB_EDGE_BOTTOM;     // chapter progress bar edge
@@ -415,8 +391,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textContrast = 0;
   // Whole pixels between letters, offset: 2 is the font as designed, 0..4 shows as -2..+2.
   uint8_t characterSpacing = reader_defaults::CHARACTER_SPACING;
-  // X4 Pro: draw the lock wallpaper a second time a minute after locking (1 = on).
-  uint8_t refreshSleepWallpaper = 0;
   // Swipe by default: it works the same wherever the thumb lands, and it leaves the
   // whole page free of invisible tap targets.
   uint8_t touchReaderControls = TOUCH_READER_SWIPE;
@@ -466,10 +440,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   }
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
-  // The same count while night mode is on: 0 = same as refreshFrequency, otherwise a
-  // REFRESH_FREQUENCY index + 1. Inverted pages ghost differently, so they get their own.
-  static constexpr uint8_t NIGHT_REFRESH_SAME = 0;
-  uint8_t refreshFrequencyNight = NIGHT_REFRESH_SAME;
   // Full refresh on the first page of each chapter entered, on top of the page count.
   uint8_t chapterStartRefresh = 0;
   // A crosshatch frame before the first page of each chapter entered (one extra refresh).
@@ -633,33 +603,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint32_t popupItems = 0;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
-  // Performance timings (1 = on). Switches on the refresh/wake instrumentation: the
-  // on-panel overlay line, and the CSV written to /perf on the card. Off costs nothing —
-  // no file is opened and every record() call returns on its first line. Deliberately not
-  // persisted-by-default-on: a reader who never measures anything should never pay a card
-  // write for it.
-  // Instrumented builds (development, testkit, experimental) force this on and hide the
-  // row: a kit round that comes back without /perf/<device>-NNN.csv has wasted a flash and
-  // half an hour of the tester's time, and asking them to remember a toggle is what makes
-  // that happen. Release builds compile the row out of the settings list entirely and
-  // leave the field at 0.
-#ifdef LECTOR_FORCE_PERF_TIMINGS
-  uint8_t showTimings = 1;
-#else
-  uint8_t showTimings = 0;
-#endif
-  // Fast page turns (1 = on). Asks the panel for its cheapest partial waveform on FAST
-  // refreshes. Measured on the X4: 578 ms a page becomes roughly 150 ms. The trade is
-  // ghosting -- a shorter drive leaves more behind -- so the anti-ghost budget charges
-  // these passes double and cleans more often, and every eighth pass runs the standard
-  // sequence so the panel re-reads its own temperature. Inert on panels without a
-  // second fast path (the X3, the Seeed Sticky, X4 Pro units with a UC8279). Off restores
-  // the vendor sequence exactly, with no reflash.
-#if FREEINK_DEVICE_X4PRO
-  uint8_t fastPageTurns = 0;  // never measured on this panel: a reader has to opt in
-#else
-  uint8_t fastPageTurns = 1;
-#endif
   // Power button return from footnotes (1 = enabled, 0 = disabled)
   uint8_t pwrBtnFootnoteBack = 1;
   // The book's own CSS, one switch: text styling (weight, slant, decoration, super/sub,
@@ -667,9 +610,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // image sizes). Written under the "embeddedStyle" key (1 = enabled, 0 = disabled).
   // Paragraph Alignment "Book's Style" needs this on.
   uint8_t embeddedStyle = 1;
-  // Which tab the in-book menu opens on (see BOOK_MENU_TAB). Sleep Screen by default;
-  // on a night with no wallpaper to act on that tab is absent and the menu opens on Navigate.
-  uint8_t bookMenuTab = BOOK_MENU_TAB_SLEEP;
   // Focus Reading - emphasizes the first part of words with bold
   uint8_t focusReadingEnabled = 0;
   // Guide Dots — draw a middle dot (U+00B7) between words as a reading aid. Restored
@@ -705,13 +645,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t paragraphNumberPlace = PARA_NUM_PLACE_TEXT;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
-  // TXT reader font, kept apart from the EPUB reader font above. A plain text file
-  // is usually a dump (a log, a scrape, a note) rather than a typeset book, so it
-  // reads best packed small; the default is deliberately the smallest built-in size
-  // and it never follows the EPUB font. Empty txtSdFontFamilyName = built-in family.
-  static constexpr uint8_t TXT_DEFAULT_FONT_POINT_SIZE = 12;
-  uint8_t txtFontPointSize = TXT_DEFAULT_FONT_POINT_SIZE;
-  char txtSdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
   char dictionaryName[32] = "";
   // Fast Unlock (1 = on). Shortens the recovery-chord settle window the wake waits out
@@ -863,9 +796,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   }
 
   int getReaderFontId() const;
-  // Font id for the TXT reader, resolved from the txt* fields above rather than the
-  // EPUB reader selection, so changing one never moves the other.
-  int getTxtReaderFontId() const;
   // Per-book override: resolve the reader font id from a ReaderPrefs snapshot
   // instead of the live global fields, so a custom book lays out through its own
   // settings without ever mutating the global singleton.

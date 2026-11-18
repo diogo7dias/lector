@@ -261,24 +261,8 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
   emit(SettingInfo::Toggle(StrId::STR_FAST_UNLOCK, &CrossPointSettings::fastUnlock, "fastUnlock",
                            StrId::STR_CAT_DISPLAY));
 
-  emit(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_FAVORITE_BADGE, &CrossPointSettings::showSleepFavoriteBadge,
-                           "showSleepFavoriteBadge", StrId::STR_CAT_DISPLAY));
-
   emit(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, &CrossPointSettings::showSleepWallpaperPosition,
                            "showSleepWallpaperPosition", StrId::STR_CAT_DISPLAY));
-
-  emit(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_READING_STATS, &CrossPointSettings::showSleepReadingStats,
-                           "showSleepReadingStats", StrId::STR_CAT_DISPLAY));
-
-  emit(SettingInfo::Enum(StrId::STR_SLEEP_READING_STATS_ALIGN, &CrossPointSettings::sleepReadingStatsAlign,
-                         {StrId::STR_CENTER, StrId::STR_ALIGN_LEFT, StrId::STR_ALIGN_RIGHT}, "sleepReadingStatsAlign",
-                         StrId::STR_CAT_DISPLAY));
-
-#if FREEINK_DEVICE_X4PRO
-  // Only the X4 Pro has the timed wake behind it (main.cpp), so only it has the row.
-  emit(SettingInfo::Toggle(StrId::STR_REFRESH_SLEEP_WALLPAPER, &CrossPointSettings::refreshSleepWallpaper,
-                           "refreshSleepWallpaper", StrId::STR_CAT_DISPLAY));
-#endif
 
   // "Never" (index 5) is back, matching upstream: the reader skips its own cadence, and
   // DisplayRefreshPolicy still forces a clean after its consecutive-FAST cap.
@@ -286,10 +270,6 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
                          {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
                           StrId::STR_PAGES_30, StrId::STR_REFRESH_NEVER},
                          "refreshFrequency", StrId::STR_CAT_DISPLAY));
-  emit(SettingInfo::Enum(StrId::STR_NIGHT_REFRESH_FREQ, &CrossPointSettings::refreshFrequencyNight,
-                         {StrId::STR_SAME_AS_DAY, StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10,
-                          StrId::STR_PAGES_15, StrId::STR_PAGES_30, StrId::STR_REFRESH_NEVER},
-                         "refreshFrequencyNight", StrId::STR_CAT_DISPLAY));
   emit(SettingInfo::Toggle(StrId::STR_CHAPTER_START_REFRESH, &CrossPointSettings::chapterStartRefresh,
                            "chapterStartRefresh", StrId::STR_CAT_DISPLAY));
   emit(SettingInfo::Toggle(StrId::STR_CHAPTER_WIPE, &CrossPointSettings::chapterWipe, "chapterWipe",
@@ -459,21 +439,6 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
       {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_ORIENTATION_INVERTED, StrId::STR_LANDSCAPE_CCW},
       "orientation", StrId::STR_CAT_READER));
 
-  // Which tab the in-book menu lands on. Labels are the tab bar's own strings, and
-  // the list is index-aligned with CrossPointSettings::BOOK_MENU_TAB because ENUM
-  // settings persist by index.
-  {
-    std::vector<StrId> bookMenuTabValues(CrossPointSettings::BOOK_MENU_TAB_COUNT);
-    bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_NAVIGATE] = StrId::STR_SEC_NAVIGATE;
-    bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_THIS_BOOK] = StrId::STR_SEC_THIS_BOOK;
-    bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_LOOK] = StrId::STR_SEC_LOOK;
-    bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_DEVICE] = StrId::STR_SEC_DEVICE;
-    bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_SLEEP] = StrId::STR_SEC_SLEEP_SCREEN;
-
-    emit(SettingInfo::Enum(StrId::STR_BOOK_MENU_TAB, &CrossPointSettings::bookMenuTab, std::move(bookMenuTabValues),
-                           "bookMenuTab", StrId::STR_CAT_READER));
-  }
-
   // Off / On / Bolder. Stored 0/1/2, so a file written when this was a toggle reads the same.
   emit(SettingInfo::Enum(StrId::STR_PAPERBACK_LOOK, &CrossPointSettings::paperbackLookBody,
                          {StrId::STR_STATE_OFF, StrId::STR_STATE_ON, StrId::STR_BOLDER}, "paperbackLookBody",
@@ -609,32 +574,6 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
                          {StrId::STR_FMT_AUTHOR_TITLE, StrId::STR_FMT_TITLE_AUTHOR, StrId::STR_FMT_TITLE},
                          "opdsFilenameFormat"));
 
-// Measurement, off by default and free while it is off. On, the device times every
-// refresh, draws the previous one's cost in a corner of the screen, and writes a CSV
-// to /perf on the card for reading on a computer. It exists because the device has no
-// serial console in a reader's hands, so the only honest way to judge a speed change
-// is to have the device report its own numbers. See docs/perf-measurement.md.
-// Instrumented builds keep it on and out of sight; releases never show it. See the
-// field's declaration in CrossPointSettings.h.
-#ifndef LECTOR_FORCE_PERF_TIMINGS
-  emit(SettingInfo::Toggle(StrId::STR_PERF_TIMINGS, &CrossPointSettings::showTimings, "showTimings",
-                           StrId::STR_CAT_SYSTEM));
-#endif
-
-  // The panel's cheapest partial waveform on page turns and menu moves. On by default
-  // on the one board validated for it; the row is here so a panel that turns out to
-  // ghost can be put back on the vendor sequence without a reflash. See
-  // CrossPointSettings::fastPageTurns.
-#if FREEINK_DEVICE_X4PRO
-  // Its own key: settings saved while this row did nothing here hold "fastPageTurns": 1,
-  // which would switch an unmeasured waveform on for every reader who updates. No category:
-  // the switch lives on its own page (FastPageTurnsTestActivity), beside what to test.
-  emit(SettingInfo::Toggle(StrId::STR_FAST_PAGE_TURNS, &CrossPointSettings::fastPageTurns, "x4ProFastPageTurns"));
-#else
-  emit(SettingInfo::Toggle(StrId::STR_FAST_PAGE_TURNS, &CrossPointSettings::fastPageTurns, "fastPageTurns",
-                           StrId::STR_CAT_SYSTEM));
-#endif
-
   // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
   emit(SettingInfo::DynamicString(
       StrId::STR_KOREADER_USERNAME, [] { return KOREADER_STORE.getUsername(); },
@@ -742,12 +681,6 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
 
   emit(SettingInfo::Enum(StrId::STR_PARA_PAGES, &CrossPointSettings::sbParaPagesPos, anchorPositions, "sbParaPagesPos",
                          StrId::STR_CUSTOMISE_STATUS_BAR));
-
-  emit(SettingInfo::Enum(StrId::STR_CHAPTER_TIME_LEFT, &CrossPointSettings::sbChapterTimePos, anchorPositions,
-                         "sbChapterTimePos", StrId::STR_CUSTOMISE_STATUS_BAR));
-
-  emit(SettingInfo::Enum(StrId::STR_BOOK_TIME_LEFT, &CrossPointSettings::sbBookTimePos, anchorPositions,
-                         "sbBookTimePos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
   emit(SettingInfo::Enum(StrId::STR_BOOK_BAR, &CrossPointSettings::sbBookBar,
                          {StrId::STR_STATE_OFF, StrId::STR_TOP, StrId::STR_BOTTOM}, "sbBookBar",

@@ -4,7 +4,6 @@
 #include <HalFrontlight.h>
 #include <I18n.h>
 #include <Logging.h>
-#include <PerfStats.h>
 #include <WiFi.h>
 #include <esp_attr.h>
 #include <esp_timer.h>
@@ -12,7 +11,6 @@
 #include "CrossPointState.h"
 #include "activities/Activity.h"
 #include "components/UITheme.h"
-#include "util/DebugTrace.h"
 
 namespace {
 // RTC_NOINIT survives ESP.restart() but not power loss.
@@ -28,10 +26,8 @@ constexpr uint32_t SILENT_REBOOT_LIGHT_ON = 1U << 0;
 // Breadcrumbs for the heap-defrag reboot, in RTC memory because the card is one of the
 // suspects: an X3 that left a WiFi screen sat on "Loading" until Power was held, and
 // nothing said which step it stopped at. The trail names the last step passed; the
-// rescue timer reboots a restart that has not reached its first frame in time, and
-// the next boot writes where it stopped to the diagnostics file.
+// rescue timer reboots a restart that has not reached its first frame in time.
 static RTC_NOINIT_ATTR uint32_t restartTrail;
-static RTC_NOINIT_ATTR uint32_t restartRescuedAt;
 constexpr uint32_t RESTART_TRAIL_MAGIC = 0x7EA11000;
 constexpr uint32_t RESTART_TRAIL_MASK = 0xFFFFFF00;
 enum RestartStage : uint8_t {
@@ -43,15 +39,10 @@ enum RestartStage : uint8_t {
   STAGE_DISPLAY_UP,
   STAGE_LOOP_RUNNING,
 };
-constexpr const char* kRestartStageNames[] = {"none",           "entered",       "popup drawn", "state saved",
-                                              "restart called", "boot (silent)", "display up",  "loop running"};
 constexpr uint64_t RESTART_RESCUE_US = 30ULL * 1000 * 1000;
 static esp_timer_handle_t restartRescueTimer = nullptr;
 
-static void markRestartStage(const RestartStage stage) {
-  restartTrail = RESTART_TRAIL_MAGIC | stage;
-  debug_trace::note("restart stage: %s", kRestartStageNames[stage]);
-}
+static void markRestartStage(const RestartStage stage) { restartTrail = RESTART_TRAIL_MAGIC | stage; }
 
 // Decodes a breadcrumb word; 0 when it is cold-boot garbage or cleared.
 static uint8_t restartStageOf(const uint32_t word) {
@@ -64,7 +55,6 @@ static uint8_t restartStageOf(const uint32_t word) {
 // The magic goes too, so the rescue boot is a plain one: if the seamless path is what
 // hangs, a silent rescue would only hang again, every 30 s.
 static void restartRescueFired(void*) {
-  restartRescuedAt = restartTrail;
   silentRebootMagic = 0;
   esp_restart();
 }
@@ -83,7 +73,6 @@ static void finishRestartTrail() {
   if (restartTrail == 0) return;
   if (restartRescueTimer) esp_timer_stop(restartRescueTimer);
   restartTrail = 0;
-  debug_trace::note("restart stage: first frame");
 }
 
 // Latched true once enterDeepSleep() commits to sleeping, before it tears down
@@ -161,21 +150,12 @@ RestartBoot takeRestartBoot() {
   silentRebootMagic = 0;
   silentRebootTarget = 0;
   silentRebootPayload = 0;
-  // Where the last restart stopped, read before the silent boot below overwrites it.
-  const uint8_t trailStage = restartStageOf(restartTrail);
-  const uint8_t rescuedStage = restartStageOf(restartRescuedAt);
-  restartRescuedAt = 0;
   if (boot.silent) {
     armRestartRescue();
     restartTrail = RESTART_TRAIL_MAGIC | STAGE_BOOT_SILENT;
   } else {
     restartTrail = 0;
   }
-  boot.trailStage = kRestartStageNames[trailStage];
-  boot.rescuedStage = kRestartStageNames[rescuedStage];
-  boot.rescued = rescuedStage != 0;
-  // A clean silent restart stops at "restart called"; anything else is worth a record.
-  boot.trailWorthRecording = trailStage != 0 && !(boot.silent && trailStage == STAGE_RESTART_CALLED);
   return boot;
 }
 
@@ -186,7 +166,5 @@ void noteRestartDisplayUp() {
 void noteRestartLoopPass() {
   if (!restartTrail) return;
   if (restartStageOf(restartTrail) < STAGE_LOOP_RUNNING) markRestartStage(STAGE_LOOP_RUNNING);
-  uint64_t wireUs = 0, waveUs = 0, totalUs = 0;
-  PerfStats::splitTotals(wireUs, waveUs, totalUs);
-  if (totalUs > 0) finishRestartTrail();  // a refresh has completed since boot
+  if (display.hasCompletedRefresh()) finishRestartTrail();  // a refresh has completed since boot
 }

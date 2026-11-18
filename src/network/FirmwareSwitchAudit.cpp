@@ -4,8 +4,6 @@
 #include <esp_ota_ops.h>
 #include <nvs.h>
 
-#include "Diagnostics.h"
-
 namespace firmware_flash {
 
 namespace {
@@ -43,10 +41,6 @@ void auditPendingSwitch(const char* version) {
 
   const esp_partition_t* running = esp_ota_get_running_partition();
   const uint32_t runningAddress = running ? running->address : 0;
-  // Either way it goes into the diagnostics file: "did the update take" is
-  // the question that file exists to answer, and main() flushes it once the
-  // boot records are in.
-  diag::recordBootAfterInstall(intended, runningAddress, imageSize);
   if (running && runningAddress == intended) {
     LOG_INF("FLASH", "firmware switch to 0x%06X took effect", static_cast<unsigned>(intended));
     return;

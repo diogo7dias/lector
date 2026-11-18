@@ -308,18 +308,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS:
       openBookmarks();
       break;
-    case EpubReaderMenuActivity::MenuAction::SEARCH:
-      openSearch();
-      break;
     case EpubReaderMenuActivity::MenuAction::TOGGLE_BOOKMARK:
       addBookmark();
       break;
     // Reading tools
     case EpubReaderMenuActivity::MenuAction::DICTIONARY:
       openDictionaryWordSelect();
-      break;
-    case EpubReaderMenuActivity::MenuAction::DICTIONARY_HISTORY:
-      openDictionaryHistory();
       break;
     case EpubReaderMenuActivity::MenuAction::GRAB_QUOTE:
       openQuoteGrab();

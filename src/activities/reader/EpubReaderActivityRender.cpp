@@ -11,7 +11,6 @@
 #include "CrossPointSettings.h"
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderActivity.h"
-#include "EpubReaderSearchActivity.h"
 #include "EpubReaderUtils.h"
 #include "MappedInputManager.h"
 #include "QuoteSelectActivity.h"

@@ -2,10 +2,7 @@
 
 #include <cstddef>
 
-// Stage stamps for the lock path, the sleep-side counterpart to WakeTiming.
-//
-// WakeTiming has a fixed stage list because the boot always runs the same steps in the
-// same order. The lock does not: which sleep face renders decides what work happens, so
+// Stage stamps for the lock path. Which sleep face renders decides what work happens, so
 // the marks are free-form and only the ones a given lock actually reached are reported.
 //
 // The measurement that prompted this: a lock cost 10258 ms, of which the panel accounted

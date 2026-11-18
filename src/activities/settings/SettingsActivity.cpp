@@ -15,8 +15,6 @@
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
-#include "Diagnostics.h"
-#include "FastPageTurnsTestActivity.h"
 #include "FontDownloadActivity.h"
 #include "InstalledFontsActivity.h"
 #include "KOReaderSettingsActivity.h"
@@ -116,14 +114,8 @@ void applyGroups(std::vector<SettingInfo>& rows, const std::vector<SettingsGroup
 }  // namespace
 
 namespace {
-// Four settings categories, then the File Transfer activity, then on the X4 Pro the
-// Fast Page Turns trial.
-constexpr int kFastPageTurnsTestCell = 5;
-#if FREEINK_DEVICE_X4PRO
-constexpr int kCategoryCount = 6;
-#else
+// Four settings categories, then the File Transfer activity.
 constexpr int kCategoryCount = 5;
-#endif
 }  // namespace
 
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) const {
@@ -168,8 +160,6 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) const
 
 StrId SettingsActivity::categoryName(const int index) const {
   switch (index) {
-    case kFastPageTurnsTestCell:
-      return StrId::STR_FAST_PAGE_TURNS;
     case 4:
       return StrId::STR_FILE_TRANSFER;
     case 0:
@@ -230,7 +220,6 @@ const char* SettingsActivity::cellValue(const int index) const {
   if (mode == Mode::Hub) {
     if (index == 4) return nullptr;
     if (index < 0 || index >= kCategoryCount) return nullptr;
-    if (index == kFastPageTurnsTestCell) return SETTINGS.fastPageTurns ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     // Settings only: the group headings applyGroups inserts are rows too.
     const auto& rows = const_cast<SettingsActivity*>(this)->categoryRows(index);
     const auto settingCount =
@@ -341,14 +330,12 @@ void SettingsActivity::rebuildSettingsList() {
                     StrId::STR_FRONTLIGHT_WARMTH, StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE, StrId::STR_FRONTLIGHT_SCHEDULE,
                     StrId::STR_FRONTLIGHT_SCHEDULE_ON, StrId::STR_FRONTLIGHT_SCHEDULE_OFF}},
                   {StrId::STR_GRP_SCREEN,
-                   {StrId::STR_REFRESH_FREQ, StrId::STR_NIGHT_REFRESH_FREQ, StrId::STR_CHAPTER_START_REFRESH,
-                    StrId::STR_CHAPTER_WIPE, StrId::STR_SUNLIGHT_FADING_FIX, StrId::STR_SCREEN_CALIBRATION}},
+                   {StrId::STR_REFRESH_FREQ, StrId::STR_CHAPTER_START_REFRESH, StrId::STR_CHAPTER_WIPE,
+                    StrId::STR_SUNLIGHT_FADING_FIX, StrId::STR_SCREEN_CALIBRATION}},
                   {StrId::STR_GRP_SLEEP_SCREEN, {StrId::STR_SLEEP_SCREEN, StrId::STR_FAST_UNLOCK}},
                   {StrId::STR_GRP_WALLPAPER,
                    {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER, StrId::STR_SHOW_SLEEP_IMAGE_FILENAME,
-                    StrId::STR_SHOW_SLEEP_FAVORITE_BADGE, StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION,
-                    StrId::STR_SHOW_SLEEP_READING_STATS, StrId::STR_SLEEP_READING_STATS_ALIGN,
-                    StrId::STR_SHUFFLE_WALLPAPERS, StrId::STR_REFRESH_SLEEP_WALLPAPER}},
+                    StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, StrId::STR_SHUFFLE_WALLPAPERS}},
                   {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
               });
 
@@ -357,11 +344,9 @@ void SettingsActivity::rebuildSettingsList() {
       {
           {StrId::STR_GRP_TEXT,
            {StrId::STR_TEXT_SETTINGS, StrId::STR_MANAGE_FONTS, StrId::STR_INSTALLED_FONTS, StrId::STR_DICTIONARY}},
-          // Book Menu Opens On belongs here: it is about the page you are on, and left out
-          // of the map it fell to the bottom of the category under no heading at all.
           {StrId::STR_GRP_PAGE,
-           {StrId::STR_ORIENTATION, StrId::STR_BOOK_MENU_TAB, StrId::STR_PARAGRAPH_NUMBERS,
-            StrId::STR_PARAGRAPH_NUMBER_SIZE, StrId::STR_PARAGRAPH_NUMBER_PLACE}},
+           {StrId::STR_ORIENTATION, StrId::STR_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBER_SIZE,
+            StrId::STR_PARAGRAPH_NUMBER_PLACE}},
           // The status bar rows adjacent, and the screen that configures it straight after
           // the toggle that hides it.
           {StrId::STR_GRP_LOOK,
@@ -406,10 +391,6 @@ void SettingsActivity::rebuildSettingsList() {
           {StrId::STR_GRP_DEVICE,
            {StrId::STR_LANGUAGE, StrId::STR_CLEAN_STORAGE, StrId::STR_CLEAR_READING_CACHE, StrId::STR_CHECK_UPDATES,
             StrId::STR_SD_FIRMWARE_UPDATE, StrId::STR_INSTALL_OTHER_FIRMWARE, StrId::STR_WHATS_NEW}},
-          // Last, and named for what they are: a panel-tuning escape hatch and a
-          // diagnostics readout. Performance Timings is compiled out of some builds, and
-          // applyGroups draws no heading for a group whose rows are all missing.
-          {StrId::STR_GRP_ADVANCED, {StrId::STR_FAST_PAGE_TURNS, StrId::STR_PERF_TIMINGS}},
       });
 }
 
@@ -450,25 +431,18 @@ void SettingsActivity::startDownloadActivity(std::unique_ptr<Activity> activity)
   }
   {
     RenderLock lock(*this);
-    const uint32_t before = ESP.getFreeHeap();
-    size_t capacity = 0;
     // Settings stays on the activity stack. None of these cached rows is used
     // by OTA/fonts, and settings retains capacity for ALL categories even when
     // it only displays System. Destruction also frees each row's enum/callback data.
     closeRouting();
     for (auto* rows : {&settings, &displaySettings, &readerSettings, &controlsSettings, &systemSettings}) {
-      capacity += rows->capacity();
       releaseStorage(*rows);
     }
     settingsCount = 0;
     releaseStorage(cellNameScratch);
     releaseStorage(cellValueScratch);
     releaseStorage(optionPopup);
-    const uint32_t after = ESP.getFreeHeap();
-    diag::recordHeapReclaim("settings", before, after, capacity, sizeof(SettingInfo));
   }
-  // Persist before Wi-Fi checkpoints can fill the bounded diagnostics buffer.
-  diag::flush();
   startActivityForResult(std::move(activity), [this](const ActivityResult&) {
     SETTINGS.saveToFile();
     {
@@ -492,17 +466,6 @@ void SettingsActivity::activateCell(const int index) {
       activityManager.goToFileTransfer();
       return;
     }
-#if FREEINK_DEVICE_X4PRO
-    if (index == kFastPageTurnsTestCell) {
-      const uint8_t before = SETTINGS.fastPageTurns;
-      startActivityForResult(std::make_unique<FastPageTurnsTestActivity>(renderer, mappedInput),
-                             [this, before](const ActivityResult&) {
-                               if (SETTINGS.fastPageTurns != before) SETTINGS.saveToFile();
-                               requestUpdate();
-                             });
-      return;
-    }
-#endif
     // A new screen: its first row shares this cell's action and value, so it would
     // inherit the tap flash.
     app.clearTapFlash();

@@ -13,7 +13,6 @@
 #include "SdCardFontSystem.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
-#include "WakeTiming.h"
 #include "Xtc.h"
 #include "XtcReaderActivity.h"
 #include "activities/boot_sleep/PxcSleepRenderer.h"
@@ -171,7 +170,6 @@ void ReaderActivity::onEnter() {
     BusyBanner fontBanner(renderer, tr(STR_BUSY_LOADING_FONT));
     sdFontSystem.ensureLoaded(renderer);
   }
-  WakeTiming::mark(WakeTiming::Stage::FontLoaded);
 
   // Only from here on does anything draw. The font above and the book loads below run
   // while a wake's clearing pass may still be on the panel (main.cpp starts it async
@@ -210,9 +208,6 @@ void ReaderActivity::onEnter() {
     waitForPanel();
     onGoToEpubReader(std::move(epub));
   }
-  // The page reader is queued, not painted: its first render runs on the next
-  // ActivityManager::loop(). WakeTiming::readable() reports that end of the wake.
-  WakeTiming::mark(WakeTiming::Stage::BookLoaded);
 }
 
 void ReaderActivity::onGoBack() {

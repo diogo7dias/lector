@@ -17,10 +17,8 @@
 // through to ActivityManager's device-wide actions; a press neither can run does nothing.
 // (Only the EPUB quick menu draws a "not available" pop-up.)
 //
-// Text Settings is deliberately NOT in the subset. The TXT reader keeps its own font and
-// size (txtSdFontFamilyName / txtFontPointSize, edited from its Confirm pop-up), so the
-// global Text Settings screen would change margins and alignment on the page while its
-// font rows did nothing — worse than saying the binding does not apply here.
+// Text Settings is deliberately NOT in the subset: it is a per-book screen of the EPUB
+// reader's in-book menu.
 namespace simple_reader_shortcut {
 
 enum class Action : uint8_t {

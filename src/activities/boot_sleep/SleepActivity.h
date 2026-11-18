@@ -12,9 +12,6 @@ class SleepActivity final : public Activity {
   explicit SleepActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool fromTimeout = false)
       : Activity(activity_name::kSleep, renderer, mappedInput), fromTimeout(fromTimeout) {}
   void onEnter() override;
-  // Draws the wallpaper at `path` again, for the timed Refresh Wallpaper wake. False when
-  // the file is gone or will not decode; nothing was drawn then.
-  static bool repaintWallpaper(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& path);
 
  private:
   // Everything onEnter() does apart from bookkeeping. Split out so onEnter() can wrap it

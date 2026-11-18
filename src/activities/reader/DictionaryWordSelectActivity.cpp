@@ -12,7 +12,6 @@
 #include <cstdlib>
 
 #include "CrossPointSettings.h"
-#include "DictHistoryStore.h"
 #include "DictionaryDefinitionActivity.h"
 #include "components/UITheme.h"
 #include "util/DictionaryFailure.h"
@@ -185,17 +184,10 @@ void DictionaryWordSelectActivity::performLookup() {
 
   if (found) {
     popup = Popup::None;
-    // The headword, not the word on the page: it is what the dictionary actually holds, so
-    // looking it up again from the history finds the same entry. Recorded on the way BACK
-    // from the definition, never here: writing the history means parsing and re-serialising
-    // a JSON document, and a definition can be 64 KB, so doing both at once would stack two
-    // allocations on the peak this path is already tightest at.
-    std::string looked = headword;
     startActivityForResult(
         std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
                                                        std::move(definition), dict.definitionsAreHtml()),
-        [this, looked = std::move(looked)](const ActivityResult&) {
-          DICT_HISTORY.add(looked);
+        [this](const ActivityResult&) {
           if (heldLookup) {
             finish();
             return;
@@ -205,7 +197,7 @@ void DictionaryWordSelectActivity::performLookup() {
     return;
   }
   // Name the failure: an index/open problem and a lookup problem are told apart, and the
-  // wording of each lives in dict_failure so the history screen says the same thing.
+  // wording of each lives in dict_failure.
   const dict_failure::Message message = ok ? dict_failure::forLookup(result) : dict_failure::forIndex(indexResult);
   popup = message.isError ? Popup::Error : Popup::NotFound;
   popupMsg = message.id;

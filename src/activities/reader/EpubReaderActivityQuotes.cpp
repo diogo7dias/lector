@@ -8,7 +8,6 @@
 
 #include <algorithm>
 
-#include "DictionaryHistoryActivity.h"
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderActivity.h"
 #include "QuoteSelectActivity.h"

@@ -13,7 +13,6 @@
 #include <cstring>
 #include <string>
 
-#include "Diagnostics.h"
 #include "FirmwareFlasher.h"
 #include "FirmwareVersion.h"
 #include "OtaRetryPolicy.h"
@@ -48,22 +47,21 @@ bool isHttps(const std::string& url) { return url.rfind("https://", 0) == 0; }
 
 #if CONFIG_IDF_TARGET_ESP32C3
 // Read before the framebuffer loan ends. Admission numbers alone cannot tell
-// a failed handshake from an allocation failure after an allowed gate. These
-// notes use the existing static diagnostics buffer; no card I/O during TLS.
+// a failed handshake from an allocation failure after an allowed gate.
 void recordTransferMemory(const char* step) {
   const auto failed = heap_probe::read();
-  diag::note("  transfer=%s heap free=%u largest=%u alloc_failures=%u first=%u largest_failed=%u", step,
-             static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()),
-             static_cast<unsigned>(failed.failures), static_cast<unsigned>(failed.firstSize),
-             static_cast<unsigned>(failed.largestSize));
+  LOG_ERR("OTA", "transfer=%s heap free=%u largest=%u alloc_failures=%u first=%u largest_failed=%u", step,
+          static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()),
+          static_cast<unsigned>(failed.failures), static_cast<unsigned>(failed.firstSize),
+          static_cast<unsigned>(failed.largestSize));
   // Scratch counters are cumulative within this loan (including redirects and
   // retries), and are only meaningful when a Session actually claimed it.
   if (!tls_scratch::isActive()) return;
-  diag::note("  scratch low=%u spills=%u spill_bytes=%u tls_oom=%u last_oom_size=%u last_oom_free=%u",
-             static_cast<unsigned>(tls_scratch::poolLowWaterBytes()),
-             static_cast<unsigned>(tls_scratch::heapFallbackCount()),
-             static_cast<unsigned>(tls_scratch::heapFallbackBytes()), static_cast<unsigned>(tls_scratch::oomCount()),
-             static_cast<unsigned>(tls_scratch::oomSize()), static_cast<unsigned>(tls_scratch::oomFreeHeap()));
+  LOG_ERR("OTA", "scratch low=%u spills=%u spill_bytes=%u tls_oom=%u last_oom_size=%u last_oom_free=%u",
+          static_cast<unsigned>(tls_scratch::poolLowWaterBytes()),
+          static_cast<unsigned>(tls_scratch::heapFallbackCount()),
+          static_cast<unsigned>(tls_scratch::heapFallbackBytes()), static_cast<unsigned>(tls_scratch::oomCount()),
+          static_cast<unsigned>(tls_scratch::oomSize()), static_cast<unsigned>(tls_scratch::oomFreeHeap()));
 }
 #endif
 }  // namespace
@@ -99,10 +97,6 @@ bool OtaUpdater::heapAllowsTls(const char* step) {
   const uint32_t poolFree = tls_scratch::poolFreeBytes();
   const uint32_t poolBlock = tls_scratch::poolLargestBlock();
   const bool allowed = tls_heap::canStartTls(lastFreeHeap, lastLargestBlock, scratch, poolFree, poolBlock);
-  // The same numbers into the diagnostics file: this is exactly what a user
-  // was once asked to read off the screen and type into a chat.
-  diag::recordTlsGate(step, lastFreeHeap, lastLargestBlock, scratch, tls_heap::minFree(scratch),
-                      tls_heap::minBlock(scratch), allowed, poolFree, poolBlock);
   // One line per gate, INF so a default build reads it back without a debug
   // flag: the real numbers, not another guess about where the C3's heap went.
   LOG_INF("OTA", "Heap at %s: free %u, largest block %u, framebuffer lent %s, floor %u/%u", step,
@@ -247,14 +241,10 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   // runs esp_image_verify, which rejects images this device runs perfectly
   // (see FirmwareFlasher.h), and esp_ota_set_boot_partition arms a rollback
   // that sends any non-Arduino firmware straight back here on its first boot.
-  // The attempt entry opens before the partition lookup, the same as the SD
-  // path: "no next-update partition" is answered by the table it dumps.
-  diag::beginAttempt(diag::Source::Ota, nullptr, otaSize);
   firmware_flash::StreamingInstall installer;
   const firmware_flash::Result beginRes = installer.begin();
   if (beginRes != firmware_flash::Result::OK) {
     LOG_ERR("OTA", "install begin failed: %s", firmware_flash::resultName(beginRes));
-    diag::endAttempt(firmware_flash::resultName(beginRes), "partition lookup");
     return INTERNAL_UPDATE_ERROR;
   }
 
@@ -329,8 +319,8 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
 #if CONFIG_IDF_TARGET_ESP32C3
           const auto writeResult = installer.feed(data, len);
           if (writeResult != firmware_flash::Result::OK) {
-            diag::note("  flash feed: %s written=%zu capacity=%zu", firmware_flash::resultName(writeResult),
-                       installer.written(), installer.capacity());
+            LOG_ERR("OTA", "flash feed: %s written=%zu capacity=%zu", firmware_flash::resultName(writeResult),
+                    installer.written(), installer.capacity());
 #else
           if (installer.feed(data, len) != firmware_flash::Result::OK) {
 #endif
@@ -354,26 +344,21 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
 
     if (wrongChip) {
       failure = ota_retry::Failure::WRONG_CHIP;
-      diag::note("  download %d: wrong chip image=%s device=%s", attempt, firmware_flash::chipName(lastImageChip),
-                 firmware_flash::chipName(firmware_flash::runningPartitionChipId()));
     } else if (!flashOk) {
       failure = ota_retry::Failure::FLASH_WRITE;
-      diag::note("  download %d: flash write failed at byte %zu of %zu", attempt, processedSize, totalSize);
+      LOG_ERR("OTA", "download %d: flash write failed at byte %zu of %zu", attempt, processedSize, totalSize);
     } else if (fetchOk && ota_retry::isShortTransfer(processedSize, totalSize)) {
       // Ended cleanly, short of the image: resumable, so say so rather than
       // committing a truncated partition and calling it corrupt.
       LOG_ERR("OTA", "Transfer ended at %zu of %zu bytes", processedSize, totalSize);
       failure = ota_retry::Failure::DOWNLOAD;
-      diag::note("  download %d: ended early at byte %zu of %zu%s", attempt, processedSize, totalSize,
-                 replayedFromStart ? " (server replayed from 0)" : "");
+      if (replayedFromStart) LOG_ERR("OTA", "download %d: the server replayed from byte 0", attempt);
     } else if (fetchOk) {
       installed = true;
-      diag::note("  download %d: OK %zu bytes%s", attempt, processedSize,
-                 replayedFromStart ? " (server replayed from 0)" : "");
       break;
     } else {
       failure = ota_retry::Failure::DOWNLOAD;
-      diag::note("  download %d: connection failed at byte %zu of %zu", attempt, processedSize, totalSize);
+      LOG_ERR("OTA", "download %d: connection failed at byte %zu of %zu", attempt, processedSize, totalSize);
     }
 
     if (!ota_retry::shouldRetry(failure, attempt)) break;
@@ -388,14 +373,11 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
 #endif
     if (failure == ota_retry::Failure::WRONG_CHIP) {
       LOG_ERR("OTA", "Firmware install aborted: wrong device");
-      diag::endAttempt(errorName(WRONG_DEVICE_ERROR), "download");
       return WRONG_DEVICE_ERROR;
     }
     LOG_ERR("OTA", "Firmware install failed (%s)",
             failure == ota_retry::Failure::FLASH_WRITE ? "flash write" : "download");
-    const OtaUpdaterError err = failure == ota_retry::Failure::FLASH_WRITE ? INTERNAL_UPDATE_ERROR : HTTP_ERROR;
-    diag::endAttempt(errorName(err), "download");
-    return err;
+    return failure == ota_retry::Failure::FLASH_WRITE ? INTERNAL_UPDATE_ERROR : HTTP_ERROR;
   }
 
   // Validates the image where it landed, then points otadata at it with the

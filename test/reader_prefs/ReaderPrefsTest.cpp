@@ -50,8 +50,8 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.extraParagraphSpacing, b.extraParagraphSpacing);
   EXPECT_EQ(a.wordSpacing, b.wordSpacing);
   EXPECT_EQ(a.characterSpacing, b.characterSpacing);
-  EXPECT_EQ(a.sbChapterTimePos, b.sbChapterTimePos);
-  EXPECT_EQ(a.sbBookTimePos, b.sbBookTimePos);
+  EXPECT_EQ(a.retiredChapterTime, b.retiredChapterTime);
+  EXPECT_EQ(a.retiredBookTime, b.retiredBookTime);
   EXPECT_EQ(a.textContrast, b.textContrast);
   EXPECT_EQ(a.paragraphNumberPlace, b.paragraphNumberPlace);
   EXPECT_EQ(a.sbBookTitlePos, b.sbBookTitlePos);
@@ -824,19 +824,22 @@ TEST(StatusBarBlock, HiddenBarKeepsItsProgressBarsOnlyWhenAsked) {
   EXPECT_EQ(2, b.activeBarThickness());
 }
 
-TEST(ReaderPrefs, AV17RecordLeavesTheTimeLeftItemsOff) {
+TEST(ReaderPrefs, RetiredTimeLeftBytesAreZeroedOnRead) {
+  // A record written while Time Left in Chapter / Book existed still carries the anchors.
+  // The layout keeps their bytes, but a read drops the values so a book that had one set
+  // is not seen as custom by the whole-blob compare against global.
   auto old = makeSample();
-  old.sbChapterTimePos = 3;  // outside the v17 record, must not be read
-  old.sbBookTimePos = 4;
-  std::stringstream file;
-  file.put(static_cast<char>(17));
-  file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(17));
-  ReaderPrefs loaded;
-  bool migrated = false;
-  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
-  EXPECT_TRUE(migrated);
-  EXPECT_EQ(0, loaded.sbChapterTimePos);
-  EXPECT_EQ(0, loaded.sbBookTimePos);
+  old.retiredChapterTime = 3;
+  old.retiredBookTime = 4;
+  for (const uint8_t version : {static_cast<uint8_t>(18), ReaderPrefs::VERSION}) {
+    std::stringstream file;
+    file.put(static_cast<char>(version));
+    file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(version));
+    ReaderPrefs loaded;
+    ASSERT_TRUE(readReaderPrefs(file, loaded));
+    EXPECT_EQ(0, loaded.retiredChapterTime);
+    EXPECT_EQ(0, loaded.retiredBookTime);
+  }
 }
 
 TEST(ReaderPrefs, AV18RecordKeepsNormalContrast) {

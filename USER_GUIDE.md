@@ -179,12 +179,7 @@ not count as reading.
 
 **Stats** on Home leads with this month as a calendar: each day fills from the bottom by how
 long you read that day, the longest day full, and today has a thick outline. Under it are the
-last 7 days, this year, all time and the books finished. The sleep screen shows the last 7
-days in a thin black band along its foot, on wallpapers and covers alike, when **Settings >
-Display > Show Reading Stats** is on (off by default). When you lock straight from a book,
-a **This sitting** line above it shows the time and pages of the sitting you just closed;
-it needs no clock. **Reading Stats Position** puts its
-text in the **Center** (default), or on the **Left** or **Right**.
+last 7 days, this year, all time and the books finished.
 
 Turning past the last page shows **End of book** with the title and author, the day you
 started and the day you finished, your total time and pages in that book, and the last quote
@@ -375,10 +370,8 @@ and the number of rows it holds. Moving onto a heading opens it (the plus turns 
 and closes the one that was open. **Back** closes the open tab; a second **Back** leaves the
 menu. Rows that do not apply to the open book are not shown at all.
 
-The menu opens on **Sleep Screen**. **Settings > Reader > Book Menu Opens On** changes that to
-**Navigate**, **Book**, **Look** or **Device** instead, and that choice always wins. The
-**Sleep Screen** tab appears alongside the others while the lock screen has a wallpaper to act
-on; on nights it has none, a menu set to open there opens on **Navigate**.
+The menu opens on **Sleep Screen**. That tab appears alongside the others while the lock
+screen has a wallpaper to act on; on nights it has none, the menu opens on **Navigate**.
 
 ### Navigate
 
@@ -390,10 +383,6 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 - **Go to Page** — jump to a page number of the printed edition: type it as the book prints
   it (`147`, or `xii` in the front matter) and **OK**. Shown only in EPUB 3 books that carry
   the printed page numbers (a page list); Return takes you back.
-- **Search** — type a word or phrase and the book is searched chapter by chapter, straight
-  from the card; hits appear as they are found, each with a line of context and its chapter.
-  Case, curly quotes and line breaks do not matter. Up to 100 hits. Pick one to land on its
-  page (Return takes you back); Back stops the search. The last search is offered again.
 - **Return** — go back to where you were before selecting a chapter, jumping by percentage,
   or opening a bookmark. Keeps the last eight jump origins during this reading session;
   ordinary page turns do not add entries. Shown only while there is somewhere to return to.
@@ -410,8 +399,6 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 
 - **Look Up** — pick a word on the page and read its definition. Needs a dictionary, see
   [section 11](#11-fonts-and-dictionaries).
-- **Lookup History** — the last 100 words you looked up, newest first. Pick one to read its
-  definition again.
 - **Grab Quote** — save a passage from this page.
 - **View Quotes** — read back what you saved, shown once the book has quotes.
 - **Remove This Book** — unfile the book from recents; the file stays on the card.
@@ -505,9 +492,8 @@ Wallpaper rows in the in-book menu's Sleep Screen tab favourite, pause, hold and
 wallpaper the device just showed. Paused wallpapers move to `/sleep pause` and stop appearing
 in the rotation. **Settings > Display > Shuffle Wallpapers** reshuffles the order.
 
-Five Display settings decide what is drawn over a wallpaper: **Show Wallpaper Name**, **Show
-Favorite Badge**, **Show Wallpaper Position**, **Show Reading Stats** (this sitting and the last 7 days in a
-band along the foot) and **Sleep Footer Text** (your own line of text). **Sleep Image Quality** trades rendering time against how the image looks: **Fast** or
+Three Display settings decide what is drawn over a wallpaper: **Show Wallpaper Name**, **Show
+Wallpaper Position** and **Sleep Footer Text** (your own line of text). **Sleep Image Quality** trades rendering time against how the image looks: **Fast** or
 **Pretty**.
 
 ### Cover settings
@@ -937,8 +923,7 @@ Look a word up from the in-book menu's **Look Up** row, or bind a hold to **Dict
 **Settings > Controls**. On a touch screen, hold the word itself for half a second: its
 definition opens straight away, and Back returns to the page. A long definition turns pages
 with the same taps and side swipes as a book page, under **Touch Reader Controls**. A word with several entries in
-the dictionary shows all of them, each under its own headword. Every successful lookup is remembered: **Lookup History**, in the
-same menu, lists the last 100 words newest first and reopens any of them. Setup and usage
+the dictionary shows all of them, each under its own headword. Setup and usage
 are covered in [docs/dictionary.md](./docs/dictionary.md).
 
 ---
@@ -979,15 +964,8 @@ belongs to, so the rows here appear in the same order as on the device.
 - **Sleep Screen Cover Mode** — Fit or Crop.
 - **Sleep Screen Cover Filter** — None, Contrast or Inverted.
 - **Sleep Image Quality** — Fast or Pretty.
-- **Show Wallpaper Name**, **Show Favorite Badge**, **Show Wallpaper Position**, **Show
-  Reading Stats** — what is drawn over the wallpaper. All off by default.
-- **Reading Stats Position** — Center, Left or Right.
+- **Show Wallpaper Name**, **Show Wallpaper Position** — what is drawn over the wallpaper. Both off by default.
 - **Shuffle Wallpapers** — reshuffle the rotation now.
-- **Refresh Wallpaper** (X4 Pro) — off by default. A gray wallpaper drawn straight after a page or
-  a menu can keep faint outlines of it. On, the reader wakes by itself one minute after locking,
-  draws the same wallpaper again and goes back to sleep, which clears them. Only wallpapers are
-  redrawn, not book covers, and not when the battery is under 15%. A short Power press during
-  that redraw (a few seconds) is missed: press again.
 
 **Frontlight** (boards with a frontlight)
 
@@ -1009,8 +987,6 @@ which turns the extra space between an EPUB's paragraphs on or off for that book
 - **Refresh Frequency** — a full refresh every 1, 5, 10, 15 or 30 pages, or **Never**. Never
   turns off the page-counted refresh only; the reader still cleans the panel when enough ink
   has moved to need it, so a long session does not end up smeared.
-- **Night Refresh Frequency** — the same choice while night mode is on. **Same as Day** (the
-  default) keeps Refresh Frequency; any other value applies only to inverted pages.
 - **Refresh at Chapter Start** — off by default. On adds a full refresh on the first page of
   each chapter you enter, on top of Refresh Frequency, so every chapter opens clean. EPUB only.
 - **Chapter Wipe** — off by default. On shows a crosshatch frame for one refresh (about half a
@@ -1124,7 +1100,6 @@ is centred.
   (default) tucks each number into the indent just before the paragraph's first letter;
   Page Edge lines them up in a column at the left edge. Either way they sit centred on
   the first line, and a number is left out where there is no room for it.
-- **Book Menu Opens On** — which tab the in-book menu starts on: Sleep Screen (default), Navigate, Book, Look or Device.
 
 **Look**
 
@@ -1142,7 +1117,7 @@ is centred.
 **Customise Status Bar** places each element in one of six slots (top left, top centre, top
 right, bottom left, bottom centre, bottom right) or turns it off: **Battery**, **Clock**,
 **Chapter Title**, **Book Title**, **Page in Chapter**, **Book %**, **Chapter %**, **Chapter Number**, **Pages This
-Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Alongside them:
+Session**, **Pages to Paragraph**. Alongside them:
 
 - **Chapter Title** and **Book Title** can go in different slots, for example the book on top
   and the chapter at the bottom. Put both on the same edge (both top or both bottom) and they
@@ -1158,11 +1133,6 @@ Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Al
 - **Pages to Paragraph** shows `>P.0` on most pages: the paragraph you are in ends before the
   next one starts. `>P.2` means it runs two more pages. In a TXT book each line break starts a
   paragraph, so a file broken into short lines always shows `>P.0`.
-- **Chapter time left** (`C:12m`) and **Book time left** (`B:3h05`) estimate from how long you
-  spend per page this sitting. They appear after three timed pages; turns under 2 seconds or
-  over 10 minutes are not counted. On EPUB the book estimate scales the rest of the book by the
-  current chapter, so it settles as you read. A TXT book has no chapters, so it shows Book time
-  left only, counted from its exact pages left.
 - **Book Bar** and **Chapter Bar** — Off, Top or Bottom, with **Bar Thickness** (Slim 3 px,
   Medium 6 px, Fat 9 px). On EPUB books the Book Bar has a small notch where each chapter
   starts. A book with more than 64 chapters shows a plain bar.
@@ -1223,21 +1193,6 @@ Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Al
 - **Clear Read Books from Recent List**.
 - **Move Finished Books to Read Folder**.
 - **Move Opened Books to Recents Folder**.
-
-**Fast Page Turns** — on by default on the X4, where it is validated. On the X4 Pro it has its
-own row on the main **Settings** page, off by default while it is being tried out. That page
-holds the switch and what to test, and it changes nothing on units with a UC8279 panel.
-Page turns and menu moves use the panel's cheapest waveform, which is several times quicker than the standard
-one. Every eighth pass runs the standard waveform anyway, so the panel never works from a
-stale temperature reading, and the first paint after a wake never uses it. Turn it off if
-you ever see ink left behind that a full refresh does not clear.
-
-**Performance Timings** — off by default, and free while it is off. On, Lector times every
-screen refresh and reports the numbers three ways: a small line in the top-left corner of
-the screen showing what the previous refresh cost, a breakdown of the last wake in place of
-the unlock screen footer, and a `.csv` file per session in the `/perf` folder on the card.
-It is there so a slow page turn can be measured rather than guessed at. Turn it off again
-when you are done; it writes to the card while it is on.
 
 **Network** — **Wi-Fi Networks**, **KOReader Sync**, **OPDS Servers**, **Share WiFi and OPDS**.
 
@@ -1331,15 +1286,6 @@ cache folders.
 
 **A crash happened.** Lector writes a crash report to the SD card without needing a USB
 connection. Attach that file to any bug report.
-
-**A firmware update failed, or ran to the end and the old firmware came back.** Lector keeps
-`lector-flash-diagnostics.txt` at the root of the card: every install attempt from the card or
-over the air, where it stopped and at which byte, the battery and memory at the time, the
-partition table and boot record, the boot after an install, and any crash or watchdog restart.
-It also records Wi-Fi connection progress, so a stall at **Connecting...** leaves evidence
-even before an update starts. Leave it for two minutes, then send the same file.
-Send that whole file. It names no book, network or device. It is kept to the last two days and a
-few kilobytes, and the web interface home page links to it (the *Diagnostics* link).
 
 **More detail is needed.** Connect the device over USB and run the debugging monitor (needs
 Python 3 with `pyserial`, `colorama` and `matplotlib`; install with

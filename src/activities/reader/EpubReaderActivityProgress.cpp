@@ -13,7 +13,6 @@
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderActivity.h"
 #include "EpubReaderBookmarksActivity.h"
-#include "EpubReaderSearchActivity.h"
 #include "EpubReaderUtils.h"
 #include "ProgressMapper.h"
 #include "QuoteSelectActivity.h"

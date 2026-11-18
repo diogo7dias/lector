@@ -2,13 +2,11 @@
 #include <Logging.h>
 
 #include "CrossPointSettings.h"
-#include "DictionaryHistoryActivity.h"
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderActivity.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
-#include "EpubReaderSearchActivity.h"
 #include "KOReaderAutoSync.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"

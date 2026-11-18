@@ -1,6 +1,5 @@
 #include "WifiSelectionActivity.h"
 
-#include <DiagLog.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <I18n.h>
@@ -9,61 +8,26 @@
 #include <esp_mac.h>
 
 #include <algorithm>
-#include <atomic>
 
 #include "CrossPointSettings.h"
-#include "Diagnostics.h"
 #include "MappedInputManager.h"
 #include "WifiCredentialStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
 
 namespace {
-// The Arduino event task only publishes numbers. The main task owns DiagLog/SD.
-std::atomic<uint32_t> stationEvents{0}, stationEventMs{0}, disconnects{0}, disconnectReason{0};
-std::atomic<int> stationEvent{-1}, associatedRssi{0};
-const char* statusName(const int status) {
-  switch (status) {
-    case WL_IDLE_STATUS:
-      return "IDLE";
-    case WL_NO_SSID_AVAIL:
-      return "NO_SSID";
-    case WL_SCAN_COMPLETED:
-      return "SCAN_DONE";
-    case WL_CONNECTED:
-      return "CONNECTED";
-    case WL_CONNECT_FAILED:
-      return "CONNECT_FAILED";
-    case WL_CONNECTION_LOST:
-      return "LOST";
-    case WL_DISCONNECTED:
-      return "DISCONNECTED";
-    case WL_STOPPED:
-      return "STOPPED";
-    case WL_NO_SHIELD:
-      return "NO_SHIELD";
-    default:
-      return "unobserved_or_unknown";
-  }
-}
 // The reader used to fail a connection with nothing on record but a timeout.
 // The SDK knows why it failed -- wrong password, AP out of range, the AP
 // dropping us -- and names the reason, so log it. Diagnosis only; the reason
 // never steers a decision here.
 void logWifiStationEvent(const arduino_event_id_t event, const arduino_event_info_t info) {
-  stationEvent = static_cast<int>(event);
-  stationEventMs = millis();
-  ++stationEvents;
   switch (event) {
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:
-      associatedRssi = WiFi.RSSI();
       LOG_INF("WIFI", "Station connected, channel %d", static_cast<int>(info.wifi_sta_connected.channel));
       break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
       LOG_INF("WIFI", "Station got IP, rssi %d dBm", static_cast<int>(WiFi.RSSI()));
       break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED: {
-      ++disconnects;
-      disconnectReason = info.wifi_sta_disconnected.reason;
       const auto reason = static_cast<wifi_err_reason_t>(info.wifi_sta_disconnected.reason);
       LOG_INF("WIFI", "Station disconnected: %s (%d)", WiFi.disconnectReasonName(reason),
               static_cast<int>(info.wifi_sta_disconnected.reason));
@@ -78,62 +42,7 @@ void logWifiStationEvent(const arduino_event_id_t event, const arduino_event_inf
 }
 }  // namespace
 
-// Persist BEFORE possibly blocking calls. After the first 48 writes, checkpoints
-// share a 5-second rate limit with the heartbeat. Retention keeps the file <=6 KiB.
-// This runs only on the activity/main task, never in render(), onExit(), or an ISR.
-void WifiSelectionActivity::checkpoint(const char* phase, const bool boundary) {
-  const uint32_t now = millis();
-  const bool write = diaglog::wifiCheckpointDue(checkpointWrites, now, lastCheckpointMs, boundary);
-  if (!boundary && !write) return;
-  diag::note("  t=%u phase=%s", now, phase);
-  if (!write) return;
-  session.noteDiagnostics(now);
-  diag::note("  loop=%u last=%u max_gap_ms=%u ui=%d(0:auto/1:scan/5:join/8:fail) scan_pending=%d join_pending=%d",
-             loopCount, lastLoopMs, maxLoopGapMs, static_cast<int>(state), scanPending, joinPending);
-  diag::note("  status=%d(%s) since=%u dwell_ms=%u last_sample=%u polls=%u changes=%u seen_mask=0x%x", lastStatus,
-             statusName(lastStatus), statusSinceMs, lastStatus < 0 ? 0 : statusLastMs - statusSinceMs, statusLastMs,
-             statusPolls, statusChanges, statusSeenMask);
-  diag::note("  sampled_ms[0..6,254,255]=%u,%u,%u,%u,%u,%u,%u,%u,%u mask_bits[254,255]=30,31", statusDwellMs[0],
-             statusDwellMs[1], statusDwellMs[2], statusDwellMs[3], statusDwellMs[4], statusDwellMs[5], statusDwellMs[6],
-             statusDwellMs[7], statusDwellMs[8]);
-  diag::note("  station events=%u last=%d at=%u disconnects=%u reason=%u associated_rssi=%d (0=unknown)",
-             stationEvents.load(), stationEvent.load(), stationEventMs.load(), disconnects.load(),
-             disconnectReason.load(), associatedRssi.load());
-  diag::note(
-      "  join_heap=%u largest=%u raw_scan=%d (-1=unknown); heap/RSSI=0 unknown; target_seen=-1 unscanned/no target",
-      joinFreeHeap, joinLargestHeap, rawScanCount);
-  diag::note("  action=%d running=%d (-1:none 0:SCAN 1:JOIN 2:DISCONNECT 3:PASSWORD 4:SAVE 5:FORGET 6:FINISH)",
-             lastAction, actionRunning);
-  diag::note("  checkpoint=%u immediate_limit=48 interval_ms=5000 file_cap=6144", ++checkpointWrites);
-  diag::flush();
-  lastCheckpointMs = millis();
-  diag::beginWifiCheckpoint();
-}
-
-void WifiSelectionActivity::observeStatus(const int status) {
-  const uint32_t now = millis();
-  ++statusPolls;
-  const int previousBucket = lastStatus == 254 ? 7 : lastStatus == 255 ? 8 : lastStatus;
-  if (previousBucket >= 0 && previousBucket < 9) statusDwellMs[previousBucket] += now - statusLastMs;
-  statusLastMs = now;
-  if (status >= 0 && status < 32) statusSeenMask |= 1u << status;
-  if (status == 254) statusSeenMask |= 1u << 30;  // STOPPED uses bit 30.
-  if (status == 255) statusSeenMask |= 1u << 31;  // NO_SHIELD uses bit 31.
-  if (status == lastStatus) return;
-  diag::note("  t=%u WiFi.status %d -> %d previous_observed_ms=%u", now, lastStatus, status,
-             lastStatus < 0 ? 0 : now - statusSinceMs);
-  lastStatus = status;
-  statusSinceMs = now;
-  ++statusChanges;
-  checkpoint("status changed");
-}
-
 void WifiSelectionActivity::onEnter() {
-  diag::beginWifiCheckpoint();
-  diag::note(
-      "  WiFi.status codes: -1=unobserved 0=IDLE 1=NO_SSID 2=SCAN_DONE 3=CONNECTED 4=CONNECT_FAILED 5=LOST "
-      "6=DISCONNECTED 254=STOPPED 255=NO_SHIELD");
-  checkpoint("onEnter before UI");
   UiStatusActivity::onEnter();
 
   // Registered once for the life of the process; WiFi.onEvent keeps its own list
@@ -147,14 +56,12 @@ void WifiSelectionActivity::onEnter() {
     wifiEventsRegistered = true;
   }
 
-  checkpoint("before credential load/render lock");
   // Load saved WiFi credentials - SD card operations need lock as we use SPI
   // for both
   {
     RenderLock lock(*this);
     WIFI_STORE.loadFromFile();
   }
-  checkpoint("credential load returned");
 
   setListSelection(0);
   networks.clear();
@@ -197,12 +104,10 @@ void WifiSelectionActivity::onEnter() {
   startup.lastConnectedSsid = WIFI_STORE.getLastConnectedSsid();
   session.begin(startup, millis());
   pumpSession();
-  checkpoint("onEnter returned; awaiting loop");
 }
 
 void WifiSelectionActivity::onExit() {
   // ActivityManager holds RenderLock here: RAM only, never flush.
-  diag::note("  t=%u wifi onExit", static_cast<unsigned>(millis()));
   Activity::onExit();
 
   LOG_DBG("WIFI", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
@@ -225,19 +130,12 @@ void WifiSelectionActivity::startWifiScan() {
   setListSelection(0);
   requestUpdate();
 
-  checkpoint("scan before WiFi.mode");
-  const bool modeOk = WiFi.mode(WIFI_STA);
-  diag::note("  scan mode returned=%d", modeOk);
-  checkpoint("scan before disconnect");
-  const bool disconnected = WiFi.disconnect();
-  diag::note("  scan disconnect returned=%d", disconnected);
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
   delay(100);
 
-  checkpoint("before scanNetworks async");
-  const int result = WiFi.scanNetworks(true);
-  diag::note("  t=%u scanNetworks returned=%d", static_cast<unsigned>(millis()), result);
+  WiFi.scanNetworks(true);
   scanPending = true;
-  checkpoint("scan started");
 }
 
 void WifiSelectionActivity::appendHiddenNetworkEntry() {
@@ -271,35 +169,23 @@ void WifiSelectionActivity::rebuildNetworkView() {
 }
 
 void WifiSelectionActivity::beginJoin(const std::string& ssid, const std::string& password) {
-  // A scan/keyboard between joins is NOT evidence that the old status stayed pinned.
-  lastStatus = -1;
-  statusLastMs = statusSinceMs = 0;
-  associatedRssi = 0;
-  joinFreeHeap = ESP.getFreeHeap();
-  joinLargestHeap = ESP.getMaxAllocHeap();
-  diag::note("  t=%u join start free_heap=%u largest=%u", static_cast<unsigned>(millis()), joinFreeHeap,
-             joinLargestHeap);
-  checkpoint("beginJoin entered");
   selectedSSID = ssid;
   connectedIP.clear();
   connectionError.clear();
   refreshConnectionLines();
   requestUpdate();
 
-  checkpoint("join before persistent/mode");
   WiFi.persistent(false);  // Credentials are managed by WifiCredentialStore; suppress SDK NVS auto-connect
   WiFi.mode(WIFI_STA);
   // Abort any in-progress SDK auto-connect, but leave the stored AP config alone
   // and keep the radio up: erasing the config and power-cycling the radio makes
   // some routers fail the WPA handshake that follows, which showed as a reader
   // that would not join a network it had joined the day before.
-  checkpoint("join before disconnect 1000ms");
   if (!WiFi.disconnect(false, false, 1000)) {
     LOG_DBG("WIFI", "Disconnect before begin timed out; continuing with explicit begin");
   }
   delay(100);
 
-  checkpoint("join disconnect returned");
   // Scan all channels so networks with multiple APs use the strongest matching
   // BSSID instead of the first match found by the framework's default fast scan.
   WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
@@ -317,25 +203,15 @@ void WifiSelectionActivity::beginJoin(const std::string& ssid, const std::string
     LOG_ERR("WIFI", "Failed to read station MAC for hostname (err=%d)", static_cast<int>(macResult));
   }
 
-  checkpoint("before WiFi.begin");
-  wl_status_t beginStatus;
   if (!password.empty()) {
-    beginStatus = WiFi.begin(ssid.c_str(), password.c_str());
+    WiFi.begin(ssid.c_str(), password.c_str());
   } else {
-    beginStatus = WiFi.begin(ssid.c_str());
+    WiFi.begin(ssid.c_str());
   }
-  diag::note("  t=%u WiFi.begin returned=%d (not a status poll)", static_cast<unsigned>(millis()),
-             static_cast<int>(beginStatus));
   joinPending = true;
-  checkpoint("WiFi.begin returned");
 }
 
 void WifiSelectionActivity::runAction(const wifi_session::Action& action) {
-  lastAction = static_cast<int>(action.kind);
-  actionRunning = true;
-  diag::note("  t=%u action=%d (0=SCAN 1=JOIN 2=DISCONNECT 3=PASSWORD 4=SAVE 5=FORGET 6=FINISH)",
-             static_cast<unsigned>(millis()), static_cast<int>(action.kind));
-  checkpoint("action begin");
   switch (action.kind) {
     case wifi_session::ActionKind::START_SCAN:
       startWifiScan();
@@ -428,30 +304,22 @@ void WifiSelectionActivity::syncStateFromSession() {
 
 void WifiSelectionActivity::pumpSession() {
   wifi_session::Action action;
-  checkpoint("before nextAction", loopCount == 0);
   while (session.nextAction(millis(), action)) {
     runAction(action);
-    actionRunning = false;
-    checkpoint("action returned");
     if (action.kind == wifi_session::ActionKind::FINISH) {
       return;  // The activity is finishing; nothing after this is ours to touch.
     }
   }
   syncStateFromSession();
-  checkpoint("drain returned", false);
 }
 
 void WifiSelectionActivity::pollRadio() {
   if (scanPending) {
-    checkpoint("before scanComplete", false);
     const int16_t scanResult = WiFi.scanComplete();
     if (scanResult == WIFI_SCAN_RUNNING) {
       return;
     }
 
-    rawScanCount = scanResult;
-    diag::note("  t=%u scanComplete returned=%d (raw AP count or error)", static_cast<unsigned>(millis()), scanResult);
-    checkpoint("scan completed");
     scanPending = false;
     if (scanResult == WIFI_SCAN_FAILED) {
       session.onScanFailed(millis());
@@ -492,19 +360,13 @@ void WifiSelectionActivity::pollRadio() {
     return;
   }
 
-  checkpoint("before WiFi.status", lastStatus < 0);
   const wl_status_t status = WiFi.status();
-  observeStatus(static_cast<int>(status));
   if (status == WL_CONNECTED) {
     joinPending = false;
     IPAddress ip = WiFi.localIP();
     char ipStr[16];
     snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
     connectedIP = ipStr;
-
-    diag::note("  chosen AP associated_rssi=%d channel=%d", static_cast<int>(WiFi.RSSI()),
-               static_cast<int>(WiFi.channel()));
-    checkpoint("connected before clock sync");
 
     // With an RTC, sync on the first successful WiFi connection only. The DS3231 drifts
     // ~2 ppm so one sync is enough; users can force a re-sync from Settings > Customise
@@ -519,13 +381,11 @@ void WifiSelectionActivity::pollRadio() {
       SETTINGS.saveToFile();
     }
 
-    checkpoint("clock sync returned; before credential save/render lock");
     {
       RenderLock lock(*this);
       WIFI_STORE.setLastConnectedSsid(session.activeSsid());
     }
 
-    checkpoint("credential save returned");
     session.onJoinSucceeded(millis());
     return;
   }
@@ -534,7 +394,6 @@ void WifiSelectionActivity::pollRadio() {
     joinPending = false;
     connectionError = status == WL_NO_SSID_AVAIL ? tr(STR_ERROR_NETWORK_NOT_FOUND) : tr(STR_ERROR_GENERAL_FAILURE);
     session.onJoinFailed(millis());
-    checkpoint("radio failure delivered");
   }
 }
 
@@ -739,11 +598,6 @@ bool WifiSelectionActivity::handleListSideButtons() {
 }
 
 bool WifiSelectionActivity::handleCustomInput() {
-  const uint32_t now = millis();
-  if (loopCount != 0) maxLoopGapMs = std::max(maxLoopGapMs, now - lastLoopMs);
-  lastLoopMs = now;
-  ++loopCount;
-  checkpoint("loop entered", loopCount == 1);
   if (state == WifiSelectionState::SCANNING || state == WifiSelectionState::AUTO_CONNECTING) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       // The reader took over; stop trying saved networks behind their back.

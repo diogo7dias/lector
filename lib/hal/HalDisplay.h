@@ -68,11 +68,8 @@ class HalDisplay {
 
   // The ink half of the same budget, carried across a lock the same way. See
   // DisplayRefreshPolicy's debt thresholds and FrameInkMetrics.
-  // Ask for the panel's cheap partial path on FAST refreshes. Sticky, and only a
-  // request: boards without one, and every promoted pass, ignore it. Off restores the
-  // vendor sequence exactly, with no reflash.
-  void setFastPageTurns(const bool enabled) { turboWanted = enabled; }
-  bool fastPageTurns() const { return turboWanted; }
+  // Whether any refresh has finished since boot (the silent restart is waiting on its first frame).
+  bool hasCompletedRefresh() const { return refreshCompleted; }
 
   uint16_t inkDebt() const { return refreshPolicy.inkDebt(); }
   void seedInkDebt(uint16_t value) { refreshPolicy.seedInkDebt(value); }
@@ -151,7 +148,7 @@ class HalDisplay {
   // enough to trap charge in the panel.
   // `inkScore` is what FrameInkMetrics made of the frame about to be pushed, or 0 on a
   // path that has no framebuffer to measure (a grayscale plane).
-  RefreshMode applyRefreshPolicy(RefreshMode requested, uint16_t inkScore = 0, bool allowTurbo = true);
+  RefreshMode applyRefreshPolicy(RefreshMode requested, uint16_t inkScore = 0);
   // Scores the framebuffer that is about to go to the panel. Returns 0 when the timings
   // are of no use to the policy (a mode the policy will not promote anyway), so the pass
   // over 48-52 KB is not paid for nothing.
@@ -164,34 +161,17 @@ class HalDisplay {
   // display rules ("an X3 HALF is not one waveform"; "an X3 grayscale base with a HALF
   // fallback has to resync first") then all read the same field.
   DeviceProfile deviceProfile;
-  // Feeds both the in-RAM stats the overlay draws and the CSV on the card.
-  void noteRefreshTiming(RefreshMode requested, RefreshMode actual, uint32_t totalUs, uint32_t asyncStartUs,
-                         uint16_t thinkMs, uint16_t inkScore) const;
-
   EInkDisplay einkDisplay;
   DisplayRefreshPolicy refreshPolicy;
-  bool turboWanted = false;
-  // The wake (or any caller) asked the driver to drive every pixel on the next FAST, and
-  // the driver has not consumed that yet. Read by applyRefreshPolicy().
-  bool driveAllArmed = false;
   // False until the first pass after begin() has been through applyRefreshPolicy().
   bool firstPassDone = false;
-  // What the last pass actually ran, for the perf log: what was asked for and what the
-  // reload cadence allowed are not the same thing.
-  bool lastPassWasTurbo = false;
   bool lastPassWasClean = false;
   FrameInkMetrics inkMetrics;
 
-  // In-flight async refresh, so waitRefreshComplete() can close the PerfLog record the
-  // async start opened. Carried unconditionally rather than behind the PERF_LOG flag:
-  // 14 bytes on one long-lived object is not worth an #if in a header everything sees.
-  uint32_t pendingAsyncStartUs = 0;
-  uint32_t pendingAsyncSplitUs = 0;
-  uint16_t pendingAsyncThinkMs = 0;
-  uint16_t pendingAsyncInkScore = 0;
-  RefreshMode pendingAsyncRequested = RefreshMode::FAST_REFRESH;
-  RefreshMode pendingAsyncActual = RefreshMode::FAST_REFRESH;
+  // An async refresh has been started and waitRefreshComplete() has not yet seen it end.
   bool pendingAsync = false;
+  // True once any refresh has finished since boot.
+  bool refreshCompleted = false;
 };
 
 extern HalDisplay display;

@@ -20,7 +20,6 @@ E-reader firmware for the Xteink X3, X4 and X4 Pro.
 - Granular paragraph spacing and first-line indent.
 - Paperback Look: heavier ink for reader text.
 - Bionic Reading and guide dots.
-- Lookup History: the last 100 dictionary words, reopened from the in-book menu.
 - ChareInk as the built-in reading font, Cozette for the UI.
 
 ### Quotes

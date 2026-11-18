@@ -17,7 +17,6 @@
 #include "ReaderProgressSaveDebouncer.h"
 #include "ReaderReturnHistory.h"
 #include "ReaderUtils.h"
-#include "ReadingTime.h"
 #include "components/OptionPopup.h"
 #include "components/StatusBar.h"
 #include "util/ReadingJournal.h"
@@ -45,10 +44,9 @@ struct EpubReaderState {
   // The reader lays out exclusively through prefs_, so the global singleton is never
   // mutated for reading and a custom book stays decoupled from global changes.
   ReaderPrefs prefs_;
-  int sessionPages = 0;               // Status bar only; reset with this reader activity.
-  int8_t queuedTurns = 0;             // Page turns pressed during a refresh; see QueuedTurns.h.
-  reading_time::PageTimer pageTimer;  // pace for the time-left items, this sitting only
-  reading_journal::Session journal;   // this sitting's line in /stats/journal.txt
+  int sessionPages = 0;              // Status bar only; reset with this reader activity.
+  int8_t queuedTurns = 0;            // Page turns pressed during a refresh; see QueuedTurns.h.
+  reading_journal::Session journal;  // this sitting's line in /stats/journal.txt
   // Book-bar chapter marks, built once on enter (statusbar::addChapterMark). 128 bytes
   // as a member rather than a vector: fixed, and read on the stack-tight render task.
   uint16_t chapterMarks_[statusbar::kMaxChapterMarks] = {};
@@ -320,7 +318,6 @@ struct EpubReaderState {
   // (a build step's image probe) has handed the buffer back white under the shown page, so the
   // Quick Menu must not paint straight onto it. Render task only.
   uint32_t pageLoanCount = 0;
-  std::string lastSearchQuery;  // offered again the next time Search opens
   // The book's look while the Reader Settings screen edits it (a copy of prefs_).
   ReaderPrefs readerEdit_{};
   // The book's bar while the Customise Status Bar screen edits it (a copy of prefs_'s).

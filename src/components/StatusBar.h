@@ -35,10 +35,6 @@ struct StatusBarData {
   // a new paragraph begins on the next page. -1 = the chapter cannot answer (no
   // paragraph table), which hides the item rather than showing a wrong 0.
   int paragraphPagesLeft = -1;
-  // Minutes left in the chapter and in the book at this sitting's pace. -1 hides the item
-  // until enough pages were timed (reading_time::MIN_SAMPLES).
-  int chapterMinutesLeft = -1;
-  int bookMinutesLeft = -1;
   // Book-bar chapter marks: where each top-level chapter starts, in thousandths of the
   // book. Points at storage the reader owns, so the render path stays allocation-free.
   // A count of 0 draws a plain bar.
@@ -116,8 +112,6 @@ struct Seg {
   X(ChapterNum, chapterNumPos, true)      \
   X(SessionPages, sessionPagesPos, false) \
   X(ParaPages, paraPagesPos, false)       \
-  X(ChapterTime, chapterTimePos, true)    \
-  X(BookTime, bookTimePos, false)         \
   X(BookTitle, bookTitlePos, false)
 
 #define SB_ITEM_ENUM(id, field, chapterOnly) id,

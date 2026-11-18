@@ -61,18 +61,6 @@ bool SleepActivity::renderWallpaperFile(const std::string& filename, const PxcRe
   return true;
 }
 
-// Refresh Wallpaper: the picture the last lock left, drawn again over itself. No popup,
-// no pre-clear and no new pick: the panel already holds this image, the second drive is
-// what clears the traces the first one left.
-bool SleepActivity::repaintWallpaper(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& path) {
-  const SleepActivity painter(renderer, mappedInput);
-  display.setInverted(false);
-  prepareSleepReadingLine();
-  const bool painted = painter.renderWallpaperFile(path, nullptr, 0, 0);
-  clearSleepReadingLine();
-  return painted;
-}
-
 void SleepActivity::renderCustomSleepScreen() const {
 #ifdef LECTOR_LOCK_LAB
   // A Full lock run has to draw what the bench draws, or the number it reports belongs to

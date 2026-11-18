@@ -4,7 +4,6 @@
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <I18n.h>
-#include <PerfStats.h>
 #include <esp_random.h>
 
 #include <algorithm>
@@ -16,7 +15,6 @@
 #include "CrossPointState.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
-#include "WakeTiming.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
@@ -32,7 +30,6 @@
 #include "settings/OpdsServerListActivity.h"
 #include "settings/ReleaseNotesActivity.h"
 #include "settings/SettingsActivity.h"
-#include "util/DebugTrace.h"
 #include "util/FullScreenMessageActivity.h"
 #include "util/OrientationCycle.h"
 
@@ -166,10 +163,8 @@ void ActivityManager::renderTaskLoop() {
   while (true) {
     // Takes the whole pending count, not one notification: every update request that
     // arrived while the previous refresh was on the panel is served by this single pass,
-    // which is what keeps a held-down button from costing one refresh per press. The
-    // count is recorded so a log can say how much actually collapsed.
-    const uint32_t requestsServed = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    PerfStats::noteRenderPass(requestsServed);
+    // which is what keeps a held-down button from costing one refresh per press.
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     // Acquire the lock before reading currentActivity to avoid a TOCTOU race
     // where the main task deletes the activity between the null-check and render().
     RenderLock lock;
@@ -201,10 +196,7 @@ void ActivityManager::renderTaskLoop() {
           // page) must not keep answering to the band the screen before it drew, or a
           // tap along the bottom of the page is a Back that leaves the book.
           hint_band::lastPainted().valid = false;
-          const bool wakeDestination = currentActivity->isReaderActivity() || currentActivity->isHomeActivity();
-          const uint32_t panelsBefore = PerfStats::wakePanelCount();
           currentActivity->render(std::move(lock));
-          if (wakeDestination && PerfStats::wakePanelCount() != panelsBefore) WakeTiming::readable();
         }
       }
     }
@@ -247,7 +239,6 @@ void ActivityManager::loop() {
     // deferred-update flush at the bottom of this function, and once the panel is up
     // handleInput() consumes the pass on every pass, so a deferred request would never
     // be flushed at all: the panel opened, reported present=1, and was never drawn.
-    WakeTiming::reportInput();
     if (lightPanel.isActive()) {
       // close() clears isActive() before this runs: the page under the band gets a clean paint.
       if (lightPanel.handleInput(mappedInput, [this] {
@@ -256,7 +247,6 @@ void ActivityManager::loop() {
           }))
         return;
     } else if (Frontlight.present() && mappedInput.wasMenuGesture()) {
-      debug_trace::note("top-edge gesture: opening the light panel");
       lightPanel.show();
       requestUpdate(/*immediate=*/true);
       return;
@@ -319,8 +309,6 @@ void ActivityManager::loop() {
         currentActivity = std::move(stackActivities.back());
         stackActivities.pop_back();
         LOG_DBG("ACT", "Popped from activity stack, new size = %zu", stackActivities.size());
-        // Resume bookkeeping runs before the result handler can render or navigate again.
-        currentActivity->becameTopmost();
         currentActivity->onRevealed();
         if (currentActivity->resultHandler) {
           LOG_DBG("ACT", "Handling result for popped activity");
@@ -544,10 +532,8 @@ void ActivityManager::paintQuickLockBadge() {
 }
 
 bool ActivityManager::runBoundAction(const uint8_t function) {
-  debug_trace::note("bound action %u dispatched", function);
   // The screen on top gets first refusal: in a book, most of these actions are its own.
   if (currentActivity && currentActivity->runBoundAction(function)) {
-    debug_trace::note("bound action %u taken by the activity", function);
     return true;
   }
 
@@ -610,8 +596,6 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
       return true;
     case CrossPointSettings::LP_MENU_LIGHT_PANEL:
       if (!Frontlight.present() || lightPanel.isActive()) {
-        debug_trace::note("light panel refused: present=%d active=%d", Frontlight.present() ? 1 : 0,
-                          lightPanel.isActive() ? 1 : 0);
         return false;
       }
       lightPanel.show();
