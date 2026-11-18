@@ -252,22 +252,15 @@ void EpubReaderMenuActivity::onEnter() {
   UiListActivity::onEnter();
   {
     RenderLock lock(*this);
-    // Open on the tab Settings > Book Menu Opens On names (indexed by BOOK_MENU_TAB).
-    // A tab that is not there tonight (Sleep, with no wallpaper to act on) falls back
-    // to Navigate, and failing that to the first heading.
-    static constexpr StrId TAB_LABELS[CrossPointSettings::BOOK_MENU_TAB_COUNT] = {
-        StrId::STR_SEC_NAVIGATE, StrId::STR_SEC_THIS_BOOK, StrId::STR_SEC_LOOK, StrId::STR_SEC_DEVICE,
-        StrId::STR_SEC_SLEEP_SCREEN};
+    // Open on Sleep Screen. That tab is not there tonight when there is no wallpaper to
+    // act on, so fall back to Navigate, and failing that to the first heading.
     const auto headerFor = [this](const StrId label) {
       for (int i = 0; i < static_cast<int>(items.size()); ++i) {
         if (items[i].isHeader && items[i].labelId == label) return i;
       }
       return -1;
     };
-    const uint8_t wanted = SETTINGS.bookMenuTab < CrossPointSettings::BOOK_MENU_TAB_COUNT
-                               ? SETTINGS.bookMenuTab
-                               : CrossPointSettings::BOOK_MENU_TAB_NAVIGATE;
-    int first = headerFor(TAB_LABELS[wanted]);
+    int first = headerFor(StrId::STR_SEC_SLEEP_SCREEN);
     if (first < 0) first = headerFor(StrId::STR_SEC_NAVIGATE);
     if (first < 0) {
       first = 0;

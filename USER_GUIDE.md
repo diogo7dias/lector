@@ -370,10 +370,8 @@ and the number of rows it holds. Moving onto a heading opens it (the plus turns 
 and closes the one that was open. **Back** closes the open tab; a second **Back** leaves the
 menu. Rows that do not apply to the open book are not shown at all.
 
-The menu opens on **Sleep Screen**. **Settings > Reader > Book Menu Opens On** changes that to
-**Navigate**, **Book**, **Look** or **Device** instead, and that choice always wins. The
-**Sleep Screen** tab appears alongside the others while the lock screen has a wallpaper to act
-on; on nights it has none, a menu set to open there opens on **Navigate**.
+The menu opens on **Sleep Screen**. That tab appears alongside the others while the lock
+screen has a wallpaper to act on; on nights it has none, the menu opens on **Navigate**.
 
 ### Navigate
 
@@ -1102,7 +1100,6 @@ is centred.
   (default) tucks each number into the indent just before the paragraph's first letter;
   Page Edge lines them up in a column at the left edge. Either way they sit centred on
   the first line, and a number is left out where there is no room for it.
-- **Book Menu Opens On** — which tab the in-book menu starts on: Sleep Screen (default), Navigate, Book, Look or Device.
 
 **Look**
 

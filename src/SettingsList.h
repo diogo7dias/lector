@@ -439,21 +439,6 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
       {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_ORIENTATION_INVERTED, StrId::STR_LANDSCAPE_CCW},
       "orientation", StrId::STR_CAT_READER));
 
-  // Which tab the in-book menu lands on. Labels are the tab bar's own strings, and
-  // the list is index-aligned with CrossPointSettings::BOOK_MENU_TAB because ENUM
-  // settings persist by index.
-  {
-    std::vector<StrId> bookMenuTabValues(CrossPointSettings::BOOK_MENU_TAB_COUNT);
-    bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_NAVIGATE] = StrId::STR_SEC_NAVIGATE;
-    bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_THIS_BOOK] = StrId::STR_SEC_THIS_BOOK;
-    bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_LOOK] = StrId::STR_SEC_LOOK;
-    bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_DEVICE] = StrId::STR_SEC_DEVICE;
-    bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_SLEEP] = StrId::STR_SEC_SLEEP_SCREEN;
-
-    emit(SettingInfo::Enum(StrId::STR_BOOK_MENU_TAB, &CrossPointSettings::bookMenuTab, std::move(bookMenuTabValues),
-                           "bookMenuTab", StrId::STR_CAT_READER));
-  }
-
   // Off / On / Bolder. Stored 0/1/2, so a file written when this was a toggle reads the same.
   emit(SettingInfo::Enum(StrId::STR_PAPERBACK_LOOK, &CrossPointSettings::paperbackLookBody,
                          {StrId::STR_STATE_OFF, StrId::STR_STATE_ON, StrId::STR_BOLDER}, "paperbackLookBody",
