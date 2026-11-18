@@ -54,12 +54,6 @@ void DictionaryWordSelectActivity::onEnter() {
   if (!words.empty()) {
     const int initial = closestInRow(rowCount / 2, renderer.getScreenWidth() / 2);
     if (initial >= 0) selected = initial;
-    const int held = anchorX >= 0 ? wordAt(anchorX, anchorY) : -1;
-    if (held >= 0) {
-      selected = held;
-      lookupPending = true;
-      heldLookup = true;
-    }
   }
   requestUpdate();
 }
@@ -166,39 +160,25 @@ void DictionaryWordSelectActivity::moveVertical(const int direction) {
 
 void DictionaryWordSelectActivity::performLookup() {
   popup = Popup::Busy;
-  const Dictionary::Readiness readiness = dict.prepare(SETTINGS.dictionaryName);
-  const bool needsIndex = readiness == Dictionary::Readiness::NeedsIndex;
-  popupMsg = needsIndex ? StrId::STR_DICT_INDEXING : StrId::STR_DICT_LOOKING_UP;
-  requestUpdateAndWait();  // paint the page + busy popup before blocking on SD
-
-  bool ok = readiness != Dictionary::Readiness::Unavailable;
-  Dictionary::IndexResult indexResult = Dictionary::IndexResult::Ok;
-  if (needsIndex) {
-    ok = dict.buildIndex(&indexResult);
-  }
-
   std::string definition;
   std::string headword;
-  Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
-  const bool found = ok && dict.lookup(words[selected].text(), definition, headword, &result);
+  dict_failure::Message message;
+  const auto showBusy = [](void* ctx, const StrId id) {
+    auto* self = static_cast<DictionaryWordSelectActivity*>(ctx);
+    self->popupMsg = id;
+    self->requestUpdateAndWait();  // paint the page + busy popup before blocking on SD
+  };
+  const bool found = dict_failure::lookUp(dict, SETTINGS.dictionaryName, words[selected].text(), definition, headword,
+                                          message, showBusy, this);
 
   if (found) {
     popup = Popup::None;
     startActivityForResult(
         std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
                                                        std::move(definition), dict.definitionsAreHtml()),
-        [this](const ActivityResult&) {
-          if (heldLookup) {
-            finish();
-            return;
-          }
-          requestUpdate();
-        });
+        [this](const ActivityResult&) { requestUpdate(); });
     return;
   }
-  // Name the failure: an index/open problem and a lookup problem are told apart, and the
-  // wording of each lives in dict_failure.
-  const dict_failure::Message message = ok ? dict_failure::forLookup(result) : dict_failure::forIndex(indexResult);
   popup = message.isError ? Popup::Error : Popup::NotFound;
   popupMsg = message.id;
   popupTime = millis();
@@ -211,12 +191,6 @@ void DictionaryWordSelectActivity::loop() {
       popup = Popup::None;
       requestUpdate();
     }
-    return;
-  }
-
-  if (lookupPending) {
-    lookupPending = false;
-    performLookup();
     return;
   }
 

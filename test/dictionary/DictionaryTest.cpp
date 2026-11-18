@@ -289,3 +289,16 @@ TEST_F(DictionaryTest, LongIfoDescriptionDoesNotHideTheTypeSequence) {
   ASSERT_TRUE(dictionary.lookup("bank", definition, headword, &result));
   EXPECT_EQ(definition, "plain");
 }
+
+// A touch selection looks up the passage as the quote joins it: words spaced, edge
+// punctuation still attached.
+TEST_F(DictionaryTest, PhraseWithSpacesAndEdgePunctuationFindsItsHeadword) {
+  writeDictionary({{"kick", "strike"}, {"kick the bucket", "die"}, {"kickback", "a bribe"}}, "m");
+  openAndIndex();
+  ASSERT_TRUE(
+      dictionary.lookup("\xE2\x80\x9C"
+                        "kick the bucket,",
+                        definition, headword, &result));
+  EXPECT_EQ(definition, "die");
+  EXPECT_EQ(headword, "kick the bucket");
+}

@@ -45,12 +45,14 @@ test('opens a book, swipes a page, opens the menu, resumes after a reboot', asyn
   };
   const second = await body();
 
-  // Holding a word opens the dictionary. The sim card has none, so the reader says so in a
-  // message that clears itself, and the page underneath neither turns nor opens the menu.
+  // Holding a word selects it, and lifting without a drag looks it up. The sim card has no
+  // dictionary, so the reader says so in a message that clears itself, and the page
+  // underneath neither turns nor opens the menu. (The activity label stays on the picker:
+  // only an entered screen logs its name, and the reader is resumed, not entered.)
   const held = await frames.textContent();
   await fetch(`${app.baseUrl}/tap/240/300?ms=1200`, { method: 'POST' });
   await expect(frames).not.toHaveText(held ?? '', { timeout: 30_000 });
-  await expect(activity).toHaveText('EpubReader');
+  await expect(activity).toHaveText('QuoteSelect');
   await expect.poll(body, { message: 'the message clears off the same page', timeout: 30_000 }).toEqual(second);
 
   await panel.tap({ position: { x: 240, y: 400 } }); // centre of the page

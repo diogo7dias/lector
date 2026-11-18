@@ -36,7 +36,7 @@
 #include "util/QuoteText.h"
 #include "util/ReadingPercent.h"
 
-void EpubReaderActivity::openDictionaryWordSelect(const int anchorX, const int anchorY) {
+void EpubReaderActivity::openDictionaryWordSelect() {
   if (SETTINGS.dictionaryName[0] == '\0') {
     showDictionaryMessage = true;
     dictionaryMessageTime = millis();
@@ -52,14 +52,17 @@ void EpubReaderActivity::openDictionaryWordSelect(const int anchorX, const int a
   pageMargins(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
 
   // The page was laid out in this book's font (per-book prefs), so the word boxes must be too.
-  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
-                             renderer, mappedInput, std::move(page), orientedMarginLeft, orientedMarginTop,
-                             SETTINGS.getReaderFontId(prefs_), anchorX, anchorY),
-                         [this](const ActivityResult&) { requestUpdate(); });
+  startActivityForResult(
+      std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page), orientedMarginLeft,
+                                                     orientedMarginTop, SETTINGS.getReaderFontId(prefs_)),
+      [this](const ActivityResult&) { requestUpdate(); });
 }
 
-void EpubReaderActivity::openQuoteGrab() {
-  if (!section) return;
+void EpubReaderActivity::openQuoteGrab(const int holdX, const int holdY) {
+  if (!section) {
+    mappedInput.spendTouchContact();  // a hold's lift must not turn the page instead
+    return;
+  }
 
   // Word geometry must match render(): the same margins and status bar bands.
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
@@ -73,8 +76,13 @@ void EpubReaderActivity::openQuoteGrab() {
       // pages itself while the reader stays suspended and its section stays alive.
       std::make_unique<QuoteSelectActivity>(renderer, mappedInput, section.get(), section->currentPage,
                                             orientedMarginLeft, orientedMarginTop, *epub, currentSpineIndex,
-                                            readerFontId),
-      [this](const ActivityResult&) {
+                                            readerFontId, holdX, holdY),
+      [this](const ActivityResult& result) {
+        // A held word lifted with no dictionary set: say so, as the hold always has.
+        if (result.isCancelled) {
+          showDictionaryMessage = true;
+          dictionaryMessageTime = millis();
+        }
         loadQuoteAnchors();  // a fresh grab appended to the sidecar
         requestUpdate();
       });
