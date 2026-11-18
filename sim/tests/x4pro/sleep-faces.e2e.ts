@@ -79,27 +79,29 @@ test('Quick Resume keeps the page and wakes into it', async (ctx) => {
   const d = await device(ctx);
   const { screen } = ctx;
   await d.pick('quickResume');
-  await d.tapTwice(240, 517); // Browse Files
-  await expect(d.activity).toHaveText('FileBrowser', { timeout: 30_000 });
-  await d.tapTwice(150, 279); // test_kerning_ligature.epub
-  // In a full run reading.e2e.ts opened this book first, which files it into /recents: the
-  // row is gone from the card's root and the book is Home's newest recent instead.
-  await new Promise((r) => setTimeout(r, 3000));
-  if ((await d.activity.textContent()) !== 'EpubReader') {
-    await screen.getByRole('button', { name: 'Home' }).click();
-    await expect(d.activity).toHaveText('Home', { timeout: 30_000 });
-    await d.tapTwice(240, 258); // newest recent
+  // The suite shares one card: an earlier test may already have filed the book into Recents
+  // (Home then shows it as its first row) and left it on the contents page, where
+  // touch-select.e2e.ts expects to find it again. A fresh open starts on the cover image:
+  // turn one page to the contents, whose ink is exact.
+  const resume = (await d.ink(0, 230, 480, 60)) > 500; // blank on a fresh card
+  if (resume) {
+    await d.tapTwice(240, 260); // the book's row on Home
+  } else {
+    await d.tapTwice(240, 517); // Browse Files
+    await expect(d.activity).toHaveText('FileBrowser', { timeout: 30_000 });
+    await d.tapTwice(150, 279); // test_kerning_ligature.epub
   }
   await expect(d.activity).toHaveText('EpubReader', { timeout: 60_000 });
   await expect(d.busy).toHaveText('no', { timeout: 30_000 });
-  // The first page is a cover image; turn to a page of text, whose ink is exact.
-  const frames = screen.getByTestId('frames');
-  const box = await d.panel.boundingBox();
-  if (!box) throw new Error('no panel on the page');
-  const framesBefore = await frames.textContent();
-  await screen.swipe({ from: { x: box.x + 420, y: box.y + 420 }, to: { x: box.x + 100, y: box.y + 420 } });
-  await expect(frames).not.toHaveText(framesBefore ?? '', { timeout: 30_000 });
-  await expect(d.busy).toHaveText('no', { timeout: 60_000 });
+  if (!resume) {
+    const frames = screen.getByTestId('frames');
+    const box = await d.panel.boundingBox();
+    if (!box) throw new Error('no panel on the page');
+    const framesBefore = await frames.textContent();
+    await screen.swipe({ from: { x: box.x + 420, y: box.y + 420 }, to: { x: box.x + 100, y: box.y + 420 } });
+    await expect(frames).not.toHaveText(framesBefore ?? '', { timeout: 30_000 });
+    await expect(d.busy).toHaveText('no', { timeout: 60_000 });
+  }
   // The moon is a 32 px tile in the bottom-left corner, over the status bar's page count.
   const moonBox: [number, number, number, number] = [6, 750, 50, 44];
   const bodyBox: [number, number, number, number] = [0, 60, 480, 680];
