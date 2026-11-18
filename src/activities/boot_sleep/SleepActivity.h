@@ -18,9 +18,12 @@ class SleepActivity final : public Activity {
   // and record which wallpaper (if any) ended up on the panel; the render functions
   // return from several places.
   void renderSleepScreen() const;
-  // The Lector fallback: white page, the name centred. Every face that finds nothing to
-  // show (no wallpaper, no cover, a decode that failed) lands here.
-  void renderDefaultSleepScreen() const;
+  // The Lector face: the crow and the name centred, on white, or on black when `dark`. The
+  // Light and Dark faces draw it on purpose; every face that finds nothing to show (no
+  // wallpaper, no cover, a decode that failed) lands here, on white.
+  void renderDefaultSleepScreen(bool dark = false) const;
+  // The None face: an empty white page.
+  void renderBlankSleepScreen() const;
   void renderCustomSleepScreen() const;
   void renderCoverSleepScreen() const;
   // Full-screen wallpaper or cover: cleared page, the bitmap centred (fit or crop), the

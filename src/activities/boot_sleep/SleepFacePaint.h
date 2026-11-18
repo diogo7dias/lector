@@ -26,7 +26,8 @@
 // and retained charge means neither can be verified by reading code. Every row below
 // encodes what the firmware does TODAY. Changing one needs a hardware check first.
 //
-// Product-locked: exactly three faces exist. Do not add, merge or delete one.
+// Faces that draw a bitmap share the Wallpaper and CoverFallback rows. The faces drawn without
+// a file (Dark, Light, None, and the fallback) are all PlainLector: one HALF submission.
 namespace sleep_face {
 
 enum class Face : uint8_t {
@@ -35,7 +36,8 @@ enum class Face : uint8_t {
   // The open book's cover, shown when no wallpaper could be. Renders through exactly the
   // same bitmap path as a .bmp wallpaper, which is why it shares its rows.
   CoverFallback,
-  // A white page with "Lector" centred. Where every face that fails lands.
+  // The crow and "Lector" centred, white or black, or an empty page. Where every face that
+  // fails lands.
   PlainLector,
 };
 

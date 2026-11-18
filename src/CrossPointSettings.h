@@ -17,33 +17,21 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   friend class PersistableStore<CrossPointSettings>;
 
  public:
+  // Stored numbers are CrossPoint's, so a settings file moves between the two firmwares.
+  // Every lector release since 2026-09-14 (0.58.0 included) wrote only 2 or 3: older faces
+  // were migrated to Custom on load and the file resaved, so 0 to 8 never held a different
+  // meaning in a file those releases wrote. A value above COVER_TRANSPARENT (the old 9, or
+  // anything a future build wrote) becomes Custom; see wake_face::migrateSleepScreen.
   enum SLEEP_SCREEN_MODE {
-    // RETIRED (2026-08-19, Diogo): the dark crest. Slot kept so later values keep their
-    // meaning; fromJson() migrates it to CUSTOM.
     DARK = 0,
-    // RETIRED (2026-09-14, Diogo): the crest face itself. Wallpapers are the sleep screen;
-    // the only flash-drawn face left is the Lector fallback in renderDefaultSleepScreen(),
-    // reached when no wallpaper and no cover can be shown. fromJson() migrates to CUSTOM.
     LIGHT = 1,
     CUSTOM = 2,
     COVER = 3,
-    // RETIRED (2026-09-14, Diogo): the cover while reading, a wallpaper otherwise. Custom
-    // now falls back to the cover on its own. fromJson() migrates to CUSTOM.
     COVER_CUSTOM = 4,
-    // RETIRED: no longer offered in Settings, and fromJson() migrates a stored 5 to DARK.
-    // The slot stays so every value after it keeps its meaning; renderBlankSleepScreen()
-    // and its switch case stay too, so re-offering it is a one-line change.
     BLANK = 5,
-    QUICK_RESUME = 6,  // Retired: migrate to LIGHT; keep persisted numbering.
-    // RETIRED (2026-09-14, Diogo): the reading-stats dashboard. fromJson() migrates to
-    // CUSTOM. Slot kept for the values after it.
-    STATS_DASHBOARD = 7,
-    // RETIRED (2026-08-11, Diogo): kept the last reader page and drew a frame around it,
-    // except the frame never appeared on the device. fromJson() migrates to CUSTOM.
-    FREEZE = 8,
-    // RETIRED (2026-09-14, Diogo): an alpha overlay over whatever the panel held.
-    // fromJson() migrates to CUSTOM.
-    TRANSPARENT_CUSTOM = 9,
+    QUICK_RESUME = 6,
+    TRANSPARENT_CUSTOM = 7,
+    COVER_TRANSPARENT = 8,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };

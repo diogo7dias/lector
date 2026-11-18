@@ -228,13 +228,17 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
   const auto emit = [visit, context](auto&& info) { visit(context, info); };
   // Enum settings are persisted as numeric values. Assign these labels by enum
   // value so a reordered menu or enum cannot silently swap their behavior.
-  // Only Custom and Cover are offered. Every other slot is a retired face (see
-  // SLEEP_SCREEN_MODE) whose value is migrated to Custom on load; the array stays
-  // index-aligned with the enum and the placeholders never reach the picker or the web
-  // API (withHiddenEnumValues below).
+  // Index-aligned with SLEEP_SCREEN_MODE: every face is offered, in CrossPoint's order.
   std::vector<StrId> sleepScreenValues(CrossPointSettings::SLEEP_SCREEN_MODE_COUNT, StrId::STR_NONE_OPT);
+  sleepScreenValues[CrossPointSettings::DARK] = StrId::STR_DARK;
+  sleepScreenValues[CrossPointSettings::LIGHT] = StrId::STR_LIGHT;
   sleepScreenValues[CrossPointSettings::CUSTOM] = StrId::STR_CUSTOM;
   sleepScreenValues[CrossPointSettings::COVER] = StrId::STR_COVER;
+  sleepScreenValues[CrossPointSettings::COVER_CUSTOM] = StrId::STR_COVER_CUSTOM;
+  sleepScreenValues[CrossPointSettings::BLANK] = StrId::STR_NONE_OPT;
+  sleepScreenValues[CrossPointSettings::QUICK_RESUME] = StrId::STR_QUICK_RESUME;
+  sleepScreenValues[CrossPointSettings::TRANSPARENT_CUSTOM] = StrId::STR_TRANSPARENT;
+  sleepScreenValues[CrossPointSettings::COVER_TRANSPARENT] = StrId::STR_COVER_TRANSPARENT;
 
   // One entry at a time, never a single braced initializer: a braced list materializes ALL
   // entries as one temporary array in this frame; at 86 entries that array alone was ~15.5 KB
@@ -242,11 +246,7 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
   // fault" during boot before anything painted.
   // --- Display ---
   emit(SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen, std::move(sleepScreenValues),
-                         "sleepScreen", StrId::STR_CAT_DISPLAY)
-           .withHiddenEnumValues({CrossPointSettings::DARK, CrossPointSettings::LIGHT, CrossPointSettings::COVER_CUSTOM,
-                                  CrossPointSettings::BLANK, CrossPointSettings::QUICK_RESUME,
-                                  CrossPointSettings::STATS_DASHBOARD, CrossPointSettings::FREEZE,
-                                  CrossPointSettings::TRANSPARENT_CUSTOM}));
+                         "sleepScreen", StrId::STR_CAT_DISPLAY));
 
   emit(SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
                          {StrId::STR_FIT, StrId::STR_CROP}, "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY));

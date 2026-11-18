@@ -499,11 +499,13 @@ appears only when a dictionary is set.
 
 | Mode           | Behaviour                                                                        |
 | -------------- | -------------------------------------------------------------------------------- |
-| Custom         | A wallpaper from the SD card. When none is found, the open book's cover; with no book open, a white screen with the lector crow and the name "Lector". |
+| Dark           | The lector crow and the name "Lector", white on black. Drawn by the firmware, no SD file. |
+| Light          | The same screen, black on white. Drawn by the firmware, no SD file. |
+| Custom         | A wallpaper from the SD card. When none is found, the open book's cover; with no book open, the white crow and "Lector" screen. |
 | Cover          | The open book's cover. With no book open, the white crow and "Lector" screen.     |
+| None           | An empty white screen. Drawn by the firmware, no SD file. |
 
-Custom is the default. Retired sleep-screen choices now use Custom. Inactivity uses your
-selected sleep screen.
+Custom is the default. Inactivity uses your selected sleep screen.
 
 ### Wallpaper files
 
@@ -987,7 +989,7 @@ belongs to, so the rows here appear in the same order as on the device.
 
 **Sleep screen**
 
-- **Sleep Screen** — Custom, Cover. See [section 8](#8-sleep-screen-and-wallpapers).
+- **Sleep Screen** — Dark, Light, Custom, Cover, None. See [section 8](#8-sleep-screen-and-wallpapers).
 - **Fast Unlock** — shorter recovery-chord wait at wake, and the page painted over the sleep screen in one pass. Off if a wake lands in the recovery picker by itself or the wallpaper ghosts into the first page.
 - **Sleep Footer Text** — your own line of text on the sleep screen.
 

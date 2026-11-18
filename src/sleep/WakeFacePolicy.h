@@ -2,10 +2,9 @@
 #include <cstdint>
 
 namespace wake_face {
-// Persisted IDs must not be renumbered. Only Custom (2, a wallpaper) and Cover (3)
-// remain; every other stored value — Dark, Light (the crest), Cover + Custom, Blank,
-// Quick Resume, Stats Dashboard, Freeze, Transparent — becomes Custom.
-inline constexpr uint8_t migrateSleepScreen(uint8_t mode) { return mode == 3 ? 3 : 2; }
+// Persisted IDs must not be renumbered; they are CrossPoint's (see the enum). A value no
+// build offers (the old lector 9, or one a future build wrote) becomes Custom.
+inline constexpr uint8_t migrateSleepScreen(uint8_t mode) { return mode <= 8 ? mode : 2; }
 
 // How long the wake waits, measured from gpio.begin(), before the recovery chord is
 // read. The X3/X4 buttons are an ADC resistor ladder that shares a supply with the

@@ -2,18 +2,16 @@
 
 #include "sleep/WakeFacePolicy.h"
 
-TEST(WakeFacePolicy, OnlyWallpaperAndCoverSurviveMigration) {
-  EXPECT_EQ(wake_face::migrateSleepScreen(2), 2);   // Custom stays Custom
-  EXPECT_EQ(wake_face::migrateSleepScreen(3), 3);   // Cover stays Cover
-  EXPECT_EQ(wake_face::migrateSleepScreen(0), 2);   // Dark
-  EXPECT_EQ(wake_face::migrateSleepScreen(1), 2);   // Light (the crest)
-  EXPECT_EQ(wake_face::migrateSleepScreen(4), 2);   // Cover + Custom
-  EXPECT_EQ(wake_face::migrateSleepScreen(5), 2);   // Blank
-  EXPECT_EQ(wake_face::migrateSleepScreen(6), 2);   // Quick Resume
-  EXPECT_EQ(wake_face::migrateSleepScreen(7), 2);   // Stats Dashboard
-  EXPECT_EQ(wake_face::migrateSleepScreen(8), 2);   // Freeze
-  EXPECT_EQ(wake_face::migrateSleepScreen(9), 2);   // Transparent
+TEST(WakeFacePolicy, EveryOfferedFaceKeepsItsStoredNumber) {
+  // CrossPoint's numbers: Dark, Light, Custom, Cover, Cover + Custom, None, Quick Resume,
+  // Transparent, Cover + Transparent. A 0.58.0 file only ever held 2 or 3.
+  for (uint8_t mode = 0; mode <= 8; mode++) EXPECT_EQ(wake_face::migrateSleepScreen(mode), mode);
+}
+
+TEST(WakeFacePolicy, ValuesNoBuildOffersBecomeCustom) {
+  EXPECT_EQ(wake_face::migrateSleepScreen(9), 2);   // lector's old Transparent slot
   EXPECT_EQ(wake_face::migrateSleepScreen(42), 2);  // anything a future build wrote
+  EXPECT_EQ(wake_face::migrateSleepScreen(255), 2);
 }
 
 TEST(WakeFacePolicy, FastUnlockShortensOnlyTheLadderSettleWindow) {

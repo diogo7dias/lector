@@ -146,9 +146,16 @@ void SleepActivity::renderSleepScreen() const {
   LOG_INF("SLP", "pre-clear %ums", static_cast<unsigned>(preClearMs));
 
   // Custom: wallpaper, then cover, then the Lector fallback. Cover: cover, then the
-  // fallback. Retired values are migrated to Custom when settings load, so nothing else
-  // can arrive here; the default keeps a stale value from a blank panel.
+  // fallback. Quick Resume and the two transparent faces never get here (onEnter keeps the
+  // page on the panel); a value no build offers is migrated to Custom on load, and the
+  // default keeps a stale one from a blank panel.
   switch (SETTINGS.sleepScreen) {
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::DARK):
+      return renderDefaultSleepScreen(/*dark=*/true);
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT):
+      return renderDefaultSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
+      return renderBlankSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER):
       return renderCoverSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM):
@@ -164,12 +171,21 @@ void SleepActivity::renderSleepScreen() const {
 // The stock-parity rule this face obeys now lives in sleep_face::planFor next to the two
 // other faces, so all three read as one table instead of three literals in three
 // functions.
-void SleepActivity::renderDefaultSleepScreen() const {
+void SleepActivity::renderDefaultSleepScreen(const bool dark) const {
   renderer.clearScreen();
   drawLectorFace(renderer);
+  // Dark is the same face on a black page. The fallback and Light stay white.
+  if (dark) renderer.invertScreen();
   const sleep_face::PaintPlan plan =
       sleep_face::planFor(sleep_face::Face::PlainLector, /*sourceHasGrayscale=*/false, display.profile());
   renderer.displayBuffer(plan.base);
+}
+
+// None: an empty page. Drawn without any SD file, like Dark and Light.
+void SleepActivity::renderBlankSleepScreen() const {
+  renderer.clearScreen();
+  renderer.displayBuffer(
+      sleep_face::planFor(sleep_face::Face::PlainLector, /*sourceHasGrayscale=*/false, display.profile()).base);
 }
 
 void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Face face) const {
