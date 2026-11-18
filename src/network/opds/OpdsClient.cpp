@@ -20,6 +20,15 @@ const std::string& ifSameServer(const OpdsServer& server, const std::string& url
   static const std::string none;
   return fetch_url::mayCarryCredentials(server.url, url) ? secret : none;
 }
+
+// The same rule for the server's custom headers: a feed link that points at another host
+// (a CDN, another catalogue) gets none of them. HttpDownloader repeats the check on every
+// redirect hop.
+HttpDownloader::RequestExtras extrasFor(const OpdsServer& server, const std::string& url) {
+  HttpDownloader::RequestExtras extras;
+  if (fetch_url::mayCarryCredentials(server.url, url)) extras.headers = server.activeCustomHeaders();
+  return extras;
+}
 }  // namespace
 
 ClientStatus OpdsClient::fetchFeed(const OpdsServer& server, const std::string& pathOrUrl, FeedResult& outResult,
@@ -68,9 +77,9 @@ ClientStatus OpdsClient::fetchFeed(const OpdsServer& server, const std::string& 
     if (beforeAttempt) beforeAttempt();
     {
       OpdsParserStream stream{parser};
-      fetched =
-          HttpDownloader::fetchUrl(url, stream, ifSameServer(server, url, server.username),
-                                   ifSameServer(server, url, server.password), &fetchError, &fetchStatus, timeoutMs);
+      fetched = HttpDownloader::fetchUrl(url, stream, ifSameServer(server, url, server.username),
+                                         ifSameServer(server, url, server.password), &fetchError, &fetchStatus,
+                                         timeoutMs, extrasFor(server, url));
     }
     if (afterAttempt) afterAttempt();
 
@@ -183,10 +192,11 @@ HttpDownloader::DownloadError OpdsClient::downloadBook(
     HttpDownloader::DownloadError result;
 
     if (beforeAttempt) beforeAttempt();
-    result = HttpDownloader::downloadToFile(
-        downloadUrl, partPath, progress, cancelFlag, ifSameServer(server, downloadUrl, server.username),
-        ifSameServer(server, downloadUrl, server.password),
-        /*allowResume=*/true, server.keepFilename ? &contentDisposition : nullptr, timeoutMs);
+    result = HttpDownloader::downloadToFile(downloadUrl, partPath, progress, cancelFlag,
+                                            ifSameServer(server, downloadUrl, server.username),
+                                            ifSameServer(server, downloadUrl, server.password),
+                                            /*allowResume=*/true, server.keepFilename ? &contentDisposition : nullptr,
+                                            timeoutMs, /*outStatus=*/nullptr, extrasFor(server, downloadUrl));
     if (afterAttempt) afterAttempt();
 
     if (result == HttpDownloader::OK) {

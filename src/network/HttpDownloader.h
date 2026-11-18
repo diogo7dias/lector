@@ -4,6 +4,8 @@
 #include <functional>
 #include <string>
 
+#include "HttpRequestExtras.h"
+
 /**
  * HTTP client utility for fetching content and downloading files. Built on
  * esp_http_client: https is verified against the CA bundle, plain http is
@@ -43,6 +45,9 @@ class HttpDownloader {
 
   static constexpr uint32_t DEFAULT_TIMEOUT_MS = 60000;
 
+  using Header = std::pair<std::string, std::string>;
+  using RequestExtras = HttpRequestExtras;
+
   /**
    * Fetch a URL with optional credentials, streaming into `stream`. outError receives why a failed fetch
    * failed, so a caller can tell the reader whether the server refused it or the
@@ -50,7 +55,7 @@ class HttpDownloader {
    */
   static bool fetchUrl(const std::string& url, Stream& stream, const std::string& username = "",
                        const std::string& password = "", DownloadError* outError = nullptr, int* outStatus = nullptr,
-                       uint32_t timeoutMs = DEFAULT_TIMEOUT_MS);
+                       uint32_t timeoutMs = DEFAULT_TIMEOUT_MS, const RequestExtras& extras = {});
 
   /**
    * Stream the response body to onData as it arrives, without buffering it.
@@ -92,5 +97,6 @@ class HttpDownloader {
                                       ProgressCallback progress = nullptr, bool* cancelFlag = nullptr,
                                       const std::string& username = "", const std::string& password = "",
                                       bool allowResume = false, std::string* contentDisposition = nullptr,
-                                      uint32_t timeoutMs = DEFAULT_TIMEOUT_MS, int* outStatus = nullptr);
+                                      uint32_t timeoutMs = DEFAULT_TIMEOUT_MS, int* outStatus = nullptr,
+                                      const RequestExtras& extras = {});
 };

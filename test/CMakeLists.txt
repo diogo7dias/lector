@@ -51,6 +51,14 @@ FetchContent_Declare(jpegdec
   SOURCE_SUBDIR no-cmake
 )
 
+# ArduinoJson at the firmware pin, headers only, for opds_server_store.
+FetchContent_Declare(arduinojson
+  GIT_REPOSITORY https://github.com/bblanchon/ArduinoJson.git
+  GIT_TAG v7.4.2  # as platformio.ini
+  SOURCE_SUBDIR no-cmake
+)
+FetchContent_MakeAvailable(arduinojson)
+
 add_library(crosspoint_test_common INTERFACE)
 target_include_directories(crosspoint_test_common INTERFACE
   ${REPO_ROOT}
@@ -85,6 +93,8 @@ add_subdirectory(link_back_stack)
 add_subdirectory(opds_filename)
 add_subdirectory(opds_parser)
 add_subdirectory(credential_bundle)
+add_subdirectory(http_header)
+add_subdirectory(opds_server_store)
 add_subdirectory(html_to_plain_text)
 add_subdirectory(minibidi_arabic)
 add_subdirectory(combining_marks)

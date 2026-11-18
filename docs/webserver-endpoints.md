@@ -446,7 +446,9 @@ Successful response:
 
 ### `GET /api/opds`
 
-Lists saved OPDS servers. Passwords are never returned.
+Lists saved OPDS servers. Passwords and custom header values are never returned: the entry
+says whether a password is set (`hasPassword`) and, for each of the two header slots, the
+header's `name` and whether it has a value (`hasValue`).
 
 ```bash
 curl http://crosspoint.local/api/opds
@@ -461,7 +463,11 @@ Response:
     "name": "My Catalog",
     "url": "http://calibre.local:8080/opds",
     "username": "reader",
-    "hasPassword": true
+    "hasPassword": true,
+    "headers": [
+      {"name": "CF-Access-Client-Id", "hasValue": true},
+      {"name": "", "hasValue": false}
+    ]
   }
 ]
 ```
@@ -470,6 +476,12 @@ Response:
 
 Adds or updates an OPDS server. Include `index` to update an existing entry.
 If `password` is omitted during an update, the existing password is preserved.
+
+`headers` is up to two `{"name", "value"}` objects, slot by slot (a token for an auth proxy,
+for example `CF-Access-Client-Id`). An empty `name` clears the slot; a missing `value` keeps
+the stored one. A name or value that is not a valid header, or a name the client sets itself
+(`Host`, `Content-Length`, `Content-Type`, `Transfer-Encoding`, `Connection`, `Range`,
+`User-Agent`, ...), answers `400`. Headers go only to the catalog's own host.
 
 ```bash
 curl -X POST \

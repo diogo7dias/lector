@@ -36,6 +36,16 @@ void OpdsServerStore::toJson(JsonDocument& doc) const {
     obj["username"] = server.username;
     obj["password_obf"] = obfuscation::obfuscateToBase64(server.password);
     obj["keep_filename"] = server.keepFilename;
+    // Only for a server that has one, so an untouched list is written as before.
+    if (std::any_of(server.customHeaders.begin(), server.customHeaders.end(),
+                    [](const HttpHeader& header) { return !header.name.empty(); })) {
+      JsonArray headers = obj["headers"].to<JsonArray>();
+      for (const auto& header : server.customHeaders) {
+        JsonObject headerObj = headers.add<JsonObject>();
+        headerObj["name"] = header.name;
+        headerObj["value_obf"] = obfuscation::obfuscateToBase64(header.value);
+      }
+    }
   }
 }
 
@@ -60,6 +70,20 @@ bool OpdsServerStore::fromJson(JsonVariantConst doc) {
     server.username = obj["username"] | "";
     server.password = extractPassword(obj, needsResave);
     server.keepFilename = obj["keep_filename"] | false;
+
+    size_t headerIndex = 0;
+    for (JsonObjectConst headerObj : obj["headers"].as<JsonArrayConst>()) {
+      if (headerIndex >= OpdsServer::MAX_CUSTOM_HEADERS) break;
+      HttpHeader& header = server.customHeaders[headerIndex++];
+      header.name = headerObj["name"] | "";
+      bool ok = false;
+      bool tooLong = false;
+      header.value =
+          obfuscation::deobfuscateFromBase64(headerObj["value_obf"] | "", HTTP_HEADER_VALUE_MAX, &ok, &tooLong);
+      // A hand-edited or damaged entry is dropped whole, not sent half-formed.
+      if (!isValidHttpHeader(header.name, header.value)) header = HttpHeader{};
+    }
+
     servers.push_back(std::move(server));
   }
 
@@ -123,6 +147,16 @@ bool OpdsServerStore::removeServer(size_t index) {
   LOG_DBG("OPS", "Removed server: %s", servers[index].name.c_str());
   servers.erase(servers.begin() + static_cast<ptrdiff_t>(index));
   return saveToFile();
+}
+
+std::vector<std::pair<std::string, std::string>> OpdsServer::activeCustomHeaders() const {
+  std::vector<std::pair<std::string, std::string>> active;
+  active.reserve(MAX_CUSTOM_HEADERS);
+  for (const auto& header : customHeaders) {
+    if (!header.name.empty() && isValidHttpHeader(header.name, header.value))
+      active.emplace_back(header.name, header.value);
+  }
+  return active;
 }
 
 const OpdsServer* OpdsServerStore::getServer(size_t index) const {

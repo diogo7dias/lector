@@ -1784,8 +1784,6 @@ void CrossPointWebServer::handleGetOpdsServers() const {
   server->send(200, "application/json", "");
   server->sendContent("[");
 
-  char output[512];
-  constexpr size_t outputSize = sizeof(output);
   JsonDocument doc;
   bool seenFirst = false;
 
@@ -1797,13 +1795,26 @@ void CrossPointWebServer::handleGetOpdsServers() const {
     doc["username"] = servers[i].username;
     // Never expose passwords over the API — only indicate whether one is set
     doc["hasPassword"] = !servers[i].password.empty();
+    // Header names show; values are secrets and only report whether one is set.
+    JsonArray headers = doc["headers"].to<JsonArray>();
+    for (const auto& header : servers[i].customHeaders) {
+      JsonObject entry = headers.add<JsonObject>();
+      entry["name"] = header.name;
+      entry["hasValue"] = !header.value.empty();
+    }
 
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) continue;
+    // Sized to this row: a fixed buffer silently dropped any server whose row outgrew it.
+    const size_t outputSize = measureJson(doc) + 1;
+    auto output = makeUniqueNoThrow<char[]>(outputSize);
+    if (!output) {
+      LOG_ERR("WEB", "OOM: %zu byte OPDS row", outputSize);
+      continue;
+    }
+    serializeJson(doc, output.get(), outputSize);
 
     if (seenFirst) server->sendContent(",");
     seenFirst = true;
-    server->sendContent(output);
+    server->sendContent(output.get());
     yield();                          // Yield to allow WiFi and other tasks to process during a slow send
     resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
   }
@@ -1817,28 +1828,51 @@ void CrossPointWebServer::handlePostOpdsServer() {
   JsonDocument doc;
   if (!parseJsonBody(*server, doc)) return;
 
+  // An edit starts from the stored server, so a field the page does not send (the password,
+  // a header value, keepFilename) keeps its value.
   OpdsServer opdsServer;
+  const bool isEdit = doc["index"].is<int>();
+  if (isEdit) {
+    const int idx = doc["index"].as<int>();
+    const auto* existing = idx >= 0 ? OPDS_STORE.getServer(static_cast<size_t>(idx)) : nullptr;
+    if (!existing) {
+      server->send(400, "text/plain", "Invalid server index");
+      return;
+    }
+    opdsServer = *existing;
+  }
   opdsServer.name = doc["name"] | std::string("");
   opdsServer.url = doc["url"] | std::string("");
   opdsServer.username = doc["username"] | std::string("");
+
+  // Each sent header replaces its slot: an empty name clears it, a missing value keeps the stored one.
+  JsonArrayConst sentHeaders = doc["headers"].as<JsonArrayConst>();
+  for (size_t slot = 0; slot < OpdsServer::MAX_CUSTOM_HEADERS && slot < sentHeaders.size(); slot++) {
+    HttpHeader& header = opdsServer.customHeaders[slot];
+    const std::string name = sentHeaders[slot]["name"] | std::string("");
+    if (name.empty()) {
+      header = HttpHeader{};
+      continue;
+    }
+    header.name = name;
+    if (sentHeaders[slot]["value"].is<const char*>() || sentHeaders[slot]["value"].is<std::string>()) {
+      header.value = sentHeaders[slot]["value"] | std::string("");
+    }
+    if (!isValidHttpHeader(header.name, header.value)) {
+      server->send(400, "text/plain", "Invalid custom header");
+      return;
+    }
+  }
 
   // The password field is optional in the JSON payload. When absent (vs. present but empty),
   // we preserve the existing password — the web UI omits it when the user hasn't changed it.
   bool hasPasswordField = doc["password"].is<const char*>() || doc["password"].is<std::string>();
   std::string password = doc["password"] | std::string("");
 
-  if (doc["index"].is<int>()) {
-    int idx = doc["index"].as<int>();
-    if (idx < 0 || idx >= static_cast<int>(OPDS_STORE.getCount())) {
-      server->send(400, "text/plain", "Invalid server index");
-      return;
-    }
-    // Preserve existing password if not explicitly provided
-    if (!hasPasswordField) {
-      const auto* existing = OPDS_STORE.getServer(static_cast<size_t>(idx));
-      if (existing) password = existing->password;
-    }
-    opdsServer.password = password;
+  if (isEdit) {
+    const int idx = doc["index"].as<int>();
+    // Preserve existing password if not explicitly provided (opdsServer already holds it)
+    if (hasPasswordField) opdsServer.password = password;
     OPDS_STORE.updateServer(static_cast<size_t>(idx), opdsServer);
     LOG_DBG("WEB", "Updated OPDS server at index %d", idx);
   } else {

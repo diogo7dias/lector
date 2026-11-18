@@ -8,7 +8,7 @@
 
 /**
  * Edit screen for a single OPDS server.
- * Shows Name, URL, Username, Password fields and a Delete option.
+ * Shows Name, URL, Username, Password, two custom header rows and a Delete option.
  * Used for both adding new servers and editing existing ones.
  */
 class OpdsSettingsActivity final : public UiListActivity {
@@ -35,6 +35,7 @@ class OpdsSettingsActivity final : public UiListActivity {
   OpdsServer editServer;
   bool isNewServer = false;
   bool showSaveError = false;
+  const char* errorMessage = "";
 
   int getMenuItemCount() const;
   bool saveServer();

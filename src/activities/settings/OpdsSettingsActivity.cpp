@@ -16,12 +16,18 @@
 namespace fui = freeink::ui;
 
 namespace {
-// Editable fields: Name, URL, Username, Password.
+// Editable fields: Name, URL, Username, Password, then the custom headers.
 // Existing servers also show a Delete option (BASE_ITEMS + 1).
-constexpr int BASE_ITEMS = 4;
+constexpr int FIELD_ITEMS = 4;
+constexpr int HEADER_ITEMS = static_cast<int>(OpdsServer::MAX_CUSTOM_HEADERS);
+constexpr int BASE_ITEMS = FIELD_ITEMS + HEADER_ITEMS;
 
-constexpr StrId FIELD_NAMES[BASE_ITEMS] = {StrId::STR_SERVER_NAME, StrId::STR_OPDS_SERVER_URL, StrId::STR_USERNAME,
-                                           StrId::STR_PASSWORD};
+constexpr StrId FIELD_NAMES[BASE_ITEMS] = {StrId::STR_SERVER_NAME,     StrId::STR_OPDS_SERVER_URL,
+                                           StrId::STR_USERNAME,        StrId::STR_PASSWORD,
+                                           StrId::STR_CUSTOM_HEADER_1, StrId::STR_CUSTOM_HEADER_2};
+
+// One keyboard line holds "Name: value", so it has to fit the longest of both.
+constexpr uint16_t HEADER_LINE_MAX = HTTP_HEADER_NAME_MAX + 2 + HTTP_HEADER_VALUE_MAX;
 }  // namespace
 
 int OpdsSettingsActivity::getMenuItemCount() const {
@@ -69,7 +75,7 @@ ListChrome OpdsSettingsActivity::chrome() const {
 
 bool OpdsSettingsActivity::drawOverlay() {
   if (!showSaveError) return false;
-  GUI.drawPopup(renderer, tr(STR_ERROR_GENERAL_FAILURE));
+  GUI.drawPopup(renderer, errorMessage);
   return true;
 }
 
@@ -96,6 +102,7 @@ bool OpdsSettingsActivity::saveServer() {
   }
 
   showSaveError = !success;
+  errorMessage = tr(STR_ERROR_GENERAL_FAILURE);
   if (showSaveError) {
     requestUpdate();
   }
@@ -105,10 +112,36 @@ bool OpdsSettingsActivity::saveServer() {
 
 void OpdsSettingsActivity::activateIndex(const int index) {
   app.clearTapFlash();
+  showSaveError = false;
 
   // Each field edit is saved immediately so partially configured servers
   // survive navigation and power-loss scenarios.
-  if (index >= 0 && index < BASE_ITEMS) {
+  if (index >= FIELD_ITEMS && index < BASE_ITEMS) {
+    // "Name: value" on one line, so a header takes one keyboard visit and one row. The line
+    // opens as it was saved: the value is already readable to anyone who can edit this row.
+    const size_t slot = static_cast<size_t>(index - FIELD_ITEMS);
+    auto handler = [this, slot](const ActivityResult& result) {
+      if (result.isCancelled) return;
+      HttpHeader header;
+      parseHttpHeaderLine(std::get<KeyboardResult>(result.data).text, header);
+      if (!isValidHttpHeader(header.name, header.value)) {
+        errorMessage = tr(STR_INVALID_HEADER);
+        showSaveError = true;
+        requestUpdate();
+        return;
+      }
+      editServer.customHeaders[slot] = std::move(header);
+      saveServer();
+      requestUpdate();
+    };
+    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, I18N.get(FIELD_NAMES[index]),
+                                                                   formatHttpHeaderLine(editServer.customHeaders[slot]),
+                                                                   HEADER_LINE_MAX, InputType::Text),
+                           handler);
+    return;
+  }
+
+  if (index >= 0 && index < FIELD_ITEMS) {
     // One handler for all four fields: they differ only in where the text lands, what
     // the keyboard is titled, how long it may be, and which keyboard it opens.
     struct FieldSpec {
@@ -117,7 +150,7 @@ void OpdsSettingsActivity::activateIndex(const int index) {
       uint16_t maxLength;
       InputType type;
     };
-    static constexpr FieldSpec fields[BASE_ITEMS] = {
+    static constexpr FieldSpec fields[FIELD_ITEMS] = {
         {&OpdsServer::name, StrId::STR_SERVER_NAME, 63, InputType::Text},
         {&OpdsServer::url, StrId::STR_OPDS_SERVER_URL, 127, InputType::Url},
         {&OpdsServer::username, StrId::STR_USERNAME, 63, InputType::Text},
@@ -171,7 +204,13 @@ void OpdsSettingsActivity::buildScreen(UiScreen& screen) {
   rows.assign(static_cast<size_t>(itemCount), fui::ListItem{});
 
   for (int i = 0; i < itemCount; ++i) {
-    if (i < BASE_ITEMS) {
+    if (i >= FIELD_ITEMS && i < BASE_ITEMS) {
+      // A header's name shows, its value never does: the row says only that it has one.
+      rows[i].label = I18N.get(FIELD_NAMES[i]);
+      const HttpHeader& header = editServer.customHeaders[static_cast<size_t>(i - FIELD_ITEMS)];
+      subtitles[i] = header.name.empty() ? tr(STR_NOT_SET) : formatHttpHeaderLine(header, /*maskValue=*/true);
+      rows[i].subtitle = subtitles[i].c_str();
+    } else if (i < BASE_ITEMS) {
       rows[i].label = I18N.get(FIELD_NAMES[i]);
       // The value as the subtitle, which is where the old drawList value column put it.
       // A password is never shown, set or not: the row says only that it has one.

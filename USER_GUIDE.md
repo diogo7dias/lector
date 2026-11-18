@@ -701,6 +701,15 @@ are done with it. Share when you mean to, not out of habit.
 catalog root URL (for a Calibre Content Server, usually ending in `/opds`), and optional
 username and password. Authentication is HTTP Basic; set Calibre to Basic rather than Digest.
 
+A catalog behind an authentication proxy such as Cloudflare Access takes up to two **Custom
+Header** rows, each typed as one `Name: value` line, for example `CF-Access-Client-Id: ...`
+and `CF-Access-Client-Secret: ...`. The row shows the name and hides the value, which is
+stored scrambled like the password. A header named `Authorization` replaces the username and
+password. The web page has a name and a value box for each, and a blank value box keeps the
+saved value. Headers, like the password, go only to the catalog's own host, never to a
+download link that points elsewhere. `Host`, `Content-Length`, `Content-Type`,
+`Transfer-Encoding`, `Connection`, `Range` and `User-Agent` are refused.
+
 Browse and download from **Home > OPDS Browser**. With more than one catalog saved it opens a
 server picker, whose last row, **Add Server**, adds another. Back goes up one level; hold Back
 for a second and let go to leave the catalog for Home. Where downloads land (**Download folder**)
