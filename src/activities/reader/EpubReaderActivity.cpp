@@ -206,6 +206,7 @@ void EpubReaderActivity::onExit() {
     // Report how this session ended: a Sortes visit is not ordinary reading.
     // This reports session state; it does not override sleep or wake policy.
     APP_STATE.lastSleepFromReader = false;
+    nextSection.reset();
     section.reset();
     epub.reset();
     return;
@@ -248,6 +249,7 @@ void EpubReaderActivity::onExit() {
   const bool pageMoved =
       currentSpineIndex != openedSpine || (section ? section->currentPage : nextPageNumber) != openedPage;
 
+  nextSection.reset();
   section.reset();
   // File the book on the way out: finished books go to /read, anything else that was
   // opened goes to /recents. A finished move wins, so a book never lands in both. The

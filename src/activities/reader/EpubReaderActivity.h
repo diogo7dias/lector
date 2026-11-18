@@ -38,6 +38,7 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   bool openSectionForRender(const ReaderRenderSpec& renderSpec);
   // loop() phase: prewarm, progress save and background builds while input is idle.
   void runIdleBackgroundWork();
+  void prefetchNextChapter();
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
@@ -232,7 +233,13 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // while it waits for the reader to come within the build window, and while it is
   // heap-paused (no work is happening, so spinning at full speed would only burn
   // battery; the paused gate still retries every loop pass).
-  bool skipLoopDelay() override { return backgroundBuildWanted() && !buildHeapPaused; }
+  bool skipLoopDelay() override {
+    return (backgroundBuildWanted() || (nextSection && nextSection->isBuilding())) && !buildHeapPaused;
+  }
+  void onCovered() override {  // ActivityManager holds the RenderLock here
+    nextSection.reset();
+    prefetchedSpine = -1;  // the child may change settings; recheck the cache on return
+  }
   bool isReaderActivity() const override { return true; }
   bool isBookContext() const override { return true; }
   bool applyReaderOrientation(const uint8_t orientation) override {

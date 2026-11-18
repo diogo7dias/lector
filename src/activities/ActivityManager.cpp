@@ -352,6 +352,7 @@ void ActivityManager::loop() {
           stackActivities.pop_back();
         }
       } else if (pendingAction == PendingAction::Push) {
+        currentActivity->onCovered();
         stackActivities.push_back(std::move(currentActivity));
         LOG_DBG("ACT", "Pushed to activity stack, new size = %zu", stackActivities.size());
       }
