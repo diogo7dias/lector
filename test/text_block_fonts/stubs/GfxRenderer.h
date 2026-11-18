@@ -11,7 +11,6 @@ class GfxRenderer {
   struct Drawn {
     int font, x, y;
     bool black;
-    int letterSpacing;
   };
   mutable std::vector<Drawn> drawn;
   int missingFont = -1;  // this id cannot be loaded
@@ -22,15 +21,14 @@ class GfxRenderer {
   int getTextAdvanceX(const int id, const char* text, EpdFontFamily::Style) const {
     return id * static_cast<int>(strlen(text));
   }
-  int spacedGlyphCount(int, const char* text, EpdFontFamily::Style) const { return static_cast<int>(strlen(text)); }
   int getTextWidth(const int id, const char* text, EpdFontFamily::Style, BidiUtils::BidiBaseDir) const {
     return getTextAdvanceX(id, text, EpdFontFamily::REGULAR);
   }
   bool getCodepointMetrics(int, uint32_t, EpdFontFamily::Style, int32_t&, int&) const { return false; }
   bool isFontCacheScanning() const { return false; }
   void drawText(const int font, const int x, const int y, const char*, const bool black, EpdFontFamily::Style,
-                BidiUtils::BidiBaseDir, const int letterSpacing = 0) const {
-    drawn.push_back({font, x, y, black, letterSpacing});
+                BidiUtils::BidiBaseDir) const {
+    drawn.push_back({font, x, y, black});
   }
   void drawLine(int, int, int, int, int, bool) const {}
 };

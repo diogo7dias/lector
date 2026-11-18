@@ -7,6 +7,7 @@
 // a field added to a list is picked up here with no edit to this file.
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <set>
@@ -62,7 +63,9 @@ TEST(ReaderLookFields, EveryLivePrefsByteIsNamedByExactlyOneList) {
   // Set sizes, so a name repeated inside one list collapses and fails here.
   EXPECT_EQ(named,
             reader_look::SCREEN_FIELD_COUNT + reader_look::BOOK_FIELD_COUNT + reader_look::STATUS_BAR_FIELD_COUNT);
-  EXPECT_EQ(named + sizeof(ReaderPrefs::sdFontFamilyName) + sizeof(ReaderPrefs::reserved14), sizeof(ReaderPrefs));
+  EXPECT_EQ(
+      named + sizeof(ReaderPrefs::sdFontFamilyName) + sizeof(ReaderPrefs::reserved14) + READER_PREFS_RETIRED_BYTES,
+      sizeof(ReaderPrefs));
 }
 
 TEST(ReaderLookFields, TheListsDoNotOverlap) {
@@ -78,10 +81,22 @@ TEST(ReaderLookFields, TheListsDoNotOverlap) {
 TEST(ReaderLookFields, SettingTheWholeListTouchesEveryLiveByte) {
   const ReaderPrefs p = makeAllDistinct();
   const auto* bytes = reinterpret_cast<const uint8_t*>(&p);
-  // Apart from the font name and retired byte, every field gets a distinct non-zero value.
+  // Apart from the font name and the retired bytes, every field gets a distinct non-zero value.
   EXPECT_EQ(0, p.reserved14);
+  const size_t retired[] = {offsetof(ReaderPrefs, reserved14),
+                            offsetof(ReaderPrefs, retiredParagraphSpacing),
+                            offsetof(ReaderPrefs, retiredFirstLineIndentMode),
+                            offsetof(ReaderPrefs, retiredEmbeddedLayoutStyle),
+                            offsetof(ReaderPrefs, retiredKerning),
+                            offsetof(ReaderPrefs, retiredLigatures),
+                            offsetof(ReaderPrefs, retiredLinkUnderline),
+                            offsetof(ReaderPrefs, retiredBookMargins),
+                            offsetof(ReaderPrefs, retiredHeadingPageBreak),
+                            offsetof(ReaderPrefs, retiredWordExpansion),
+                            offsetof(ReaderPrefs, retiredFillPages)};
+  static_assert(sizeof(retired) / sizeof(retired[0]) == READER_PREFS_RETIRED_BYTES + 1);
   for (size_t i = 0; i < sizeof(ReaderPrefs); ++i) {
-    if (i == offsetof(ReaderPrefs, reserved14)) continue;
+    if (std::find(std::begin(retired), std::end(retired), i) != std::end(retired)) continue;
     if (i >= offsetof(ReaderPrefs, sdFontFamilyName) &&
         i < offsetof(ReaderPrefs, sdFontFamilyName) + sizeof(ReaderPrefs::sdFontFamilyName)) {
       continue;

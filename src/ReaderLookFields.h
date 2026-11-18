@@ -28,30 +28,20 @@
   X(lineSpacingPercent)              \
   X(paragraphAlignment)              \
   X(extraParagraphSpacing)           \
-  X(paragraphSpacing)                \
   X(wordSpacing)                     \
-  X(kerning)                         \
-  X(ligatures)                       \
-  X(linkUnderline)                   \
   X(screenMargin)                    \
   X(screenMarginTop)                 \
   X(screenMarginBottom)              \
   X(marginLinkMode)                  \
   X(dynamicMargins)                  \
-  X(firstLineIndentMode)             \
-  X(firstLineIndentPercent)          \
+  X(paragraphIndentSpaces)           \
   X(focusReadingEnabled)             \
   X(guideDotsEnabled)                \
   X(guideDotsHidden)                 \
-  X(embeddedTextStyle)               \
-  X(embeddedLayoutStyle)             \
+  X(embeddedStyle)                   \
   X(textAntiAliasing)                \
   X(textContrast)                    \
-  X(bookMargins)                     \
-  X(headingPageBreak)                \
-  X(wordExpansion)                   \
   X(characterSpacing)                \
-  X(fillPages)                       \
   X(imageRendering)
 
 // Per-book toggles that live in the in-book menu, not on the Reader Settings screen.

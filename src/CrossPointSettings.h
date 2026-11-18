@@ -279,18 +279,17 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // tightens its spacing when the rows would otherwise run off the panel.
   static constexpr uint8_t POPUP_ITEM_MAX = 32;
 
-  // Image rendering in EPUB reader
-  // Images are always drawn. PLACEHOLDER (alt text only) and SUPPRESS were retired
-  // 2026-08-11 (Diogo) and the Settings row went with them.
-  //
-  // The values, the ReaderRenderSpec field and the parser branches that read it all stay.
-  // spec.imageRendering is serialised into every cached section and compared on load, so
-  // deleting it would change the section file format and force every book on the card to
-  // re-index. The spec builder (makeRenderSpec) now hard-sets IMAGES_DISPLAY instead, which reaches stored
-  // per-book overrides and reader presets as well as the global value — and which makes a
-  // section cached under the old placeholder layout mismatch and rebuild, but only for the
-  // books that actually used it.
-  enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
+  // Image rendering in EPUB reader. Display draws images with grey levels, Placeholder
+  // leaves the alt text only, Suppress hides them, and Black & White dithers them to two
+  // levels so an image page skips the grey refresh. Black & White lays out like Display
+  // (makeRenderSpec folds it), so switching between them keeps the section cache.
+  enum IMAGE_RENDERING {
+    IMAGES_DISPLAY = 0,
+    IMAGES_PLACEHOLDER = 1,
+    IMAGES_SUPPRESS = 2,
+    IMAGES_DISPLAY_BW = 3,
+    IMAGE_RENDERING_COUNT
+  };
 
   // Paragraph numbering mode. The value is per-book (ReaderPrefs::paragraphNumbering);
   // this enum is only the shared value type. Numbers are drawn in the left margin at
@@ -406,34 +405,18 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t clockHasBeenSynced = 0;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
-  // Reader paragraph spacing as a percentage of the line height (block gap between
-  // paragraphs; 0 = off). Restored granular control (old lector). Feeds the render
-  // spec, so a change rebuilds the section cache.
-  static constexpr uint8_t MAX_PARAGRAPH_SPACING = 150;
-  // Half a line of air between paragraphs by default: with the first-line indent below
-  // it, a paragraph break is visible at a glance rather than inferred from the ragged
-  // right edge of the line above.
-  static constexpr uint8_t DEFAULT_PARAGRAPH_SPACING = reader_defaults::PARAGRAPH_SPACING_PERCENT;
-  uint8_t paragraphSpacing = DEFAULT_PARAGRAPH_SPACING;
   static constexpr uint8_t MIN_WORD_SPACING = reader_defaults::MIN_WORD_SPACING;
   static constexpr uint8_t MAX_WORD_SPACING = reader_defaults::MAX_WORD_SPACING;
   uint8_t wordSpacing = reader_defaults::WORD_SPACING;  // percent of natural space advance; no limit on justification
-  uint8_t kerning = 1;                                  // pair kerning for the reading font (0 = off)
-  uint8_t ligatures = 1;                                // font ligatures for the reading font (0 = off)
-  uint8_t linkUnderline = 1;                            // underline in-book links (0 = plain)
   // On by default, as in CrossPoint (Diogo, 2026-11-18). The grey pass costs an extra
   // refresh on every page turn; the toggle turns it off.
   uint8_t textAntiAliasing = 1;
   // How dark anti-aliased greys are drawn (0 Normal, 1 High, 2 Max); only with textAntiAliasing.
   uint8_t textContrast = 0;
-  uint8_t bookMargins = 1;       // keep the book's CSS margins and padding (0 = drop them)
-  uint8_t headingPageBreak = 0;  // start h1/h2 headings on a new page (1 = on)
-  uint8_t wordExpansion = 0;     // letter spacing allowed on loose justified lines: 0 off, 1 some, 2 more
-  // Half pixels between letters, offset: 5 is the font as designed, 0..10 shows as -5..+5.
+  // Whole pixels between letters, offset: 2 is the font as designed, 0..4 shows as -2..+2.
   uint8_t characterSpacing = reader_defaults::CHARACTER_SPACING;
   // X4 Pro: draw the lock wallpaper a second time a minute after locking (1 = on).
   uint8_t refreshSleepWallpaper = 0;
-  uint8_t fillPages = 0;  // keep lines on the page, no orphan/widow/heading carry (1 = on)
   // Swipe by default: it works the same wherever the thumb lands, and it leaves the
   // whole page free of invisible tap targets.
   uint8_t touchReaderControls = TOUCH_READER_SWIPE;
@@ -498,12 +481,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // the three fields directly without asking which mode is on. Restored granular range
   // (old lector). Margins feed the viewport, so a change rebuilds the section cache
   // through the viewport dimensions (no cache-format bump needed).
+  // The side margin runs 5 to 40 in steps of 5; top and bottom keep the wider range.
   static constexpr uint8_t SCREEN_MARGIN_MIN = 0;
   static constexpr uint8_t SCREEN_MARGIN_MAX = 100;
   static constexpr uint8_t SCREEN_MARGIN_STEP = 1;
-  uint8_t screenMargin = 17;
-  uint8_t screenMarginTop = 17;
-  uint8_t screenMarginBottom = 17;
+  static constexpr uint8_t HORIZONTAL_MARGIN_MIN = reader_defaults::MIN_SCREEN_MARGIN;
+  static constexpr uint8_t HORIZONTAL_MARGIN_MAX = reader_defaults::MAX_SCREEN_MARGIN;
+  static constexpr uint8_t HORIZONTAL_MARGIN_STEP = reader_defaults::SCREEN_MARGIN_STEP;
+  uint8_t screenMargin = reader_defaults::SCREEN_MARGIN;
+  uint8_t screenMarginTop = reader_defaults::SCREEN_MARGIN;
+  uint8_t screenMarginBottom = reader_defaults::SCREEN_MARGIN;
   // margin_link::Mode as a number: 0 = Separate, 1 = top and bottom move together,
   // 2 = All Sides (every side holds the horizontal value). See util/MarginLink.h.
   static constexpr uint8_t MARGIN_LINK_MODE_COUNT = margin_link::MODE_COUNT;
@@ -535,20 +522,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t DYNAMIC_MARGINS_COUNT = 3;
   uint8_t dynamicMargins = 0;
 
-  // First-line paragraph indent (restored old-lector model). BOOK = respect the
-  // publisher/CSS indent; PERCENT = a custom indent as a percentage of the column
-  // width (0% = flush, 100% = start at the column's horizontal middle). Feeds the
-  // render spec, so a change rebuilds the section cache like any layout setting.
-  enum FIRST_LINE_INDENT_MODE : uint8_t { FIRST_LINE_INDENT_BOOK = 0, FIRST_LINE_INDENT_PERCENT = 1 };
-  static constexpr uint8_t MAX_FIRST_LINE_INDENT_PERCENT = 100;
-  // Default to a real indent rather than trusting the publisher's CSS, which on many
-  // EPUBs is absent entirely.
-  // Deliberately not reader_defaults::FIRST_LINE_INDENT_PERCENT. That constant re-seeds
-  // sidecars written before v9, which must go on looking the way they did; this is what a
-  // new install starts from.
-  static constexpr uint8_t DEFAULT_FIRST_LINE_INDENT_PERCENT = 23;
-  uint8_t firstLineIndentMode = FIRST_LINE_INDENT_PERCENT;
-  uint8_t firstLineIndentPercent = DEFAULT_FIRST_LINE_INDENT_PERCENT;
+  // First-line paragraph indent, counted in spaces of the reading font (0 to 5, 0 = flush).
+  // Feeds the render spec, so a change rebuilds the section cache like any layout setting.
+  uint8_t paragraphIndentSpaces = reader_defaults::PARAGRAPH_INDENT_SPACES;
   // OPDS download destination folder ("" = SD root). Global; edited from the
   // OPDS server list. Persisted via a category-less SettingInfo::String in
   // SettingsList.h, so it stays out of the on-device Settings screen.
@@ -686,14 +662,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 #endif
   // Power button return from footnotes (1 = enabled, 0 = disabled)
   uint8_t pwrBtnFootnoteBack = 1;
-  // The book's own CSS, split into two switches the reader honours independently.
-  // Text: font weight, slant, decoration, super/sub, writing direction, display:none.
-  // Keeps the old "embeddedStyle" key so a settings file written before the split
-  // carries straight over (1 = enabled, 0 = disabled).
-  uint8_t embeddedTextStyle = 1;
-  // Layout: text alignment, first-line indent, margins, padding, book-set image sizes.
-  // Paragraph Alignment "Book's Style" and First Line Indent "Book" both need this on.
-  uint8_t embeddedLayoutStyle = 1;
+  // The book's own CSS, one switch: text styling (weight, slant, decoration, super/sub,
+  // direction, display:none) and layout (alignment, indents, margins, padding, book-set
+  // image sizes). Written under the "embeddedStyle" key (1 = enabled, 0 = disabled).
+  // Paragraph Alignment "Book's Style" needs this on.
+  uint8_t embeddedStyle = 1;
   // Which tab the in-book menu opens on (see BOOK_MENU_TAB). Sleep Screen by default;
   // on a night with no wallpaper to act on that tab is absent and the menu opens on Navigate.
   uint8_t bookMenuTab = BOOK_MENU_TAB_SLEEP;
@@ -790,9 +763,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Initials stay the default because a full name competes with the title for the same
   // wrapped lines, and the list is read title-first.
   uint8_t authorDisplay = AUTHOR_INITIALS;
-  // Image rendering mode in EPUB reader
-  // Retired: no Settings row, so nothing persists or changes it. Kept as the source the
-  // per-book ReaderPrefs snapshot copies, so that field starts at IMAGES_DISPLAY too.
+  // Image rendering mode in EPUB reader (IMAGE_RENDERING)
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Language setting (Language enum index, default 0 = EN)
   uint8_t language = 0;

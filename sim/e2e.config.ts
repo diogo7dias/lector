@@ -24,6 +24,9 @@ export default {
         env: {
           LECTOR_BOARD: board,
           ...(process.env.LECTOR_QEMU_DIR ? { LECTOR_QEMU_DIR: process.env.LECTOR_QEMU_DIR } : {}),
+          // The x4 parked-build test needs a chapter longer than the first build chunk, which
+          // the default 5 px margins and 95% spacing no longer give: open pages hold less.
+          ...(board === 'x4' ? { LECTOR_SD_EXTRA: 'fixtures/long-pages' } : {}),
         },
       },
     },

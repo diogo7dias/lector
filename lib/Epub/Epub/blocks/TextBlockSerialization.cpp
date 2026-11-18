@@ -48,7 +48,6 @@ bool TextBlock::serialize(HalFile& file) const {
   serialization::writePod(file, blockStyle.textIndentDefined);
   serialization::writePod(file, blockStyle.isRtl);
   serialization::writePod(file, blockStyle.directionDefined);
-  serialization::writePod(file, letterSpacing);
   serialization::writePod(file, blockStyle.fontId);
 
   // Per-word fonts: a flag, then the font table and one slot per word.
@@ -170,7 +169,6 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   serialization::readPod(file, blockStyle.textIndentDefined);
   serialization::readPod(file, blockStyle.isRtl);
   serialization::readPod(file, blockStyle.directionDefined);
-  serialization::readPod(file, block->letterSpacing);
   serialization::readPod(file, blockStyle.fontId);
 
   uint8_t hasWordFonts = 0;

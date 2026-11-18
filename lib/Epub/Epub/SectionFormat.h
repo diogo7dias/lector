@@ -154,7 +154,15 @@ namespace {
 // v87: TrueType advances defer rounding until pixel placement (upstream #4431).
 // v88: an image src with a "." segment ("./img.jpg") resolves to the zip entry, so it
 //      is laid out and drawn instead of left out of the page.
-constexpr uint8_t SECTION_FILE_VERSION = 88;
+// v89: lean typography pass. The header loses paragraphSpacing, the second embedded style
+//      byte, kerning, ligatures, linkUnderline, bookMargins, headingPageBreak, wordExpansion
+//      and fillPages (kerning, ligatures, link underline and book margins are always on, the
+//      rest are gone). firstLineIndentMode and firstLineIndentPercent become one
+//      paragraphIndentSpaces byte (0 to 5 spaces), and characterSpacing counts whole pixels
+//      (-2 to 2) instead of half pixels. Each TextBlock loses its Word Expansion
+//      letterSpacing byte. Word Spacing now runs 50 to 200 and the paragraph indent no
+//      longer has a 3-space floor, so lines lay out differently as well.
+constexpr uint8_t SECTION_FILE_VERSION = 89;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -173,11 +181,11 @@ constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
 // Derived so the pairing can't be forgotten: 0xFE for v28, 0xFD for v29, ...
 constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE - (SECTION_FILE_VERSION - 28);
 constexpr uint32_t HEADER_SIZE =
-    sizeof(uint8_t) + sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint8_t) +
-    sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) +
-    sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(bool) + sizeof(bool) + sizeof(bool) +
-    sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint8_t) +
-    sizeof(uint8_t) + sizeof(uint8_t) + sizeof(int8_t) + sizeof(bool);
+    sizeof(uint8_t) /*version*/ + sizeof(int) /*fontId*/ + sizeof(float) /*lineCompression*/ +
+    sizeof(bool) /*extraParagraphSpacing*/ + sizeof(uint8_t) /*wordSpacing*/ + sizeof(uint8_t) /*alignment*/ +
+    sizeof(uint16_t) * 2 /*viewport*/ + sizeof(bool) /*embeddedStyle*/ + sizeof(uint8_t) /*imageRendering*/ +
+    sizeof(bool) /*focusReading*/ + sizeof(uint8_t) /*guideDotsMode*/ + sizeof(uint8_t) /*paragraphIndentSpaces*/ +
+    sizeof(int8_t) /*characterSpacing*/ + sizeof(uint16_t) /*pageCount*/ + sizeof(uint32_t) * 5 /*LUT offsets*/;
 // The header ends with the patched-later fields, in this order. Named once so a seek
 // never re-derives its offset from the end of the header by hand.
 constexpr uint32_t PAGE_LUT_FIELD = HEADER_SIZE - sizeof(uint32_t) * 5;

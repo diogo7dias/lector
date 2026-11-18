@@ -372,3 +372,8 @@ STR_FIRMWARE_WRITE_FAILED: "Не ўдалося запісаць прашыўк�
 STR_FIRMWARE_UPDATE_DO_NOT_POWER_OFF: "Не выключайце прыладу!"
 STR_RECOVERY_MODE: "Рэжым аднаўлення"
 STR_RECOVERY_MODE_HINT: "Змясціце firmware.bin у корань SD-карты і абярыце яго"
+STR_EMBEDDED_STYLE: "Убудаваны стыль"
+STR_IMAGES: "Выявы"
+STR_IMAGES_DISPLAY: "Паказваць"
+STR_IMAGES_PLACEHOLDER: "Запаўняльнік"
+STR_IMAGES_SUPPRESS: "Хаваць"

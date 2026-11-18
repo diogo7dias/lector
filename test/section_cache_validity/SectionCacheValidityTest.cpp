@@ -25,26 +25,17 @@ TEST(SectionCacheValidity, EveryLayoutFieldInvalidatesIndependently) {
   CHECK_FIELD(fontId, 1);
   CHECK_FIELD(lineCompression, 1.1f);
   CHECK_FIELD(extraParagraphSpacing, true);
-  CHECK_FIELD(paragraphSpacing, 10);
   CHECK_FIELD(wordSpacing, 125);
   CHECK_FIELD(paragraphAlignment, 1);
   CHECK_FIELD(viewportWidth, 440);
   CHECK_FIELD(viewportHeight, 720);
-  CHECK_FIELD(embeddedTextStyle, false);
-  CHECK_FIELD(embeddedLayoutStyle, false);
+  CHECK_FIELD(embeddedStyle, false);
   CHECK_FIELD(imageRendering, 1);
   CHECK_FIELD(focusReadingEnabled, true);
   CHECK_FIELD(guideDotsMode, GUIDE_DOTS_VISIBLE);
   CHECK_FIELD(guideDotsMode, GUIDE_DOTS_HIDDEN);
-  CHECK_FIELD(firstLineIndentMode, 1);
-  CHECK_FIELD(firstLineIndentPercent, 20);
-  CHECK_FIELD(kerning, false);
-  CHECK_FIELD(ligatures, false);
-  CHECK_FIELD(linkUnderline, false);
-  CHECK_FIELD(bookMargins, false);
-  CHECK_FIELD(headingPageBreak, true);
-  CHECK_FIELD(wordExpansion, 2);
-  CHECK_FIELD(fillPages, true);
+  CHECK_FIELD(paragraphIndentSpaces, 3);
+  CHECK_FIELD(characterSpacing, -1);
 #undef CHECK_FIELD
 }
 

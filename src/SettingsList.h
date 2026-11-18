@@ -372,14 +372,9 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
                          "paragraphAlignment", StrId::STR_CAT_READER)
            .withTextSettings());
 
-  // First-line indent (restored old-lector model): Book (respect CSS) vs Custom %.
-  emit(SettingInfo::Enum(StrId::STR_FIRST_LINE_INDENT, &CrossPointSettings::firstLineIndentMode,
-                         {StrId::STR_INDENT_BOOK, StrId::STR_INDENT_PERCENT}, "firstLineIndentMode",
-                         StrId::STR_CAT_READER)
-           .withTextSettings());
-
-  emit(SettingInfo::Value(StrId::STR_FIRST_LINE_INDENT_PERCENT, &CrossPointSettings::firstLineIndentPercent,
-                          {0, CrossPointSettings::MAX_FIRST_LINE_INDENT_PERCENT, 5}, "firstLineIndentPercent",
+  // First-line indent, in spaces of the reading font.
+  emit(SettingInfo::Value(StrId::STR_PARAGRAPH_INDENTATION, &CrossPointSettings::paragraphIndentSpaces,
+                          {0, reader_defaults::MAX_PARAGRAPH_INDENT_SPACES, 1}, "paragraphIndentSpaces",
                           StrId::STR_CAT_READER)
            .withTextSettings());
 
@@ -392,7 +387,8 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
            .withTextSettings());
 
   emit(SettingInfo::Value(StrId::STR_HORIZONTAL_MARGIN, &CrossPointSettings::screenMargin,
-                          {CrossPointSettings::SCREEN_MARGIN_MIN, CrossPointSettings::SCREEN_MARGIN_MAX, 5},
+                          {CrossPointSettings::HORIZONTAL_MARGIN_MIN, CrossPointSettings::HORIZONTAL_MARGIN_MAX,
+                           CrossPointSettings::HORIZONTAL_MARGIN_STEP},
                           "screenMargin", StrId::STR_CAT_READER)
            .withTextSettings());
 
@@ -411,38 +407,17 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
                          "dynamicMargins", StrId::STR_CAT_READER)
            .withTextSettings());
 
-  emit(SettingInfo::Toggle(StrId::STR_EMBEDDED_TEXT_STYLE, &CrossPointSettings::embeddedTextStyle, "embeddedStyle",
+  // One switch for all publisher styling; the key predates the old text/layout split.
+  emit(SettingInfo::Toggle(StrId::STR_EMBEDDED_STYLE, &CrossPointSettings::embeddedStyle, "embeddedStyle",
                            StrId::STR_CAT_READER)
-           .withTextSettings());
-
-  emit(SettingInfo::Toggle(StrId::STR_EMBEDDED_LAYOUT_STYLE, &CrossPointSettings::embeddedLayoutStyle,
-                           "embeddedLayoutStyle", StrId::STR_CAT_READER)
            .withTextSettings());
 
   emit(SettingInfo::Value(StrId::STR_WORD_SPACING, &CrossPointSettings::wordSpacing,
-                          {CrossPointSettings::MIN_WORD_SPACING, CrossPointSettings::MAX_WORD_SPACING, 5},
+                          {CrossPointSettings::MIN_WORD_SPACING, CrossPointSettings::MAX_WORD_SPACING,
+                           reader_defaults::WORD_SPACING_STEP},
                           "wordSpacing", StrId::STR_CAT_READER)
            .withTextSettings());
 
-  emit(SettingInfo::Toggle(StrId::STR_KERNING, &CrossPointSettings::kerning, "kerning", StrId::STR_CAT_READER)
-           .withTextSettings());
-
-  emit(SettingInfo::Toggle(StrId::STR_LIGATURES, &CrossPointSettings::ligatures, "ligatures", StrId::STR_CAT_READER)
-           .withTextSettings());
-
-  emit(SettingInfo::Toggle(StrId::STR_LINK_UNDERLINE, &CrossPointSettings::linkUnderline, "linkUnderline",
-                           StrId::STR_CAT_READER)
-           .withTextSettings());
-
-  // Retired in 0.8.2: the granular paragraph gap (% of line height) duplicated what
-  // the Extra Paragraph Spacing toggle above already does. The field and its render
-  // spec entry are kept (old caches and sidecars still carry it) but it is pinned to
-  // 0 and no longer editable, here or in the in-book Layout tab. Restore this entry
-  // to bring the control back.
-  // SettingInfo::Value(StrId::STR_PARAGRAPH_SPACING, &CrossPointSettings::paragraphSpacing,
-  //                    {0, CrossPointSettings::MAX_PARAGRAPH_SPACING, 10}, "paragraphSpacing",
-  //                    StrId::STR_CAT_READER)
-  //     .withTextSettings(),
   emit(SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
                            StrId::STR_CAT_READER)
            .withTextSettings());
@@ -451,27 +426,17 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
                          {StrId::STR_NORMAL, StrId::STR_HIGH, StrId::STR_MAX}, "textContrast", StrId::STR_CAT_READER)
            .withTextSettings());
 
-  emit(SettingInfo::Toggle(StrId::STR_BOOK_MARGINS, &CrossPointSettings::bookMargins, "bookMargins",
-                           StrId::STR_CAT_READER)
-           .withTextSettings());
-
-  emit(SettingInfo::Toggle(StrId::STR_HEADING_PAGE_BREAK, &CrossPointSettings::headingPageBreak, "headingPageBreak",
-                           StrId::STR_CAT_READER)
-           .withTextSettings());
-
-  emit(SettingInfo::Toggle(StrId::STR_FILL_PAGES, &CrossPointSettings::fillPages, "fillPages", StrId::STR_CAT_READER)
-           .withTextSettings());
-
-  emit(
-      SettingInfo::Enum(StrId::STR_WORD_EXPANSION, &CrossPointSettings::wordExpansion,
-                        {StrId::STR_WORD_EXPANSION_OFF, StrId::STR_WORD_EXPANSION_SOME, StrId::STR_WORD_EXPANSION_MORE},
-                        "wordExpansion", StrId::STR_CAT_READER)
-          .withTextSettings());
-
+  // Whole pixels, stored 0..4 and shown -2..+2. A new key: "characterSpacing" held half pixels.
   emit(SettingInfo::Value(StrId::STR_CHARACTER_SPACING, &CrossPointSettings::characterSpacing,
-                          {0, reader_defaults::MAX_CHARACTER_SPACING, 1}, "characterSpacing", StrId::STR_CAT_READER)
+                          {0, reader_defaults::MAX_CHARACTER_SPACING, 1}, "characterSpacingPx", StrId::STR_CAT_READER)
            .withTextSettings()
            .withDisplayOffset(-static_cast<int8_t>(reader_defaults::CHARACTER_SPACING)));
+
+  emit(SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
+                         {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS,
+                          StrId::STR_IMAGES_DISPLAY_BW},
+                         "imageRendering", StrId::STR_CAT_READER)
+           .withTextSettings());
 
   emit(SettingInfo::Toggle(StrId::STR_FOCUS_READING, &CrossPointSettings::focusReadingEnabled, "focusReadingEnabled",
                            StrId::STR_CAT_READER)

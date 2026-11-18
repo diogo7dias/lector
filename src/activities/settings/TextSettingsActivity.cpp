@@ -40,13 +40,12 @@ constexpr LookField LOOK_FIELDS[] = {
 #undef CP_LOOK_FIELD
 };
 
-// The two options that defer to the book's own CSS, and so go inert when Embedded Layout
-// Style is off.
-constexpr uint8_t ALIGNMENT_BOOK_INDEX = 4;    // STR_BOOK_S_STYLE
-constexpr uint8_t INDENT_MODE_BOOK_INDEX = 0;  // STR_INDENT_BOOK
+// The option that defers to the book's own CSS, and so goes inert when Book Styling is off.
+constexpr uint8_t ALIGNMENT_BOOK_INDEX = 4;  // STR_BOOK_S_STYLE
 
-std::string needsLayoutLabel(const std::string& label) {
-  return label + " (" + I18N.get(StrId::STR_NEEDS_EMBEDDED_LAYOUT) + ")";
+// "Book's Style (Embedded Style Off)": the option is chosen but has nothing to defer to.
+std::string inertBookStyleLabel(const std::string& label) {
+  return label + " (" + I18N.get(StrId::STR_EMBEDDED_STYLE) + " " + I18N.get(StrId::STR_STATE_OFF) + ")";
 }
 
 // The preview is the whole point of the screen, so it takes a fixed slice of the height
@@ -145,10 +144,8 @@ int TextSettingsActivity::reservedHeight() const {
 void TextSettingsActivity::drawReserved(const Rect& rect) {
   // The preview is a real page rendered by the reader engine, so it stays a raw
   // painter; the base only decides where it goes. It measures and draws with this look's
-  // Kerning and Ligatures switches; the reader sets its own again on its next page.
+  // Character Spacing; the reader sets its own again on its next page.
   const int previewFontId = SETTINGS.getReaderFontId(look_);
-  renderer.setKerning(previewFontId, look_.kerning != 0);
-  renderer.setLigatures(previewFontId, look_.ligatures != 0);
   renderer.setCharacterSpacing(previewFontId, look_.characterSpacing - reader_defaults::CHARACTER_SPACING);
   textsettings::renderPreview(renderer, previewLayout_, look_, rect.y, rect.height - metrics_.verticalSpacing);
 }
@@ -157,8 +154,8 @@ namespace {
 // Each cell's SettingInfo entry, by the CrossPointSettings field it edits. Everything else
 // about the cell (name, kind, range, step, option labels) is read from that entry, so a
 // look setting added to SettingsList.h needs only a Row, a line here and a place in
-// visibleRows(). The grid shortens a few names, and Word Spacing moves by its full step
-// on Up/Down as well as on the large step.
+// visibleRows(). The grid shortens a few names, and Word Spacing and the side margin move
+// by their full step on Up/Down as well as on the large step.
 struct RowSpec {
   uint8_t CrossPointSettings::* setting;  // nullptr: Font and Size, fed by the font registry
   StrId shortName;                        // STR_NONE_OPT: the entry's own name
@@ -172,12 +169,9 @@ constexpr RowSpec ROW_SPECS[] = {
     {&CrossPointSettings::extraParagraphSpacing, StrId::STR_NONE_OPT, false},   // ExtraSpacing
     {&CrossPointSettings::wordSpacing, StrId::STR_NONE_OPT, true},              // WordSpacing
     {&CrossPointSettings::characterSpacing, StrId::STR_NONE_OPT, false},        // CharacterSpacing
-    {&CrossPointSettings::kerning, StrId::STR_NONE_OPT, false},                 // Kerning
-    {&CrossPointSettings::ligatures, StrId::STR_NONE_OPT, false},               // Ligatures
     {&CrossPointSettings::paragraphAlignment, StrId::STR_ALIGNMENT, false},     // Alignment
-    {&CrossPointSettings::firstLineIndentMode, StrId::STR_NONE_OPT, false},     // IndentMode
-    {&CrossPointSettings::firstLineIndentPercent, StrId::STR_NONE_OPT, false},  // IndentPercent
-    {&CrossPointSettings::screenMargin, StrId::STR_NONE_OPT, false},            // HorizontalMargin
+    {&CrossPointSettings::paragraphIndentSpaces, StrId::STR_NONE_OPT, false},   // Indent
+    {&CrossPointSettings::screenMargin, StrId::STR_NONE_OPT, true},             // HorizontalMargin
     {&CrossPointSettings::marginLinkMode, StrId::STR_NONE_OPT, false},          // MarginLink
     {&CrossPointSettings::screenMarginTop, StrId::STR_VERTICAL_MARGIN, false},  // VerticalMargin
     {&CrossPointSettings::screenMarginTop, StrId::STR_NONE_OPT, false},         // TopMargin
@@ -186,13 +180,8 @@ constexpr RowSpec ROW_SPECS[] = {
     {&CrossPointSettings::focusReadingEnabled, StrId::STR_NONE_OPT, false},     // FocusReading
     {&CrossPointSettings::guideDotsEnabled, StrId::STR_NONE_OPT, false},        // GuideDots
     {&CrossPointSettings::guideDotsHidden, StrId::STR_NONE_OPT, false},         // HiddenDots
-    {&CrossPointSettings::embeddedTextStyle, StrId::STR_NONE_OPT, false},       // EmbeddedTextStyle
-    {&CrossPointSettings::embeddedLayoutStyle, StrId::STR_NONE_OPT, false},     // EmbeddedLayoutStyle
-    {&CrossPointSettings::bookMargins, StrId::STR_NONE_OPT, false},             // BookMargins
-    {&CrossPointSettings::linkUnderline, StrId::STR_NONE_OPT, false},           // LinkUnderline
-    {&CrossPointSettings::headingPageBreak, StrId::STR_NONE_OPT, false},        // HeadingPageBreak
-    {&CrossPointSettings::fillPages, StrId::STR_NONE_OPT, false},               // FillPages
-    {&CrossPointSettings::wordExpansion, StrId::STR_NONE_OPT, false},           // WordExpansion
+    {&CrossPointSettings::embeddedStyle, StrId::STR_NONE_OPT, false},           // EmbeddedStyle
+    {&CrossPointSettings::imageRendering, StrId::STR_NONE_OPT, false},          // Images
     {&CrossPointSettings::textAntiAliasing, StrId::STR_NONE_OPT, false},        // AntiAliasing
     {&CrossPointSettings::textContrast, StrId::STR_NONE_OPT, false},            // TextContrast
     {&CrossPointSettings::debugBorders, StrId::STR_NONE_OPT, false},            // DebugBorders
@@ -246,7 +235,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   // The section headings the list used to carry are gone: a cell shows its own name, and
   // four bands would have cost two grid rows to say what the pairing already says.
   std::vector<Row> rows;
-  rows.reserve(33);
+  rows.reserve(24);
 
   rows.push_back(Row::Font);
   rows.push_back(Row::Size);
@@ -259,16 +248,9 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   rows.push_back(Row::ExtraSpacing);
   rows.push_back(Row::WordSpacing);
   rows.push_back(Row::CharacterSpacing);
-  rows.push_back(Row::Kerning);
-  rows.push_back(Row::Ligatures);
 
   rows.push_back(Row::Alignment);
-  rows.push_back(Row::IndentMode);
-  // The custom-% value only applies in Custom% mode; in Book mode the indent comes from
-  // the EPUB's own CSS, so there is nothing to tune.
-  if (look_.firstLineIndentMode == CrossPointSettings::FIRST_LINE_INDENT_PERCENT) {
-    rows.push_back(Row::IndentPercent);
-  }
+  rows.push_back(Row::Indent);
 
   // All Sides: the horizontal cell is every side, so it is the only margin cell, and
   // Dynamic Margins is not offered at all — it would compute a horizontal margin of its
@@ -295,14 +277,8 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   // Hidden Dots only says anything about a page that is already drawing guide dots.
   if (look_.guideDotsEnabled) rows.push_back(Row::HiddenDots);
 
-  rows.push_back(Row::EmbeddedTextStyle);
-  rows.push_back(Row::EmbeddedLayoutStyle);
-  // Book Margins splits the margins out of the Layout bucket, so it only shows beside it.
-  if (look_.embeddedLayoutStyle) rows.push_back(Row::BookMargins);
-  rows.push_back(Row::LinkUnderline);
-  rows.push_back(Row::HeadingPageBreak);
-  rows.push_back(Row::FillPages);
-  rows.push_back(Row::WordExpansion);
+  rows.push_back(Row::EmbeddedStyle);
+  rows.push_back(Row::Images);
   // Kept at the end so it coming and going only reflows the last pair of cells.
   if (look_.textAntiAliasing) rows.push_back(Row::TextContrast);
 
@@ -414,12 +390,10 @@ std::string TextSettingsActivity::rowValueText(const Row row) const {
   const uint8_t v = *field;
   if (info->enumValues.empty()) return "";
   const std::string label = I18N.get(v < info->enumValues.size() ? info->enumValues[v] : info->enumValues[0]);
-  // "Book's Style" and First Line Indent: Book read the book's own CSS, which is exactly
-  // what Embedded Layout Style switches off. Saying so on the row beats a setting that
-  // looks chosen and does nothing.
-  const bool defersToBook =
-      (row == Row::Alignment && v == ALIGNMENT_BOOK_INDEX) || (row == Row::IndentMode && v == INDENT_MODE_BOOK_INDEX);
-  return (defersToBook && !look_.embeddedLayoutStyle) ? needsLayoutLabel(label) : label;
+  // "Book's Style" reads the book's own CSS, which is exactly what Book Styling switches
+  // off. Saying so on the row beats a setting that looks chosen and does nothing.
+  const bool defersToBook = row == Row::Alignment && v == ALIGNMENT_BOOK_INDEX;
+  return (defersToBook && !look_.embeddedStyle) ? inertBookStyleLabel(label) : label;
 }
 
 // Up and Down move a whole grid row so the column is kept; Left and Right move one cell,

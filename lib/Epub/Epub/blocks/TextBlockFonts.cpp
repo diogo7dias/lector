@@ -50,9 +50,7 @@ int TextBlock::wordBoxTop(const GfxRenderer& renderer, const int sectionFontId, 
 
 int TextBlock::wordWidth(const GfxRenderer& renderer, const int sectionFontId, const uint16_t i) const {
   const int font = wordRenderFont(renderer, sectionFontId, i);
-  const int width = renderer.getTextAdvanceX(font, wordText(i), wordStyle(i));
-  if (!letterSpacing) return width;
-  return width + letterSpacing * std::max(0, renderer.spacedGlyphCount(font, wordText(i), wordStyle(i)) - 1);
+  return renderer.getTextAdvanceX(font, wordText(i), wordStyle(i));
 }
 
 int TextBlock::extraAscent(const GfxRenderer& renderer, const int sectionFontId) const {

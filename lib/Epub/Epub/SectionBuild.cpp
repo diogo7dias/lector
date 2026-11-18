@@ -150,7 +150,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const PopupFn popupFn, vo
   ctx->contentBase = (lastSlash != std::string::npos) ? localPath.substr(0, lastSlash + 1) : "";
   ctx->imageBasePath = epub.getCachePath() + "/img_" + std::to_string(spineIndex) + "_";
 
-  if (spec.embeddedTextStyle || spec.embeddedLayoutStyle) {
+  if (spec.embeddedStyle) {
     ctx->cssParser = epub.getCssParser();
     const auto cssLoad =
         ctx->cssParser ? ctx->cssParser->loadFromCache(/*headerOnly=*/false) : CssParser::CacheLoad::Ok;

@@ -170,9 +170,7 @@ void EpubReaderActivity::rememberBookOnceRendered() {
 
 void EpubReaderActivity::onExit() {
   Activity::onExit();
-  // The reading font's Kerning and Ligatures switches end with the book.
-  renderer.setKerning(0, true);
-  renderer.setLigatures(0, true);
+  // The reading font's Character Spacing ends with the book.
   renderer.setCharacterSpacing(0, 0);
   renderer.setTextContrast(0);
 

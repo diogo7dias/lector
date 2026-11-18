@@ -70,44 +70,31 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
     LOG_DBG("SCT", "File not open for writing header");
     return;
   }
-  static_assert(
-      HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(spec.fontId) + sizeof(spec.lineCompression) +
-                         sizeof(spec.extraParagraphSpacing) + sizeof(spec.paragraphSpacing) + sizeof(spec.wordSpacing) +
-                         sizeof(spec.paragraphAlignment) + sizeof(spec.viewportWidth) + sizeof(spec.viewportHeight) +
-                         sizeof(pageCount) + sizeof(spec.embeddedTextStyle) + sizeof(spec.embeddedLayoutStyle) +
-                         sizeof(spec.imageRendering) + sizeof(spec.focusReadingEnabled) + sizeof(spec.guideDotsMode) +
-                         sizeof(spec.firstLineIndentMode) + sizeof(spec.firstLineIndentPercent) + sizeof(spec.kerning) +
-                         sizeof(spec.ligatures) + sizeof(spec.linkUnderline) + sizeof(spec.bookMargins) +
-                         sizeof(spec.headingPageBreak) + sizeof(spec.wordExpansion) + sizeof(spec.characterSpacing) +
-                         sizeof(spec.fillPages) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +
-                         sizeof(uint32_t) + sizeof(uint32_t),
-      "Header size mismatch");
+  static_assert(HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(spec.fontId) + sizeof(spec.lineCompression) +
+                                   sizeof(spec.extraParagraphSpacing) + sizeof(spec.wordSpacing) +
+                                   sizeof(spec.paragraphAlignment) + sizeof(spec.viewportWidth) +
+                                   sizeof(spec.viewportHeight) + sizeof(pageCount) + sizeof(spec.embeddedStyle) +
+                                   sizeof(spec.imageRendering) + sizeof(spec.focusReadingEnabled) +
+                                   sizeof(spec.guideDotsMode) + sizeof(spec.paragraphIndentSpaces) +
+                                   sizeof(spec.characterSpacing) + sizeof(uint32_t) + sizeof(uint32_t) +
+                                   sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
+                "Header size mismatch");
   // Written as the incomplete sentinel; finalizeBuild() patches it to
   // SECTION_FILE_VERSION as the last step, committing the file.
   serialization::writePod(file, SECTION_FILE_INCOMPLETE_VERSION);
   serialization::writePod(file, spec.fontId);
   serialization::writePod(file, spec.lineCompression);
   serialization::writePod(file, spec.extraParagraphSpacing);
-  serialization::writePod(file, spec.paragraphSpacing);
   serialization::writePod(file, spec.wordSpacing);
   serialization::writePod(file, spec.paragraphAlignment);
   serialization::writePod(file, spec.viewportWidth);
   serialization::writePod(file, spec.viewportHeight);
-  serialization::writePod(file, spec.embeddedTextStyle);
-  serialization::writePod(file, spec.embeddedLayoutStyle);
+  serialization::writePod(file, spec.embeddedStyle);
   serialization::writePod(file, spec.imageRendering);
   serialization::writePod(file, spec.focusReadingEnabled);
   serialization::writePod(file, spec.guideDotsMode);
-  serialization::writePod(file, spec.firstLineIndentMode);
-  serialization::writePod(file, spec.firstLineIndentPercent);
-  serialization::writePod(file, spec.kerning);
-  serialization::writePod(file, spec.ligatures);
-  serialization::writePod(file, spec.linkUnderline);
-  serialization::writePod(file, spec.bookMargins);
-  serialization::writePod(file, spec.headingPageBreak);
-  serialization::writePod(file, spec.wordExpansion);
+  serialization::writePod(file, spec.paragraphIndentSpaces);
   serialization::writePod(file, spec.characterSpacing);
-  serialization::writePod(file, spec.fillPages);
   serialization::writePod(file, pageCount);  // Placeholder for page count (will be initially 0, patched later)
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for LUT offset (patched later)
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for anchor map offset (patched later)
@@ -121,26 +108,16 @@ static void readSpecFields(HalFile& f, ReaderRenderSpec& out) {
   serialization::readPod(f, out.fontId);
   serialization::readPod(f, out.lineCompression);
   serialization::readPod(f, out.extraParagraphSpacing);
-  serialization::readPod(f, out.paragraphSpacing);
   serialization::readPod(f, out.wordSpacing);
   serialization::readPod(f, out.paragraphAlignment);
   serialization::readPod(f, out.viewportWidth);
   serialization::readPod(f, out.viewportHeight);
-  serialization::readPod(f, out.embeddedTextStyle);
-  serialization::readPod(f, out.embeddedLayoutStyle);
+  serialization::readPod(f, out.embeddedStyle);
   serialization::readPod(f, out.imageRendering);
   serialization::readPod(f, out.focusReadingEnabled);
   serialization::readPod(f, out.guideDotsMode);
-  serialization::readPod(f, out.firstLineIndentMode);
-  serialization::readPod(f, out.firstLineIndentPercent);
-  serialization::readPod(f, out.kerning);
-  serialization::readPod(f, out.ligatures);
-  serialization::readPod(f, out.linkUnderline);
-  serialization::readPod(f, out.bookMargins);
-  serialization::readPod(f, out.headingPageBreak);
-  serialization::readPod(f, out.wordExpansion);
+  serialization::readPod(f, out.paragraphIndentSpaces);
   serialization::readPod(f, out.characterSpacing);
-  serialization::readPod(f, out.fillPages);
 }
 
 bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
