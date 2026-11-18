@@ -334,6 +334,8 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
   const auto leanKeys = reader_preset_migration::readLegacyKeys(doc);
   if (!leanKeys.hasParagraphIndentSpaces) {
     reader_preset_migration::migrateLeanTypography(leanKeys, paragraphIndentSpaces, embeddedStyle, characterSpacing);
+    // Placeholder and Suppress did nothing from 2026-08-11 until the Images row came back.
+    imageRendering = IMAGES_DISPLAY;
     needsResave = true;
   }
   // Word Spacing and the side margin moved to coarser steps, so a saved value lands on the grid.
