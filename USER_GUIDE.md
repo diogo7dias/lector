@@ -262,7 +262,7 @@ books copied from a computer carry a real date, while books the device downloade
 | `.epub`         | The full reader: chapters, footnotes, bookmarks, quotes |
 | `.txt`          | Plain-text reader                                     |
 | `.xtc`          | XTC reader, the Xteink book format                    |
-| `.bmp`          | Image viewer                                          |
+| `.bmp`, `.png`, `.jpg` | Image viewer                                   |
 | `.pxc`          | Image viewer for the packed wallpaper format          |
 | `.bin`          | Offered as a firmware file, see [section 13](#13-updating-the-firmware) |
 
@@ -270,7 +270,8 @@ Text files are read as UTF-8. A file that is not valid UTF-8 is read as Windows-
 usual encoding of older Western text files (Latin-1 accents, curly quotes, the euro sign).
 UTF-16 files are not supported and show a message instead.
 
-From the image viewers you can set the picture as your sleep wallpaper.
+From the image viewers you can set the picture as your sleep wallpaper. A `.jpg` is converted
+to a panel-sized `sleep.bmp` (Fit or Crop, as **Sleep Screen Cover Mode** says); a `.bmp` is copied as it is.
 
 Opening a wallpaper from `/sleep` gives you the triage buttons: **Favorite**, **Pause** and
 **Delete**. Favoriting closes the viewer straight away and takes you back to the folder, so
@@ -499,11 +500,17 @@ appears only when a dictionary is set.
 
 | Mode           | Behaviour                                                                        |
 | -------------- | -------------------------------------------------------------------------------- |
-| Custom         | A wallpaper from the SD card. When none is found, the open book's cover; with no book open, a white screen with the lector crow and the name "Lector". |
+| Dark           | The lector crow and the name "Lector", white on black. Drawn by the firmware, no SD file. |
+| Light          | The same screen, black on white. Drawn by the firmware, no SD file. |
+| Custom         | A wallpaper from the SD card. When none is found, the open book's cover; with no book open, the white crow and "Lector" screen. |
 | Cover          | The open book's cover. With no book open, the white crow and "Lector" screen.     |
+| Cover + Custom | The open book's cover when you lock from a book, a wallpaper otherwise. With no cover, the wallpaper; with no wallpaper, the white crow and "Lector" screen. |
+| Quick Resume   | The page you were on stays on the screen with a small moon in the bottom-left corner, and waking puts the same page back. Nothing is cleared or redrawn at lock, so it is the fastest face; a copy of the screen is kept on the card in `.crosspoint`. |
+| Transparent    | A picture with see-through parts (an overlay) drawn over the page you were on. See Overlay files below. With no overlay on the card, the white crow and "Lector" screen. |
+| Cover + Transparent | The same overlay drawn over the open book's cover. With no cover, over a blank page; with no overlay, the plain cover. |
+| None           | An empty white screen. Drawn by the firmware, no SD file. |
 
-Custom is the default. Retired sleep-screen choices now use Custom. Inactivity uses your
-selected sleep screen.
+Custom is the default. Inactivity uses your selected sleep screen.
 
 ### Wallpaper files
 
@@ -526,6 +533,17 @@ in the rotation. **Settings > Display > Shuffle Wallpapers** reshuffles the orde
 Three Display settings decide what is drawn over a wallpaper: **Show Wallpaper Name**, **Show
 Wallpaper Position** and **Sleep Footer Text** (your own line of text). **Sleep Image Quality** trades rendering time against how the image looks: **Fast** or
 **Pretty**.
+
+### Overlay files
+
+The two Transparent faces read overlays, not wallpapers: a 32-bit `.bmp` with an alpha channel
+or a `.png` (with transparency; grayscale, indexed or colour). Put one at the root of the
+card as `sleep-overlay.bmp` or `sleep-overlay.png`, which takes priority, or several in
+`/sleep-overlay` (a hidden `/.sleep-overlay` is read too) and one is picked at random each
+time the device sleeps. A `.bmp` with no see-through pixels is not an overlay and is skipped.
+Overlays follow **Sleep Screen Cover Mode** (Fit or Crop) like a wallpaper. In the image
+viewer, **Set Cover** saves a `.bmp` or `.png` as the root overlay while a Transparent face is
+selected.
 
 ### Cover settings
 
@@ -987,7 +1005,7 @@ belongs to, so the rows here appear in the same order as on the device.
 
 **Sleep screen**
 
-- **Sleep Screen** — Custom, Cover. See [section 8](#8-sleep-screen-and-wallpapers).
+- **Sleep Screen** — Dark, Light, Custom, Cover, Cover + Custom, Quick Resume, Transparent, Cover + Transparent, None. See [section 8](#8-sleep-screen-and-wallpapers).
 - **Fast Unlock** — shorter recovery-chord wait at wake, and the page painted over the sleep screen in one pass. Off if a wake lands in the recovery picker by itself or the wallpaper ghosts into the first page.
 - **Sleep Footer Text** — your own line of text on the sleep screen.
 

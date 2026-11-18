@@ -61,7 +61,7 @@ bool SleepActivity::renderWallpaperFile(const std::string& filename, const PxcRe
   return true;
 }
 
-void SleepActivity::renderCustomSleepScreen() const {
+void SleepActivity::renderCustomSleepScreen(const bool thenCover) const {
 #ifdef LECTOR_LOCK_LAB
   // A Full lock run has to draw what the bench draws, or the number it reports belongs to
   // a different recipe than the picture on the panel.
@@ -159,6 +159,8 @@ void SleepActivity::renderCustomSleepScreen() const {
   if (dir) dir.close();
 
   // No wallpaper to show: the open book's cover, then the Lector fallback. The cover path
-  // never comes back here, so the chain cannot loop.
-  renderCoverSleepScreen();
+  // comes back here only from Cover + Custom, which passes thenCover=false, so the chain
+  // cannot loop.
+  if (thenCover) return renderCoverSleepScreen();
+  renderDefaultSleepScreen();
 }

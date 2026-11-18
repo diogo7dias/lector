@@ -2,18 +2,25 @@
 
 #include "sleep/WakeFacePolicy.h"
 
-TEST(WakeFacePolicy, OnlyWallpaperAndCoverSurviveMigration) {
-  EXPECT_EQ(wake_face::migrateSleepScreen(2), 2);   // Custom stays Custom
-  EXPECT_EQ(wake_face::migrateSleepScreen(3), 3);   // Cover stays Cover
-  EXPECT_EQ(wake_face::migrateSleepScreen(0), 2);   // Dark
-  EXPECT_EQ(wake_face::migrateSleepScreen(1), 2);   // Light (the crest)
-  EXPECT_EQ(wake_face::migrateSleepScreen(4), 2);   // Cover + Custom
-  EXPECT_EQ(wake_face::migrateSleepScreen(5), 2);   // Blank
-  EXPECT_EQ(wake_face::migrateSleepScreen(6), 2);   // Quick Resume
-  EXPECT_EQ(wake_face::migrateSleepScreen(7), 2);   // Stats Dashboard
-  EXPECT_EQ(wake_face::migrateSleepScreen(8), 2);   // Freeze
-  EXPECT_EQ(wake_face::migrateSleepScreen(9), 2);   // Transparent
-  EXPECT_EQ(wake_face::migrateSleepScreen(42), 2);  // anything a future build wrote
+TEST(WakeFacePolicy, StampedFilesKeepEveryOfferedFace) {
+  // CrossPoint's numbers: Dark, Light, Custom, Cover, Cover + Custom, None, Quick Resume,
+  // Transparent, Cover + Transparent.
+  for (uint8_t mode = 0; mode <= 8; mode++) EXPECT_EQ(wake_face::sleepFaceFromFile(mode, true), mode);
+  EXPECT_EQ(wake_face::sleepFaceFromFile(9, true), 2);   // lector's old Transparent slot, no longer a face
+  EXPECT_EQ(wake_face::sleepFaceFromFile(42, true), 2);  // anything a future build wrote
+  EXPECT_EQ(wake_face::sleepFaceFromFile(255, true), 2);
+}
+
+TEST(WakeFacePolicy, OlderLectorFilesKeepWhatTheirNumbersMeant) {
+  // 0.58.0 wrote only 2 and 3.
+  EXPECT_EQ(wake_face::sleepFaceFromFile(2, false), 2);
+  EXPECT_EQ(wake_face::sleepFaceFromFile(3, false), 3);
+  // Before the nine-face picker: 7 was the stats dashboard and 8 Freeze (both gone), and 9 the
+  // transparent overlay, which is 7 now.
+  EXPECT_EQ(wake_face::sleepFaceFromFile(7, false), 2);
+  EXPECT_EQ(wake_face::sleepFaceFromFile(8, false), 2);
+  EXPECT_EQ(wake_face::sleepFaceFromFile(9, false), 7);
+  EXPECT_EQ(wake_face::sleepFaceFromFile(42, false), 2);
 }
 
 TEST(WakeFacePolicy, FastUnlockShortensOnlyTheLadderSettleWindow) {

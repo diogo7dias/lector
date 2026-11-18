@@ -16,6 +16,7 @@
 #include "LectorFace.h"
 #include "SleepFacePaint.h"
 #include "SleepInfoOverlay.h"
+#include "SleepOverlay.h"
 #include "SleepPreClear.h"
 #include "SleepTiming.h"
 #include "activities/reader/ReaderUtils.h"
@@ -66,6 +67,12 @@ BitmapPlacement calculateBitmapPlacement(const int bitmapWidth, const int bitmap
   return placement;
 }
 
+// The faces that draw on the page the reader left instead of replacing it.
+bool keepsPage(const uint8_t mode) {
+  return mode == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
+         mode == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM;
+}
+
 }  // namespace
 
 void SleepActivity::onEnter() {
@@ -75,7 +82,13 @@ void SleepActivity::onEnter() {
   // from onEnter (outside ActivityManager's per-render polarity resolution),
   // so clear any inversion left over from a night-mode reader render. Every face
   // repaints the whole panel, so dropping the inversion costs it nothing.
+  //
+  // Quick Resume and Transparent keep the page and draw on it, so night mode's output
+  // inversion is made real in the framebuffer first: the page looks the same, and what the
+  // face adds (and the frame Quick Resume saves) is in normal polarity.
+  const bool frameWasInverted = display.isInverted();
   display.setInverted(false);
+  if (frameWasInverted && keepsPage(SETTINGS.sleepScreen)) renderer.invertScreen();
 
   // Run and land any queued favourite rename before the folder is touched and before the
   // state below is written. The renames DELIBERATELY start here, not at the press: on a
@@ -102,6 +115,9 @@ void SleepActivity::onEnter() {
 }
 
 void SleepActivity::renderSleepScreen() const {
+  // Quick Resume asks nothing of the card and keeps the page: no popup, no scrub.
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME) return renderQuickResumeScreen();
+
   // The "Entering sleep" popup, in the reader's orientation when locking from a book.
   // Both faces read the card and can take seconds, so the press gets a visible answer
   // first.
@@ -122,6 +138,15 @@ void SleepActivity::renderSleepScreen() const {
   // physically observable (and this one is the user's visible answer to a press that then
   // spends seconds reading the card), and the face's own base is HALF/FULL, not FAST, so
   // the composed pass would put the popup on a different waveform than it runs today.
+  // Transparent draws over the page, so nothing may scrub or replace it: the popup is put up
+  // and taken back out of the framebuffer, and there is no pre-clear. The overlay's own
+  // waveform is the only pass that cleans, as CrossPoint does.
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM) {
+    showPopupKeepingPage();
+    SleepTiming::mark("popup");
+    return renderTransparentCustomSleepScreen();
+  }
+
   if (APP_STATE.lastSleepFromReader) {
     ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
@@ -146,11 +171,24 @@ void SleepActivity::renderSleepScreen() const {
   LOG_INF("SLP", "pre-clear %ums", static_cast<unsigned>(preClearMs));
 
   // Custom: wallpaper, then cover, then the Lector fallback. Cover: cover, then the
-  // fallback. Retired values are migrated to Custom when settings load, so nothing else
-  // can arrive here; the default keeps a stale value from a blank panel.
+  // fallback. Quick Resume and the two transparent faces never get here (onEnter keeps the
+  // page on the panel); a value no build offers is migrated to Custom on load, and the
+  // default keeps a stale one from a blank panel.
   switch (SETTINGS.sleepScreen) {
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::DARK):
+      return renderDefaultSleepScreen(/*dark=*/true);
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT):
+      return renderDefaultSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
+      return renderBlankSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER):
       return renderCoverSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_TRANSPARENT):
+      // The cover with the overlay over it; no cover means the overlay over a blank page.
+      return renderCoverSleepScreen(CoverFallback::Overlay);
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM):
+      // The cover while reading, a wallpaper otherwise (and when the book has no cover).
+      return APP_STATE.lastSleepFromReader ? renderCoverSleepScreen(CoverFallback::Custom) : renderCustomSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM):
     default:
       return renderCustomSleepScreen();
@@ -164,15 +202,25 @@ void SleepActivity::renderSleepScreen() const {
 // The stock-parity rule this face obeys now lives in sleep_face::planFor next to the two
 // other faces, so all three read as one table instead of three literals in three
 // functions.
-void SleepActivity::renderDefaultSleepScreen() const {
+void SleepActivity::renderDefaultSleepScreen(const bool dark) const {
   renderer.clearScreen();
   drawLectorFace(renderer);
+  // Dark is the same face on a black page. The fallback and Light stay white.
+  if (dark) renderer.invertScreen();
   const sleep_face::PaintPlan plan =
       sleep_face::planFor(sleep_face::Face::PlainLector, /*sourceHasGrayscale=*/false, display.profile());
   renderer.displayBuffer(plan.base);
 }
 
-void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Face face) const {
+// None: an empty page. Drawn without any SD file, like Dark and Light.
+void SleepActivity::renderBlankSleepScreen() const {
+  renderer.clearScreen();
+  renderer.displayBuffer(
+      sleep_face::planFor(sleep_face::Face::PlainLector, /*sourceHasGrayscale=*/false, display.profile()).base);
+}
+
+void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Face face,
+                                            SleepOverlay* const overlay) const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   // Fit shrinks while decoding, so the dither lands on panel pixels; the renderer would
@@ -193,7 +241,8 @@ void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Fa
   // The cover filter describes how a full-screen image should look: NO_FILTER keeps the
   // tone (grayscale), the others flatten it to black and white.
   // A panel without gray (DeviceProfile::panelHasGray) skips the planes it cannot draw.
-  const bool hasGreyscale = bitmap.hasGreyscale() && display.profile().panelHasGray &&
+  // An overlay can carry grey of its own, so it asks for the planes too.
+  const bool hasGreyscale = (bitmap.hasGreyscale() || overlay) && display.profile().panelHasGray &&
                             SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
 
   renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
@@ -206,6 +255,7 @@ void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Fa
   // and once per pass below for the same reason the bitmap is. On the cover face only
   // the reading line draws: the wallpaper badges need a SleepInfoOverlayScope.
   drawSleepInfoOverlay(renderer);
+  if (overlay && !overlay->draw(renderer)) LOG_ERR("SLP", "Overlay failed on the cover");
 
   // Everything above this point is card reading and decoding; everything below is the
   // panel. The gap between "decode" and "face" is the wallpaper's own refresh cost.
@@ -239,17 +289,26 @@ void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Fa
           bitmap.rewindToData();
           renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
           drawSleepInfoOverlay(renderer);
-          return true;
+          return !overlay || overlay->draw(renderer);
         },
         [](GfxRenderer::RenderMode) {});
   }
 }
 
-// The open book's cover, or the Lector fallback when there is no book, no cover, or the
-// cover cannot be read.
-void SleepActivity::renderCoverSleepScreen() const {
+// What the cover face shows when there is no book, no cover, or the cover cannot be read:
+// the Lector face (Cover), the wallpaper (Cover + Custom; Custom's own cover fallback is off
+// there, so the two cannot send each other round in a circle), or the overlay on its own
+// (Cover + Transparent).
+void SleepActivity::renderNoCoverSleepScreen(const CoverFallback fallback) const {
+  if (fallback == CoverFallback::Custom) return renderCustomSleepScreen(/*thenCover=*/false);
+  if (fallback == CoverFallback::Overlay) return renderTransparentCustomSleepScreen();
+  renderDefaultSleepScreen();
+}
+
+// The open book's cover, then `fallback`.
+void SleepActivity::renderCoverSleepScreen(const CoverFallback fallback) const {
   if (APP_STATE.openEpubPath.empty()) {
-    return renderDefaultSleepScreen();
+    return renderNoCoverSleepScreen(fallback);
   }
 
   std::string coverBmpPath;
@@ -260,12 +319,12 @@ void SleepActivity::renderCoverSleepScreen() const {
     Xtc lastXtc(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastXtc.load()) {
       LOG_ERR("SLP", "Failed to load last XTC");
-      return renderDefaultSleepScreen();
+      return renderNoCoverSleepScreen(fallback);
     }
 
     if (!lastXtc.generateCoverBmp()) {
       LOG_ERR("SLP", "Failed to generate XTC cover bmp");
-      return renderDefaultSleepScreen();
+      return renderNoCoverSleepScreen(fallback);
     }
 
     coverBmpPath = lastXtc.getCoverBmpPath();
@@ -274,12 +333,12 @@ void SleepActivity::renderCoverSleepScreen() const {
     Txt lastTxt(APP_STATE.openEpubPath, "/.crosspoint");
     if (!lastTxt.load()) {
       LOG_ERR("SLP", "Failed to load last TXT");
-      return renderDefaultSleepScreen();
+      return renderNoCoverSleepScreen(fallback);
     }
 
     if (!lastTxt.generateCoverBmp()) {
       LOG_ERR("SLP", "No cover image found for TXT file");
-      return renderDefaultSleepScreen();
+      return renderNoCoverSleepScreen(fallback);
     }
 
     coverBmpPath = lastTxt.getCoverBmpPath();
@@ -288,17 +347,17 @@ void SleepActivity::renderCoverSleepScreen() const {
     // Skip loading css since we only need metadata here
     if (!lastEpub.load(true, true)) {
       LOG_ERR("SLP", "Failed to load last epub");
-      return renderDefaultSleepScreen();
+      return renderNoCoverSleepScreen(fallback);
     }
 
     if (!lastEpub.generateCoverBmp(cropped)) {
       LOG_ERR("SLP", "Failed to generate cover bmp");
-      return renderDefaultSleepScreen();
+      return renderNoCoverSleepScreen(fallback);
     }
 
     coverBmpPath = lastEpub.getCoverBmpPath(cropped);
   } else {
-    return renderDefaultSleepScreen();
+    return renderNoCoverSleepScreen(fallback);
   }
 
   HalFile file;
@@ -306,10 +365,13 @@ void SleepActivity::renderCoverSleepScreen() const {
     Bitmap bitmap(file);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Rendering sleep cover: %s", coverBmpPath.c_str());
-      renderBitmapSleepScreen(bitmap, sleep_face::Face::CoverFallback);
+      // Cover + Transparent: no usable overlay just means the plain cover.
+      SleepOverlay overlay;
+      const bool withOverlay = fallback == CoverFallback::Overlay && overlay.prepare(renderer);
+      renderBitmapSleepScreen(bitmap, sleep_face::Face::CoverFallback, withOverlay ? &overlay : nullptr);
       return;
     }
   }
 
-  return renderDefaultSleepScreen();
+  return renderNoCoverSleepScreen(fallback);
 }

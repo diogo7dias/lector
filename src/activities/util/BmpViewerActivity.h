@@ -26,11 +26,12 @@ class BmpViewerActivity final : public Activity {
   void doToggleFavorite();
   void doTogglePause();
   void promptDelete();
-  // A PNG can only become the sleep image while the Transparent face is selected;
-  // every other face reads .bmp only, so offering it there would write a file
-  // nothing ever renders.
+  // A .bmp or .jpg can become the wallpaper (a .jpg is converted); a .png or .bmp can
+  // become the overlay while a Transparent face is selected. Anything else would write a
+  // file nothing ever renders.
   bool canSetSleepCover() const;
-  bool renderPng();
+  // A .png or .jpg onto the framebuffer.
+  bool renderDecoded();
 
   std::string filePath;
   // Arena-backed and bounded; see NameList. A wallpaper folder with thousands of

@@ -2,10 +2,22 @@
 #include <cstdint>
 
 namespace wake_face {
-// Persisted IDs must not be renumbered. Only Custom (2, a wallpaper) and Cover (3)
-// remain; every other stored value — Dark, Light (the crest), Cover + Custom, Blank,
-// Quick Resume, Stats Dashboard, Freeze, Transparent — becomes Custom.
-inline constexpr uint8_t migrateSleepScreen(uint8_t mode) { return mode == 3 ? 3 : 2; }
+// Persisted IDs must not be renumbered; they are CrossPoint's (see the enum in
+// CrossPointSettings.h).
+//
+// A file this build wrote carries "sleepFaceNumbering": a stored value no build offers
+// (a future build's) becomes Custom.
+//
+// A file without the key is older. Lector's own pre-2026-09-14 numbering differed from
+// CrossPoint's at 7 (Stats Dashboard), 8 (Freeze) and 9 (Transparent), and those three were
+// retired to Custom on load ever since, so 0.58.0 files hold only 2 or 3 and read the same
+// either way. A card that skipped every build since keeps what its numbers meant: 7 and 8
+// are Custom, and 9, the transparent overlay, is today's 7.
+inline constexpr uint8_t sleepFaceFromFile(const uint8_t stored, const bool numbered) {
+  if (numbered) return stored <= 8 ? stored : 2;
+  if (stored == 9) return 7;
+  return stored <= 6 ? stored : 2;
+}
 
 // How long the wake waits, measured from gpio.begin(), before the recovery chord is
 // read. The X3/X4 buttons are an ADC resistor ladder that shares a supply with the

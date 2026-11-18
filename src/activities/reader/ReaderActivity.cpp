@@ -177,7 +177,8 @@ void ReaderActivity::onEnter() {
   // activities themselves paint from onEnter, so the wait sits in front of each of them,
   // after its load. No-op when nothing is in flight.
   const auto waitForPanel = [this] { renderer.waitRefreshComplete(); };
-  if (FsHelpers::hasBmpExtension(initialBookPath) || FsHelpers::hasPngExtension(initialBookPath)) {
+  if (FsHelpers::hasBmpExtension(initialBookPath) || FsHelpers::hasPngExtension(initialBookPath) ||
+      FsHelpers::hasJpgExtension(initialBookPath)) {
     waitForPanel();
     onGoToBmpViewer(initialBookPath);
   } else if (hasPxcExtension(initialBookPath)) {

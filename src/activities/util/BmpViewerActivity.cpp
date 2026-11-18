@@ -1,11 +1,12 @@
 #include "BmpViewerActivity.h"
 
 #include <Bitmap.h>
-#include <Epub/converters/PngToFramebufferConverter.h>
+#include <Epub/converters/ImageDecoderFactory.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <JpegToBmpConverter.h>
 #include <Memory.h>
 
 #include <algorithm>
@@ -21,6 +22,19 @@ using SleepImageTriage::lineHeightForHelp;
 
 namespace {
 constexpr char CUSTOM_SLEEP_ROOT_BMP[] = "/sleep.bmp";
+// While a Transparent face is selected "set as sleep image" means "use this as the overlay".
+constexpr char OVERLAY_ROOT_BMP[] = "/sleep-overlay.bmp";
+constexpr char OVERLAY_ROOT_PNG[] = "/sleep-overlay.png";
+
+// The sleep faces that read /sleep-overlay.*.
+bool overlayFaceSelected() {
+  return SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM ||
+         SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_TRANSPARENT;
+}
+
+bool isViewableImage(const std::string_view name) {
+  return FsHelpers::hasBmpExtension(name) || FsHelpers::hasPngExtension(name) || FsHelpers::hasJpgExtension(name);
+}
 }  // namespace
 
 BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
@@ -48,7 +62,7 @@ void BmpViewerActivity::loadSiblingImages() {
       file.getName(name, sizeof(name));
       if (name[0] != '.') {
         const std::string_view fname(name);
-        if (FsHelpers::hasBmpExtension(fname) || FsHelpers::hasPngExtension(fname)) {
+        if (isViewableImage(fname)) {
           // Bounded on purpose: this folder can hold thousands of images, and an
           // unbounded name list exhausts the heap into a throwing allocation.
           if (!siblingImages.push(fname)) break;
@@ -82,18 +96,23 @@ void BmpViewerActivity::drawHints() {
   const char* pauseLabel =
       crosspoint::sleep::isPaused(filePath) ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE);
   // Blank rather than "Set sleep cover" when the file cannot become one: a .png is
-  // only usable as a sleep image while the Transparent face is selected.
+  // only usable as a sleep image while a Transparent face is selected.
   const auto labels = triage ? mappedInput.mapLabels(tr(STR_BACK), favLabel, tr(STR_DELETE), pauseLabel)
                              : mappedInput.mapLabels(tr(STR_BACK), canSetSleepCover() ? tr(STR_SET_SLEEP_COVER) : "",
                                                      (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
-bool BmpViewerActivity::canSetSleepCover() const { return FsHelpers::hasBmpExtension(filePath); }
+bool BmpViewerActivity::canSetSleepCover() const {
+  if (overlayFaceSelected()) return FsHelpers::hasBmpExtension(filePath) || FsHelpers::hasPngExtension(filePath);
+  return FsHelpers::hasBmpExtension(filePath) || FsHelpers::hasJpgExtension(filePath);
+}
 
-bool BmpViewerActivity::renderPng() {
+// A .png or .jpg: the decoder for its extension, centred and shrunk to the panel.
+bool BmpViewerActivity::renderDecoded() {
+  auto* const decoder = ImageDecoderFactory::getDecoder(filePath);
   ImageDimensions dimensions;
-  if (!PngToFramebufferConverter::getDimensionsStatic(filePath, dimensions)) return false;
+  if (!decoder || !decoder->getDimensions(filePath, dimensions)) return false;
   if (dimensions.width <= 0 || dimensions.height <= 0) return false;
 
   const float scale = std::min(static_cast<float>(renderer.getScreenWidth()) / dimensions.width,
@@ -103,8 +122,7 @@ bool BmpViewerActivity::renderPng() {
   RenderConfig config{(renderer.getScreenWidth() - width) / 2, (renderer.getScreenHeight() - height) / 2, width,
                       height};
 
-  PngToFramebufferConverter converter;
-  return converter.decodeToFramebuffer(filePath, renderer, config);
+  return decoder->decodeToFramebuffer(filePath, renderer, config);
 }
 
 void BmpViewerActivity::onEnter() {
@@ -118,10 +136,10 @@ void BmpViewerActivity::onEnter() {
   const auto pageHeight = renderer.getScreenHeight();
   Rect popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   GUI.fillPopupProgress(renderer, popupRect, 20);  // Initial 20% progress
-  if (FsHelpers::hasPngExtension(filePath)) {
+  if (!FsHelpers::hasBmpExtension(filePath)) {
     renderer.clearScreen();
-    if (renderPng()) {
-      // drawHints(), not a private label set: a .png sitting in a sleep folder must
+    if (renderDecoded()) {
+      // drawHints(), not a private label set: a .png or .jpg sitting in a sleep folder must
       // offer the same favourite/pause/delete triage a .bmp or .pxc does there.
       drawHints();
       // HALF: the image replaces the loading popup, the list or the previous image.
@@ -209,7 +227,10 @@ void BmpViewerActivity::doSetSleepCover() {
 
   if (!canSetSleepCover()) return;
 
-  const char* destination = CUSTOM_SLEEP_ROOT_BMP;
+  const bool overlayMode = overlayFaceSelected();
+  const bool jpeg = FsHelpers::hasJpgExtension(filePath);
+  const char* destination = overlayMode ? (FsHelpers::hasPngExtension(filePath) ? OVERLAY_ROOT_PNG : OVERLAY_ROOT_BMP)
+                                        : CUSTOM_SLEEP_ROOT_BMP;
 
   // Already the destination: nothing to copy, and opening it for write would truncate
   // the very file being read.
@@ -224,12 +245,19 @@ void BmpViewerActivity::doSetSleepCover() {
     const std::string partPath = FsHelpers::partialPathFor(destination);
     if (buffer && Storage.openFileForRead("BMP", filePath, inFile)) {
       if (Storage.openFileForWrite("BMP", partPath, outFile)) {
-        int bytesRead;
+        int bytesRead = 0;
         success = true;
-        while ((bytesRead = inFile.read(buffer, COPY_BYTES)) > 0) {
-          if (outFile.write(buffer, bytesRead) != bytesRead) {
-            success = false;
-            break;
+        if (jpeg) {
+          // A .jpg is converted to the panel-sized 2-bit .bmp the covers use (Fit or Crop as
+          // the cover setting says), so it sleeps like any other wallpaper.
+          success = JpegToBmpConverter::jpegFileToBmpStream(
+              inFile, outFile, SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP);
+        } else {
+          while ((bytesRead = inFile.read(buffer, COPY_BYTES)) > 0) {
+            if (outFile.write(buffer, bytesRead) != bytesRead) {
+              success = false;
+              break;
+            }
           }
         }
         if (bytesRead < 0) success = false;
@@ -245,7 +273,8 @@ void BmpViewerActivity::doSetSleepCover() {
   }
 
   if (success) {
-    SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
+    // Saved as the overlay, the face stays what it was; saved as a wallpaper, Custom shows it.
+    if (!overlayMode) SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
     SETTINGS.saveToFile();
     GUI.drawPopup(renderer, tr(STR_DONE));
   } else {
