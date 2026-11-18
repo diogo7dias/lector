@@ -1142,7 +1142,7 @@ is centred.
 **Customise Status Bar** places each element in one of six slots (top left, top centre, top
 right, bottom left, bottom centre, bottom right) or turns it off: **Battery**, **Clock**,
 **Chapter Title**, **Book Title**, **Page in Chapter**, **Book %**, **Chapter %**, **Chapter Number**, **Pages This
-Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Alongside them:
+Session**, **Pages to Paragraph**. Alongside them:
 
 - **Chapter Title** and **Book Title** can go in different slots, for example the book on top
   and the chapter at the bottom. Put both on the same edge (both top or both bottom) and they
@@ -1158,11 +1158,6 @@ Session**, **Pages to Paragraph**, **Chapter time left**, **Book time left**. Al
 - **Pages to Paragraph** shows `>P.0` on most pages: the paragraph you are in ends before the
   next one starts. `>P.2` means it runs two more pages. In a TXT book each line break starts a
   paragraph, so a file broken into short lines always shows `>P.0`.
-- **Chapter time left** (`C:12m`) and **Book time left** (`B:3h05`) estimate from how long you
-  spend per page this sitting. They appear after three timed pages; turns under 2 seconds or
-  over 10 minutes are not counted. On EPUB the book estimate scales the rest of the book by the
-  current chapter, so it settles as you read. A TXT book has no chapters, so it shows Book time
-  left only, counted from its exact pages left.
 - **Book Bar** and **Chapter Bar** — Off, Top or Bottom, with **Bar Thickness** (Slim 3 px,
   Medium 6 px, Fat 9 px). On EPUB books the Book Bar has a small notch where each chapter
   starts. A book with more than 64 chapters shows a plain bar.

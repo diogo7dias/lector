@@ -7,7 +7,6 @@
 #include "CrossPointSettings.h"
 #include "ReaderProgressSaveDebouncer.h"
 #include "ReaderUtils.h"
-#include "ReadingTime.h"
 #include "SimpleReaderShortcut.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
@@ -52,9 +51,8 @@ class TxtReaderActivity final : public Activity {
   // reader uses for its move-on-exit filing.
   bool pendingDeleteBook = false;
   reading_journal::Session journal;
-  // Status bar only, this sitting: forward turns ("+N") and the pace behind Book Time.
+  // Status bar only, this sitting: forward turns ("+N").
   int sessionPages = 0;
-  reading_time::PageTimer pageTimer;
   // Pages-to-paragraph answer for page paraPagesFor (-1 = none), kept so a redraw of
   // the same page does not re-read the file. Reset whenever the page index changes.
   mutable int paraPagesFor = -1;

@@ -65,8 +65,6 @@ void collectStatusBarSlots(const StatusBarBlock& sb, bool top, std::string slots
       {sb.chapterNumPos, "Ch 2/14"},
       {sb.sessionPagesPos, "+8"},
       {sb.paraPagesPos, ">P.0"},
-      {sb.chapterTimePos, "C:12m"},
-      {sb.bookTimePos, "B:3h05"},
       {sb.bookTitlePos, I18N.get(StrId::STR_BOOK_TITLE)},
   };
   for (const auto& item : items) {

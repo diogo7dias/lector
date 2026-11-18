@@ -140,7 +140,6 @@ void TxtReaderActivity::pageTurn(const bool forward) {
   if (!forward) {
     if (currentPage == 0) return;
     journal.turn(millis(), false);
-    pageTimer.onTurn(millis(), false);
     currentPage--;
     journal.finished = false;  // left the last page again: not finished after all
     requestUpdate();
@@ -148,7 +147,6 @@ void TxtReaderActivity::pageTurn(const bool forward) {
   }
   if (currentPage < totalPages - 1) {
     journal.turn(millis(), true);
-    pageTimer.onTurn(millis(), true);
     if (sessionPages < std::numeric_limits<int>::max()) ++sessionPages;
     currentPage++;
     if (currentPage == totalPages - 1) journal.finished = true;
@@ -338,11 +336,8 @@ void TxtReaderActivity::renderStatusBar() const {
   d.bookTitle = txt->getTitle();
   d.sessionPages = sessionPages;
   const StatusBarBlock sb = SETTINGS.statusBar();
-  // Both cost a file read or a division only when the item is on, as in the EPUB reader.
+  // Costs a file read only when the item is on, as in the EPUB reader.
   if (sb.paraPagesPos != CrossPointSettings::SB_ANCHOR_OFF) d.paragraphPagesLeft = pagesUntilNextParagraph();
-  if (sb.bookTimePos != CrossPointSettings::SB_ANCHOR_OFF) {
-    d.bookMinutesLeft = reading_time::minutesFor(totalPages - currentPage - 1, pageTimer.msPerPage());
-  }
   // Paperback Look (status bar): thicken only status-bar glyphs, then reset.
   renderer.setPaperbackLook(SETTINGS.paperbackLookStatus);
   GUI.drawStatusBarV2(renderer, d, sb);
