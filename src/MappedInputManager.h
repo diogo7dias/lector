@@ -92,7 +92,7 @@ class MappedInputManager {
   // drag, and only then decides the touch was a button press instead).
   void spendTouchContact();
   bool isScreenTouchHeld(int& x, int& y) const;
-  bool wasScreenLongPress(int& x, int& y) const;
+  bool wasScreenLongPress(int& x, int& y, bool keepContact = false) const;
   // Two fingers on the panel, in logical (oriented) coordinates.
   bool getTwoFingerTouch(int& x1, int& y1, int& x2, int& y2) const;
   bool wasScreenTouchReleased() const;

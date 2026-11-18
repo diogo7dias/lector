@@ -8,7 +8,7 @@ power cycle.
 
 - `read-open` a book opens from Browse Files into `EpubReader`.
 - `read-swipe` a right-to-left swipe turns to the next page.
-- `read-hold` holding a word shows the dictionary message (no dictionary on the sim card), which clears without turning the page.
+- `read-hold` holding a word and lifting enters `QuoteSelect`, then shows the dictionary message (no dictionary on the sim card), which clears without turning the page. Hold and drag (`/swipe/...?hold=1200`) selects a passage instead: `sim/tests/x4pro/touch-select.e2e.ts`.
 - `read-menu` a tap on the page centre opens `EpubReaderMenu`.
 - `read-resume` after a reboot the book reopens on the page it was left at.
 

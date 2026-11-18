@@ -174,7 +174,7 @@ void EpubReaderActivity::loop() {
 
   int holdX = 0;
   int holdY = 0;
-  if (mappedInput.wasScreenLongPress(holdX, holdY)) {
+  if (mappedInput.wasScreenLongPress(holdX, holdY, /*keepContact=*/true)) {
     openQuoteGrab(holdX, holdY);
     return;
   }
