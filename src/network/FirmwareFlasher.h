@@ -29,6 +29,7 @@ enum class Result {
   BAD_CHECKSUM,  // ESP image XOR checksum mismatch
   BAD_SHA,       // SHA256 trailer mismatch (hash_appended images)
   BAD_CHIP,      // image chip_id doesn't match the running MCU family
+  BAD_BOARD,     // image carries the board tag of a different board (FirmwareBoardTag.h)
   BAD_SIZE,      // body+pad+sha length doesn't match file size
   NO_PARTITION,
   OOM,

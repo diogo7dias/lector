@@ -45,6 +45,11 @@ bool TxtReaderActivity::runBoundAction(const uint8_t function) {
     return true;
   }
 
+  if (function == CrossPointSettings::LP_MENU_OPEN_READER_MENU) {
+    openSettingsPopup();  // what Confirm opens here
+    return true;
+  }
+
   if (function == CrossPointSettings::LP_MENU_ALIGN_LEFT || function == CrossPointSettings::LP_MENU_ALIGN_JUSTIFY) {
     const uint8_t alignment = function == CrossPointSettings::LP_MENU_ALIGN_LEFT ? CrossPointSettings::LEFT_ALIGN
                                                                                  : CrossPointSettings::JUSTIFIED;

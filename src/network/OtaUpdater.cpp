@@ -284,12 +284,10 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
           // A server that answered a ranged request with the whole body starts
           // replaying at byte 0. HttpDownloader raises the flag before handing
           // over the first chunk, so the rewind has to happen HERE, in front of
-          // the write. Doing it after the attempt (as this loop used to) let the
-          // replayed image be appended to the partial already in the partition:
-          // the partition then held the head of the image followed by a second
-          // whole copy, which commit() could only reject as corrupt after paying
-          // for the entire download, and on a large image could run past the end
-          // of the slot before it ever got that far.
+          // the write. Rewinding after the attempt (as this loop used to) appended
+          // the replayed image to the partial one already in the partition, which
+          // commit() could only reject after the whole download, and a large image
+          // could run past the end of the slot before that.
           if (replayedFromStart && !replayHandled) {
             replayHandled = true;
             LOG_ERR("OTA", "Server ignored the Range and replayed from 0; discarding %zu partial bytes", processedSize);
@@ -385,7 +383,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   const firmware_flash::Result commitRes = installer.commit();
   if (commitRes != firmware_flash::Result::OK) {
     LOG_ERR("OTA", "commit failed: %s", firmware_flash::resultName(commitRes));
-    if (commitRes == firmware_flash::Result::BAD_CHIP) return WRONG_DEVICE_ERROR;
+    if (commitRes == firmware_flash::Result::BAD_CHIP || commitRes == firmware_flash::Result::BAD_BOARD) {
+      return WRONG_DEVICE_ERROR;
+    }
     if (commitRes == firmware_flash::Result::OOM) return OOM_ERROR;
     if (commitRes == firmware_flash::Result::BAD_MAGIC || commitRes == firmware_flash::Result::BAD_CHECKSUM ||
         commitRes == firmware_flash::Result::BAD_SHA || commitRes == firmware_flash::Result::BAD_SEGMENTS ||

@@ -2,42 +2,91 @@
 
 #include <cstdint>
 
-// Where a tap on the open page lands. Pure geometry over the reading surface, so
-// the zone rules are testable on the host without a renderer or an input manager;
-// ReaderUtils binds them to the live screen size, settings and touch state.
+// Where a tap on the open page lands, and which way a swipe turns it. Pure geometry over
+// the reading surface, so the zone rules are testable on the host without a renderer or an
+// input manager; ReaderUtils binds them to the live screen size, settings and touch state.
 //
-// The layout follows CrossPoint: pages turn from the outer horizontal thirds, and
-// the reader menu opens from the centre third of BOTH axes, so the two never
-// overlap. In swipe mode the outer thirds go quiet and swipes carry the page turns.
+// Follows CrossPoint: a master switch (SETTINGS.touchReaderControls) and one gesture per
+// page direction. Pages turn from the outer horizontal thirds, or from the whole page when
+// only one direction accepts taps; the reader menu opens from the centre third of BOTH axes,
+// so the two never overlap. A swipe-only direction leaves the taps to the menu.
 namespace reader_touch {
 
-// SETTINGS.touchReaderControls.
-enum class Mode : uint8_t { Off = 0, Tap = 1, Swipe = 2, InvertedTap = 3 };
+// SETTINGS.pageTurnGesture / previousPageGesture. Values match CrossPoint.
+enum class Gesture : uint8_t { TapAndSwipe = 0, TapOnly = 1, SwipeOnly = 2, InvertedTap = 3, Disabled = 4 };
 
 // SETTINGS.showReaderMenu.
 enum class MenuMode : uint8_t { Off = 0, Tap = 1, SwipeUp = 2 };
 
 enum class TapAction : uint8_t { None, Prev, Next, Menu };
 
-// Swipes turn pages in swipe mode only. Everywhere else a horizontal swipe stays
-// free for the activities that read SwipeDir themselves.
-inline bool swipeTurnsPages(Mode mode) { return mode == Mode::Swipe; }
+inline bool allowsSwipe(Gesture g) { return g == Gesture::TapAndSwipe || g == Gesture::SwipeOnly; }
+inline bool allowsTap(Gesture g) {
+  return g == Gesture::TapAndSwipe || g == Gesture::TapOnly || g == Gesture::InvertedTap;
+}
 
-inline TapAction tapAction(Mode mode, MenuMode menu, int width, int height, int x, int y) {
-  if (mode == Mode::Off || width <= 0 || height <= 0) return TapAction::None;
+// The page a horizontal swipe turns to: a left swipe moves on, a right swipe goes back, and a
+// right-to-left book reads the other way. Each direction answers only to its own gesture.
+inline TapAction swipeAction(bool on, Gesture next, Gesture prev, bool rtl, bool swipedLeft) {
+  if (!on) return TapAction::None;
+  const bool toNext = swipedLeft != rtl;
+  if (toNext) return allowsSwipe(next) ? TapAction::Next : TapAction::None;
+  return allowsSwipe(prev) ? TapAction::Prev : TapAction::None;
+}
+
+inline TapAction tapAction(bool on, Gesture next, Gesture prev, MenuMode menu, bool rtl, int width, int height, int x,
+                           int y) {
+  if (!on || width <= 0 || height <= 0) return TapAction::None;
 
   const int zoneWidth = width / 3;
-  if (mode == Mode::Tap || mode == Mode::InvertedTap) {
-    // Outer thirds first: a page turn is never swallowed by the menu zone.
-    const bool inverted = mode == Mode::InvertedTap;
-    if (x < zoneWidth) return inverted ? TapAction::Next : TapAction::Prev;
-    if (x >= width - zoneWidth) return inverted ? TapAction::Prev : TapAction::Next;
+  const int zoneHeight = height / 3;
+  if (menu == MenuMode::Tap && x >= zoneWidth && x < width - zoneWidth && y >= zoneHeight && y < height - zoneHeight) {
+    return TapAction::Menu;
   }
 
-  if (menu != MenuMode::Tap) return TapAction::None;
-  const int zoneHeight = height / 3;
-  const bool inCentre = x >= zoneWidth && x < width - zoneWidth && y >= zoneHeight && y < height - zoneHeight;
-  return inCentre ? TapAction::Menu : TapAction::None;
+  const bool nextTaps = allowsTap(next);
+  const bool prevTaps = allowsTap(prev);
+  if (!nextTaps && !prevTaps) return TapAction::None;
+  // Either direction on Inverted Tap swaps the shared zones; a right-to-left book swaps them too.
+  const bool inverted = (next == Gesture::InvertedTap || prev == Gesture::InvertedTap) != rtl;
+  // Only one direction accepts taps: it gets the whole page.
+  if (nextTaps != prevTaps) return nextTaps ? TapAction::Next : TapAction::Prev;
+  if (x < zoneWidth) return inverted ? TapAction::Next : TapAction::Prev;
+  if (x >= width - zoneWidth) return inverted ? TapAction::Prev : TapAction::Next;
+  return TapAction::None;
+}
+
+// True for a BCP 47 tag of a right-to-left language the reader supports: Hebrew (he, or the
+// old iw), Arabic and Persian. Looks at the primary subtag only, so "ar-EG" and "he_IL" count.
+inline bool isRtlLanguage(const char* tag) {
+  if (tag == nullptr || tag[0] == '\0' || tag[1] == '\0') return false;
+  if (tag[2] != '\0' && tag[2] != '-' && tag[2] != '_') return false;
+  const char a = static_cast<char>(tag[0] | 0x20);
+  const char b = static_cast<char>(tag[1] | 0x20);
+  return (a == 'h' && b == 'e') || (a == 'i' && b == 'w') || (a == 'a' && b == 'r') || (a == 'f' && b == 'a');
+}
+
+// A settings file from before the split held one combined mode under "touchReaderControls":
+// 0 Off, 1 Tap, 2 Swipe, 3 Inverted Tap. It becomes the switch plus one gesture for both
+// directions. Anything else is not an old value and migrates to nothing.
+struct Legacy {
+  bool valid;
+  uint8_t on;
+  uint8_t gesture;
+};
+inline Legacy migrateLegacyMode(uint8_t mode) {
+  switch (mode) {
+    case 0:
+      return {true, 0, static_cast<uint8_t>(Gesture::SwipeOnly)};
+    case 1:
+      return {true, 1, static_cast<uint8_t>(Gesture::TapOnly)};
+    case 2:
+      return {true, 1, static_cast<uint8_t>(Gesture::SwipeOnly)};
+    case 3:
+      return {true, 1, static_cast<uint8_t>(Gesture::InvertedTap)};
+    default:
+      return {false, 1, static_cast<uint8_t>(Gesture::SwipeOnly)};
+  }
 }
 
 }  // namespace reader_touch

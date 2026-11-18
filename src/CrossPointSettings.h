@@ -123,7 +123,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // Side button layout options
   // Default: Up = Previous, Down = Next
-  enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTONS_DISABLED = 2, SIDE_BUTTON_LAYOUT_COUNT };
+  // Numbered like CrossPoint's so a settings file reads the same in both. NEXT_NEXT and
+  // PREV_PREV turn the same way from either side key, for reading one-handed.
+  enum SIDE_BUTTON_LAYOUT {
+    PREV_NEXT = 0,
+    NEXT_PREV = 1,
+    SIDE_BUTTONS_DISABLED = 2,
+    NEXT_NEXT = 3,
+    PREV_PREV = 4,
+    SIDE_BUTTON_LAYOUT_COUNT
+  };
 
   // Font family options (built-in fonts only; SD card fonts use sdFontFamilyName).
   // ChareInk is the sole built-in reading family; more fonts are added from the SD card.
@@ -171,18 +180,20 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
 
   // Short power button press actions
-  // How touch drives the open page. Tap turns from the outer thirds, Inverted Tap
-  // swaps the two sides, Swipe leaves the thirds quiet and turns on a horizontal
-  // swipe. Values match CrossPoint so a settings file moves between the two.
-  enum TOUCH_READER_CONTROLS {
-    TOUCH_READER_OFF = 0,
-    TOUCH_READER_TAP = 1,
-    TOUCH_READER_SWIPE = 2,
-    TOUCH_READER_INVERTED_TAP = 3,
-    TOUCH_READER_CONTROLS_COUNT
+  // How touch drives the open page: a master switch (touchReaderControls, 0 or 1) and one
+  // gesture per page direction, numbered like CrossPoint so a settings file moves between
+  // the two. Inverted Tap is tap-only; either direction on it swaps the shared tap zones.
+  enum PAGE_TURN_GESTURE {
+    TAP_AND_SWIPE = 0,
+    TAP_ONLY = 1,
+    SWIPE_ONLY = 2,
+    INVERTED_TAP = 3,
+    PAGE_TURN_GESTURE_DISABLED = 4,
+    PAGE_TURN_GESTURE_COUNT
   };
   // How the reader menu opens on a touch board. Swipe Up is only offered where the
   // Home key is capacitive, since there the bottom edge is otherwise unused.
+  enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
   enum SHOW_READER_MENU { READER_MENU_OFF = 0, READER_MENU_TAP = 1, READER_MENU_SWIPE_UP = 2, SHOW_READER_MENU_COUNT };
 
   // How long Power must be held to wake the device from deep sleep. Normal rejects a
@@ -230,6 +241,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr auto LP_MENU_ALIGN_JUSTIFY = bound_action::LP_MENU_ALIGN_JUSTIFY;
   static constexpr auto LP_MENU_TOGGLE_PARAGRAPH_SPACING = bound_action::LP_MENU_TOGGLE_PARAGRAPH_SPACING;
   static constexpr auto LP_MENU_QUICK_LOCK = bound_action::LP_MENU_QUICK_LOCK;
+  static constexpr auto LP_MENU_TOGGLE_FRONTLIGHT = bound_action::LP_MENU_TOGGLE_FRONTLIGHT;
+  static constexpr auto LP_MENU_OPEN_READER_MENU = bound_action::LP_MENU_OPEN_READER_MENU;
   static constexpr auto LONG_PRESS_MENU_FUNCTION_COUNT = bound_action::LONG_PRESS_MENU_FUNCTION_COUNT;
 
   // The three buttons the Buttons screen binds, in the order it lists them. Left and
@@ -391,9 +404,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textContrast = 0;
   // Whole pixels between letters, offset: 2 is the font as designed, 0..4 shows as -2..+2.
   uint8_t characterSpacing = reader_defaults::CHARACTER_SPACING;
-  // Swipe by default: it works the same wherever the thumb lands, and it leaves the
-  // whole page free of invisible tap targets.
-  uint8_t touchReaderControls = TOUCH_READER_SWIPE;
+  // On, with both directions on Swipe Only by default: a swipe works the same wherever the
+  // thumb lands, and leaves the whole page free of invisible tap targets.
+  uint8_t touchReaderControls = 1;
+  uint8_t pageTurnGesture = SWIPE_ONLY;
+  uint8_t previousPageGesture = SWIPE_ONLY;
   // Persisted under the legacy "tapForReaderMenu" key, whose old values line up:
   // 0 = Off, 1 = Tap.
   uint8_t showReaderMenu = READER_MENU_TAP;
@@ -523,6 +538,18 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // the double-click window, and a bound hold takes the press away from the firmware's
   // own hold behaviour (page repeat, list paging). Leaving them Disabled is what keeps
   // both free until the user asks for them.
+  // The X4 Pro, the one board with a frontlight, starts with a Home double press and a
+  // Power double click that toggle it and a Home hold that opens the reader menu (CrossPoint's
+  // defaults). Elsewhere they stay Disabled: a bound double click delays the single by the
+  // double-click window, which a board with nothing to toggle would pay for no reason. Only a
+  // field absent from a saved file takes these; a binding the file holds is kept as it is.
+#if FREEINK_DEVICE_X4PRO
+  static constexpr uint8_t DEFAULT_FRONTLIGHT_TOGGLE = LP_MENU_TOGGLE_FRONTLIGHT;
+  static constexpr uint8_t DEFAULT_HOME_READER_MENU = LP_MENU_OPEN_READER_MENU;
+#else
+  static constexpr uint8_t DEFAULT_FRONTLIGHT_TOGGLE = LP_MENU_DISABLED;
+  static constexpr uint8_t DEFAULT_HOME_READER_MENU = LP_MENU_DISABLED;
+#endif
   uint8_t btnBookLeftSingle = LP_MENU_PAGE_PREV;
   uint8_t btnBookLeftDouble = LP_MENU_DISABLED;
   uint8_t btnBookLeftHold = LP_MENU_DISABLED;
@@ -530,8 +557,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t btnBookRightDouble = LP_MENU_DISABLED;
   uint8_t btnBookRightHold = LP_MENU_DISABLED;
   uint8_t btnBookHomeSingle = LP_MENU_GO_HOME;
-  uint8_t btnBookHomeDouble = LP_MENU_DISABLED;
-  uint8_t btnBookHomeHold = LP_MENU_DISABLED;
+  uint8_t btnBookHomeDouble = DEFAULT_FRONTLIGHT_TOGGLE;
+  uint8_t btnBookHomeHold = DEFAULT_HOME_READER_MENU;
   uint8_t btnUiLeftSingle = LP_MENU_PAGE_PREV;
   uint8_t btnUiLeftDouble = LP_MENU_DISABLED;
   uint8_t btnUiLeftHold = LP_MENU_DISABLED;
@@ -539,16 +566,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t btnUiRightDouble = LP_MENU_DISABLED;
   uint8_t btnUiRightHold = LP_MENU_DISABLED;
   uint8_t btnUiHomeSingle = LP_MENU_GO_HOME;
-  uint8_t btnUiHomeDouble = LP_MENU_DISABLED;
+  uint8_t btnUiHomeDouble = DEFAULT_FRONTLIGHT_TOGGLE;
   uint8_t btnUiHomeHold = LP_MENU_DISABLED;
   // Power. Its defaults are what the old shortPwrBtn / doubleClickPowerFunction pair
   // defaulted to: a click does nothing, a hold sleeps. The hold keeps its own threshold
   // (sleepHoldMs), so leaving it on Sleep leaves the sleep hold exactly as it was.
   uint8_t btnBookPowerSingle = LP_MENU_DISABLED;
-  uint8_t btnBookPowerDouble = LP_MENU_DISABLED;
+  uint8_t btnBookPowerDouble = DEFAULT_FRONTLIGHT_TOGGLE;
   uint8_t btnBookPowerHold = LP_MENU_SLEEP;
   uint8_t btnUiPowerSingle = LP_MENU_DISABLED;
-  uint8_t btnUiPowerDouble = LP_MENU_DISABLED;
+  uint8_t btnUiPowerDouble = DEFAULT_FRONTLIGHT_TOGGLE;
   uint8_t btnUiPowerHold = LP_MENU_SLEEP;
 
   // The binding field for one button and gesture, in or out of a book. Returns a
@@ -696,6 +723,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Initials stay the default because a full name competes with the title for the same
   // wrapped lines, and the list is read title-first.
   uint8_t authorDisplay = AUTHOR_INITIALS;
+  // Where the battery percentage is left off (HIDE_BATTERY_PERCENTAGE): Never shows it
+  // everywhere, In Reader hides it in the reader's status bar only, Always also drops it
+  // from the header every other screen carries. The battery icon stays in all three.
+  uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Image rendering mode in EPUB reader (IMAGE_RENDERING)
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Language setting (Language enum index, default 0 = EN)

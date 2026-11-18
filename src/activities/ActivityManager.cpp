@@ -22,6 +22,7 @@
 #include "components/HintBandGeometry.h"
 #include "components/RowHitTest.h"
 #include "fontIds.h"
+#include "frontlight/ApplyFrontlightSetting.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
@@ -603,6 +604,13 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
       // hand the very next pass to the panel and return before its own flush.
       requestUpdate(/*immediate=*/true);
       return true;
+    case CrossPointSettings::LP_MENU_TOGGLE_FRONTLIGHT: {
+      if (!Frontlight.present() || lightPanel.isActive()) return false;
+      SETTINGS.frontlightOn = Frontlight.isOn() ? 0 : 1;
+      applyFrontlightSetting(&CrossPointSettings::frontlightOn);
+      SETTINGS.saveToFile();
+      return true;
+    }
     default:
       return false;
   }

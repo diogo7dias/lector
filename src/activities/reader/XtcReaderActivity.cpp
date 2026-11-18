@@ -52,9 +52,13 @@ bool XtcReaderActivity::runBoundAction(const uint8_t function) {
     return true;
   }
 
-  // Wallpaper Hold is the only remaining binding this reader can run itself; everything
-  // else falls through to the shared handler. Resolve can still say None for Wallpaper
-  // Hold, because this is where the card is asked whether the file is still on it.
+  if (function == CrossPointSettings::LP_MENU_OPEN_READER_MENU) {
+    openChapterSelection();  // what Confirm opens here
+    return true;
+  }
+
+  // Wallpaper Hold is the only other binding this reader runs itself; the rest falls through
+  // to the shared handler. Resolve can still say None: the card is asked whether the file is there.
   if (simple_reader_shortcut::resolve(function, /*supportsStatusBarToggle=*/false) !=
       simple_reader_shortcut::Action::WallpaperHold) {
     return false;
@@ -143,6 +147,20 @@ void XtcReaderActivity::loop() {
                                         {this, [](void* ctx) { static_cast<XtcReaderActivity*>(ctx)->onGoHome(); }},
                                         backLatch_)) {
     return;
+  }
+
+  // Holding a page button SKIP_HOLD_MS jumps ten pages once (the press turned one, so nine
+  // more), stopping short of the end screen.
+  if (const int held = ReaderUtils::heldPageDirection(mappedInput); held == 0) {
+    holdSkipped_ = false;
+  } else if (!holdSkipped_ && !atEndOfBook && mappedInput.getHeldTime() >= ReaderUtils::SKIP_HOLD_MS) {
+    holdSkipped_ = true;
+    const uint32_t last = xtc->getPageCount() - 1;
+    const int64_t target = std::clamp<int64_t>(static_cast<int64_t>(currentPage) + held * 9, 0, last);
+    if (target != currentPage) {
+      currentPage = static_cast<uint32_t>(target);
+      requestUpdate();
+    }
   }
 
   auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);

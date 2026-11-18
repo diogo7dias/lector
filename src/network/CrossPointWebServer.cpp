@@ -1656,6 +1656,7 @@ void CrossPointWebServer::handleGetSettings() const {
         doc["min"] = s.shownValue(s.valueRange.min);
         doc["max"] = s.shownValue(s.valueRange.max);
         doc["step"] = s.valueRange.step;
+        if (s.minutesPerStep) doc["minutesPerStep"] = s.minutesPerStep;
         break;
       }
       case SettingType::STRING: {

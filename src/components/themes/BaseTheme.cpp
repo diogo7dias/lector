@@ -415,9 +415,8 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                       renderer.getLineHeight(batteryPercentFontId) + 10, false);
   }
 
-  // The percentage is always drawn: the setting that used to hide it was removed, and its
-  // default was "never hide", so this is the behaviour every existing device already had.
-  constexpr bool showBatteryPercentage = true;
+  // Hide Battery % drops the number here only on Always; In Reader leaves the headers alone.
+  const bool showBatteryPercentage = SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_ALWAYS;
   // Position icon at right edge, drawBatteryRight will place text to the left
   const int batteryX = rect.x + rect.width - batteryRightPadding - BaseMetrics::values.batteryWidth;
   drawBatteryRight(renderer,
@@ -835,8 +834,8 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   const int sepGap = 4;       // even gap each side of the bar
   const int sepBarW = kLine;  // bar thickness
   const int sepW = sepGap + sepBarW + sepGap;
-  // Always shown — see the note on showBatteryPercentage in drawHeader().
-  constexpr bool showBattery = true;
+  // The reader's own bar: the number goes on In Reader and on Always (Hide Battery %).
+  const bool showBattery = SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_NEVER;
 
   // --- Build the bar on the STACK: one fixed segment array per anchor. No heap in
   // this render path (it runs on the lock-holding, stack-tight render task). Short

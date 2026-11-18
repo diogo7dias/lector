@@ -137,6 +137,33 @@ bool detectPanicReboot() {
       resetReason == ESP_RST_INT_WDT || resetReason == ESP_RST_TASK_WDT || resetReason == ESP_RST_WDT;
   return watchdogReset && panicCaptureMarker == PANIC_CAPTURE_MAGIC;
 }
+
+// Names the reset in the crash report. A watchdog or lockup reset can come back with no panic
+// reason and no stack, and this line is then the only way to tell it from a true panic.
+const char* resetReasonName(const esp_reset_reason_t reason) {
+  switch (reason) {
+    case ESP_RST_PANIC:
+      return "PANIC (exception/abort)";
+    case ESP_RST_CPU_LOCKUP:
+      return "CPU_LOCKUP";
+    case ESP_RST_INT_WDT:
+      return "INT_WDT";
+    case ESP_RST_TASK_WDT:
+      return "TASK_WDT";
+    case ESP_RST_WDT:
+      return "WDT (other)";
+    case ESP_RST_BROWNOUT:
+      return "BROWNOUT";
+    case ESP_RST_POWERON:
+      return "POWERON";
+    case ESP_RST_SW:
+      return "SW";
+    case ESP_RST_DEEPSLEEP:
+      return "DEEPSLEEP";
+    default:
+      return "OTHER";
+  }
+}
 }  // namespace
 
 void begin() {
@@ -254,6 +281,7 @@ std::string getPanicInfo(bool full) {
     std::string info;
 
     info += "CrossPoint version: " CROSSPOINT_VERSION;
+    info += "\n\nReset reason: " + std::string(resetReasonName(esp_reset_reason()));
     info += "\n\nPanic reason: " + std::string(panicMessage);
     appendCodeAddresses(info);
     info += "\n\nLast logs:\n" + getLastLogs();

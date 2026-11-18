@@ -31,11 +31,22 @@ TEST(ButtonMapping, SideLayoutAffectsOnlyPageNavigation) {
   Config config{{0, 1, 2, 3}, 0, 0, false};
   for (unsigned layout = 0; layout <= UINT8_MAX; ++layout) {
     config.sideLayout = layout;
-    EXPECT_EQ(resolve(Button::PageBack, config).first, layout < 2 ? 4 + layout : NONE);
-    EXPECT_EQ(resolve(Button::PageForward, config).first, layout < 2 ? 5 - layout : NONE);
+    EXPECT_EQ(resolve(Button::PageBack, config).first, layout < 2 ? 4 + layout : layout == 4 ? 4 : NONE);
+    EXPECT_EQ(resolve(Button::PageForward, config).first, layout < 2 ? 5 - layout : layout == 3 ? 4 : NONE);
     EXPECT_EQ(resolve(Button::NavNext, config).first, 5);
     EXPECT_EQ(resolve(Button::Up, config).first, 4);
   }
+}
+
+TEST(ButtonMapping, OneHandedLayoutsTurnTheSameWayFromBothSideKeys) {
+  Config config{{0, 1, 2, 3}, 3, 0, false};  // Next/Next
+  EXPECT_EQ(resolve(Button::PageForward, config).first, 4);
+  EXPECT_EQ(resolve(Button::PageForward, config).second, 5);
+  EXPECT_EQ(resolve(Button::PageBack, config).first, NONE);
+  config.sideLayout = 4;  // Prev/Prev
+  EXPECT_EQ(resolve(Button::PageBack, config).first, 4);
+  EXPECT_EQ(resolve(Button::PageBack, config).second, 5);
+  EXPECT_EQ(resolve(Button::PageForward, config).first, NONE);
 }
 
 TEST(ButtonMapping, ScreenDirectionsAndLabelsUseTheLiveOrientation) {

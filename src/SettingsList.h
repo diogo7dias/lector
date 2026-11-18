@@ -278,38 +278,57 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
   emit(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                            StrId::STR_CAT_DISPLAY));
 
-  // Frontlight. Dropped below on a board the SDK reports no frontlight for,
-  // so these four rows only ever appear on hardware that has one.
+  // Frontlight. Dropped below on a board the SDK reports no frontlight for. On the device
+  // the light panel owns on/off, brightness and warmth; these rows persist and reach the
+  // web settings page only.
   emit(SettingInfo::Toggle(StrId::STR_FRONTLIGHT, &CrossPointSettings::frontlightOn, "frontlightOn",
-                           StrId::STR_CAT_DISPLAY));
+                           StrId::STR_CAT_DISPLAY)
+           .withWebOnly());
 
   // Step 5 rather than 1: the panel's perceived brightness moves in coarse
   // jumps, and a 0-100 row stepped by one takes twenty presses to cross.
   emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_BRIGHTNESS, &CrossPointSettings::frontlightBrightness, {0, 100, 5},
-                          "frontlightBrightness", StrId::STR_CAT_DISPLAY));
+                          "frontlightBrightness", StrId::STR_CAT_DISPLAY)
+           .withWebOnly());
   emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_MAX_BRIGHTNESS, &CrossPointSettings::frontlightMaxBrightness,
-                          {10, 100, 5}, "frontlightMaxBrightness", StrId::STR_CAT_DISPLAY));
+                          {10, 100, 5}, "frontlightMaxBrightness", StrId::STR_CAT_DISPLAY)
+           .withWebOnly());
 
   emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_WARMTH, &CrossPointSettings::frontlightWarmth, {0, 100, 5},
-                          "frontlightWarmth", StrId::STR_CAT_DISPLAY));
+                          "frontlightWarmth", StrId::STR_CAT_DISPLAY)
+           .withWebOnly());
 
   emit(SettingInfo::Toggle(StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
-                           "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY));
+                           "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY)
+           .withWebOnly());
   emit(SettingInfo::Toggle(StrId::STR_FRONTLIGHT_SCHEDULE, &CrossPointSettings::frontlightScheduleEnabled,
-                           "frontlightScheduleEnabled", StrId::STR_CAT_DISPLAY));
+                           "frontlightScheduleEnabled", StrId::STR_CAT_DISPLAY)
+           .withWebOnly());
   emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_SCHEDULE_ON, &CrossPointSettings::frontlightScheduleOn,
-                          {0, frontlight::SCHEDULE_LAST_STEP, 1}, nullptr, StrId::STR_CAT_DISPLAY));
+                          {0, frontlight::SCHEDULE_LAST_STEP, 1}, "frontlightScheduleOn", StrId::STR_CAT_DISPLAY)
+           .withWebOnly()
+           .withMinutesPerStep(frontlight::SCHEDULE_STEP_MINUTES));
   emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_SCHEDULE_OFF, &CrossPointSettings::frontlightScheduleOff,
-                          {0, frontlight::SCHEDULE_LAST_STEP, 1}, nullptr, StrId::STR_CAT_DISPLAY));
+                          {0, frontlight::SCHEDULE_LAST_STEP, 1}, "frontlightScheduleOff", StrId::STR_CAT_DISPLAY)
+           .withWebOnly()
+           .withMinutesPerStep(frontlight::SCHEDULE_STEP_MINUTES));
+
+  emit(SettingInfo::Enum(StrId::STR_HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
+                         {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideBatteryPercentage",
+                         StrId::STR_CAT_DISPLAY));
 
   emit(SettingInfo::Enum(StrId::STR_AUTHOR_DISPLAY, &CrossPointSettings::authorDisplay,
                          {StrId::STR_AUTHOR_INITIALS, StrId::STR_AUTHOR_FULL_NAME}, "authorDisplay",
                          StrId::STR_CAT_DISPLAY));
 
-  emit(SettingInfo::Enum(
-      StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
-      {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE, StrId::STR_STATE_INVERTED_TAP},
-      "touchReaderControls", StrId::STR_CAT_CONTROLS));
+  emit(SettingInfo::Toggle(StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
+                           "touchReaderControls", StrId::STR_CAT_CONTROLS));
+  const std::vector<StrId> pageGestures = {StrId::STR_TAP_AND_SWIPE, StrId::STR_TAP_ONLY, StrId::STR_SWIPE_ONLY,
+                                           StrId::STR_STATE_INVERTED_TAP, StrId::STR_DISABLED};
+  emit(SettingInfo::Enum(StrId::STR_NEXT_PAGE_GESTURE, &CrossPointSettings::pageTurnGesture, pageGestures,
+                         "pageTurnGesture", StrId::STR_CAT_CONTROLS));
+  emit(SettingInfo::Enum(StrId::STR_PREV_PAGE_GESTURE, &CrossPointSettings::previousPageGesture, pageGestures,
+                         "previousPageGesture", StrId::STR_CAT_CONTROLS));
 
   // Persisted under CrossPoint's legacy "tapForReaderMenu" key: the old values
   // line up (0 = Off, 1 = Tap), so a settings file carries over either way.
@@ -471,9 +490,10 @@ using SettingVisitor = void (*)(void* context, SettingInfo& info);
                            StrId::STR_CAT_READER));
 
   // --- Controls ---
-  emit(SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
-                         {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED}, "sideButtonLayout",
-                         StrId::STR_CAT_CONTROLS));
+  emit(SettingInfo::Enum(
+      StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
+      {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED, StrId::STR_NEXT_NEXT, StrId::STR_PREV_PREV},
+      "sideButtonLayout", StrId::STR_CAT_CONTROLS));
 
   emit(SettingInfo::Toggle(StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION, &CrossPointSettings::frontButtonFollowOrientation,
                            "frontButtonFollowOrientation", StrId::STR_CAT_CONTROLS));

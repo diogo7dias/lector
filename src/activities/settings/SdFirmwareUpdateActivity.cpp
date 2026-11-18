@@ -124,6 +124,10 @@ bool SdFirmwareUpdateActivity::validateFirmware() {
                     firmware_flash::chipName(firmware_flash::runningPartitionChipId()));
       detailMessage = buf;
       hintMessage = "Use firmware for this device's chip";
+    } else if (vr == firmware_flash::Result::BAD_BOARD) {
+      errorMessage = tr(STR_FIRMWARE_WRONG_DEVICE);
+      detailMessage = "Image is tagged for another board";
+      hintMessage = "Use firmware built for this board";
     } else if (vr == firmware_flash::Result::BAD_MAGIC) {
       errorMessage = tr(STR_INVALID_FIRMWARE);
       detailMessage = "Not an ESP32 firmware image (bad magic)";
@@ -233,6 +237,9 @@ void SdFirmwareUpdateActivity::performUpdate() {
                     firmware_flash::chipName(firmware_flash::runningPartitionChipId()));
       detailMessage = buf;
       hintMessage = "Use firmware for this device's chip";
+    } else if (result == firmware_flash::Result::BAD_BOARD) {
+      errorMessage = tr(STR_FIRMWARE_WRONG_DEVICE);
+      hintMessage = "Use firmware built for this board";
     } else if (result == firmware_flash::Result::VERIFY_FAIL) {
       // The bytes in flash do not match the file. otadata was left alone, so
       // the device still boots the firmware it is running now. The offset goes

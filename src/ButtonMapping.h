@@ -70,13 +70,16 @@ constexpr Hardware resolve(Button button, const Config& config) {
       return {5};
     case Button::Power:
       return {6};
+    // Layouts: 0 Prev/Next, 1 Next/Prev, 2 off, 3 Next/Next, 4 Prev/Prev (both side keys).
     case Button::PageBack:
       if (config.sideLayout == 0) return {4};
       if (config.sideLayout == 1) return {5};
+      if (config.sideLayout == 4) return {4, 5};
       return {};
     case Button::PageForward:
       if (config.sideLayout == 0) return {5};
       if (config.sideLayout == 1) return {4};
+      if (config.sideLayout == 3) return {4, 5};
       return {};
     case Button::NavNext:
       return navDirectionSwapped(config) ? Hardware{4, config.front[2]} : Hardware{5, config.front[3]};

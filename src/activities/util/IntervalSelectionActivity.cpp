@@ -35,7 +35,6 @@ std::string stepLine(const StrId labelId, const StrId formatId, const int step) 
 void IntervalSelectionActivity::onEnter() {
   UiStatusActivity::onEnter();
   value = slider_field::clamp(value, slider_field::Range{minValue, maxValue});
-  openedWithValue = value;
   // Neither hint changes; only the readout is rebuilt as the value moves. Touch
   // boards never show them (they get Cancel/OK instead), so the two strings are
   // not built there either.
@@ -47,17 +46,7 @@ void IntervalSelectionActivity::onEnter() {
   requestUpdate();
 }
 
-void IntervalSelectionActivity::applyLive() const {
-  if (liveApply.fn) liveApply.fn(liveApply.ctx, value);
-}
-
 void IntervalSelectionActivity::refreshValueText() {
-  if (readoutFormat) {
-    char text[32];
-    readoutFormat(value, text, sizeof(text));
-    valueText = text;
-    return;
-  }
   // A range whose top means "never" or "off" says so instead of showing the
   // number that stands for it.
   if (maxBoundaryLabelId != StrId::STR_NONE_OPT && value == maxValue) {
@@ -95,14 +84,12 @@ UiStatusActivity::StatusView IntervalSelectionActivity::statusView() const {
 void IntervalSelectionActivity::adjustValue(const int delta) {
   value = slider_field::step(value, slider_field::Range{minValue, maxValue}, delta, /*wrap=*/false);
   refreshValueText();
-  applyLive();
   requestUpdate();
 }
 
 void IntervalSelectionActivity::onSliderChanged(const int next) {
   value = slider_field::clamp(next, slider_field::Range{minValue, maxValue});
   refreshValueText();
-  applyLive();
   requestUpdate();
 }
 
@@ -128,10 +115,6 @@ bool IntervalSelectionActivity::handleCustomInput() {
 }
 
 void IntervalSelectionActivity::onBackButton() {
-  // Live-applied values (frontlight, margins) have been following the slider the
-  // whole time, so cancelling has to put the device back where it was found
-  // rather than just declining to report a number.
-  if (liveApply.fn && value != openedWithValue) liveApply.fn(liveApply.ctx, openedWithValue);
   ActivityResult result;
   result.isCancelled = true;
   setResult(std::move(result));

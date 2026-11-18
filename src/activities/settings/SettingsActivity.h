@@ -35,13 +35,7 @@ class SettingsActivity final : public UiGridActivity {
   // Puts the cursor back on a landable row after a rebuild that may have added or
   // removed rows under it.
   void restoreCursorAfterRebuild();
-  // The field a live slider dialog is writing through while it is open, so its
-  // static apply callback can reach it and Cancel can put it back. Null when no
-  // dialog is up.
-  uint8_t CrossPointSettings::* liveValuePtr = nullptr;
-  int liveValueOffset = 0;  // the open dialog's SettingInfo::displayOffset
   void openSleepTimeoutPicker();
-  void openScheduleTimePicker(uint8_t CrossPointSettings::* valuePtr, StrId titleId);
   /**
    * Writes this reader's WiFi networks and OPDS servers to a bundle on the card
    * and hands it to the Nearby sender. The bundle carries passwords in the clear

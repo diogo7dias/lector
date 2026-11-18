@@ -43,6 +43,17 @@ bottom-edge buttons **Back**, **Confirm**, **Left** and **Right**.
 The four bottom-edge buttons can be reassigned in **Settings > Controls > Remap Front Buttons**,
 and the side buttons can be swapped or disabled with **Side Button Layout (reader)**.
 
+### Touch page turning
+
+**Settings > Controls > Touch Reader Controls** switches touch page turning on or off. With it
+on, **Next Page** and **Previous Page** each take their own gesture: Tap & Swipe, Tap Only,
+Swipe Only (the default), Inverted Tap or Disabled. A swipe to the left goes on, a swipe to the
+right goes back. Taps turn from the outer thirds of the page, or from the whole page when only
+one direction accepts taps; the centre third opens the reader menu. Inverted Tap on either
+direction swaps the two sides. In a right-to-left EPUB (language Hebrew, Arabic or Persian) the swipes and
+the tap sides run the other way. Older settings files carry over: the old Tap, Swipe and
+Inverted Tap become the matching gesture for both directions.
+
 ### Tapping, on a device with a touch screen
 
 A tap takes two steps. The first tap on a row, a button or any other control highlights it
@@ -286,8 +297,8 @@ Three System settings move books for you as you read:
 | Previous page | **Left** or **Volume Up**        |
 | Next page     | **Right** or **Volume Down**     |
 
-**Settings > Controls > Side Button Layout (reader)** swaps the two side buttons or disables
-them while reading. **Orient front buttons** turns the bottom-edge buttons along with the
+**Settings > Controls > Side Button Layout (reader)** swaps the two side buttons, makes both turn
+the same way (Next/Next or Prev/Prev, for one-handed reading) or disables them while reading. **Orient front buttons** turns the bottom-edge buttons along with the
 page when you read in landscape.
 
 With **Short Power Button Click** set to **Page Turn**, a short press of **Power** also turns
@@ -304,9 +315,11 @@ position; explicit progress sync saves immediately.
 
 ### Chapters
 
-Chapter jumps live in the in-book menu, under **Navigate > Select Chapter**. Holding a page
-turn button does nothing: page turning fires on the press, so the page never waits to find out
-whether a hold was coming.
+Chapter jumps live in the in-book menu, under **Navigate > Select Chapter**. Page turning
+fires on the press, so the page never waits to find out whether a hold was coming. In an
+`.xtc` book, holding a page button for 0.7 seconds also jumps ten pages in that direction
+(the one page the press turned counts toward them), once per hold. Elsewhere holding a page
+button does nothing, unless you bind that hold in **Buttons**, which then takes precedence.
 
 ### Footnotes
 
@@ -336,6 +349,11 @@ of them can be pointed at any action.
 - **Long press while reading** — holding **Confirm** in the book.
 - **Hold in in-book menu** — holding **Confirm** with the menu open.
 - **Double-click power** — two quick presses of **Power**.
+
+On the X4 Pro a fresh device starts with a double press of **Home** and a double click of
+**Power** bound to **Toggle Frontlight**, and holding **Home** in a book bound to **Open Reader
+Menu**. Both are ordinary actions in the list, so any button can take them; a binding you have
+already saved is kept as it is. Other boards start with those gestures unbound.
 
 **Pop-up Items** decides which rows the quick pop-up those bindings can open actually
 contains.
@@ -969,14 +987,13 @@ belongs to, so the rows here appear in the same order as on the device.
 
 **Frontlight** (boards with a frontlight)
 
-- **Frontlight**, **Brightness**, **Warmth**, **Restore on Wake** (on by default).
-- **Max Brightness** — the top of the brightness range, 10 to 100 (default 30). The light
-  panel's brightness track runs from 0 to this, and a brightness above it is brought down.
-- **Light Schedule**, **Light On From**, **Light On Until** (boards with a clock) — at each
-  wake inside these hours the light comes on by itself, whatever it was before sleep; 20:00
-  to 07:00 by default, in 15-minute steps. Only the wake reads it: a light you change by hand
-  stays that way until the next one, and the light does not go off by itself at the end time.
-  Outside the hours **Restore on Wake** decides as usual.
+The frontlight has no rows in Settings. The light panel (swipe down from the top edge, or bind
+**Frontlight** to a button) holds on or off, brightness and warmth. **Toggle Frontlight**, a
+button action, flips it without opening the panel. The other frontlight options live on the web
+settings page only: **Max Brightness** (the top of the panel's brightness track, 10 to 100,
+default 30; a brightness above it is brought down), **Restore on Wake** (on by default), and **Light Schedule**
+(at each wake inside the set hours the light comes on by itself) with its **Light On From** and
+**Light On Until** times (20:00 and 07:00 by default, in quarter-hour steps).
 
 In a book the light panel also has **Align Left** and **Justify**, which set the book's paragraph
 alignment (for that EPUB alone; in a TXT book, for every TXT book), and **Paragraph Spacing**,
@@ -998,6 +1015,8 @@ which turns the extra space between an EPUB's paragraphs on or off for that book
   **Reset to Defaults** goes back to this model's measurements. It is kept on the device, not on
   the card. Menu screens keep their own spacing.
 - **Sunlight Fading Fix** — software fix for white X4 units fading in direct sunlight. Not shown on the X4 Pro.
+- **Hide Battery %** — Never (default), In Reader or Always. The battery icon stays; In Reader
+  drops the number from the reader's status bar, Always from the screen headers too.
 
 **Home**
 
@@ -1016,7 +1035,7 @@ minus at one end and a plus at the other. Touch anywhere along the track to jump
 to that value, or drag along it and the value follows your finger. Left and Right move one
 step, the side buttons move five, and the preview under the band follows, so nothing ever
 covers the page you are judging. Back or Select puts the band away; there is nothing to
-confirm, because every change has already been applied. Sleep timeout, frontlight and the
+confirm, because every change has already been applied. Sleep timeout and the
 other numbers in Settings use the same band.
 
 - **Font** — Noto Serif, Noto Sans, plus any SD card families; opens a full-screen picker.
@@ -1151,7 +1170,7 @@ Session**, **Pages to Paragraph**. Alongside them:
 
 - **Remap Front Buttons** — reassign each bottom-edge button (X3/X4 only; unavailable on X4 Pro).
 - **Orient front buttons** — rotate their meaning with the screen.
-- **Side Button Layout (reader)** — Prev/Next, Next/Prev or Disabled.
+- **Side Button Layout (reader)** — Prev/Next, Next/Prev, Disabled, Next/Next or Prev/Prev.
 
 **Power button**
 
