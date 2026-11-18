@@ -44,5 +44,11 @@ void SleepActivity::renderQuickResumeScreen() const {
   if (APP_STATE.lastSleepFromReader) ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
   drawMoon(renderer);
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  if (display.profile().isX3) {
+    // The X3 controller still holds the displayed page, and its differential base is what
+    // adds the moon without a flash; both lector's earlier Quick Resume and CrossPoint do this.
+    renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
+  } else {
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  }
 }
