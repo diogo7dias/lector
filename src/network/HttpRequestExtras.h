@@ -17,6 +17,8 @@ struct HttpRequestExtras {
   std::string bearer;
   // Extra request headers. A header named Authorization replaces both of the above.
   std::vector<std::pair<std::string, std::string>> headers;
+  // When set, receives the body of a 401 answer (the OPDS authentication document).
+  std::string* challengeBody = nullptr;
 };
 
 namespace request_headers {

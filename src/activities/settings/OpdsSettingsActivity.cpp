@@ -8,6 +8,7 @@
 
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
+#include "OpdsTokenStore.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
@@ -187,6 +188,8 @@ void OpdsSettingsActivity::activateIndex(const int index) {
             requestUpdate();
             return;
           }
+          // The sign-in token goes with the server it belongs to.
+          OPDS_TOKENS.put(OpdsTokenStore::keyFor(editServer.url, editServer.username), {});
           if (!OPDS_STORE.removeServer(static_cast<size_t>(serverIndex))) {
             LOG_ERR("OPS", "Failed to remove OPDS server at index %d", serverIndex);
             showSaveError = true;

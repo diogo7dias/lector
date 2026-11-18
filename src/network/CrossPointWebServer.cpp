@@ -24,6 +24,7 @@
 #include "FontInstaller.h"
 #include "HttpDownloader.h"
 #include "OpdsServerStore.h"
+#include "OpdsTokenStore.h"
 #include "ProtectedPaths.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
@@ -1903,6 +1904,10 @@ void CrossPointWebServer::handleDeleteOpdsServer() {
     return;
   }
 
+  // The sign-in token goes with the server it belongs to.
+  if (const auto* removed = OPDS_STORE.getServer(static_cast<size_t>(idx))) {
+    OPDS_TOKENS.put(OpdsTokenStore::keyFor(removed->url, removed->username), {});
+  }
   OPDS_STORE.removeServer(static_cast<size_t>(idx));
   LOG_DBG("WEB", "Deleted OPDS server at index %d", idx);
   server->send(200, "text/plain", "OK");

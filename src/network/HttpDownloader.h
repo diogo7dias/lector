@@ -48,6 +48,9 @@ class HttpDownloader {
   using Header = std::pair<std::string, std::string>;
   using RequestExtras = HttpRequestExtras;
 
+  // Bytes of a 401 answer's body kept in RequestExtras::challengeBody.
+  static constexpr size_t CHALLENGE_BODY_MAX = 4096;
+
   /**
    * Fetch a URL with optional credentials, streaming into `stream`. outError receives why a failed fetch
    * failed, so a caller can tell the reader whether the server refused it or the
@@ -99,4 +102,13 @@ class HttpDownloader {
                                       bool allowResume = false, std::string* contentDisposition = nullptr,
                                       uint32_t timeoutMs = DEFAULT_TIMEOUT_MS, int* outStatus = nullptr,
                                       const RequestExtras& extras = {});
+
+  /**
+   * POST a form (application/x-www-form-urlencoded) and collect up to CHALLENGE_BODY_MAX
+   * bytes of the answer. Redirects are not followed: the body carries credentials, so it
+   * goes to url and nowhere else. extras.bearer and extras.headers are sent as for a GET.
+   * Returns true for a 2xx answer; outStatus is 0 when none arrived.
+   */
+  static bool postForm(const std::string& url, const std::string& body, std::string& outResponse, int& outStatus,
+                       const RequestExtras& extras = {}, uint32_t timeoutMs = DEFAULT_TIMEOUT_MS);
 };

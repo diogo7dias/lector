@@ -710,6 +710,13 @@ saved value. Headers, like the password, go only to the catalog's own host, neve
 download link that points elsewhere. `Host`, `Content-Length`, `Content-Type`,
 `Transfer-Encoding`, `Connection`, `Range` and `User-Agent` are refused.
 
+A catalog that signs in with OAuth (the "password" flow of the OPDS Authentication standard,
+used by some library and publisher servers) needs nothing extra: enter the username and
+password as usual. When the server answers 401 with that flow, Lector posts them to the
+server's own token endpoint, keeps the token it gets back (scrambled on the card, like the
+password) and renews it when it expires. A token endpoint on any other host is refused. Servers
+that sign in through a login web page (the "implicit" flow) are not supported.
+
 Browse and download from **Home > OPDS Browser**. With more than one catalog saved it opens a
 server picker, whose last row, **Add Server**, adds another. Back goes up one level; hold Back
 for a second and let go to leave the catalog for Home. Where downloads land (**Download folder**)
