@@ -31,7 +31,7 @@
 // Where the page sits on screen: the reading margins plus the status bar bands. render()
 // lays the page out inside these, and every overlay that hit-tests words on it (dictionary
 // pick, quote grab) must use the same, or a hold lands a line off.
-void EpubReaderActivity::pageMargins(int& top, int& right, int& bottom, int& left) {
+void EpubReaderActivity::pageMargins(int& top, int& right, int& bottom, int& left, const int spine) {
   // This book's own bar: everything below measures with the same prefs it lays out with.
   const StatusBarBlock sb = statusBarOf(prefs_);
 
@@ -48,7 +48,12 @@ void EpubReaderActivity::pageMargins(int& top, int& right, int& bottom, int& lef
   int sbTitleExtraPx = 0;
   bool sbTitleTop = false;
   if (sb.textOn() && sb.titleSlot(true).anchor != CrossPointSettings::SB_ANCHOR_OFF) {
-    std::string chapterTitle = currentChapterLabel().title;
+    std::string chapterTitle;
+    if (spine < 0 || spine == currentSpineIndex) {
+      chapterTitle = currentChapterLabel().title;
+    } else if (const int toc = epub->getTocIndexForSpineIndex(spine); toc != -1) {
+      chapterTitle = epub->getTocItem(toc).title;
+    }
     if (chapterTitle.empty()) chapterTitle = tr(STR_UNNAMED);
     const int lines = UITheme::getStatusBarV2TitleLines(sb, renderer, true, chapterTitle.c_str(),
                                                         epub->getTitle().c_str(), &sbTitleTop);

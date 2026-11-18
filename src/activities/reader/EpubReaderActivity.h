@@ -129,7 +129,8 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // Opens the reader menu for the current position (short-press Confirm)
   void openReaderMenu();
   // Reading margins plus status bar bands: where render() puts the page.
-  void pageMargins(int& top, int& right, int& bottom, int& left);
+  // spine: whose chapter title sizes the status bar band (default: the open chapter).
+  void pageMargins(int& top, int& right, int& bottom, int& left, int spine = -1);
   ChapterLabel currentChapterLabel() const;
   void openDictionaryWordSelect(int anchorX = -1, int anchorY = -1);
   // Opens the Grab Quote word-range picker on the current page.
@@ -234,11 +235,12 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // heap-paused (no work is happening, so spinning at full speed would only burn
   // battery; the paused gate still retries every loop pass).
   bool skipLoopDelay() override {
-    return (backgroundBuildWanted() || (nextSection && nextSection->isBuilding())) && !buildHeapPaused;
+    // nextSection only lives while it builds; the pointer is read, never dereferenced, here.
+    return (backgroundBuildWanted() || nextSection != nullptr) && !buildHeapPaused;
   }
   void onCovered() override {  // ActivityManager holds the RenderLock here
     nextSection.reset();
-    prefetchedSpine = -1;  // the child may change settings; recheck the cache on return
+    prefetchedSpine = -1;  // a dropped prefetch is retried once this screen is back
   }
   bool isReaderActivity() const override { return true; }
   bool isBookContext() const override { return true; }
