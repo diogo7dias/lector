@@ -385,5 +385,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::DELETE_CACHE:
       deleteCacheAndGoHome();
       break;
+    case EpubReaderMenuActivity::MenuAction::GO_HOME:
+      onGoHome();
+      break;
+    // Flipped in place by the menu itself, which stays open; never reach here.
+    case EpubReaderMenuActivity::MenuAction::NIGHT_MODE:
+    case EpubReaderMenuActivity::MenuAction::FRONTLIGHT:
+      break;
   }
 }

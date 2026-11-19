@@ -1,6 +1,7 @@
 #include "EpubReaderMenuActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalFrontlight.h>
 #include <I18n.h>
 
 #include <algorithm>
@@ -11,6 +12,7 @@
 #include "ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "frontlight/ApplyFrontlightSetting.h"
 #include "util/HoldRepeat.h"
 
 namespace fui = freeink::ui;
@@ -119,6 +121,8 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
       items.push_back({MenuAction::TOGGLE_PARAGRAPH_NUM_PLACE, StrId::STR_PARAGRAPH_NUMBER_PLACE});
     }
     items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
+    items.push_back({MenuAction::NIGHT_MODE, StrId::STR_NIGHT_MODE});
+    if (Frontlight.present()) items.push_back({MenuAction::FRONTLIGHT, StrId::STR_FRONTLIGHT});
   }
 
   // --- Navigate: everything that moves the reading position ---------------------
@@ -200,6 +204,7 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
                   {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS},
                   {MenuAction::NEARBY_SEND_BOOK, StrId::STR_NEARBY_SEND_FILE}});
     group(items, {{MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE}});
+    group(items, {{MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON}});
   }
 
   return pages;
@@ -440,6 +445,22 @@ void EpubReaderMenuActivity::activateIndex(const int visibleIndex) {
     return;
   }
 
+  // Night mode and the frontlight flip in place, like the toggles above: the page they
+  // change is under the menu, and the value in the row says what happened.
+  if (selectedAction == MenuAction::NIGHT_MODE) {
+    SETTINGS.screenInverted = SETTINGS.screenInverted ? 0 : 1;
+    SETTINGS.saveToFile();
+    requestUpdate();
+    return;
+  }
+  if (selectedAction == MenuAction::FRONTLIGHT) {
+    SETTINGS.frontlightOn = Frontlight.isOn() ? 0 : 1;
+    applyFrontlightSetting(&CrossPointSettings::frontlightOn);
+    SETTINGS.saveToFile();
+    requestUpdate();
+    return;
+  }
+
   // Favouriting is handed to the reader like every other action, and the reader queues
   // the card work rather than waiting for it. Nothing happens here, deliberately: an
   // in-place label flip costs a menu redraw, and leaving the menu already costs a page
@@ -467,6 +488,10 @@ const char* EpubReaderMenuActivity::rowValue(const int index) const {
                                                   : StrId::STR_STATE_OFF);
     case MenuAction::TOGGLE_PAPERBACK_STATUS:
       return I18N.get(selectedPaperbackStatus ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+    case MenuAction::NIGHT_MODE:
+      return I18N.get(SETTINGS.screenInverted ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+    case MenuAction::FRONTLIGHT:
+      return I18N.get(Frontlight.isOn() ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
     case MenuAction::TOGGLE_STATUS_BAR:
       return I18N.get(selectedStatusBar ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
     case MenuAction::TOGGLE_PROGRESS_BAR:

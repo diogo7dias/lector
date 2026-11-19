@@ -436,6 +436,10 @@ screen has a wallpaper to act on; on nights it has none, the menu opens on **Nav
 - **Customise Status Bar** — everything the bar can show and where. Changes here become your
   default bar, so every book opens with it.
 - **Orientation** — rotate the screen.
+- **Night mode** — flip the page to white on black and back. The same switch as the **Night
+  mode** setting; the menu itself stays light.
+- **Frontlight** — turn the light on or off, without leaving the book. Shown only on a reader with a
+  frontlight. For brightness and warmth, swipe down from the top edge.
 
 ### Sleep Screen
 
@@ -455,6 +459,7 @@ This tab appears only when the last sleep screen was a wallpaper that is still o
 - **Nearby Sync** — take a position from another Lector nearby.
 - **Send to Nearby Reader** — send this file to another Lector nearby.
 - **Delete Book Cache** — clear this book's layout cache; it is rebuilt on the next open.
+- **Go Home** — leave the book for Home. Your place is kept.
 
 Press **Back** to close the menu.
 
