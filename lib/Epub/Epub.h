@@ -59,6 +59,10 @@ class Epub {
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
+  // Title and author without building the reader's caches: from book.bin when the book was
+  // opened before, otherwise by parsing the package's <metadata> alone. Writes nothing.
+  // Raw as the book states them (no filename fallback); false when the file is no EPUB.
+  bool loadMetadata(std::string& title, std::string& author);
   // After load, for the book being read: finds every item without rescanning the card.
   void indexZipEntries();
   // For a book that skipped its stylesheet at load and now wants it: parses the CSS into

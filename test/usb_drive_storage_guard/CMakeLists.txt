@@ -1,11 +1,15 @@
 add_executable(UsbDriveStorageGuardTest
   UsbDriveStorageGuardTest.cpp
   ${REPO_ROOT}/lib/hal/HalStorage.cpp
+  ${REPO_ROOT}/lib/FsHelpers/FsHelpers.cpp
+  ${REPO_ROOT}/lib/Utf8/Utf8.cpp
 )
 
 target_include_directories(UsbDriveStorageGuardTest BEFORE PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/stubs
   ${REPO_ROOT}/lib/hal
+  ${REPO_ROOT}/lib/FsHelpers
+  ${REPO_ROOT}/lib/Utf8
   ${REPO_ROOT}/lib/Memory
 )
 

@@ -1,6 +1,7 @@
 #include "HalStorage.h"
 
 #include <FS.h>  // need to be included before SdFat.h for compatibility with FS.h's File class
+#include <FsHelpers.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <SDCardManager.h>
@@ -229,6 +230,11 @@ HalFile::~HalFile() = default;
 HalFile::HalFile(HalFile&&) = default;
 HalFile& HalFile::operator=(HalFile&&) = default;
 
+// Called under the storage mutex.
+void HalStorage::noteBookPath(const char* path) {
+  if (path && FsHelpers::hasBookExtension(std::string_view(path))) bookGen = bookGen + 1;
+}
+
 HalFile HalStorage::open(const char* path, const oflag_t oflag) {
   StorageLock lock;  // ensure thread safety for the duration of this function
   // Allocate before opening: O_TRUNC may already change the card even if the
@@ -239,6 +245,7 @@ HalFile HalStorage::open(const char* path, const oflag_t oflag) {
     return {};
   }
   if (cardLentToUsbHost) return {};
+  if ((oflag & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC)) != 0) noteBookPath(path);
   impl->file = SDCard.open(path, oflag);
   return HalFile(std::move(impl));
 }
@@ -247,9 +254,18 @@ bool HalStorage::mkdir(const char* path, const bool pFlag) { HAL_STORAGE_WRAPPED
 
 bool HalStorage::exists(const char* path) { HAL_STORAGE_WRAPPED_CALL(exists, path); }
 
-bool HalStorage::remove(const char* path) { HAL_STORAGE_WRAPPED_CALL(remove, path); }
+bool HalStorage::remove(const char* path) {
+  HalStorage::StorageLock lock;
+  if (cardLentToUsbHost) return false;
+  noteBookPath(path);
+  return SDCard.remove(path);
+}
 bool HalStorage::rename(const char* oldPath, const char* newPath) {
-  HAL_STORAGE_WRAPPED_CALL(rename, oldPath, newPath);
+  HalStorage::StorageLock lock;
+  if (cardLentToUsbHost) return false;
+  noteBookPath(oldPath);
+  noteBookPath(newPath);
+  return SDCard.rename(oldPath, newPath);
 }
 
 bool HalStorage::rmdir(const char* path) { HAL_STORAGE_WRAPPED_CALL(rmdir, path); }
@@ -283,6 +299,7 @@ bool HalStorage::openFileForWrite(const char* moduleName, const char* path, HalF
     file = HalFile();
     return false;
   }
+  if (!cardLentToUsbHost) noteBookPath(path);
   const bool ok = !cardLentToUsbHost && SDCard.openFileForWrite(moduleName, path, impl->file);
   file = HalFile(std::move(impl));
   return ok;
@@ -336,7 +353,13 @@ int HalFile::read() {
 size_t HalFile::write(const uint8_t* buf, size_t count) { HAL_FILE_WRAPPED_CALL(write, buf, count); }
 size_t HalFile::write(const void* buf, size_t count) { HAL_FILE_WRAPPED_CALL(write, buf, count); }
 size_t HalFile::write(uint8_t b) { HAL_FILE_WRAPPED_CALL(write, b); }
-bool HalFile::rename(const char* newPath) { HAL_FILE_WRAPPED_CALL(rename, newPath); }
+bool HalFile::rename(const char* newPath) {
+  HalStorage::StorageLock lock;
+  assert(impl != nullptr);
+  if (cardLentToUsbHost) return false;
+  HalStorage::getInstance().noteBookPath(newPath);
+  return impl->file.rename(newPath);
+}
 bool HalFile::isDirectory() const { HAL_FILE_FORWARD_CALL(isDirectory, ); }  // already thread-safe, no need to wrap
 void HalFile::rewindDirectory() { HAL_FILE_WRAPPED_CALL(rewindDirectory, ); }
 bool HalFile::close() {

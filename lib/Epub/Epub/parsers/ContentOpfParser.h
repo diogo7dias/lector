@@ -33,6 +33,7 @@ class ContentOpfParser final : public Print {
   HalFile tempItemStore;
   std::string coverItemId;
   bool hasExplicitStartReference = false;
+  bool metadataDone = false;
 
   // Index for fast idref→href lookup (binary search over .items.bin)
   struct ItemIndexEntry {
@@ -48,6 +49,9 @@ class ContentOpfParser final : public Print {
   static void endElement(void* userData, const XML_Char* name);
 
  public:
+  // Title and author only: parsing stops at the end of <metadata>, before the manifest, so no
+  // temp file is written and nothing is read of the spine. For a book that was never opened.
+  bool metadataOnly = false;
   std::string title;
   std::string author;
   std::string language;

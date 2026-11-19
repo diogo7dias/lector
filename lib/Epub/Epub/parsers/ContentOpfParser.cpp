@@ -77,7 +77,10 @@ ContentOpfParser::~ContentOpfParser() {
 size_t ContentOpfParser::write(const uint8_t data) { return write(&data, 1); }
 
 size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
-  return feedXmlParser(parser, buffer, size, remainingSize, "COF");
+  if (metadataDone) return 0;
+  const size_t fed = feedXmlParser(parser, buffer, size, remainingSize, "COF");
+  // A short write is how a sink tells the zip reader to stop (allowEarlyStop).
+  return metadataDone ? 0 : fed;
 }
 
 void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
@@ -120,6 +123,12 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     if (self->description.empty()) {
       self->state = IN_BOOK_DESCRIPTION;
     }
+    return;
+  }
+
+  if (self->metadataOnly && self->state == IN_PACKAGE &&
+      (xmlLocalNameEquals(name, "manifest") || xmlLocalNameEquals(name, "spine"))) {
+    self->metadataDone = true;  // a package with no <metadata> before its manifest
     return;
   }
 
@@ -406,6 +415,7 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
 
   if (self->state == IN_METADATA && xmlLocalNameEquals(name, "metadata")) {
     self->state = IN_PACKAGE;
+    if (self->metadataOnly) self->metadataDone = true;
     return;
   }
 
