@@ -58,6 +58,14 @@ class HalStorage {
   bool exists(const char* path);
   bool remove(const char* path);
   bool rename(const char* oldPath, const char* newPath);
+
+  // Counts every removal, rename or write-open of a path named like a book (EPUB, XTC, text).
+  // Every channel that changes the card's books goes through this class, so a screen that
+  // keeps a picture of the card (the Library index) compares it with the value it saw.
+  // Wraps; only equality means anything.
+  uint32_t bookGeneration() const { return bookGen; }
+  // Called by the methods above, and by HalFile::rename; call it with the storage mutex held.
+  void noteBookPath(const char* path);
   bool rmdir(const char* path);
 
   // Card capacity and used space in bytes, 0 when no card is mounted. The used
@@ -103,6 +111,7 @@ class HalStorage {
   static HalStorage instance;
 
   bool initialized = false;
+  volatile uint32_t bookGen = 0;
   SemaphoreHandle_t storageMutex = nullptr;
 };
 

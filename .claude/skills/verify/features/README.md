@@ -29,6 +29,7 @@ Proven end to end through `lv` on 2026-10-25 (every recipe, every board).
 ## Features
 
 - [Home and navigation](./home.md): rows, arm-then-open, Home key, tap timing.
+- [Library](./library.md): every book on the card by title, kept right across /recents and /read filing.
 - [Reading](./reading.md): open a book, page turns, word hold, in-book menu, resume after reboot.
 - [Settings](./settings.md): change a setting by touch, survives reboot.
 - [Sleep and wake](./sleep.md): Power sleeps to the sleep screen and deep sleep, Power wakes.

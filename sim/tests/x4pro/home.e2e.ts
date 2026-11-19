@@ -11,21 +11,21 @@ test('arms a row on the first tap, opens it on the second, Home comes back', asy
 
   const panel = screen.getByRole('img', { name: 'Device screen' });
   const before = await frames.textContent();
-  await panel.tap({ position: { x: 240, y: 517 } }); // Browse Files
+  await panel.tap({ position: { x: 240, y: 464 } }); // Browse Files
   await expect(frames).not.toHaveText(before ?? '', { timeout: 30_000 });
   await expect(busy).toHaveText('no', { timeout: 30_000 });
   await expect(activity).toHaveText('Home');
 
-  // The armed row (x 20-459, y 495-539) carries a 2 px dashed border on every side:
+  // The armed row (x 20-459, y 442-486) carries a 2 px dashed border on every side:
   // each edge strip is partly inked, never solid and never blank.
-  const edges = { top: [20, 495, 440, 2], bottom: [20, 538, 440, 2], left: [20, 495, 2, 45], right: [458, 495, 2, 45] };
+  const edges = { top: [20, 442, 440, 2], bottom: [20, 485, 440, 2], left: [20, 442, 2, 45], right: [458, 442, 2, 45] };
   for (const [edge, [x, y, w, h]] of Object.entries(edges)) {
     const { ink, area } = await (await fetch(`${app.baseUrl}/ink/${x}/${y}/${w}/${h}`)).json();
     expect(ink / area, `${edge} edge is dashed`).toBeGreaterThan(0.3);
     expect(ink / area, `${edge} edge is dashed`).toBeLessThan(0.9);
   }
 
-  await panel.tap({ position: { x: 240, y: 517 } });
+  await panel.tap({ position: { x: 240, y: 464 } });
   await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
 
   await screen.getByRole('button', { name: 'Home' }).click();
@@ -52,14 +52,14 @@ test('an idle Home drops to low power, and a tap after it still reads the card',
     .toBe(true);
 
   const panel = screen.getByRole('img', { name: 'Device screen' });
-  await panel.tap({ position: { x: 240, y: 517 } }); // arm Browse Files
+  await panel.tap({ position: { x: 240, y: 464 } }); // arm Browse Files
   await expect
     .poll(async () => (await sinceHome()).includes('Restoring normal CPU frequency'), {
       message: 'the tap restored full clock',
       timeout: 30_000,
     })
     .toBe(true);
-  await panel.tap({ position: { x: 240, y: 517 } });
+  await panel.tap({ position: { x: 240, y: 464 } });
   await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
 
   await screen.getByRole('button', { name: 'Home' }).click();

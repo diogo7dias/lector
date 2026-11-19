@@ -41,7 +41,7 @@ test('All Bookmarks opens the book at the bookmark', async ({ app, screen }) => 
   const readOn = lastMatch(await log(), /Progress saved: spine=(\d+) offset=\d+ page=(\d+)/g);
   expect(readOn?.slice(1), 'reading stopped past the bookmark').not.toEqual([spine, page]);
 
-  await press('Down', 5); // Settings, below the book row and the four menu rows above it
+  await press('Down', 6); // Settings, below the book row and the five menu rows above it
   await press('Confirm');
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
   await press('Down'); // Reader

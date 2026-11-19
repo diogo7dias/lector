@@ -26,6 +26,35 @@ TEST(UsbDriveStorageGuard, SleepFlushesBeforeUnmountAndStillSleepsOnFailure) {
   syncOk = true;
 }
 
+// The Library index trusts this count to know a book was added, moved, renamed or deleted: it
+// moves for a book's path on any channel, and for nothing else (caches, parts, plain reads).
+TEST(UsbDriveStorageGuard, BookGenerationMovesOnlyForBookPaths) {
+  const uint32_t start = Storage.bookGeneration();
+  HalFile file;
+  Storage.openFileForRead("TEST", "/a.epub", file);
+  Storage.open("/a.epub", O_RDONLY);
+  Storage.exists("/a.epub");
+  Storage.openFileForWrite("TEST", "/.crosspoint/epub_1/book.bin", file);
+  Storage.openFileForWrite("TEST", "/a.epub.part", file);
+  Storage.remove("/.crosspoint/epub_1/book.bin");
+  Storage.rename("/b.epub.part", "/b.part");
+  EXPECT_EQ(Storage.bookGeneration(), start) << "no book path was touched";
+
+  Storage.openFileForWrite("TEST", "/a.epub", file);
+  EXPECT_EQ(Storage.bookGeneration(), start + 1);
+  Storage.open("/a.txt", O_WRONLY | O_CREAT);
+  EXPECT_EQ(Storage.bookGeneration(), start + 2);
+  Storage.remove("/A.XTCH");
+  EXPECT_EQ(Storage.bookGeneration(), start + 3);
+  Storage.rename("/b.epub.part", "/b.epub");  // a book arriving whole
+  EXPECT_EQ(Storage.bookGeneration(), start + 4);
+  Storage.rename("/a.epub", "/recents/a.epub");  // opened: filed into /recents
+  EXPECT_EQ(Storage.bookGeneration(), start + 6) << "both names are book paths";
+  Storage.openFileForWrite("TEST", "/a.epub", file);
+  EXPECT_TRUE(file.rename("/read/a.epub"));  // moved through its own handle
+  EXPECT_EQ(Storage.bookGeneration(), start + 8);
+}
+
 // Once USB Drive lends the card to a computer, no firmware file call may reach it,
 // including through a handle that was opened before the handoff.
 TEST(UsbDriveStorageGuard, NoCallReachesTheCardWhileTheHostHoldsIt) {

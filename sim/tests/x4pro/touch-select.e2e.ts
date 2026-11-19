@@ -29,9 +29,9 @@ test('holds a word, drags across lines, saves the passage as a quote', async ({ 
   if (!box) throw new Error('no panel on the page');
   const resume = (await ink(230, 60)) > 5_000;
   if (resume) {
-    await tapTwice(240, 260); // the book's row on Home
+    await tapTwice(240, 232); // the book's row on Home
   } else {
-    await tapTwice(240, 517); // Browse Files
+    await tapTwice(240, 464); // Browse Files
     await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
     await tapTwice(150, 279); // test_kerning_ligature.epub
   }

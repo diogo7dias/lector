@@ -425,6 +425,37 @@ void Epub::dropCacheIfSourceChanged() const {
   if (Storage.openFileForWrite("EBP", stampPath, stamp)) stamp.write(&size, sizeof(size));
 }
 
+bool Epub::loadMetadata(std::string& title, std::string& author) {
+  title.clear();
+  author.clear();
+
+  auto cache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
+  if (!cache) {
+    LOG_ERR("EBP", "OOM: BookMetadataCache");
+    return false;
+  }
+  if (cache->load()) {
+    title = cache->coreMetadata.title;
+    author = cache->coreMetadata.author;
+    return true;
+  }
+  cache.reset();
+
+  std::string opfPath;
+  size_t opfSize = 0;
+  if (!findContentOpfFile(&opfPath) || !getItemSize(opfPath, &opfSize)) return false;
+
+  const std::string noBase;
+  ContentOpfParser parser(cachePath, noBase, opfSize, nullptr);
+  parser.metadataOnly = true;
+  if (!parser.setup()) return false;
+  if (!readItemContentsToStream(opfPath, parser, 1024, /*allowEarlyStop=*/true)) return false;
+
+  title = utf8ComposeNfc(parser.title);
+  author = parser.author;
+  return true;
+}
+
 bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   LOG_DBG("EBP", "Loading ePub: %s", filepath.c_str());
   dropCacheIfSourceChanged();
