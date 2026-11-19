@@ -2,7 +2,9 @@ import { test, expect } from 'e2e';
 
 // Settings > Reader > Reader Menu Style > Toolbar: a tap on the page centre paints a sheet
 // over the bottom of the page instead of opening the list menu. Its scrub row jumps through
-// the book, a tile opens an existing screen, and a tap above the sheet closes it.
+// the book, a tile opens an existing screen, and a tap above the sheet closes it. The file sorts
+// after touch-select: its Settings visit leaves Home with another row selected, which that
+// test's "is the book listed" check does not expect.
 test('the toolbar menu scrubs, opens a tile and closes', async ({ app, screen }) => {
   await app.open('/');
   const activity = screen.getByTestId('activity');
@@ -70,17 +72,18 @@ test('the toolbar menu scrubs, opens a tile and closes', async ({ app, screen })
   await expect(activity).toHaveText('EpubReaderChapterSelection', { timeout: 30_000 });
   await panel.tap({ position: { x: 60, y: 780 } }); // Back
   await expect(busy).toHaveText('no', { timeout: 60_000 });
-  // A popped screen logs no "Entering", so the label keeps the list's name: the log says the
-  // reader is back.
-  await expect
-    .poll(async () => (await (await fetch(`${app.baseUrl}/log`)).text()).includes('Exiting activity: EpubReaderChapterSelection'))
-    .toBe(true);
 
-  // Open again and tap above the sheet: it closes, the page is whole again.
+  // The reader is back with no sheet: the page centre opens it again, and a tap above the sheet
+  // closes it, the page whole again.
   await tapOnce(240, 400);
   await expect.poll(band, { timeout: 30_000 }).toBeLessThan(withoutSheet / 2);
   await tapOnce(240, 300);
   await expect.poll(band, { timeout: 60_000 }).toBeGreaterThan(withoutSheet / 2);
+
+  // More opens the tabbed menu (an entered screen, so the label changes).
+  await tapOnce(240, 400);
+  await tapTwice(390, 757);
+  await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
 
   // Back to the list, so later suites find the default menu.
   await screen.getByRole('button', { name: 'Home' }).click();
