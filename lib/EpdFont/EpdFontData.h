@@ -192,7 +192,28 @@ typedef struct {
   const uint16_t* glyphToGroup;               ///< Per-glyph group ID (nullptr for contiguous-group fonts)
   const EpdKernClassEntry* kernLeftClasses;   ///< Sorted left-side class map (nullptr if none)
   const EpdKernClassEntry* kernRightClasses;  ///< Sorted right-side class map (nullptr if none)
-  const int8_t* kernMatrix;              ///< Flat leftClassCount x rightClassCount matrix, 4.4 fixed-point in pixels
+  /// Split form of the two class maps, used by the built-in fonts instead of the packed
+  /// EpdKernClassEntry arrays above (which are null for them). Same 3 bytes per entry, but the
+  /// binary search reads only the codepoint array, so it touches a third less memory and every
+  /// read is aligned (a 3-byte packed entry leaves two of three codepoint reads unaligned).
+  /// SD-card fonts keep the packed form: the .cpfont stores it verbatim and maps it in place.
+  /// Whichever pointer is non-null selects the representation.
+  const uint16_t* kernLeftCodepoints;   ///< nullptr when this font uses the packed form
+  const uint8_t* kernLeftClassIds;      ///< parallel to kernLeftCodepoints
+  const uint16_t* kernRightCodepoints;  ///< nullptr when this font uses the packed form
+  const uint8_t* kernRightClassIds;     ///< parallel to kernRightCodepoints
+  const int8_t* kernMatrix;             ///< Flat leftClassCount x rightClassCount matrix, 4.4 fixed-point in pixels
+  /// Sparse (CSR) kerning, used by the built-in fonts instead of `kernMatrix` (null for them).
+  /// The dense matrix is mostly zero (Ubuntu: 3002 of 24472 cells are set), so only the
+  /// non-zero cells are stored. Values are identical, so layout and pagination do not change.
+  /// SD-card fonts keep the dense matrix, mapped in place.
+  ///
+  /// kernRowOffsets has kernLeftClassCount + 1 entries; row `l` occupies
+  /// [kernRowOffsets[l], kernRowOffsets[l+1]) in the other two arrays, sorted ascending by
+  /// column so the lookup can stop early.
+  const uint16_t* kernRowOffsets;        ///< nullptr when this font uses the dense matrix
+  const uint8_t* kernSparseCols;         ///< 0-based right class of each stored entry
+  const int8_t* kernSparseValues;        ///< 4.4 fixed-point value of each stored entry
   uint16_t kernLeftEntryCount;           ///< Entries in kernLeftClasses
   uint16_t kernRightEntryCount;          ///< Entries in kernRightClasses
   uint8_t kernLeftClassCount;            ///< Number of distinct left classes (matrix rows)
