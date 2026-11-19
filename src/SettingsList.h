@@ -174,6 +174,8 @@ inline SettingInfo buildFontSizeSetting(const SdCardFontRegistry* registry) {
 // name persists in SETTINGS.dictionaryName (saved/loaded manually in
 // CrossPointSettings::toJson/fromJson — the generic loop skips dynamic entries).
 inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& dictionaries) {
+  static_assert(sizeof(CrossPointSettings::dictionaryName) >= DictionaryRegistry::MAX_NAME_BYTES,
+                "dictionaryName must hold any folder name DictionaryRegistry lists");
   std::vector<std::string> folderNames;
   folderNames.reserve(dictionaries.size());
   std::transform(dictionaries.begin(), dictionaries.end(), std::back_inserter(folderNames),
@@ -189,9 +191,7 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 
   s.valueGetter = [folderNames]() -> uint8_t {
     for (size_t i = 0; i < folderNames.size(); i++) {
-      // Compare within the settings field capacity: an over-long folder name is
-      // stored truncated, and must still match its list entry.
-      if (strncmp(folderNames[i].c_str(), SETTINGS.dictionaryName, sizeof(SETTINGS.dictionaryName) - 1) == 0) {
+      if (folderNames[i] == SETTINGS.dictionaryName) {
         return static_cast<uint8_t>(i + 1);
       }
     }

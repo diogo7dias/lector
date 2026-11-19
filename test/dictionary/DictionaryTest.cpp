@@ -302,3 +302,32 @@ TEST_F(DictionaryTest, PhraseWithSpacesAndEdgePunctuationFindsItsHeadword) {
   EXPECT_EQ(definition, "die");
   EXPECT_EQ(headword, "kick the bucket");
 }
+
+TEST_F(DictionaryTest, ElidedPrefixIsDroppedAfterTheWholeWordMisses) {
+  writeDictionary({{"homme", "man"}, {"il", "he"}, {"l'homme", "whole"}}, "m");
+  openAndIndex();
+  ASSERT_TRUE(dictionary.lookup("l'homme", definition, headword, &result));
+  EXPECT_EQ(headword, "l'homme");  // the whole word still wins
+
+  writeDictionary({{"homme", "man"}, {"il", "he"}}, "m");
+  openAndIndex();
+  ASSERT_TRUE(dictionary.lookup("l'homme", definition, headword, &result));
+  EXPECT_EQ(headword, "homme");
+  ASSERT_TRUE(dictionary.lookup("qu'il", definition, headword, &result));
+  EXPECT_EQ(headword, "il");
+  // Curly apostrophe U+2019.
+  ASSERT_TRUE(dictionary.lookup("l\xE2\x80\x99homme", definition, headword, &result));
+  EXPECT_EQ(headword, "homme");
+}
+
+TEST_F(DictionaryTest, ElisionTriesTheLongestRemainderFirstAndSkipsLongPrefixes) {
+  writeDictionary({{"aujourd'hui", "today"}, {"hui", "x"}}, "m");
+  openAndIndex();
+  ASSERT_TRUE(dictionary.lookup("l'aujourd'hui", definition, headword, &result));
+  EXPECT_EQ(headword, "aujourd'hui");
+
+  writeDictionary({{"word", "w"}}, "m");
+  openAndIndex();
+  EXPECT_FALSE(dictionary.lookup("abcdefgh'word", definition, headword, &result));  // prefix over 7 bytes
+  EXPECT_EQ(result, Dictionary::LookupResult::NotFound);
+}

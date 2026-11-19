@@ -662,7 +662,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
-  char dictionaryName[32] = "";
+  // Sized to DictionaryRegistry::MAX_NAME_BYTES (static_assert in SettingsList.h): a UTF-8 folder name takes
+  // up to 3 bytes per character, and a name stored cut short no longer names a folder.
+  char dictionaryName[128] = "";
   // Fast Unlock (1 = on). Shortens the recovery-chord settle window the wake waits out
   // before routing, 500 ms to 100 ms on the X3/X4 button ladder (the X4 Pro is 20 ms
   // either way). Chosen from code inspection, so the row exists to switch back without
