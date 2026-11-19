@@ -17,7 +17,7 @@ test('an image page draws the same after the book is filed into recents', async 
       await expect(busy).toHaveText('no', { timeout: 30_000 });
     }
   };
-  await tapTwice(240, 517); // Browse Files
+  await tapTwice(240, 464); // Browse Files
   await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
   await tapTwice(150, 248); // test_jpeg_images.epub, at the card root
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
@@ -44,7 +44,7 @@ test('an image page draws the same after the book is filed into recents', async 
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
   await expect.poll(async () => (await fetch(`${app.baseUrl}/log`)).text()).toContain('-> /recents/test_jpeg_images.epub');
 
-  await tapTwice(240, 260); // the book's row on Home
+  await tapTwice(240, 232); // the book's row on Home
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
   await expect.poll(body, { message: 'the image page reopens with its image', timeout: 60_000 }).toEqual(imagePage);
   expect(await (await fetch(`${app.baseUrl}/log`)).text()).not.toContain('Image file not found');

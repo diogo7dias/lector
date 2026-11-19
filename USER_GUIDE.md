@@ -165,6 +165,7 @@ The Home screen is the entry point. It lists the books you have been reading, an
 - **Continue Reading** — reopen the most recent book. Present in themes that put it in the
   menu, and only once something has been read.
 - **Browse Files** — the file browser.
+- **Library** — every book on the card by title, see [Library](#library).
 - **OPDS Browser** — shown once at least one catalog is configured, see
   [section 9](#9-getting-books-onto-the-device).
 - **File Transfer** — Wi-Fi transfers, see [section 9](#9-getting-books-onto-the-device).
@@ -186,6 +187,23 @@ shows **Unavailable** instead of choosing from an incomplete scan.
 
 **Settings > Display > Author On Home** switches the author line between initials and the
 full name.
+
+### Library
+
+**Library** lists every book on the card in one list, sorted by title, with the author under
+each title. Pick one to open it. The top right shows which book you are on and how many there
+are. Titles and authors come from the books themselves (an EPUB's own title and author); a
+book without them is listed by its file name. Books in any folder are listed, wherever
+they are filed (`/recents` and `/read` included), but not the folders Lector keeps for
+itself (`/sleep`, `/fonts` and the like) or hidden files.
+
+The list is read from an index Lector keeps on the card (`/.crosspoint/lector-library.idx`).
+The first visit after the device starts, and the first one after any book was added, moved,
+renamed or deleted, rebuilds it: a strip says **Reading your books...** while it does. A
+card with a few hundred new EPUBs takes a while the first time, because each is opened once
+for its title; later visits only read the books that changed. It lists at most 2048 books on
+the X3 and X4 and 4096 on the X4 Pro. If the card is empty the list says **No books found on
+the SD card**.
 
 ### Reading stats
 

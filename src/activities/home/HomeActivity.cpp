@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
+#include "LibraryActivity.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
@@ -32,7 +33,7 @@
 #include "util/DeferredFavorite.h"
 
 int HomeActivity::menuRowCount() const {
-  int count = 4;  // File Browser, File transfer, Stats, Settings
+  int count = 5;  // File Browser, Library, File transfer, Stats, Settings
   if (hasOpdsServers) {
     count++;
   }
@@ -136,6 +137,9 @@ void HomeActivity::loop() {
         break;
       case HomeMenuItem::FILE_BROWSER:
         onFileBrowserOpen();
+        break;
+      case HomeMenuItem::LIBRARY:
+        onLibraryOpen();
         break;
       case HomeMenuItem::OPDS_BROWSER:
         onOpdsBrowserOpen();
@@ -245,13 +249,13 @@ void HomeActivity::render(RenderLock&&) {
   // no per-book cover generation, so the home stays fast. A menu selection passes -1
   // so no book row is highlighted.
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_NEARBY_SYNC), tr(STR_STATS),
+  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_LIBRARY), tr(STR_NEARBY_SYNC), tr(STR_STATS),
                                         tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Transfer, Book, Settings};
+  std::vector<UIIcon> menuIcons = {Folder, Library, Transfer, Book, Settings};
 
   if (hasOpdsServers) {
-    menuItems.insert(menuItems.begin() + 1, tr(STR_OPDS_BROWSER));
-    menuIcons.insert(menuIcons.begin() + 1, Library);
+    menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
+    menuIcons.insert(menuIcons.begin() + 2, Library);
   }
   if (bookOrbitMissing > 0) {
     menuItems.insert(menuItems.begin(), bookOrbitMissingLabel);
@@ -324,6 +328,11 @@ void HomeActivity::render(RenderLock&&) {
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
 
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
+
+// A child of Home, like Stats, so Back lands on the Library row again.
+void HomeActivity::onLibraryOpen() {
+  startActivityForResult(std::make_unique<LibraryActivity>(renderer, mappedInput), [](const ActivityResult&) {});
+}
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 

@@ -87,11 +87,11 @@ test('Quick Resume keeps the page and wakes into it', async (ctx) => {
   // (Home then shows it as its first row) and left it on the contents page, where
   // touch-select.e2e.ts expects to find it again. A fresh open starts on the cover image:
   // turn one page to the contents, whose ink is exact.
-  const resume = (await d.ink(0, 230, 480, 60)) > 500; // blank on a fresh card
+  const resume = (await d.ink(0, 200, 480, 60)) > 500; // blank on a fresh card
   if (resume) {
-    await d.tapTwice(240, 260); // the book's row on Home
+    await d.tapTwice(240, 232); // the book's row on Home
   } else {
-    await d.tapTwice(240, 517); // Browse Files
+    await d.tapTwice(240, 464); // Browse Files
     await expect(d.activity).toHaveText('FileBrowser', { timeout: 30_000 });
     await d.tapTwice(150, 279); // test_kerning_ligature.epub
   }
