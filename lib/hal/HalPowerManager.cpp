@@ -150,6 +150,8 @@ bool HalPowerManager::supportsChargeWake() {
 }
 
 bool HalPowerManager::isCharging() {
+  // Only the X4 Pro has this line; elsewhere GPIO21 is another pin (UART0 TX on the C3) and must stay untouched.
+  if (!supportsChargeWake()) return false;
   // A weak pull-down, so a line the charger leaves floating reads as not charging.
   pinMode(X4PRO_CHARGE_STATUS, INPUT_PULLDOWN);
   return digitalRead(X4PRO_CHARGE_STATUS) == HIGH;
@@ -212,7 +214,7 @@ void HalPowerManager::startDeepSleep() const {
 #if SOC_PM_SUPPORT_EXT0_WAKEUP
   // Also wake when a cable starts a charge. Not while already charging: the level wake would fire at once and
   // loop sleep and boot, so a cable left in is simply not noticed (the power button still wakes).
-  if (wake_classify::armsPlugInWake(chargeWake && supportsChargeWake(), isCharging())) {
+  if (chargeWake && supportsChargeWake() && wake_classify::armsPlugInWake(true, isCharging())) {
     if (esp_sleep_enable_ext0_wakeup(X4PRO_CHARGE_STATUS, 1) == ESP_OK) {
       // ext0 needs the RTC peripherals powered, and the line held idle (low) so it reads as not charging.
       esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);

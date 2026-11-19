@@ -457,8 +457,8 @@ void setup() {
       if (!gpio.verifyPowerButtonWakeup()) {
         // No press, but the charger line is charging: the Wake on USB Plug-In wake. Boot on as for a
         // button wake (same painted sleep face), minus the held-button bookkeeping.
-        if (!wake_classify::isPlugInWake(SETTINGS.wakeOnUsbPlugIn != 0 && HalPowerManager::supportsChargeWake(), false,
-                                         HalPowerManager::isCharging())) {
+        const bool plugInWakeOn = SETTINGS.wakeOnUsbPlugIn != 0 && HalPowerManager::supportsChargeWake();
+        if (!wake_classify::isPlugInWake(plugInWakeOn, false, plugInWakeOn && HalPowerManager::isCharging())) {
           LOG_INF("SLP", "Wake press not held through debounce, back to sleep");
           sleepAgain();
         }
