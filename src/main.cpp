@@ -1021,6 +1021,9 @@ void loop() {
   const unsigned long activityStartTime = millis();
   activityManager.loop();
   const unsigned long activityDuration = millis() - activityStartTime;
+  // Time blocked in the activity (e.g. a synchronous OPDS download) is not idle time.
+  // Only long blocks count: a normal pass takes a few ms and must not slow the timer.
+  if (activityDuration >= 1000) lastActivityTime += activityDuration;
 
   const unsigned long loopDuration = millis() - loopStartTime;
   if (loopDuration > maxLoopDuration) {
