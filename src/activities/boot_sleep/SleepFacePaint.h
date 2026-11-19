@@ -27,7 +27,8 @@
 // encodes what the firmware does TODAY. Changing one needs a hardware check first.
 //
 // Faces that draw a bitmap share the Wallpaper and CoverFallback rows. The faces drawn without
-// a file (Dark, Light, None, and the fallback) are all PlainLector: one HALF submission.
+// a file (Dark, Light, and the fallback) are PlainLector: one HALF submission. None paints
+// nothing of its own: the pre-clear's last white FULL is the page.
 namespace sleep_face {
 
 enum class Face : uint8_t {

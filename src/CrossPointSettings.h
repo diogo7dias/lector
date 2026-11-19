@@ -434,6 +434,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // GT911 senses it). 0 Off, 1 15 s, 2 30 s, 3 1 min. Off by default: dead touch
   // mid-book read as a bug.
   uint8_t touchSleep = 0;
+  // Wake from deep sleep when a USB cable is plugged in (0 = off, 1 = on). X4 Pro only.
+  uint8_t wakeOnUsbPlugIn = 0;
   unsigned long touchSleepMs() const {
     static constexpr unsigned long MS[] = {0, 15000, 30000, 60000};
     return touchSleep < 4 ? MS[touchSleep] : 0;
@@ -662,7 +664,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
-  char dictionaryName[32] = "";
+  // Sized to DictionaryRegistry::MAX_NAME_BYTES (static_assert in SettingsList.h): a UTF-8 folder name takes
+  // up to 3 bytes per character, and a name stored cut short no longer names a folder.
+  char dictionaryName[128] = "";
   // Fast Unlock (1 = on). Shortens the recovery-chord settle window the wake waits out
   // before routing, 500 ms to 100 ms on the X3/X4 button ladder (the X4 Pro is 20 ms
   // either way). Chosen from code inspection, so the row exists to switch back without

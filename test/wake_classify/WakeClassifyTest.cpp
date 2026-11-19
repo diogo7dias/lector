@@ -68,3 +68,17 @@ TEST(WakeClassify, Table) {
 
 // Compile-time too: the classifier is constexpr so the adapter costs nothing extra.
 static_assert(classify(BootFacts{Reset::DeepSleep, true, false, false}) == WakeupReason::PowerButton);
+
+TEST(WakeClassify, PlugInWake) {
+  using wake_classify::armsPlugInWake;
+  using wake_classify::isPlugInWake;
+  // Sleep side: armed only when enabled and not already charging.
+  EXPECT_TRUE(armsPlugInWake(true, false));
+  EXPECT_FALSE(armsPlugInWake(true, true));
+  EXPECT_FALSE(armsPlugInWake(false, false));
+  // Boot side: needs the setting, a released button and a charging line.
+  EXPECT_TRUE(isPlugInWake(true, false, true));
+  EXPECT_FALSE(isPlugInWake(true, true, true));    // a real press goes the button route
+  EXPECT_FALSE(isPlugInWake(true, false, false));  // ghost edge, no cable
+  EXPECT_FALSE(isPlugInWake(false, false, true));  // setting off
+}

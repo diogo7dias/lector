@@ -7,6 +7,9 @@
 #include <driver/gpio.h>
 #include <esp_sleep.h>
 #include <soc/soc_caps.h>
+#if SOC_PM_SUPPORT_EXT0_WAKEUP
+#include <driver/rtc_io.h>
+#endif
 #if CONFIG_IDF_TARGET_ESP32S3
 #include <esp_private/mspi_timing_tuning.h>
 #endif
@@ -134,6 +137,26 @@ void HalPowerManager::setPowerSaving(bool enabled) {
   xSemaphoreGive(modeMutex);
 }
 
+// X4 Pro charger STAT line: GPIO21, driven HIGH while charging. Not in BoardConfig for this board; the pin
+// is the one upstream CrossPoint #4454 measured on an X4 Pro. It is the only sign of a cable the board gives.
+static constexpr gpio_num_t X4PRO_CHARGE_STATUS = GPIO_NUM_21;
+
+bool HalPowerManager::supportsChargeWake() {
+#if SOC_PM_SUPPORT_EXT0_WAKEUP
+  return BoardConfig::isX4Pro();
+#else
+  return false;
+#endif
+}
+
+bool HalPowerManager::isCharging() {
+  // Only the X4 Pro has this line; elsewhere GPIO21 is another pin (UART0 TX on the C3) and must stay untouched.
+  if (!supportsChargeWake()) return false;
+  // A weak pull-down, so a line the charger leaves floating reads as not charging.
+  pinMode(X4PRO_CHARGE_STATUS, INPUT_PULLDOWN);
+  return digitalRead(X4PRO_CHARGE_STATUS) == HIGH;
+}
+
 void HalPowerManager::startDeepSleep() const {
 #ifdef ENABLE_SERIAL_LOG
   // Tear down HWCDC so the host sees a clean disconnect and the peripheral
@@ -187,6 +210,21 @@ void HalPowerManager::startDeepSleep() const {
   // deep-sleep command while its rail is still up (enterDeepSleep() in main.cpp
   // guarantees that ordering).
   freeink::PowerManager::powerDownRailsForSleep();
+
+#if SOC_PM_SUPPORT_EXT0_WAKEUP
+  // Also wake when a cable starts a charge. Not while already charging: the level wake would fire at once and
+  // loop sleep and boot, so a cable left in is simply not noticed (the power button still wakes).
+  if (chargeWake && supportsChargeWake() && wake_classify::armsPlugInWake(true, isCharging())) {
+    if (esp_sleep_enable_ext0_wakeup(X4PRO_CHARGE_STATUS, 1) == ESP_OK) {
+      // ext0 needs the RTC peripherals powered, and the line held idle (low) so it reads as not charging.
+      esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+      rtc_gpio_pullup_dis(X4PRO_CHARGE_STATUS);
+      rtc_gpio_pulldown_en(X4PRO_CHARGE_STATUS);
+    } else {
+      LOG_ERR("PWR", "Plug-in wake: ext0 on GPIO%d refused", static_cast<int>(X4PRO_CHARGE_STATUS));
+    }
+  }
+#endif
 
   // Waits for the power button to be physically released (so holding it doesn't
   // immediately wake the device again), then arms the wake source and sleeps.

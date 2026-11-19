@@ -25,8 +25,8 @@ bool findStem(const char* folderPath, std::string& stemOut) {
   if (!dir || !dir.isDirectory()) return false;
 
   dir.rewindDirectory();
-  char name[128];
-  char foundStem[128];
+  char name[MAX_NAME_BYTES];
+  char foundStem[MAX_NAME_BYTES];
   foundStem[0] = '\0';
   for (auto entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
     entry.getName(name, sizeof(name));
@@ -73,7 +73,7 @@ void discover(std::vector<DictionaryEntry>& out) {
     }
 
     rootDir.rewindDirectory();
-    char name[128];
+    char name[MAX_NAME_BYTES];
     for (auto entry = rootDir.openNextFile(); entry; entry = rootDir.openNextFile()) {
       // Each dictionary folder costs its own scan in findStem, so this outer loop
       // can run for a while on a card with several dictionaries.

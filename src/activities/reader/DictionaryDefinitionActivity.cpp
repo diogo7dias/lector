@@ -250,8 +250,22 @@ void DictionaryDefinitionActivity::loop() {
     }
   };
 
-  buttonNavigator.onNext(turnForward);
-  buttonNavigator.onPrevious(turnBack);
+  // Page buttons follow the side-button layout like the EPUB reader; the front pair follows the
+  // orientation swap. A body swipe pages through the list-scroll gesture (Nav* would pull in the
+  // raw side keys and bypass the layout).
+  const bool swapped = mappedInput.isNavDirectionSwapped();
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::PageForward,
+                                        swapped ? MappedInputManager::Button::Left : MappedInputManager::Button::Right},
+                                       turnForward);
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::PageBack,
+                                        swapped ? MappedInputManager::Button::Right : MappedInputManager::Button::Left},
+                                       turnBack);
+  const auto swipe = mappedInput.wasListScrollSwipe();
+  if (swipe == list_swipe::Scroll::PageDown) {
+    turnForward();
+  } else if (swipe == list_swipe::Scroll::PageUp) {
+    turnBack();
+  }
 
   // A definition has no reader menu, so the tap that would open it turns forward.
   const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);

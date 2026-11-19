@@ -16,6 +16,7 @@
 #include "DictInlineFields.h"
 #include "DictZip.h"
 #include "DictionaryRegistry.h"
+#include "IdxCursor.h"
 #include "StringUtils.h"
 
 namespace {
@@ -468,14 +469,15 @@ bool Dictionary::locateAll(LookupSession& session, const char* target, DictEntry
     LOG_ERR("DICT", "Index seek to %lu failed", static_cast<unsigned long>(startByte));
     return false;
   }
-  while (static_cast<uint32_t>(session.idx.position()) < session.idxSize) {
-    // Not flagged as readError: readWordInto returns -1 for EOF and IO error
-    // alike, so a short tail can't be told from a truncated .idx. Treat it as
-    // the end of the index rather than risk reporting a read failure for what
-    // is really a miss.
-    if (readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0) break;
+  IdxCursor<HalFile> cursor(session.idx, startByte);
+  while (cursor.position() < session.idxSize) {
+    // Not flagged as readError: readWord returns -1 for EOF and IO error alike,
+    // so a short tail can't be told from a truncated .idx. Treat it as the end
+    // of the index rather than risk reporting a read failure for what is really
+    // a miss.
+    if (cursor.readWord(wordBuf, sizeof(wordBuf)) < 0) break;
     uint8_t suffix[8];
-    if (session.idx.read(suffix, 8) != 8) break;
+    if (!cursor.readBytes(suffix, 8)) break;
 
     const int cmp = strcasecmp(wordBuf, target);
     if (cmp == 0) out.add(wordBuf, readBe32(suffix), readBe32(suffix + 4));
@@ -512,12 +514,13 @@ DictLocation Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordina
     return result;
   }
   uint8_t suffix[8];
+  IdxCursor<HalFile> cursor(session.idx, startByte);
   for (uint32_t e = startOrdinal; e < ordinal; e++) {
-    if (readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0 || session.idx.read(suffix, 8) != 8) return result;
-    if (static_cast<uint32_t>(session.idx.position()) >= session.idxSize) return result;  // ordinal past last entry
+    if (cursor.readWord(wordBuf, sizeof(wordBuf)) < 0 || !cursor.readBytes(suffix, 8)) return result;
+    if (cursor.position() >= session.idxSize) return result;  // ordinal past last entry
   }
-  if (static_cast<uint32_t>(session.idx.position()) >= session.idxSize) return result;
-  if (readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0 || session.idx.read(suffix, 8) != 8) return result;
+  if (cursor.position() >= session.idxSize) return result;
+  if (cursor.readWord(wordBuf, sizeof(wordBuf)) < 0 || !cursor.readBytes(suffix, 8)) return result;
   result.offset = readBe32(suffix);
   result.size = readBe32(suffix + 4);
   result.found = true;
@@ -539,10 +542,11 @@ bool Dictionary::locateSynonyms(LookupSession& session, const char* target, Dict
     return false;
   }
   bool ok = true;
-  while (static_cast<uint32_t>(session.syn.position()) < session.synSize) {
-    if (readWordInto(session.syn, wordBuf, sizeof(wordBuf)) < 0) break;
+  IdxCursor<HalFile> cursor(session.syn, startByte);
+  while (cursor.position() < session.synSize) {
+    if (cursor.readWord(wordBuf, sizeof(wordBuf)) < 0) break;
     uint8_t ordBytes[4];
-    if (session.syn.read(ordBytes, 4) != 4) break;
+    if (!cursor.readBytes(ordBytes, 4)) break;
 
     const int cmp = strcasecmp(wordBuf, target);
     if (cmp == 0) {
@@ -841,6 +845,46 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
       for (const auto& variant : variants) {
         searchFailed = !locateAll(session, variant.c_str(), entries) || searchFailed;
         if (!entries.empty()) break;
+      }
+    }
+
+    // Elision (French l'homme, qu'il; Italian dell'arte): the layout keeps the apostrophe inside one
+    // word, so after the whole word and its stems miss, retry with the text after each short elided
+    // prefix, longest remainder first.
+    if (entries.empty()) {
+      const size_t n = cleaned.size();
+      size_t segmentStart = 0;
+      std::vector<std::string> variants;
+      for (size_t i = 0; i < n && entries.empty();) {
+        const auto c = static_cast<unsigned char>(cleaned[i]);
+        size_t apostropheBytes = 0;
+        if (c == '\'') {
+          apostropheBytes = 1;  // U+0027
+        } else if (c == 0xCA && i + 1 < n && static_cast<unsigned char>(cleaned[i + 1]) == 0xBC) {
+          apostropheBytes = 2;  // U+02BC modifier letter apostrophe
+        } else if (c == 0xE2 && i + 2 < n && static_cast<unsigned char>(cleaned[i + 1]) == 0x80 &&
+                   (static_cast<unsigned char>(cleaned[i + 2]) == 0x99 ||
+                    static_cast<unsigned char>(cleaned[i + 2]) == 0x98)) {
+          apostropheBytes = 3;  // U+2019 / U+2018
+        }
+        if (apostropheBytes == 0) {
+          i++;
+          continue;
+        }
+        // Elided prefixes are short (l, qu, jusqu, puisqu); "dog's" keeps its stem path.
+        const bool shortPrefix = i > segmentStart && i - segmentStart <= 7;
+        const size_t suffixStart = i + apostropheBytes;
+        segmentStart = suffixStart;
+        i = suffixStart;
+        if (!shortPrefix || n - suffixStart < 2) continue;
+        const std::string suffix = cleaned.substr(suffixStart);
+        searchFailed = !locateAll(session, suffix.c_str(), entries) || searchFailed;
+        if (!entries.empty()) break;
+        stemVariants(suffix, variants);
+        for (const auto& variant : variants) {
+          searchFailed = !locateAll(session, variant.c_str(), entries) || searchFailed;
+          if (!entries.empty()) break;
+        }
       }
     }
   }

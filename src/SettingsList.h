@@ -5,6 +5,7 @@
 #include <HalClock.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <I18n.h>
 #include <SdCardFontRegistry.h>
 
@@ -174,6 +175,8 @@ inline SettingInfo buildFontSizeSetting(const SdCardFontRegistry* registry) {
 // name persists in SETTINGS.dictionaryName (saved/loaded manually in
 // CrossPointSettings::toJson/fromJson — the generic loop skips dynamic entries).
 inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& dictionaries) {
+  static_assert(sizeof(CrossPointSettings::dictionaryName) >= DictionaryRegistry::MAX_NAME_BYTES,
+                "dictionaryName must hold any folder name DictionaryRegistry lists");
   std::vector<std::string> folderNames;
   folderNames.reserve(dictionaries.size());
   std::transform(dictionaries.begin(), dictionaries.end(), std::back_inserter(folderNames),
@@ -189,9 +192,7 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 
   s.valueGetter = [folderNames]() -> uint8_t {
     for (size_t i = 0; i < folderNames.size(); i++) {
-      // Compare within the settings field capacity: an over-long folder name is
-      // stored truncated, and must still match its list entry.
-      if (strncmp(folderNames[i].c_str(), SETTINGS.dictionaryName, sizeof(SETTINGS.dictionaryName) - 1) == 0) {
+      if (folderNames[i] == SETTINGS.dictionaryName) {
         return static_cast<uint8_t>(i + 1);
       }
     }
@@ -559,6 +560,9 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
       StrId::STR_TOUCH_SLEEP, &CrossPointSettings::touchSleep,
       {StrId::STR_TOUCH_SLEEP_OFF, StrId::STR_TOUCH_SLEEP_15S, StrId::STR_TOUCH_SLEEP_30S, StrId::STR_TOUCH_SLEEP_1M},
       "touchSleep", StrId::STR_CAT_SYSTEM));
+  // X4 Pro only (hidden elsewhere below); the sleep path reads it, see HalPowerManager::setChargeWake().
+  emit(SettingInfo::Toggle(StrId::STR_WAKE_ON_USB_PLUG_IN, &CrossPointSettings::wakeOnUsbPlugIn, "wakeOnUsbPlugIn",
+                           StrId::STR_CAT_SYSTEM));
 
   // How this reader introduces itself during Nearby Position Sync. Left empty
   // it falls back to a generated "Lector-XXXX" from the MAC.
@@ -814,6 +818,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                     s.nameId == StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION ||
                                     s.nameId == StrId::STR_BACK_SHORT_TO_FILE_BROWSER;
                            }),
+            v.end());
+  }
+  if (!withAbsentHardware && !HalPowerManager::supportsChargeWake()) {
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) { return s.nameId == StrId::STR_WAKE_ON_USB_PLUG_IN; }),
             v.end());
   }
   if (!withAbsentHardware && !halClock.isAvailable()) {
