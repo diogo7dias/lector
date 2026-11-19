@@ -847,6 +847,46 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
         if (!entries.empty()) break;
       }
     }
+
+    // Elision (French l'homme, qu'il; Italian dell'arte): the layout keeps the apostrophe inside one
+    // word, so after the whole word and its stems miss, retry with the text after each short elided
+    // prefix, longest remainder first.
+    if (entries.empty()) {
+      const size_t n = cleaned.size();
+      size_t segmentStart = 0;
+      std::vector<std::string> variants;
+      for (size_t i = 0; i < n && entries.empty();) {
+        const auto c = static_cast<unsigned char>(cleaned[i]);
+        size_t apostropheBytes = 0;
+        if (c == '\'') {
+          apostropheBytes = 1;  // U+0027
+        } else if (c == 0xCA && i + 1 < n && static_cast<unsigned char>(cleaned[i + 1]) == 0xBC) {
+          apostropheBytes = 2;  // U+02BC modifier letter apostrophe
+        } else if (c == 0xE2 && i + 2 < n && static_cast<unsigned char>(cleaned[i + 1]) == 0x80 &&
+                   (static_cast<unsigned char>(cleaned[i + 2]) == 0x99 ||
+                    static_cast<unsigned char>(cleaned[i + 2]) == 0x98)) {
+          apostropheBytes = 3;  // U+2019 / U+2018
+        }
+        if (apostropheBytes == 0) {
+          i++;
+          continue;
+        }
+        // Elided prefixes are short (l, qu, jusqu, puisqu); "dog's" keeps its stem path.
+        const bool shortPrefix = i > segmentStart && i - segmentStart <= 7;
+        const size_t suffixStart = i + apostropheBytes;
+        segmentStart = suffixStart;
+        i = suffixStart;
+        if (!shortPrefix || n - suffixStart < 2) continue;
+        const std::string suffix = cleaned.substr(suffixStart);
+        searchFailed = !locateAll(session, suffix.c_str(), entries) || searchFailed;
+        if (!entries.empty()) break;
+        stemVariants(suffix, variants);
+        for (const auto& variant : variants) {
+          searchFailed = !locateAll(session, variant.c_str(), entries) || searchFailed;
+          if (!entries.empty()) break;
+        }
+      }
+    }
   }
   if (entries.empty()) {
     // A search that never reached a verdict (couldn't open or seek .idx) is a
