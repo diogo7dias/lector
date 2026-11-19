@@ -27,7 +27,27 @@ class FontDecompressor {
   // Returns the number of glyphs that couldn't be loaded (0 on full success).
   int prewarmCache(const EpdFontData* fontData, const char* utf8Text);
 
+  // Counters since the last resetStats()/logStats(), for diagnosing a page's decompression cost.
+  // getBitmapTimeUs is only recorded in builds that log (LOG_LEVEL 2); the rest always counts.
+  struct Stats {
+    uint32_t cacheHits = 0;
+    uint32_t cacheMisses = 0;
+    uint32_t decompressTimeMs = 0;
+    uint16_t uniqueGroupsAccessed = 0;
+    uint32_t pageBufferBytes = 0;  // page buffer allocations
+    uint32_t pageGlyphsBytes = 0;  // page lookup table allocations
+    uint32_t hotGroupBytes = 0;    // current hot group allocation
+    uint32_t peakTempBytes = 0;    // largest temp buffer in prewarm
+    uint32_t getBitmapTimeUs = 0;  // cumulative getBitmap time
+    uint32_t getBitmapCalls = 0;   // number of getBitmap calls on compressed fonts
+  };
+  // Logs the counters at debug level, then clears them.
+  void logStats(const char* label = "FDC");
+  void resetStats();
+  const Stats& getStats() const { return stats; }
+
  private:
+  Stats stats;
   InflateReader inflateReader;
 
   // Page buffer slots: each style gets its own flat glyph buffer with sorted lookup.
@@ -48,7 +68,7 @@ class FontDecompressor {
 
   // Hot group: last decompressed group (byte-aligned) for non-prewarmed fallback path.
   // Kept in byte-aligned format; individual glyphs are compacted on demand into hotGlyphBuf.
-  // Nothrow high-water malloc buffers, NOT std::vector: getBitmap() runs on the render path,
+  // Nothrow high-water buffers, NOT std::vector: getBitmap() runs on the render path,
   // and under -fno-exceptions a vector resize that hits OOM abort()s the firmware instead of
   // failing (field crash: hotGroup.resize() -> std::bad_alloc -> abort with ~11 KB free).
   // ensureCapacity() returns false on OOM so the caller can skip the glyph gracefully.
@@ -63,7 +83,11 @@ class FontDecompressor {
   uint32_t hotGlyphBufCapacity = 0;
 
   // Grow (never shrink) an owned buffer to at least `needed` bytes; false on OOM, buffer freed.
-  static bool ensureCapacity(uint8_t*& buf, uint32_t& capacity, uint32_t needed);
+  // `inPsram` buffers come from fontMalloc (PSRAM when the board has it), the rest from malloc.
+  static bool ensureCapacity(uint8_t*& buf, uint32_t& capacity, uint32_t needed, bool inPsram);
+
+  // getBitmap() body for compressed fonts, split out so the call can be counted and timed once.
+  const uint8_t* lookupBitmap(const EpdFontData* fontData, const EpdGlyph* glyph, uint32_t glyphIndex);
 
   void freePageBuffer();
   void freeHotGroup();
