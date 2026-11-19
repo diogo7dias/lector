@@ -129,3 +129,17 @@ TEST(RequestHeadersTest, InvalidHeadersAreLeftOut) {
 }
 
 TEST(RequestHeadersTest, NoCredentialsMeansNoHeaders) { EXPECT_TRUE(request_headers::build({}, "").empty()); }
+
+TEST(HttpHeaderEdit, EmptyValueUnderTheSavedNameKeepsTheSavedValue) {
+  const HttpHeader saved{"CF-Access-Client-Secret", "s3cret"};
+  HttpHeader header;
+  parseHttpHeaderEdit("cf-access-client-secret: ", saved, header);
+  EXPECT_EQ(header.value, "s3cret");
+  parseHttpHeaderEdit("CF-Access-Client-Secret: new", saved, header);
+  EXPECT_EQ(header.value, "new");
+  parseHttpHeaderEdit("Other-Name:", saved, header);  // a renamed header does not inherit the secret
+  EXPECT_EQ(header.value, "");
+  parseHttpHeaderEdit("", saved, header);  // an empty line clears the slot
+  EXPECT_TRUE(header.name.empty());
+  EXPECT_TRUE(header.value.empty());
+}

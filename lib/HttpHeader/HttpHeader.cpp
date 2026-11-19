@@ -36,6 +36,15 @@ void parseHttpHeaderLine(const std::string_view line, HttpHeader& header) {
   }
 }
 
+void parseHttpHeaderEdit(const std::string_view line, const HttpHeader& saved, HttpHeader& header) {
+  const std::string keptValue = saved.value;  // `header` may be `saved`
+  const std::string savedName = saved.name;
+  parseHttpHeaderLine(line, header);
+  if (header.value.empty() && !header.name.empty() && isHttpHeaderNamed(header.name, savedName)) {
+    header.value = keptValue;
+  }
+}
+
 std::string formatHttpHeaderLine(const HttpHeader& header, const bool maskValue) {
   if (header.name.empty()) return "";
   if (header.value.empty()) return header.name;
