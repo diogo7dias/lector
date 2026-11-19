@@ -43,7 +43,7 @@ test('the Clear Reading Cache warning left idle drops to low power', async ({ ap
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
   await press('Down', 3); // System
   await press('Confirm');
-  await press('Down', 14); // Clear Reading Cache
+  await press('Down', 16); // Clear Reading Cache, after Time Zone and Daylight Saving
   await press('Confirm');
   await expect(activity).toHaveText('ClearCache', { timeout: 30_000 });
 
