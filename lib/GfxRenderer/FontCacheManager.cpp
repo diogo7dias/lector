@@ -54,6 +54,14 @@ void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t st
   }
 }
 
+void FontCacheManager::logStats(const char* label) {
+  if (fontDecompressor_) fontDecompressor_->logStats(label);
+}
+
+void FontCacheManager::resetStats() {
+  if (fontDecompressor_) fontDecompressor_->resetStats();
+}
+
 bool FontCacheManager::isScanning() const { return scanMode_ == ScanMode::Scanning; }
 
 uint8_t FontCacheManager::resolveScanStyle(int fontId, EpdFontFamily::Style style) const {
@@ -174,6 +182,7 @@ void FontCacheManager::PrewarmScope::finishScan(const bool sdFontsOnly) {
 FontCacheManager::PrewarmScope::~PrewarmScope() {
   if (active_) {
     endScanAndPrewarm();  // no-op if already called
+    manager_->logStats();
     manager_->clearCache();
   }
 }

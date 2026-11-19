@@ -8,3 +8,6 @@
 	# The X4 Pro line: lector/x4pro-sdk-merged, the fork's X4 Pro work with Free-Ink
 	# main merged in (UC8179 driver, UC8279 grayscale plane inversion fix).
 	branch = lector/x4pro-sdk-merged
+	# scripts/patch_decoders.py applies scripts/stb_truetype_patches to this work tree at build
+	# time (the TTF rasterizer reads untrusted fonts); that is not a change to commit here.
+	ignore = dirty

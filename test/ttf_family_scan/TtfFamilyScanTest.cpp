@@ -1,9 +1,11 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <cstring>
 #include <string>
 #include <vector>
 
+#include "EpdFontFamily.h"
 #include "TtfFamilyScan.h"
 
 using namespace ttfscan;
@@ -177,6 +179,18 @@ TEST(TtfSizes, ClampAndEmPixels) {
   EXPECT_EQ(ttfEmPixels(40), 83);
 }
 
+// The family carries its point size as pixels at FONT_RASTER_DPI; the TTF loader sizes its em from
+// the same constant, so a face and the family that holds it agree to within the loader's rounding.
+TEST(TtfSizes, FamilyKnowsItsSizeInPixels) {
+  EXPECT_EQ(FONT_RASTER_DPI, 150);
+  for (uint8_t pt = TTF_MIN_PT; pt <= TTF_MAX_PT; ++pt) {
+    const EpdFontFamily family(pt, nullptr);
+    EXPECT_NEAR(family.getSizeInPixels(), pt * 150.0f / 72.0f, 1e-4f);
+    EXPECT_LE(std::fabs(family.getSizeInPixels() - ttfEmPixels(pt)), 0.5f) << "pt " << int(pt);
+  }
+  EXPECT_FLOAT_EQ(EpdFontFamily(0, nullptr).getSizeInPixels(), 0.0f);
+}
+
 // --- cache fingerprint (font id) -------------------------------------------------------
 
 TEST(TtfFontId, FamilySizeAndContentAllChangeTheId) {
@@ -318,4 +332,162 @@ TEST(TtfPack2Bit, RowsPackBackToBackWithoutPadding) {
   EXPECT_EQ(memcmp(out, out2, 3), 0);
   EXPECT_EQ(packed2BitBytes(3, 3), 3u);
   EXPECT_EQ(packed2BitBytes(0, 0), 0u);
+}
+
+// --- whole-face check (checkTtfFace) ------------------------------------------------------
+
+namespace {
+struct FaceSpec {
+  uint32_t sfnt = 0x00010000u;
+  uint16_t upem = 1000;
+  int16_t asc = 800, desc = -200, gap = 0;
+  uint16_t numGlyphs = 4;
+  uint16_t longMetrics = 2;
+  uint16_t locaFormat = 0;
+  const char* drop = nullptr;  // table tag to leave out
+  bool cff = false;            // CFF outlines (OTTO) instead of glyf/loca
+};
+
+// A directory and the tables checkTtfFace reads, each sized exactly as the face needs.
+std::vector<uint8_t> makeWholeFace(const FaceSpec& f) {
+  struct T {
+    const char* tag;
+    size_t len;
+  };
+  std::vector<T> tables = {
+      {"head", 54},
+      {"hhea", 36},
+      {"maxp", 6},
+      {"cmap", 4},
+      {"hmtx", f.longMetrics * 4u + (f.numGlyphs > f.longMetrics ? (f.numGlyphs - f.longMetrics) * 2u : 0u)}};
+  if (f.cff) {
+    tables.push_back({"CFF ", 8});
+  } else {
+    tables.push_back({"loca", (f.numGlyphs + 1u) * (f.locaFormat == 0 ? 2u : 4u)});
+    tables.push_back({"glyf", 16});
+  }
+  std::vector<T> kept;
+  for (const T& t : tables)
+    if (f.drop == nullptr || strcmp(f.drop, t.tag) != 0) kept.push_back(t);
+
+  size_t at = 12 + 16 * kept.size();
+  std::vector<uint8_t> v(at, 0);
+  put32(v, 0, f.sfnt);
+  put16(v, 4, static_cast<uint16_t>(kept.size()));
+  std::vector<size_t> offs;
+  for (size_t i = 0; i < kept.size(); ++i) {
+    memcpy(&v[12 + 16 * i], kept[i].tag, 4);
+    put32(v, 12 + 16 * i + 8, static_cast<uint32_t>(at));
+    put32(v, 12 + 16 * i + 12, static_cast<uint32_t>(kept[i].len));
+    offs.push_back(at);
+    at += kept[i].len;
+  }
+  v.resize(at, 0);
+  for (size_t i = 0; i < kept.size(); ++i) {
+    const size_t o = offs[i];
+    if (!strcmp(kept[i].tag, "head")) {
+      put16(v, o + 18, f.upem);
+      put16(v, o + 50, f.locaFormat);
+    } else if (!strcmp(kept[i].tag, "hhea")) {
+      put16(v, o + 4, static_cast<uint16_t>(f.asc));
+      put16(v, o + 6, static_cast<uint16_t>(f.desc));
+      put16(v, o + 8, static_cast<uint16_t>(f.gap));
+      put16(v, o + 34, f.longMetrics);
+    } else if (!strcmp(kept[i].tag, "maxp")) {
+      put16(v, o + 4, f.numGlyphs);
+    }
+  }
+  return v;
+}
+
+TtfReject check(const std::vector<uint8_t>& v) {
+  TtfMetrics m;
+  return checkTtfFace(v.data(), v.size(), m);
+}
+}  // namespace
+
+TEST(TtfFaceCheck, AcceptsAWholeFace) {
+  TtfMetrics m;
+  const auto v = makeWholeFace({});
+  EXPECT_EQ(checkTtfFace(v.data(), v.size(), m), TtfReject::None);
+  EXPECT_EQ(m.unitsPerEm, 1000);
+  FaceSpec otf;
+  otf.sfnt = 0x4F54544Fu;
+  otf.cff = true;
+  EXPECT_EQ(check(makeWholeFace(otf)), TtfReject::None);
+  FaceSpec longLoca;
+  longLoca.locaFormat = 1;
+  EXPECT_EQ(check(makeWholeFace(longLoca)), TtfReject::None);
+}
+
+TEST(TtfFaceCheck, AFileCutShortIsTruncated) {
+  const auto v = makeWholeFace({});
+  for (const size_t cut : {size_t{13}, size_t{40}, v.size() / 2, v.size() - 1}) {
+    const std::vector<uint8_t> shorter(v.begin(), v.begin() + static_cast<long>(cut));
+    EXPECT_EQ(check(shorter), TtfReject::Truncated) << "cut at " << cut;
+  }
+  EXPECT_EQ(check(std::vector<uint8_t>(5, 0)), TtfReject::NotSfnt);
+}
+
+TEST(TtfFaceCheck, EveryTableMustLieInsideTheFile) {
+  auto v = makeWholeFace({});
+  put32(v, 12 + 8, 0x7FFFFFF0u);  // first table starts far past the end
+  EXPECT_EQ(check(v), TtfReject::Truncated);
+  auto wrap = makeWholeFace({});
+  put32(wrap, 12 + 8, 20);
+  put32(wrap, 12 + 12, 0xFFFFFFF0u);  // offset + length would wrap a 32-bit sum
+  EXPECT_EQ(check(wrap), TtfReject::Truncated);
+}
+
+TEST(TtfFaceCheck, RequiredTablesMustBePresent) {
+  for (const char* tag : {"head", "hhea", "maxp", "cmap", "hmtx", "loca", "glyf"}) {
+    FaceSpec s;
+    s.drop = tag;
+    EXPECT_EQ(check(makeWholeFace(s)), TtfReject::MissingTable) << tag;
+  }
+  FaceSpec noCff;
+  noCff.sfnt = 0x4F54544Fu;
+  noCff.cff = true;
+  noCff.drop = "CFF ";
+  EXPECT_EQ(check(makeWholeFace(noCff)), TtfReject::MissingTable);
+}
+
+TEST(TtfFaceCheck, GlyphCountMustFitTheTables) {
+  FaceSpec manyGlyphs;
+  manyGlyphs.numGlyphs = 4;
+  auto v = makeWholeFace(manyGlyphs);
+  // maxp now claims 5000 glyphs, but hmtx and loca were sized for 4.
+  const size_t maxpAt = 12 + 16 * 7 + 54 + 36;
+  put16(v, maxpAt + 4, 5000);
+  EXPECT_EQ(check(v), TtfReject::Truncated);
+  FaceSpec none;
+  none.numGlyphs = 0;
+  none.longMetrics = 0;
+  EXPECT_EQ(check(makeWholeFace(none)), TtfReject::BadMetrics);
+}
+
+TEST(TtfFaceCheck, ImplausibleMetricsAreRefused) {
+  FaceSpec s;
+  s.upem = 8;
+  EXPECT_EQ(check(makeWholeFace(s)), TtfReject::BadMetrics);
+  s = {};
+  s.upem = 20000;
+  EXPECT_EQ(check(makeWholeFace(s)), TtfReject::BadMetrics);
+  s = {};
+  s.asc = -200;
+  s.desc = 800;
+  EXPECT_EQ(check(makeWholeFace(s)), TtfReject::BadMetrics);
+  s = {};
+  s.asc = 30000;  // a 31-em line: would be rasterised at hundreds of pixels
+  s.desc = -1000;
+  EXPECT_EQ(check(makeWholeFace(s)), TtfReject::BadMetrics);
+  s = {};
+  s.gap = -50;
+  EXPECT_EQ(check(makeWholeFace(s)), TtfReject::BadMetrics);
+  s = {};
+  s.longMetrics = 9;  // more long metrics than glyphs
+  EXPECT_EQ(check(makeWholeFace(s)), TtfReject::BadMetrics);
+  s = {};
+  s.locaFormat = 2;
+  EXPECT_EQ(check(makeWholeFace(s)), TtfReject::BadMetrics);
 }

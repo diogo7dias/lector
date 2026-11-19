@@ -71,7 +71,7 @@ def make_flash(path, board="x4pro"):
     return path
 
 
-def make_sd(path, books=SD_BOOKS, size_mb=256):
+def make_sd(path, books=SD_BOOKS, size_mb=256, fixtures=None):
     """A fresh card like a shop-bought one: an MBR with one FAT32 partition holding `books`.
 
     The X4 Pro mounts partition 1 only; a bare superfloppy fails there."""
@@ -85,6 +85,10 @@ def make_sd(path, books=SD_BOOKS, size_mb=256):
                    check=True, stdout=subprocess.DEVNULL, env=env)
     if books:
         subprocess.run(["mcopy", "-i", f"{path}@@1M", *books, "::/"], check=True)
+    # fixtures: a host folder copied onto the card root the same way (.fonts/ for the X4 Pro's TTF reader).
+    if fixtures:
+        entries = [os.path.join(fixtures, name) for name in sorted(os.listdir(fixtures))]
+        subprocess.run(["mcopy", "-s", "-i", f"{path}@@1M", *entries, "::/"], check=True)
     # LECTOR_SD_EXTRA: a host folder whose contents go onto the card root as they are
     # (wallpapers in sleep/, a settings.json under .crosspoint/), for a run that needs them.
     extra = os.environ.get("LECTOR_SD_EXTRA")

@@ -1,5 +1,5 @@
 """
-PlatformIO pre-build script: apply the image decoder patches via `git apply`.
+PlatformIO pre-build script: apply the image decoder and TTF rasterizer patches via `git apply`.
 
 The upstream JPEGDEC pin still has progressive grayscale bugs in
 JPEGDecodeMCU_P, including unsafe MCU_SKIP writes and attempts to consume
@@ -13,6 +13,11 @@ Each patch's idempotency is decided by git itself:
   * `git apply --check --reverse` succeeds  -> already applied, skip
   * `git apply --check`            succeeds  -> apply
   * neither succeeds                          -> abort the build
+
+The SD card TTF/OTF rasterizer is stb_truetype, compiled from the freeink-sdk submodule. Its first
+lines say not to use it on untrusted fonts, and test/fuzz/ttf crashed it, so
+`scripts/stb_truetype_patches/` bound its reads; they apply to the submodule's own work tree, which
+.gitmodules marks `ignore = dirty` so the build does not show up as a modified submodule.
 
 Patches live in `scripts/<lib>_patches/` as one-commit-per-fix files
 (see the file headers for context). Applied in lexical order.
@@ -32,7 +37,23 @@ LIBRARIES = {
 }
 
 
+# Source trees that are not libdeps: folder under the project -> patch folder under scripts/
+SOURCE_TREES = {
+    "freeink-sdk": "stb_truetype_patches",
+}
+
+
 def patch_decoders(env):
+    for tree, patch_folder in SOURCE_TREES.items():
+        tree_dir = os.path.join(env["PROJECT_DIR"], tree)
+        if not os.path.isdir(os.path.join(tree_dir, ".git")) and not os.path.isfile(
+            os.path.join(tree_dir, ".git")
+        ):
+            sys.stderr.write("ERROR: %s is not a git checkout; run git submodule update --init\n" % tree_dir)
+            raise SystemExit(1)
+        for patch in _patch_files(os.path.join(env["PROJECT_DIR"], "scripts", patch_folder)):
+            _apply_one(tree, tree_dir, patch)
+
     libdeps_dir = os.path.join(env["PROJECT_DIR"], ".pio", "libdeps")
     if not os.path.isdir(libdeps_dir):
         return

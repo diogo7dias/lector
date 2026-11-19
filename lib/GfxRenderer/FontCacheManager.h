@@ -22,6 +22,11 @@ class FontCacheManager {
   void releaseSdFontCaches();
   void prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F);
 
+  // Debug-level dump of the glyph decompressor's counters, then reset them. Logged when a prewarm
+  // scope ends, so a LOG_LEVEL 2 build shows each page's decompression cost.
+  void logStats(const char* label = "render");
+  void resetStats();
+
   // Scan-mode API: called by GfxRenderer::drawText() during scan pass
   bool isScanning() const;
   void recordText(const char* text, int fontId, EpdFontFamily::Style style);

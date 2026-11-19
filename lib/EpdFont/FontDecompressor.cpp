@@ -4,9 +4,18 @@
 #include <Logging.h>
 #include <Utf8.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <memory>
 #include <new>
+
+#include "FontAlloc.h"
+
+namespace {
+// getBitmap runs once per drawn glyph: time it only in builds that can log the result.
+constexpr bool kTimeGetBitmap = LOG_LEVEL >= 2;
+inline uint32_t statsNowUs() { return kTimeGetBitmap ? micros() : 0; }
+}  // namespace
 
 FontDecompressor::~FontDecompressor() { deinit(); }
 
@@ -24,7 +33,7 @@ void FontDecompressor::clearCache() {
 
 void FontDecompressor::freePageBuffer() {
   for (uint8_t s = 0; s < pageSlotCount; s++) {
-    free(pageSlots[s].buffer);
+    fontFree(pageSlots[s].buffer);
     free(pageSlots[s].glyphs);
     pageSlots[s] = {};
   }
@@ -32,7 +41,7 @@ void FontDecompressor::freePageBuffer() {
 }
 
 void FontDecompressor::freeHotGroup() {
-  free(hotGroup);
+  fontFree(hotGroup);
   hotGroup = nullptr;
   hotGroupCapacity = 0;
   hotGroupFont = nullptr;
@@ -42,12 +51,17 @@ void FontDecompressor::freeHotGroup() {
   hotGlyphBufCapacity = 0;
 }
 
-bool FontDecompressor::ensureCapacity(uint8_t*& buf, uint32_t& capacity, uint32_t needed) {
+bool FontDecompressor::ensureCapacity(uint8_t*& buf, uint32_t& capacity, uint32_t needed, const bool inPsram) {
   if (capacity >= needed) return true;
   // Grow-only, free-then-malloc: every caller fully rewrites the buffer after a grow, so the
   // old contents are dead -- freeing first gives the allocator its best shot on a tight heap.
-  free(buf);
-  buf = static_cast<uint8_t*>(malloc(needed));  // owned by FontDecompressor, freed in freeHotGroup()
+  if (inPsram) {
+    fontFree(buf);
+  } else {
+    free(buf);
+  }
+  // owned by FontDecompressor, freed in freeHotGroup()
+  buf = static_cast<uint8_t*>(inPsram ? fontMalloc(needed) : malloc(needed));
   capacity = buf ? needed : 0;
   return buf != nullptr;
 }
@@ -72,9 +86,12 @@ bool FontDecompressor::decompressGroup(const EpdFontData* fontData, uint16_t gro
                                        uint32_t outSize) {
   const EpdFontGroup& group = fontData->groups[groupIndex];
 
+  const uint32_t startMs = millis();
   inflateReader.init(false);
   inflateReader.setSource(&fontData->bitmap[group.compressedOffset], group.compressedSize);
-  if (!inflateReader.read(outBuf, outSize)) {
+  const bool ok = inflateReader.read(outBuf, outSize);
+  stats.decompressTimeMs += millis() - startMs;
+  if (!ok) {
     LOG_ERR("FDC", "Decompression failed for group %u", groupIndex);
     return false;
   }
@@ -140,7 +157,14 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
   if (!fontData->groups || fontData->groupCount == 0) {
     return &fontData->bitmap[glyph->dataOffset];
   }
+  const uint32_t startUs = statsNowUs();
+  stats.getBitmapCalls++;
+  const uint8_t* bitmap = lookupBitmap(fontData, glyph, glyphIndex);
+  if constexpr (kTimeGetBitmap) stats.getBitmapTimeUs += micros() - startUs;
+  return bitmap;
+}
 
+const uint8_t* FontDecompressor::lookupBitmap(const EpdFontData* fontData, const EpdGlyph* glyph, uint32_t glyphIndex) {
   // Check page buffer slots (populated by prewarmCache — one slot per font style)
   for (uint8_t s = 0; s < pageSlotCount; s++) {
     const auto& slot = pageSlots[s];
@@ -151,6 +175,7 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
       int mid = left + (right - left) / 2;
       if (slot.glyphs[mid].glyphIndex == glyphIndex) {
         if (slot.glyphs[mid].bufferOffset != UINT32_MAX) {
+          stats.cacheHits++;
           return &slot.buffer[slot.glyphs[mid].bufferOffset];
         }
         break;  // Not extracted during prewarm; fall through to hot-group path
@@ -171,13 +196,16 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
   }
 
   // Check if hot group already has this group decompressed — if not, decompress it
-  if (!(hotGroup != nullptr && hotGroupFont == fontData && hotGroupIndex == groupIndex)) {
+  if (hotGroup != nullptr && hotGroupFont == fontData && hotGroupIndex == groupIndex) {
+    stats.cacheHits++;
+  } else {
     const EpdFontGroup& group = fontData->groups[groupIndex];
+    stats.cacheMisses++;
 
     // ensureCapacity may free the buffer, so the cached-group identity dies with it either way.
     hotGroupFont = nullptr;
     hotGroupIndex = UINT16_MAX;
-    if (!ensureCapacity(hotGroup, hotGroupCapacity, group.uncompressedSize)) {
+    if (!ensureCapacity(hotGroup, hotGroupCapacity, group.uncompressedSize, true)) {
       LOG_ERR("FDC", "Failed to allocate %u bytes for hot group %u", group.uncompressedSize, groupIndex);
       return nullptr;
     }
@@ -188,10 +216,11 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
 
     hotGroupFont = fontData;
     hotGroupIndex = groupIndex;
+    stats.hotGroupBytes = group.uncompressedSize;
   }
 
   // Compact just the requested glyph from byte-aligned data into scratch buffer
-  if (!ensureCapacity(hotGlyphBuf, hotGlyphBufCapacity, glyph->dataLength)) {
+  if (!ensureCapacity(hotGlyphBuf, hotGlyphBufCapacity, glyph->dataLength, false)) {
     LOG_ERR("FDC", "Failed to allocate %u bytes for glyph scratch", (unsigned)glyph->dataLength);
     return nullptr;
   }
@@ -292,11 +321,11 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
   }
 
   // Step 3: Allocate page buffer and lookup table for this slot
-  slot.buffer = static_cast<uint8_t*>(malloc(totalBytes));
+  slot.buffer = static_cast<uint8_t*>(fontMalloc(totalBytes));
   slot.glyphs = static_cast<PageGlyphEntry*>(malloc(glyphCount * sizeof(PageGlyphEntry)));
   if (!slot.buffer || !slot.glyphs) {
     LOG_ERR("FDC", "Failed to allocate page buffer (%u bytes, %u glyphs)", totalBytes, glyphCount);
-    free(slot.buffer);
+    fontFree(slot.buffer);
     free(slot.glyphs);
     slot = {};
     return glyphCount;
@@ -305,6 +334,9 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
   slot.fontData = fontData;
   slot.glyphCount = glyphCount;
   pageSlotCount++;
+  stats.uniqueGroupsAccessed += groupCount;
+  stats.pageBufferBytes += totalBytes;
+  stats.pageGlyphsBytes += glyphCount * sizeof(PageGlyphEntry);
 
   // Initialize lookup entries (bufferOffset = UINT32_MAX means not yet extracted)
   for (uint16_t i = 0; i < glyphCount; i++) {
@@ -400,15 +432,16 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
     uint16_t groupIdx = neededGroups[g];
     const EpdFontGroup& group = fontData->groups[groupIdx];
 
-    auto* tempBuf = static_cast<uint8_t*>(malloc(group.uncompressedSize));
+    auto* tempBuf = static_cast<uint8_t*>(fontMalloc(group.uncompressedSize));
     if (!tempBuf) {
       LOG_ERR("FDC", "Failed to allocate temp buffer (%u bytes) for group %u", group.uncompressedSize, groupIdx);
       missed++;
       continue;
     }
 
+    stats.peakTempBytes = std::max<uint32_t>(stats.peakTempBytes, group.uncompressedSize);
     if (!decompressGroup(fontData, groupIdx, tempBuf, group.uncompressedSize)) {
-      free(tempBuf);
+      fontFree(tempBuf);
       missed++;
       continue;
     }
@@ -425,11 +458,32 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
       writeOffset += glyph.dataLength;
     }
 
-    free(tempBuf);
+    fontFree(tempBuf);
   }
 
   LOG_DBG("FDC", "Prewarm: %u glyphs in %u bytes from %u groups (%d missed)", glyphCount, writeOffset, groupCount,
           missed);
 
   return missed;
+}
+
+// --- Stats ---
+
+void FontDecompressor::resetStats() { stats = Stats{}; }
+
+void FontDecompressor::logStats(const char* label) {
+  const uint32_t total = stats.cacheHits + stats.cacheMisses;
+  LOG_DBG("FDC", "[%s] hits=%lu misses=%lu (%.1f%% hit rate)", label, static_cast<unsigned long>(stats.cacheHits),
+          static_cast<unsigned long>(stats.cacheMisses), total > 0 ? 100.0f * stats.cacheHits / total : 0.0f);
+  LOG_DBG("FDC", "[%s] decompress=%lums groups_accessed=%u", label, static_cast<unsigned long>(stats.decompressTimeMs),
+          stats.uniqueGroupsAccessed);
+  LOG_DBG("FDC", "[%s] mem: pageBuf=%lu pageGlyphs=%lu hotGroup=%lu peakTemp=%lu", label,
+          static_cast<unsigned long>(stats.pageBufferBytes), static_cast<unsigned long>(stats.pageGlyphsBytes),
+          static_cast<unsigned long>(stats.hotGroupBytes), static_cast<unsigned long>(stats.peakTempBytes));
+  if (stats.getBitmapCalls > 0) {
+    LOG_DBG("FDC", "[%s] getBitmap: %lu calls, %luus total, %luus/call avg", label,
+            static_cast<unsigned long>(stats.getBitmapCalls), static_cast<unsigned long>(stats.getBitmapTimeUs),
+            static_cast<unsigned long>(stats.getBitmapTimeUs / stats.getBitmapCalls));
+  }
+  resetStats();
 }

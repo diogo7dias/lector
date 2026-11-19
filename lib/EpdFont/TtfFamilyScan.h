@@ -9,6 +9,7 @@
 // up to four faces (regular / bold / italic / bold-italic) inferred from the
 // file names.
 
+#include <EpdFontData.h>  // FONT_RASTER_DPI
 #include <Fnv1a.h>
 
 #include <cctype>
@@ -38,11 +39,10 @@ inline uint8_t clampTtfPointSize(const uint8_t pt) {
   return pt;
 }
 
-// Point size to em pixels. 150 DPI is what fontconvert.py bakes .cpfont files
-// at, so "14 pt" means the same glyph height for a TTF family as for a
-// bitmap one.
-constexpr int TTF_DPI = 150;
-inline uint16_t ttfEmPixels(const uint8_t pt) { return static_cast<uint16_t>((pt * TTF_DPI + 36) / 72); }
+// Point size to em pixels. FONT_RASTER_DPI (150) is what fontconvert.py bakes
+// .cpfont files at, so "14 pt" means the same glyph height for a TTF family as
+// for a bitmap one (and as EpdFontFamily::getSizeInPixels()).
+inline uint16_t ttfEmPixels(const uint8_t pt) { return static_cast<uint16_t>((pt * FONT_RASTER_DPI + 36) / 72); }
 
 // Per-face upper bound: the whole file lives in PSRAM while selected.
 constexpr uint32_t TTF_MAX_FACE_BYTES = 2u * 1024u * 1024u;
@@ -299,6 +299,95 @@ inline bool readTtfMetrics(const uint8_t* d, const size_t len, TtfMetrics& out) 
   out.descender = static_cast<int16_t>(be16(hhea + 6));
   out.lineGap = static_cast<int16_t>(be16(hhea + 8));
   return out.unitsPerEm >= 16 && out.ascender > out.descender;
+}
+
+// Why a face was refused, for the log line and the tests.
+enum class TtfReject : uint8_t { None, NotSfnt, Truncated, MissingTable, BadMetrics };
+
+inline const char* ttfRejectText(const TtfReject r) {
+  switch (r) {
+    case TtfReject::None:
+      return "ok";
+    case TtfReject::NotSfnt:
+      return "not a TrueType/OpenType file";
+    case TtfReject::Truncated:
+      return "file is cut short (a table runs past its end)";
+    case TtfReject::MissingTable:
+      return "a required table is missing";
+    case TtfReject::BadMetrics:
+      return "implausible font metrics";
+  }
+  return "?";
+}
+
+// The checks a face passes before the rasterizer sees it. stb_truetype trusts every offset in the
+// file, and the SD card and the font installer are untrusted input, so a face must be whole: every
+// table of the directory inside the file (which is what a truncated download breaks), the tables
+// the rasterizer reads present and big enough for the glyph count the font claims, and metrics a
+// real font could have. Anything past that (the outlines themselves) is bounded inside the
+// rasterizer by scripts/stb_truetype_patches.
+inline TtfReject checkTtfFace(const uint8_t* d, const size_t len, TtfMetrics& out) {
+  if (d == nullptr || len < 12) return TtfReject::NotSfnt;
+  size_t base = 0;
+  if (memcmp(d, "ttcf", 4) == 0) {
+    if (len < 16) return TtfReject::Truncated;
+    base = be32(d + 12);
+    if (base > len || len - base < 12) return TtfReject::Truncated;
+  }
+  const uint32_t tag = be32(d + base);
+  if (tag != 0x00010000u && tag != 0x74727565u && tag != 0x4F54544Fu) return TtfReject::NotSfnt;
+  const uint16_t numTables = be16(d + base + 4);
+  if (numTables == 0 || base + 12 + static_cast<size_t>(numTables) * 16 > len) return TtfReject::Truncated;
+
+  struct Table {
+    const uint8_t* p = nullptr;
+    uint32_t len = 0;
+  };
+  Table head, hhea, hmtx, maxp, cmap, loca, glyf, cff;
+  for (uint16_t i = 0; i < numTables; ++i) {
+    const uint8_t* rec = d + base + 12 + static_cast<size_t>(i) * 16;
+    const uint32_t off = be32(rec + 8);
+    const uint32_t tlen = be32(rec + 12);
+    if (off > len || tlen > len - off) return TtfReject::Truncated;
+    Table* t = memcmp(rec, "head", 4) == 0   ? &head
+               : memcmp(rec, "hhea", 4) == 0 ? &hhea
+               : memcmp(rec, "hmtx", 4) == 0 ? &hmtx
+               : memcmp(rec, "maxp", 4) == 0 ? &maxp
+               : memcmp(rec, "cmap", 4) == 0 ? &cmap
+               : memcmp(rec, "loca", 4) == 0 ? &loca
+               : memcmp(rec, "glyf", 4) == 0 ? &glyf
+               : memcmp(rec, "CFF ", 4) == 0 ? &cff
+                                             : nullptr;
+    if (t != nullptr) *t = {d + off, tlen};
+  }
+  if (head.len < 54 || hhea.len < 36 || maxp.len < 6 || cmap.len < 4 || hmtx.p == nullptr) {
+    return TtfReject::MissingTable;
+  }
+  const bool truetype = glyf.p != nullptr && loca.p != nullptr;
+  if (!truetype && cff.len < 4) return TtfReject::MissingTable;
+
+  out.unitsPerEm = be16(head.p + 18);
+  out.ascender = static_cast<int16_t>(be16(hhea.p + 4));
+  out.descender = static_cast<int16_t>(be16(hhea.p + 6));
+  out.lineGap = static_cast<int16_t>(be16(hhea.p + 8));
+  // A real face has an em of 16 to 16384 units and a line a bit over one em tall. The line height
+  // sets the pixel size the rasterizer is asked for, so a font claiming forty ems per line
+  // would have it draw glyphs hundreds of pixels tall.
+  if (out.unitsPerEm < 16 || out.unitsPerEm > 16384 || out.ascender <= out.descender) return TtfReject::BadMetrics;
+  const int32_t line = static_cast<int32_t>(out.ascender) - out.descender + out.lineGap;
+  if (out.lineGap < 0 || line > 4 * static_cast<int32_t>(out.unitsPerEm)) return TtfReject::BadMetrics;
+
+  // hmtx holds numberOfHMetrics 4-byte pairs, then a 2-byte bearing for each remaining glyph.
+  const uint32_t numGlyphs = be16(maxp.p + 4);
+  const uint32_t longMetrics = be16(hhea.p + 34);
+  if (numGlyphs == 0 || longMetrics == 0 || longMetrics > numGlyphs) return TtfReject::BadMetrics;
+  if (hmtx.len < longMetrics * 4u + (numGlyphs - longMetrics) * 2u) return TtfReject::Truncated;
+  if (truetype) {
+    const uint16_t locaFormat = be16(head.p + 50);
+    if (locaFormat > 1) return TtfReject::BadMetrics;
+    if (loca.len < (numGlyphs + 1) * (locaFormat == 0 ? 2u : 4u)) return TtfReject::Truncated;
+  }
+  return TtfReject::None;
 }
 
 // Pixel height TtfFont must be told so that the em measures `emPx` pixels:
