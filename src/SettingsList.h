@@ -225,6 +225,8 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 // below instead of inlining it into each caller.
 using SettingVisitor = void (*)(void* context, SettingInfo& info);
 
+static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone defaults to UTC");
+
 [[gnu::noinline]] inline void forEachBaseSetting(const SettingVisitor visit, void* const context) {
   const auto emit = [visit, context](auto&& info) { visit(context, info); };
   // Enum settings are persisted as numeric values. Assign these labels by enum

@@ -1636,14 +1636,11 @@ void CrossPointWebServer::handleGetSettings() const {
         } else if (s.valueGetter) {
           doc["value"] = static_cast<int>(s.valueGetter());
         }
+        // A table enum's 104 names do not fit this buffer or one JsonDocument on a small heap: they
+        // are sent after the row, a few at a time.
+        if (s.enumLabel) break;
         JsonArray options = doc["options"].to<JsonArray>();
-        if (s.enumLabel) {
-          char label[64];
-          for (uint8_t i = 0; i < s.enumCount; i++) {
-            s.enumLabel(i, label, sizeof(label));
-            options.add(std::string(label));
-          }
-        } else if (!s.enumStringValues.empty()) {
+        if (!s.enumStringValues.empty()) {
           for (const auto& opt : s.enumStringValues) {
             options.add(opt);
           }
@@ -1687,23 +1684,8 @@ void CrossPointWebServer::handleGetSettings() const {
         continue;
     }
 
-    // A row with a long option list (the time zones, about 3 KB) does not fit the stack buffer;
-    // it is written to the heap for the length of this send.
-    char* json = output;
-    size_t jsonSize = outputSize;
-    const size_t needed = measureJson(doc) + 1;
-    auto big = std::unique_ptr<char[]>();
-    if (needed > outputSize) {
-      big = makeUniqueNoThrow<char[]>(needed);
-      if (!big) {
-        LOG_ERR("WEB", "OOM: %u bytes for setting JSON %s", static_cast<unsigned>(needed), s.key);
-        continue;
-      }
-      json = big.get();
-      jsonSize = needed;
-    }
-    const size_t written = serializeJson(doc, json, jsonSize);
-    if (written >= jsonSize) {
+    const size_t written = serializeJson(doc, output, outputSize);
+    if (written >= outputSize) {
       LOG_DBG("WEB", "Skipping oversized setting JSON for: %s", s.key);
       continue;
     }
@@ -1713,7 +1695,27 @@ void CrossPointWebServer::handleGetSettings() const {
     } else {
       seenFirst = true;
     }
-    server->sendContent(json);
+    if (s.enumLabel) {
+      // The row without its closing brace, then "options":[...] in chunks that reuse `output`.
+      output[written - 1] = '\0';
+      server->sendContent(output);
+      server->sendContent(",\"options\":[");
+      size_t used = 0;
+      for (uint8_t i = 0; i < s.enumCount; i++) {
+        char label[64];
+        s.enumLabel(i, label, sizeof(label));
+        // The labels are the zone table's: no quote, backslash or control character in them.
+        used += snprintf(output + used, outputSize - used, "%s\"%s\"", i ? "," : "", label);
+        if (used + 80 > outputSize || i + 1 == s.enumCount) {
+          server->sendContent(output);
+          used = 0;
+          yield();
+        }
+      }
+      server->sendContent("]}");
+    } else {
+      server->sendContent(output);
+    }
     yield();                          // Yield to allow WiFi and other tasks to process during a slow send
     resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
   }

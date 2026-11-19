@@ -366,9 +366,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Off (the default) is the old behaviour: hiding the bar hides its progress bars too.
   uint8_t sbOffBar = SB_OFFBAR_OFF;
   // Clock time zone: an index into clock_zones::TABLE (lib/hal/ClockZones.h, CrossPoint's table
-  // in CrossPoint's order, append only). 255 = never chosen, which reads as UTC; loading a file
-  // that has no zone derives one from the UTC offset and city 0.58.0 stored (see migrateFromJson).
-  uint8_t clockTimezone = 255;
+  // in CrossPoint's order, append only). 17 is UTC, clock_zones::UTC_INDEX: SettingsList.h checks
+  // it. A file with no valid zone (CrossPoint writes 255 for "never chosen") takes one from the UTC
+  // offset and city 0.58.0 stored (see migrateFromJson).
+  uint8_t clockTimezone = 17;
   // Summer time: 0 follows the zone's own rule, 1 forces it on, 2 forces it off.
   uint8_t clockDst = 0;
   // Clock display format: 0 = 24-hour, 1 = 12-hour

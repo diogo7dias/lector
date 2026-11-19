@@ -272,7 +272,7 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
   // (clockTimeZone, 0 = use the offset); CrossPoint 1.x stored the offset alone. A file with no
   // valid clockTimezone takes the zone those two keys meant, so it keeps showing the same local
   // time, and the resave drops them.
-  if (clockTimezone >= clock_zones::COUNT) {
+  if ((doc["clockTimezone"] | (uint8_t)255) >= clock_zones::COUNT) {
     clockTimezone = clock_zones::fromLegacy(doc["clockTimeZone"] | (uint8_t)0, doc["clockUtcOffsetQ"] | (uint8_t)48);
     LOG_INF("CPS", "Time zone from the old keys: %s", clock_zones::TABLE[clockTimezone].name);
     needsResave = true;
