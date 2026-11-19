@@ -213,11 +213,13 @@ void SleepActivity::renderDefaultSleepScreen(const bool dark) const {
 }
 
 // None: an empty page. Drawn without any SD file, like Dark and Light.
-void SleepActivity::renderBlankSleepScreen() const {
-  renderer.clearScreen();
-  renderer.displayBuffer(
-      sleep_face::planFor(sleep_face::Face::PlainLector, /*sourceHasGrayscale=*/false, display.profile()).base);
-}
+//
+// The pre-clear in renderSleepScreen already ends on an all-white FULL (every board), which
+// IS this page, so a HALF of the same white on top was a second white flash for nothing.
+// The framebuffer is still cleared to match the panel. Wallpaper and cover faces keep their
+// scrub plus base: they paint different content, and the SDK's HALF base is not a verified
+// replacement for the scrub (SleepPreClear.h).
+void SleepActivity::renderBlankSleepScreen() const { renderer.clearScreen(); }
 
 void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Face face,
                                             SleepOverlay* const overlay) const {
