@@ -21,6 +21,11 @@
 #include "util/SortesSelection.h"
 
 void EpubReaderActivity::openReaderMenu() {
+  if (openToolbar()) return;
+  openReaderMenuList();
+}
+
+void EpubReaderActivity::openReaderMenuList() {
   // Child screens (chapter list, settings) release the section; until the next render
   // rebuilds it, the menu shows the cached position, the same one bookPercent() uses.
   const int currentPage = (section ? section->currentPage : nextPageNumber) + 1;
@@ -384,6 +389,13 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     case EpubReaderMenuActivity::MenuAction::DELETE_CACHE:
       deleteCacheAndGoHome();
+      break;
+    case EpubReaderMenuActivity::MenuAction::GO_HOME:
+      onGoHome();
+      break;
+    // Flipped in place by the menu itself, which stays open; never reach here.
+    case EpubReaderMenuActivity::MenuAction::NIGHT_MODE:
+    case EpubReaderMenuActivity::MenuAction::FRONTLIGHT:
       break;
   }
 }

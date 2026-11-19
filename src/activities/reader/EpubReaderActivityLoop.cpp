@@ -67,6 +67,11 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // The toolbar owns every button and touch while it is up, offered them before the latches
+  // for the same reason as the Quick Menu above: it acts on the press, and a press it ate
+  // must never be latched as the reader's own.
+  if (handleToolbarInput()) return;
+
   // Must run before any early return below, so a genuine press is never missed. See
   // ReaderUtils::ButtonPressLatch: the reader acts on release, child screens close on
   // press, and an unpaired release used to throw the user out of the book.

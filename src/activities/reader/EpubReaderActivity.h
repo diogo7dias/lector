@@ -124,8 +124,17 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   void removeFromRecents();
   void confirmDeleteBook();
   void deleteCacheAndGoHome();
-  // Opens the reader menu for the current position (short-press Confirm)
+  // Opens the reader menu for the current position (short-press Confirm): the toolbar when
+  // Reader Menu Style says so and a page is up, else the tabbed list.
   void openReaderMenu();
+  void openReaderMenuList();
+  // The toolbar sheet (EpubReaderActivityToolbar.cpp).
+  bool openToolbar();
+  void closeToolbar(bool repaint);
+  bool handleToolbarInput();
+  void paintToolbar();
+  void runToolbarTool(int tool);
+  void toolbarGotoSpine(int spine);
   // Reading margins plus status bar bands: where render() puts the page.
   // spine: whose chapter title sizes the status bar band (default: the open chapter).
   void pageMargins(int& top, int& right, int& bottom, int& left, int spine = -1);

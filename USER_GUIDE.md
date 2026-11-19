@@ -436,6 +436,10 @@ screen has a wallpaper to act on; on nights it has none, the menu opens on **Nav
 - **Customise Status Bar** — everything the bar can show and where. Changes here become your
   default bar, so every book opens with it.
 - **Orientation** — rotate the screen.
+- **Night mode** — flip the page to white on black and back. The same switch as the **Night
+  mode** setting; the menu itself stays light.
+- **Frontlight** — turn the light on or off, without leaving the book. Shown only on a reader with a
+  frontlight. For brightness and warmth, swipe down from the top edge.
 
 ### Sleep Screen
 
@@ -455,8 +459,26 @@ This tab appears only when the last sleep screen was a wallpaper that is still o
 - **Nearby Sync** — take a position from another Lector nearby.
 - **Send to Nearby Reader** — send this file to another Lector nearby.
 - **Delete Book Cache** — clear this book's layout cache; it is rebuilt on the next open.
+- **Go Home** — leave the book for Home. Your place is kept.
 
 Press **Back** to close the menu.
+
+### Toolbar style
+
+**Settings > Reader > Reader Menu Style** swaps the list for a toolbar: a sheet over the bottom of
+the page, with the page above it left as it is. The same press, tap or bound action opens it. It applies to
+EPUB books.
+It holds:
+
+- A **scrub row**: drag along the track, or tap it, to jump through the book by chapter; the
+  arrow buttons at each end step one chapter. The line under it names the chapter and gives the
+  page and the percent.
+- Three tiles: **Contents** (the chapter list), **Text** (this book's text settings) and **More**
+  (the tabbed menu above).
+
+Tap a tile to open it, or tap the page above the sheet to close it. On a reader with buttons,
+**Left** and **Right** move between the tiles, **Confirm** opens the marked one, **Up** and
+**Down** step a chapter, and **Back** closes. **Menu Hold** does nothing while the toolbar is up.
 
 ---
 
@@ -1174,6 +1196,8 @@ is centred.
   heavier paperback ink: **ON** adds one pixel, **BOLDER** a second pixel to vertical strokes.
   The in-book menu row cycles OFF, ON, BOLDER.
 - **Night mode** — inverts the screen.
+- **Reader Menu Style** — **List** (the tabbed menu, the default) or **Toolbar**, see
+  [section 6](#6-the-in-book-menu).
 - **Customise Status Bar** — see below.
 
 **Library**

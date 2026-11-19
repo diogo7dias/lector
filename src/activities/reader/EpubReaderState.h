@@ -16,6 +16,7 @@
 #include "ReaderPrefs.h"
 #include "ReaderProgressSaveDebouncer.h"
 #include "ReaderReturnHistory.h"
+#include "ReaderToolbarUi.h"
 #include "ReaderUtils.h"
 #include "components/OptionPopup.h"
 #include "components/StatusBar.h"
@@ -205,6 +206,14 @@ struct EpubReaderState {
   // index, and the row order depends on which items are ticked, so the mapping cannot be
   // recomputed from the settings mask alone at callback time.
   std::vector<uint8_t> quickMenuFunctions;
+
+  // The toolbar sheet (Reader Menu Style: Toolbar), painted over the page like the Quick Menu.
+  // The UI object is on the heap only while it is up; loop task, under the RenderLock.
+  std::unique_ptr<ReaderToolbarUi> toolbarUi;
+  bool toolbarOpen = false;
+  bool toolbarPaintOnly = false;  // the next render paints the sheet alone, not the page
+  int toolbarFocus = -1;          // the marked tile; -1 until a button moves it on touch boards
+  bool toolbarJumped = false;     // the first scrub of a visit files one Return entry
 
   // Back and Confirm are acted on at RELEASE here, while child screens (the Settings
   // family) close on PRESS. These pair each release with the press this activity saw, so

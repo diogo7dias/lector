@@ -51,7 +51,10 @@ class EpubReaderMenuActivity final : public UiListActivity {
     RETURN,                      // back to the last deliberate-jump origin
     VIEW_QUOTES,                 // browse (and delete) the quotes saved in <book>_QUOTES.txt
     FORWARD,                     // redo the last Return
-    GO_TO_PAGE                   // jump to a printed page number (books with a page list)
+    GO_TO_PAGE,                  // jump to a printed page number (books with a page list)
+    NIGHT_MODE,                  // flip Night mode (inverted page) in place
+    FRONTLIGHT,                  // flip the frontlight on or off in place
+    GO_HOME                      // leave the book for Home
   };
 
   // Tab pages of the menu. Sleep exists only when the lock screen last showed a
