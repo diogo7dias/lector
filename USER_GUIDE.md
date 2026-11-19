@@ -1273,6 +1273,7 @@ Session**, **Pages to Paragraph**. Alongside them:
 - **XTC Status Bar** — Hide, Bottom or Top, for XTC books.
 - **Clock Format** (24-hour or 12-hour) and **Clock Synced**.
 - **Time Zone** and **Daylight Saving** are in Settings > System, and on the web settings page.
+  The X4 has no clock chip, so it does not show them.
   Every clock follows them: the status bar and Home clock, the Light Schedule and the dates in
   your reading history.
 

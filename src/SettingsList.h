@@ -826,10 +826,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             v.end());
   }
   if (!withAbsentHardware && !halClock.isAvailable()) {
-    // The schedule reads the same clock, at a wake, so the same reasoning drops it.
+    // The schedule reads the same clock, at a wake, so the same reasoning drops it. The time
+    // zone rows go too, as in CrossPoint: with no clock chip nothing on the device shows a time.
     v.erase(std::remove_if(v.begin(), v.end(),
                            [](const SettingInfo& s) {
-                             return s.nameId == StrId::STR_CLOCK || s.nameId == StrId::STR_FRONTLIGHT_SCHEDULE ||
+                             return s.nameId == StrId::STR_CLOCK || s.nameId == StrId::STR_TIMEZONE ||
+                                    s.nameId == StrId::STR_CLOCK_DST || s.nameId == StrId::STR_FRONTLIGHT_SCHEDULE ||
                                     s.nameId == StrId::STR_FRONTLIGHT_SCHEDULE_ON ||
                                     s.nameId == StrId::STR_FRONTLIGHT_SCHEDULE_OFF;
                            }),
