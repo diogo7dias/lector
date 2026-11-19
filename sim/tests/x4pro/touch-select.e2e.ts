@@ -2,7 +2,7 @@ import { test, expect } from 'e2e';
 
 // Hold a word and drag on: the selection follows the finger down the page, the hint bar
 // turns into Cancel / Save / Look Up, a second drag moves the end, and Save writes the
-// passage to the book's quotes file.
+// passage to the book's quotes file and to /My Clippings.txt.
 test('holds a word, drags across lines, saves the passage as a quote', async ({ app, screen }) => {
   await app.open('/');
   const activity = screen.getByTestId('activity');
@@ -62,4 +62,6 @@ test('holds a word, drags across lines, saves the passage as a quote', async ({ 
 
   await post('/tap/180/785?ms=150'); // Save, the second hint
   await expect.poll(log, { message: 'Save wrote the quote', timeout: 30_000 }).toContain('Saved quote');
+  await expect.poll(log, { message: 'Save added the Kindle clipping', timeout: 30_000 })
+    .toContain('Clipping added to /My Clippings.txt');
 });

@@ -92,7 +92,8 @@ class QuoteSelectActivity final : public Activity {
   int nearestWord(int x, int y, int maxGap) const;
   void dragTo(int index);
   void lookUpSelection();
-  bool saveQuoteToFile(const std::string& quote, const std::string& anchorToken);
+  bool saveQuoteToFile(const std::string& quote, const std::string& anchorToken, const quote_text::QuoteMeta& meta);
+  void appendClipping(const std::string& quote, uint32_t savedAt) const;
   std::string chapterTitle() const;
   void drawRangeHighlight() const;
   void drawHints() const;

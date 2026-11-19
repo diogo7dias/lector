@@ -1,7 +1,10 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <string>
 
 // Pure, Arduino-free helpers for the Grab Quote feature so they can be host
@@ -117,19 +120,48 @@ inline bool parseAnchorToken(const std::string& token, QuoteAnchor& out) {
 // anchor token. The scan is right-anchored on the last " @q1:" so a chapter
 // title is only ever shortened when the tail really parses as an anchor.
 // Records written before anchors existed have no token and pass through whole.
-inline void splitChapterAnchor(const std::string& field, std::string& chapterOut, std::string& anchorOut) {
+// What a record knows beyond its chapter and anchor, kept as " @o:<n>" and " @t:<n>"
+// tokens just before the anchor. Records without them read back as unknown.
+struct QuoteMeta {
+  // UTC save time in seconds; 0 when the device had no clock.
+  uint32_t savedAt = 0;
+  // Visible-text offset in the chapter of the page the quote starts on, in the units
+  // KOReader sync counts (ChapterXPathResolver); NO_OFFSET when not recorded.
+  static constexpr uint32_t NO_OFFSET = UINT32_MAX;
+  uint32_t textOffset = NO_OFFSET;
+};
+
+inline void splitChapterAnchor(const std::string& field, std::string& chapterOut, std::string& anchorOut,
+                               QuoteMeta* metaOut = nullptr) {
   chapterOut = field;
   anchorOut.clear();
+  if (metaOut) *metaOut = QuoteMeta{};
 
   const auto at = field.rfind(" @q1:");
-  if (at == std::string::npos) return;
+  if (at != std::string::npos) {
+    const std::string candidate = field.substr(at + 1);
+    QuoteAnchor probe;
+    if (parseAnchorToken(candidate, probe)) {
+      chapterOut = field.substr(0, at);
+      anchorOut = candidate;
+    }
+  }
 
-  const std::string candidate = field.substr(at + 1);
-  QuoteAnchor probe;
-  if (!parseAnchorToken(candidate, probe)) return;
-
-  chapterOut = field.substr(0, at);
-  anchorOut = candidate;
+  // Trailing " @t:<digits>" / " @o:<digits>" tokens, in any order.
+  while (true) {
+    const auto tok = chapterOut.rfind(" @");
+    if (tok == std::string::npos || tok + 4 >= chapterOut.size() || chapterOut[tok + 3] != ':') return;
+    const char key = chapterOut[tok + 2];
+    if (key != 't' && key != 'o') return;
+    uint64_t value = 0;
+    for (size_t i = tok + 4; i < chapterOut.size(); i++) {
+      if (chapterOut[i] < '0' || chapterOut[i] > '9') return;
+      value = value * 10 + static_cast<uint64_t>(chapterOut[i] - '0');
+      if (value >= UINT32_MAX) return;
+    }
+    if (metaOut) (key == 't' ? metaOut->savedAt : metaOut->textOffset) = static_cast<uint32_t>(value);
+    chapterOut.erase(tok);
+  }
 }
 
 // Form feed, the ASCII page break. Written at the head of every entry so the
@@ -183,12 +215,20 @@ inline bool nextQuoteRecord(const std::string& buf, size_t& pos, QuoteRecord& ou
 // is unchanged, so a reader that knows nothing about anchors still parses every
 // record. An empty token writes no anchor at all.
 inline std::string formatQuoteEntry(const std::string& chapter, const std::string& anchorToken,
-                                    const std::string& quote) {
+                                    const std::string& quote, const QuoteMeta& meta = {}) {
   std::string entry;
-  entry.reserve(chapter.size() + anchorToken.size() + quote.size() + 14);
+  entry.reserve(chapter.size() + anchorToken.size() + quote.size() + 40);
   entry.push_back(PAGE_BREAK);
   entry.push_back('[');
   entry.append(chapter);
+  if (meta.textOffset != QuoteMeta::NO_OFFSET) {
+    entry.append(" @o:");
+    entry.append(std::to_string(meta.textOffset));
+  }
+  if (meta.savedAt != 0) {
+    entry.append(" @t:");
+    entry.append(std::to_string(meta.savedAt));
+  }
   if (!anchorToken.empty()) {
     entry.push_back(' ');
     entry.append(anchorToken);
@@ -196,6 +236,61 @@ inline std::string formatQuoteEntry(const std::string& chapter, const std::strin
   entry.append("]\n");
   entry.append(quote);
   entry.append("\n---\n\n");
+  return entry;
+}
+
+// A stand-in save time for a quote kept without one (saved before quotes carried a time,
+// or with no clock). Fixed per text, so every sync sends the same value and BookOrbit,
+// which keys a highlight on its time and position, never counts it twice.
+// ponytail: dated in 2020; store a real time when the clock knows it (all new saves).
+inline uint32_t fallbackSavedAt(const std::string& quote) {
+  uint32_t hash = 2166136261u;
+  for (const char c : quote) hash = (hash ^ static_cast<uint8_t>(c)) * 16777619u;
+  return 1577836800u + hash % (365u * 86400u);
+}
+
+// "2026-11-19 22:05:07", the local wall-clock form KOReader and BookOrbit use.
+inline std::string koreaderDatetime(const int64_t localSeconds) {
+  const time_t t = static_cast<time_t>(localSeconds);
+  struct tm tm{};
+  gmtime_r(&t, &tm);
+  char buf[64];  // sized for any int the compiler can imagine, not just real dates
+  snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d:%02d", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour,
+           tm.tm_min, tm.tm_sec);
+  return buf;
+}
+
+// The Kindle "My Clippings.txt" file at the card root, which Readwise, Calibre and
+// most clipping tools import. Every save appends one entry; the book's own quotes
+// file stays the one the reader and the viewer use.
+inline constexpr char CLIPPINGS_PATH[] = "/My Clippings.txt";
+
+// One Kindle entry, laid out as CrossPoint writes it:
+//   Title (Author)
+//   - Your Highlight on Page 12 | Chapter | Added on Wednesday, November 19, 2026, 10:05 PM
+//
+//   quote
+//   ==========
+// `localSeconds` 0 leaves "Added on" out (no clock).
+inline std::string formatClipping(const std::string& title, const std::string& author, const std::string& chapter,
+                                  const int page, const std::string& quote, const int64_t localSeconds) {
+  static constexpr const char* WEEKDAYS[] = {"Sunday",   "Monday", "Tuesday", "Wednesday",
+                                             "Thursday", "Friday", "Saturday"};
+  static constexpr const char* MONTHS[] = {"January", "February", "March",     "April",   "May",      "June",
+                                           "July",    "August",   "September", "October", "November", "December"};
+  std::string entry = title + " (" + author + ")\n- Your Highlight on Page " + std::to_string(page);
+  if (!chapter.empty()) entry += " | " + chapter;
+  if (localSeconds != 0) {
+    const time_t t = static_cast<time_t>(localSeconds);
+    struct tm tm{};
+    gmtime_r(&t, &tm);
+    const int hour12 = tm.tm_hour % 12 == 0 ? 12 : tm.tm_hour % 12;
+    char added[80];
+    snprintf(added, sizeof(added), " | Added on %s, %s %d, %d, %02d:%02d %s", WEEKDAYS[tm.tm_wday], MONTHS[tm.tm_mon],
+             tm.tm_mday, tm.tm_year + 1900, hour12, tm.tm_min, tm.tm_hour >= 12 ? "PM" : "AM");
+    entry += added;
+  }
+  entry += "\n\n" + quote + "\n==========\n";
   return entry;
 }
 

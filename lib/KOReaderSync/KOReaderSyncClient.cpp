@@ -292,3 +292,26 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   if (httpCode == 401) return AUTH_FAILED;
   return SERVER_ERROR;
 }
+
+KOReaderSyncClient::Error KOReaderSyncClient::postJson(const char* path, const std::string& body) {
+  lastHttpCode = 0;
+  if (!KOREADER_STORE.hasCredentials()) return NO_CREDENTIALS;
+  if (insufficientHeap()) return LOW_MEMORY;
+  const std::string url = KOREADER_STORE.getBaseUrl() + path;
+  freeink::SecureHttpClient http;
+  trusted_pins::applyWithPin(http, url.c_str());
+  if (!http.begin(url)) {
+    LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
+    return NETWORK_ERROR;
+  }
+  applyAuthHeaders(http);
+  http.addHeader("Content-Type", "application/json");
+  const int httpCode = http.sendRequest("POST", body);
+  http.end();
+  lastHttpCode = httpCode;
+  if (httpCode <= 0) return trusted_pins::noteIfRejected(http, url.c_str()) ? CERT_UNTRUSTED : NETWORK_ERROR;
+  if (httpCode >= 200 && httpCode < 300) return OK;
+  if (httpCode == 401) return AUTH_FAILED;
+  if (httpCode == 404) return NOT_FOUND;
+  return SERVER_ERROR;
+}

@@ -514,6 +514,15 @@ Up and Down still move the end of the selection, onto the next page if needed. I
 **Grab Quote**, touching a word starts a selection the same way, no hold needed. Look Up
 appears only when a dictionary is set.
 
+Every saved quote is also added to `My Clippings.txt` at the root of the card, in the Kindle
+layout that Readwise, Calibre and most clipping tools import: book title and author, page,
+chapter, the time it was saved (when the device knows the time), then the passage. Deleting
+a quote in **View Quotes** removes it from the book's quotes file only; `My Clippings.txt`
+keeps everything ever saved, so trim it on a computer if you need to.
+
+With BookOrbit as the KOReader sync server, quotes also travel to BookOrbit as highlights
+(see **BookOrbit** under KOReader Sync).
+
 ---
 
 ## 8. Sleep screen and wallpapers
@@ -854,6 +863,12 @@ When some are missing, Home shows a row such as **2 on BookOrbit, not here**. Se
 only those books. Confirm downloads one and opens it at your BookOrbit position. BookOrbit needs
 a smart shelf called **Reading** (status is Reading) for this to work. Read-along books arrive
 without their audio, so their position does not sync.
+
+Your saved quotes go to BookOrbit as highlights each time the position syncs: from **Sync
+Progress** in the reader menu, and on sleep when **Auto Sync** is on. Sending is one-way and
+only adds. A quote sent twice still shows once, a highlight you delete in BookOrbit stays
+deleted, and a quote deleted on the device stays in BookOrbit until you remove it there.
+Quotes saved before Lector recorded where a quote sits in the book are not sent.
 
 #### Option C: the public KOReader server
 
