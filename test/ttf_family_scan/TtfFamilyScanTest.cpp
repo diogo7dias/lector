@@ -1,9 +1,11 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <cstring>
 #include <string>
 #include <vector>
 
+#include "EpdFontFamily.h"
 #include "TtfFamilyScan.h"
 
 using namespace ttfscan;
@@ -175,6 +177,18 @@ TEST(TtfSizes, ClampAndEmPixels) {
   EXPECT_EQ(ttfEmPixels(14), 29);
   EXPECT_EQ(ttfEmPixels(8), 17);
   EXPECT_EQ(ttfEmPixels(40), 83);
+}
+
+// The family carries its point size as pixels at FONT_RASTER_DPI; the TTF loader sizes its em from
+// the same constant, so a face and the family that holds it agree to within the loader's rounding.
+TEST(TtfSizes, FamilyKnowsItsSizeInPixels) {
+  EXPECT_EQ(FONT_RASTER_DPI, 150);
+  for (uint8_t pt = TTF_MIN_PT; pt <= TTF_MAX_PT; ++pt) {
+    const EpdFontFamily family(pt, nullptr);
+    EXPECT_NEAR(family.getSizeInPixels(), pt * 150.0f / 72.0f, 1e-4f);
+    EXPECT_LE(std::fabs(family.getSizeInPixels() - ttfEmPixels(pt)), 0.5f) << "pt " << int(pt);
+  }
+  EXPECT_FLOAT_EQ(EpdFontFamily(0, nullptr).getSizeInPixels(), 0.0f);
 }
 
 // --- cache fingerprint (font id) -------------------------------------------------------

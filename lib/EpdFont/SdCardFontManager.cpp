@@ -35,7 +35,8 @@ int SdCardFontManager::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
     LOG_ERR("SDMGR", "Font ID %d collides with existing font, skipping %s", fontId, family.name.c_str());
     return 0;
   }
-  EpdFontFamily fontFamily(font->getEpdFont(0), font->getEpdFont(1), font->getEpdFont(2), font->getEpdFont(3));
+  EpdFontFamily fontFamily(font->pointSize(), font->getEpdFont(0), font->getEpdFont(1), font->getEpdFont(2),
+                           font->getEpdFont(3));
   renderer.insertFont(fontId, fontFamily);
   ttf_ = font.release();
   ttfFontId_ = fontId;
@@ -74,7 +75,8 @@ int SdCardFontManager::loadFile(const SdCardFontFileInfo& file, const char* fami
 
   LOG_DBG("SDMGR", "Loaded %s size=%u id=%d styles=%u", file.path.c_str(), file.pointSize, fontId, font->styleCount());
 
-  EpdFontFamily fontFamily(font->getEpdFont(0), font->getEpdFont(1), font->getEpdFont(2), font->getEpdFont(3));
+  EpdFontFamily fontFamily(file.pointSize, font->getEpdFont(0), font->getEpdFont(1), font->getEpdFont(2),
+                           font->getEpdFont(3));
   renderer.insertFont(fontId, fontFamily);
   return fontId;
 }

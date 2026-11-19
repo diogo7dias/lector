@@ -9,6 +9,7 @@
 // up to four faces (regular / bold / italic / bold-italic) inferred from the
 // file names.
 
+#include <EpdFontData.h>  // FONT_RASTER_DPI
 #include <Fnv1a.h>
 
 #include <cctype>
@@ -38,11 +39,10 @@ inline uint8_t clampTtfPointSize(const uint8_t pt) {
   return pt;
 }
 
-// Point size to em pixels. 150 DPI is what fontconvert.py bakes .cpfont files
-// at, so "14 pt" means the same glyph height for a TTF family as for a
-// bitmap one.
-constexpr int TTF_DPI = 150;
-inline uint16_t ttfEmPixels(const uint8_t pt) { return static_cast<uint16_t>((pt * TTF_DPI + 36) / 72); }
+// Point size to em pixels. FONT_RASTER_DPI (150) is what fontconvert.py bakes
+// .cpfont files at, so "14 pt" means the same glyph height for a TTF family as
+// for a bitmap one (and as EpdFontFamily::getSizeInPixels()).
+inline uint16_t ttfEmPixels(const uint8_t pt) { return static_cast<uint16_t>((pt * FONT_RASTER_DPI + 36) / 72); }
 
 // Per-face upper bound: the whole file lives in PSRAM while selected.
 constexpr uint32_t TTF_MAX_FACE_BYTES = 2u * 1024u * 1024u;
