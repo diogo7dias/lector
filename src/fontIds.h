@@ -1,7 +1,9 @@
 // Kept by hand.
 #pragma once
 
+#define CHAREINK_12_FONT_ID (-2100710292)
 #define CHAREINK_14_FONT_ID (75174429)
+#define CHAREINK_16_FONT_ID (1486844727)
 // Active UI font ids (menus/lists/hints). Bound at boot + on language change to
 // either the Cozette family (default, most languages) or the Ubuntu family
 // (Arabic/Hebrew fallback). The id VALUES are derived from the Cozette headers.
@@ -18,7 +20,8 @@
 #define PARA_NUM_39_FONT_ID (906157361)
 // Font ID 0 is reserved as the "not found" sentinel.
 // Guard against any hash accidentally producing 0.
-static_assert(CHAREINK_14_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(CHAREINK_12_FONT_ID != 0 && CHAREINK_14_FONT_ID != 0 && CHAREINK_16_FONT_ID != 0,
+              "Font ID collision with sentinel");
 static_assert(UI_10_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(UI_12_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(UBUNTU_10_FONT_ID != 0, "Font ID collision with sentinel");

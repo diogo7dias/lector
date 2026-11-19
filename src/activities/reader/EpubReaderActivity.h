@@ -183,7 +183,7 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   static void readerEditSinkThunk(void* ctx, const ReaderPrefs& live);
   // The light panel's aux row is this book's text size. Only the sizes actually installed
   // for the active family are reachable, so on a device carrying only the built-in
-  // ChareInk (one compiled-in size) the row shows the size and the steppers do nothing.
+  // ChareInk the row steps through the compiled-in 12, 14 and 16 pt.
   bool lightPanelAuxText(char* out, size_t length) const override;
   bool lightPanelStepAux(int delta) override;
 

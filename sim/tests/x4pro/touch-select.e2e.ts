@@ -43,21 +43,24 @@ test('holds a word, drags across lines, saves the passage as a quote', async ({ 
   }
 
   const post = (path: string) => fetch(`${app.baseUrl}${path}`, { method: 'POST' });
+  // The contents title is drawn at the nearest built-in ChareInk size to its CSS scale, so at
+  // 16 pt it wraps to a second line and every entry sits one line (32 px) lower than at 14 pt.
+  const dy = 32;
 
   // 1.2 s still (the long press), then 1.5 s down two entries, then lift.
-  await post('/swipe/240/300/240/420?hold=1200&ms=1500');
+  await post(`/swipe/240/${300 + dy}/240/${420 + dy}?hold=1200&ms=1500`);
   await expect(activity).toHaveText('QuoteSelect', { timeout: 30_000 });
   await expect(busy).toHaveText('no', { timeout: 30_000 });
   // Bars over the dragged lines (entries 3 to 5), plain text on entries 7 to 9 below.
-  await expect.poll(async () => (await ink(280, 120)) - 2 * (await ink(560, 120)), {
+  await expect.poll(async () => (await ink(280 + dy, 120)) - 2 * (await ink(560 + dy, 120)), {
     message: 'the drag selected several lines', timeout: 30_000,
   }).toBeGreaterThan(0);
   expect(await log(), 'the lift neither saved nor looked anything up').not.toContain('Saved quote');
 
   // Touch just below the last selected word and drag that end on, to entry 7.
-  const plain = await ink(560, 120);
-  await post('/swipe/200/440/300/600?ms=1200');
-  await expect.poll(() => ink(560, 120), { message: 'the end moved down', timeout: 30_000 })
+  const plain = await ink(560 + dy, 120);
+  await post(`/swipe/200/${440 + dy}/300/${600 + dy}?ms=1200`);
+  await expect.poll(() => ink(560 + dy, 120), { message: 'the end moved down', timeout: 30_000 })
     .toBeGreaterThan(plain * 2);
 
   await post('/tap/180/785?ms=150'); // Save, the second hint

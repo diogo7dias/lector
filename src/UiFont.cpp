@@ -11,15 +11,29 @@
 namespace {
 // Fonts
 // ChareInk is lector's single built-in reading family (an e-ink tuned Charis derivative).
-// It is compiled in at 14 pt only: its glyph set is far larger than the Vollkorn it
-// replaced, and four sizes would not fit the app partition. Every other size, and every
-// other family, is installed from the SD card. Ubuntu and Cozette are the UI fonts.
+// It is compiled in at 12, 14 and 16 pt (BUILTIN_READER_POINT_SIZES): its glyph set is far
+// larger than the Vollkorn it replaced, so 18 pt and above stay SD card fonts, like every
+// other family. Ubuntu and Cozette are the UI fonts.
+EpdFont chareink12RegularFont(&chareink_12_regular);
+EpdFont chareink12BoldFont(&chareink_12_bold);
+EpdFont chareink12ItalicFont(&chareink_12_italic);
+EpdFont chareink12BoldItalicFont(&chareink_12_bolditalic);
+EpdFontFamily chareink12FontFamily(12, &chareink12RegularFont, &chareink12BoldFont, &chareink12ItalicFont,
+                                   &chareink12BoldItalicFont);
+
 EpdFont chareink14RegularFont(&chareink_14_regular);
 EpdFont chareink14BoldFont(&chareink_14_bold);
 EpdFont chareink14ItalicFont(&chareink_14_italic);
 EpdFont chareink14BoldItalicFont(&chareink_14_bolditalic);
 EpdFontFamily chareink14FontFamily(14, &chareink14RegularFont, &chareink14BoldFont, &chareink14ItalicFont,
                                    &chareink14BoldItalicFont);
+
+EpdFont chareink16RegularFont(&chareink_16_regular);
+EpdFont chareink16BoldFont(&chareink_16_bold);
+EpdFont chareink16ItalicFont(&chareink_16_italic);
+EpdFont chareink16BoldItalicFont(&chareink_16_bolditalic);
+EpdFontFamily chareink16FontFamily(16, &chareink16RegularFont, &chareink16BoldFont, &chareink16ItalicFont,
+                                   &chareink16BoldItalicFont);
 
 // The UI families ship REGULAR ONLY, and the regular face fills the family's bold slot
 // so a stray BOLD request resolves to regular instead of nullptr. This is the old-Lector
@@ -88,7 +102,9 @@ void bindUiFontsForLanguage(GfxRenderer& renderer) {
 }
 
 void bindBuiltinFonts(GfxRenderer& renderer) {
+  renderer.insertFont(CHAREINK_12_FONT_ID, chareink12FontFamily);
   renderer.insertFont(CHAREINK_14_FONT_ID, chareink14FontFamily);
+  renderer.insertFont(CHAREINK_16_FONT_ID, chareink16FontFamily);
   renderer.insertFont(PARA_NUM_13_FONT_ID, paraNum13FontFamily);
   renderer.insertFont(PARA_NUM_26_FONT_ID, paraNum26FontFamily);
   renderer.insertFont(PARA_NUM_39_FONT_ID, paraNum39FontFamily);

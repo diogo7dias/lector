@@ -28,6 +28,19 @@ for size in ${NOTOSANS_FONT_SIZES[@]}; do
   done
 done
 
+# ChareInk, the built-in reading family: 12, 14 and 16 pt (BUILTIN_READER_POINT_SIZES).
+CHAREINK_FONT_SIZES=(12 14 16)
+
+for size in ${CHAREINK_FONT_SIZES[@]}; do
+  for style in ${READER_FONT_STYLES[@]}; do
+    font_name="chareink_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
+    font_path="../builtinFonts/source/ChareInk7/ChareInk7-${style}.ttf"
+    output_path="../builtinFonts/${font_name}.h"
+    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum > $output_path
+    echo "Generated $output_path"
+  done
+done
+
 UI_FONT_SIZES=(10 12)
 UI_FONT_STYLES=("Regular" "Bold")
 

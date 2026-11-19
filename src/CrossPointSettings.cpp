@@ -540,9 +540,11 @@ int CrossPointSettings::resolveReaderFontId(const uint8_t fontFamily, const uint
   // in the page render loop) so rendering is correct even before it has run.
   const uint8_t pt =
       snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), pointSize);
-  // One built-in size, so the snap above can only land on it. The switch stays a switch so
-  // adding a second compiled-in size is a case rather than a rewrite.
   switch (pt) {
+    case 12:
+      return CHAREINK_12_FONT_ID;
+    case 16:
+      return CHAREINK_16_FONT_ID;
     case 14:
     default:
       return CHAREINK_14_FONT_ID;
