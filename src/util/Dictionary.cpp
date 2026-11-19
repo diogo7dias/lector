@@ -16,6 +16,7 @@
 #include "DictInlineFields.h"
 #include "DictZip.h"
 #include "DictionaryRegistry.h"
+#include "IdxCursor.h"
 #include "StringUtils.h"
 
 namespace {
@@ -468,14 +469,15 @@ bool Dictionary::locateAll(LookupSession& session, const char* target, DictEntry
     LOG_ERR("DICT", "Index seek to %lu failed", static_cast<unsigned long>(startByte));
     return false;
   }
-  while (static_cast<uint32_t>(session.idx.position()) < session.idxSize) {
-    // Not flagged as readError: readWordInto returns -1 for EOF and IO error
-    // alike, so a short tail can't be told from a truncated .idx. Treat it as
-    // the end of the index rather than risk reporting a read failure for what
-    // is really a miss.
-    if (readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0) break;
+  IdxCursor<HalFile> cursor(session.idx, startByte);
+  while (cursor.position() < session.idxSize) {
+    // Not flagged as readError: readWord returns -1 for EOF and IO error alike,
+    // so a short tail can't be told from a truncated .idx. Treat it as the end
+    // of the index rather than risk reporting a read failure for what is really
+    // a miss.
+    if (cursor.readWord(wordBuf, sizeof(wordBuf)) < 0) break;
     uint8_t suffix[8];
-    if (session.idx.read(suffix, 8) != 8) break;
+    if (!cursor.readBytes(suffix, 8)) break;
 
     const int cmp = strcasecmp(wordBuf, target);
     if (cmp == 0) out.add(wordBuf, readBe32(suffix), readBe32(suffix + 4));
@@ -512,12 +514,13 @@ DictLocation Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordina
     return result;
   }
   uint8_t suffix[8];
+  IdxCursor<HalFile> cursor(session.idx, startByte);
   for (uint32_t e = startOrdinal; e < ordinal; e++) {
-    if (readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0 || session.idx.read(suffix, 8) != 8) return result;
-    if (static_cast<uint32_t>(session.idx.position()) >= session.idxSize) return result;  // ordinal past last entry
+    if (cursor.readWord(wordBuf, sizeof(wordBuf)) < 0 || !cursor.readBytes(suffix, 8)) return result;
+    if (cursor.position() >= session.idxSize) return result;  // ordinal past last entry
   }
-  if (static_cast<uint32_t>(session.idx.position()) >= session.idxSize) return result;
-  if (readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0 || session.idx.read(suffix, 8) != 8) return result;
+  if (cursor.position() >= session.idxSize) return result;
+  if (cursor.readWord(wordBuf, sizeof(wordBuf)) < 0 || !cursor.readBytes(suffix, 8)) return result;
   result.offset = readBe32(suffix);
   result.size = readBe32(suffix + 4);
   result.found = true;
@@ -539,10 +542,11 @@ bool Dictionary::locateSynonyms(LookupSession& session, const char* target, Dict
     return false;
   }
   bool ok = true;
-  while (static_cast<uint32_t>(session.syn.position()) < session.synSize) {
-    if (readWordInto(session.syn, wordBuf, sizeof(wordBuf)) < 0) break;
+  IdxCursor<HalFile> cursor(session.syn, startByte);
+  while (cursor.position() < session.synSize) {
+    if (cursor.readWord(wordBuf, sizeof(wordBuf)) < 0) break;
     uint8_t ordBytes[4];
-    if (session.syn.read(ordBytes, 4) != 4) break;
+    if (!cursor.readBytes(ordBytes, 4)) break;
 
     const int cmp = strcasecmp(wordBuf, target);
     if (cmp == 0) {
