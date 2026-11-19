@@ -45,7 +45,8 @@ On the very first lookup with a dictionary (and again whenever the `.idx` or `.s
 1. **Direct match** — the word is found case-insensitively in the dictionary index. Surrounding punctuation is ignored, CJK brackets and quotes such as `「」` and `《》` included. Hebrew niqqud and cantillation marks are removed from the search term so pointed text can match unpointed headwords. Basic Arabic vowel marks (U+064B–U+0650, U+0652) and superscript alef (U+0670) are also removed; shaddah, hamza and maddah remain significant. A word listed several times, once per meaning or part of speech, shows all of its entries.
 2. **Synonyms** — on a miss, if the dictionary ships a `.syn` file, alternate spellings and irregular forms recorded there are resolved to their headword (e.g. `oxen` → `ox`, `colour` → `color`). This step is skipped if the `.sidx` sidecar could not be built (e.g. transient low memory during indexing); the dictionary otherwise stays usable, and the build is retried the next time it is opened. A synonym that points at several headwords shows them all.
 3. **Stemming** — still no match: common English word forms are retried automatically: possessives and plurals (`dogs` → `dog`, `stories` → `story`) and verb endings (`walked` → `walk`, `running` → `run`, `making` → `make`).
-4. **Not found** — a short popup appears and you return to word selection.
+4. **Elision** — still no match: the text after a short elided prefix is retried, longest first (`qu'il` → `il`, `l'homme` → `homme`; straight or curly apostrophe).
+5. **Not found** — a short popup appears and you return to word selection.
 
 ## The Definition Screen
 
@@ -53,7 +54,7 @@ When a word is found, the definition screen shows the matched headword at the to
 
 HTML dictionaries that declare `sametypesequence=h`, and dictionaries whose `.ifo` has no `sametypesequence` (each entry tags its own fields), use the EPUB text-layout engine for semantic formatting such as headings, bold, italics, lists, and line breaks. Images and CSS styling are ignored. Definitions that are too large or cannot be laid out within the available memory fall back to plain text.
 
-- **Left/Right** or side **Up/Down** — previous / next page
+- **Left/Right** or the side keys (as set by the Side buttons layout) — previous / next page
 - **Back** — return to word selection
 
 
