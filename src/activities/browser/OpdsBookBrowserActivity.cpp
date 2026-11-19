@@ -45,9 +45,8 @@ int searchIconX(const GfxRenderer& renderer) {
 void OpdsBookBrowserActivity::onEnter() {
   UiStatusActivity::onEnter();
 
-  // WiFi, TLS and a parse run on the heap a book's fonts leave. Release the rebuildable SD
-  // font caches first, as the web server and Calibre do: a handshake short of contiguous
-  // heap fails as a bad peer key, which reads like a server fault and is not one.
+  // WiFi, TLS and a parse run on what a book's fonts leave: release the rebuildable SD font caches
+  // first, as the web server and Calibre do. A handshake short of heap reads like a server fault.
   if (auto* fcm = renderer.getFontCacheManager()) {
     LOG_DBG("OPDS", "Free heap before SD font cache release: %d bytes", ESP.getFreeHeap());
     fcm->releaseSdFontCaches();
@@ -90,6 +89,10 @@ static const char* feedErrorMessage(const opds::ClientStatus status) {
       return nullptr;
     case opds::ClientStatus::BAD_CREDENTIALS:
       return tr(STR_OPDS_BAD_CREDENTIALS);
+    case opds::ClientStatus::REDIRECTED:
+      return tr(STR_OPDS_REDIRECTED);
+    case opds::ClientStatus::SERVER_ERROR:
+      return tr(STR_OPDS_SERVER_ERROR);
     case opds::ClientStatus::FEED_TOO_LARGE:
       return tr(STR_OPDS_FEED_TOO_LARGE);
     case opds::ClientStatus::HEAP_LOW:
@@ -280,7 +283,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     }
     downloadProgress = downloaded;
     downloadTotal = total;
-    // No repaint: wolfSSL holds the framebuffer until the loan ends; the screen catches up.
+    // No repaint: wolfSSL holds the framebuffer until the loan ends.
   };
 
   std::unique_ptr<GfxRenderer::FrameBufferLoan> loan;
@@ -489,8 +492,7 @@ UiStatusActivity::StatusView OpdsBookBrowserActivity::statusView() const {
       view.listItems = rows.data();
       view.listCount = static_cast<int>(rows.size());
       view.listHasSubtitle = true;
-      // The selection is clamped after this runs, so on a shorter feed's first paint it can
-      // name a row that is gone.
+      // The selection is clamped after this runs: on a shorter feed's first paint it can name a gone row.
       {
         const size_t selected = static_cast<size_t>(listSelection());
         const bool isBook = selected < entries.size() && entries[selected].type == OpdsEntryType::BOOK;
