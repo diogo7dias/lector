@@ -37,6 +37,10 @@ constexpr size_t GLYPH_ARENA_BYTES = 96 * 1024;
 constexpr uint32_t SLOT_COUNT = 512;
 constexpr uint32_t NO_CP = 0xFFFFFFFFu;
 constexpr size_t READ_CHUNK = 16 * 1024;
+// PSRAM the rest of the firmware keeps for itself: a face that would leave less than this free is
+// refused rather than starving the page cache, the web server and the TLS buffers (whose
+// allocations over 4 KB also land in PSRAM and abort on failure).
+constexpr size_t PSRAM_HEADROOM = 1024 * 1024;
 
 // Standard Latin ligatures TtfFont can substitute, sorted by packed pair for
 // EpdFont's binary search.
@@ -100,6 +104,8 @@ bool TtfSdFont::load(const SdCardFontFamilyInfo& family, const uint8_t pointSize
   }
   pointSize_ = ttfscan::clampTtfPointSize(pointSize);
   contentHash_ = fnv1a::OFFSET_BASIS_32;
+  const size_t psramBefore = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+  const size_t internalBefore = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
   for (uint8_t style = 0; style < MAX_STYLES; ++style) {
     faces_[style].reset();
     const std::string& path = family.ttfFaces[style];
@@ -113,6 +119,12 @@ bool TtfSdFont::load(const SdCardFontFamilyInfo& family, const uint8_t pointSize
     LOG_ERR(TAG, "%s has no usable regular face", family.name.c_str());
     return false;
   }
+  uint8_t faces = 0;
+  for (const auto& face : faces_) faces += face ? 1 : 0;
+  LOG_INF(TAG, "%s %u pt: %u face(s), PSRAM free %u -> %u KB, internal free %u -> %u B", family.name.c_str(),
+          pointSize_, faces, static_cast<unsigned>(psramBefore / 1024),
+          static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024),
+          static_cast<unsigned>(internalBefore), static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)));
   return true;
 }
 
@@ -129,6 +141,14 @@ bool TtfSdFont::loadFace(const uint8_t style, const char* path, const uint8_t po
   if (len < 12 || len > ttfscan::TTF_MAX_FACE_BYTES) {
     LOG_ERR(TAG, "%s: %u bytes, limit %u", path, static_cast<unsigned>(len),
             static_cast<unsigned>(ttfscan::TTF_MAX_FACE_BYTES));
+    return false;
+  }
+  const size_t psramNeeded = len + TTF_ARENA_BYTES + SLOT_COUNT * sizeof(Slot) + GLYPH_ARENA_BYTES;
+  if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) < psramNeeded + PSRAM_HEADROOM) {
+    LOG_ERR(TAG, "%s: needs %u KB of PSRAM, %u KB free and %u KB must stay free", path,
+            static_cast<unsigned>(psramNeeded / 1024),
+            static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024),
+            static_cast<unsigned>(PSRAM_HEADROOM / 1024));
     return false;
   }
   face->fileBytes = psramAlloc(len);
@@ -151,8 +171,9 @@ bool TtfSdFont::loadFace(const uint8_t style, const char* path, const uint8_t po
   face->fileLen = static_cast<uint32_t>(len);
 
   ttfscan::TtfMetrics metrics;
-  if (!ttfscan::readTtfMetrics(face->fileBytes.get(), len, metrics)) {
-    LOG_ERR(TAG, "Not a usable sfnt: %s", path);
+  const ttfscan::TtfReject reject = ttfscan::checkTtfFace(face->fileBytes.get(), len, metrics);
+  if (reject != ttfscan::TtfReject::None) {
+    LOG_ERR(TAG, "%s refused: %s", path, ttfscan::ttfRejectText(reject));
     return false;
   }
   face->arena.init(face->arenaBytes.get(), TTF_ARENA_BYTES);

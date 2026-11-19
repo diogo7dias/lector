@@ -1,0 +1,303 @@
+Bound every read of font data to the file.
+
+stb_truetype.h opens with "NO SECURITY GUARANTEE -- DO NOT USE THIS ON UNTRUSTED FONT FILES" and
+reads wherever the table offsets in the file point; the CFF reader even sizes its buffer as 512 MB.
+Reader fonts come off the SD card and from the network font installer, and test/fuzz/ttf crashed
+this build within seconds of starting, so the reads are checked:
+
+  - ttBYTE/ttCHAR/ttUSHORT/ttSHORT/ttULONG/ttLONG return 0 outside [stbtt__lo, stbtt__hi). The
+    window is set by the new stbtt_BindData() for the whole file and re-set from the fontinfo
+    (data, data_end) at every entry point that takes one.
+  - the CFF buffer ends at the end of the file instead of 512 MB past its table.
+  - the glyph point stream of a simple glyph cannot run past the end of the file, and the
+    vertices written cannot outgrow the m allocated (contour ends in a hostile glyph need not
+    ascend).
+  - composite glyphs nest at most 4 deep and draw at most 64 components per glyph, so a glyph
+    that names itself, or fans out in every level, ends instead of recursing or looping.
+
+The window is one pair of globals: stb must be called from one task at a time, as the render path
+already does.
+
+diff --git a/libs/book/FreeInkBook/third_party/stb/stb_truetype.h b/libs/book/FreeInkBook/third_party/stb/stb_truetype.h
+index 90a5c2e..1646636 100644
+--- a/libs/book/FreeInkBook/third_party/stb/stb_truetype.h
++++ b/libs/book/FreeInkBook/third_party/stb/stb_truetype.h
+@@ -701,6 +701,13 @@ STBTT_DEF int stbtt_GetNumberOfFonts(const unsigned char *data);
+ // indexing with the previous function where the index is between zero and one
+ // less than the total fonts. If an error occurs, -1 is returned.
+ 
++STBTT_DEF void stbtt_BindData(const unsigned char *data, int len);
++// Untrusted fonts: call this with the whole file before stbtt_GetFontOffsetForIndex and
++// stbtt_InitFont. Every read of font data is then checked against [data, data+len) and returns 0
++// outside it, and the other entry points re-bind to the range InitFont recorded for their font.
++// Without it nothing is bound and every read returns 0, so a font fails to init instead of
++// reading past its buffer.
++
+ STBTT_DEF int stbtt_GetFontOffsetForIndex(const unsigned char *data, int index);
+ // Each .ttf/.ttc file may have more than one font. Each font has a sequential
+ // index number starting from 0. Call this function to get the font offset for
+@@ -714,6 +721,7 @@ struct stbtt_fontinfo
+ {
+    void           * userdata;
+    unsigned char  * data;              // pointer to .ttf file
++   unsigned char  * data_end;          // one past the last byte of the file (see stbtt_BindData)
+    int              fontstart;         // offset of start of font
+ 
+    int numGlyphs;                     // number of glyphs, needed for range checking
+@@ -1279,16 +1287,26 @@ static stbtt__buf stbtt__cff_index_get(stbtt__buf b, int i)
+ // on platforms that don't allow misaligned reads, if we want to allow
+ // truetype fonts that aren't padded to alignment, define ALLOW_UNALIGNED_TRUETYPE
+ 
+-#define ttBYTE(p)     (* (stbtt_uint8 *) (p))
+-#define ttCHAR(p)     (* (stbtt_int8 *) (p))
++// Every read of font data lands in one of these. They check the bound window (stbtt_BindData and
++// STBTT__BIND) and return 0 for a byte outside it, so offsets taken from a hostile or truncated
++// file cannot walk off the buffer. Single window, not thread safe: callers serialise stb use.
++static const stbtt_uint8 *stbtt__lo, *stbtt__hi;
++static int stbtt__has(const stbtt_uint8 *p, size_t n)
++{
++   return p >= stbtt__lo && p <= stbtt__hi && (size_t) (stbtt__hi - p) >= n;
++}
++#define STBTT__BIND(info) (stbtt__lo = (info)->data, stbtt__hi = (info)->data_end)
++
+ #define ttFixed(p)    ttLONG(p)
+ 
+-static stbtt_uint16 ttUSHORT(stbtt_uint8 *p) { return p[0]*256 + p[1]; }
+-static stbtt_int16 ttSHORT(stbtt_uint8 *p)   { return p[0]*256 + p[1]; }
+-static stbtt_uint32 ttULONG(stbtt_uint8 *p)  { return (p[0]<<24) + (p[1]<<16) + (p[2]<<8) + p[3]; }
+-static stbtt_int32 ttLONG(stbtt_uint8 *p)    { return (p[0]<<24) + (p[1]<<16) + (p[2]<<8) + p[3]; }
++static stbtt_uint8 ttBYTE(const stbtt_uint8 *p)   { return stbtt__has(p, 1) ? p[0] : 0; }
++static stbtt_int8 ttCHAR(const stbtt_uint8 *p)    { return (stbtt_int8) ttBYTE(p); }
++static stbtt_uint16 ttUSHORT(const stbtt_uint8 *p) { return stbtt__has(p, 2) ? p[0]*256 + p[1] : 0; }
++static stbtt_int16 ttSHORT(const stbtt_uint8 *p)   { return stbtt__has(p, 2) ? p[0]*256 + p[1] : 0; }
++static stbtt_uint32 ttULONG(const stbtt_uint8 *p)  { return stbtt__has(p, 4) ? ((stbtt_uint32) p[0]<<24) + (p[1]<<16) + (p[2]<<8) + p[3] : 0; }
++static stbtt_int32 ttLONG(const stbtt_uint8 *p)    { return (stbtt_int32) ttULONG(p); }
+ 
+-#define stbtt_tag4(p,c0,c1,c2,c3) ((p)[0] == (c0) && (p)[1] == (c1) && (p)[2] == (c2) && (p)[3] == (c3))
++#define stbtt_tag4(p,c0,c1,c2,c3) (ttBYTE((p)+0) == (c0) && ttBYTE((p)+1) == (c1) && ttBYTE((p)+2) == (c2) && ttBYTE((p)+3) == (c3))
+ #define stbtt_tag(p,str)           stbtt_tag4(p,str[0],str[1],str[2],str[3])
+ 
+ static int stbtt__isfont(stbtt_uint8 *font)
+@@ -1386,8 +1404,10 @@ static int stbtt_InitFont_internal(stbtt_fontinfo *info, unsigned char *data, in
+    stbtt_int32 i,numTables;
+ 
+    info->data = data;
++   info->data_end = (unsigned char *) stbtt__hi;
+    info->fontstart = fontstart;
+    info->cff = stbtt__new_buf(NULL, 0);
++   if (data < stbtt__lo || data > stbtt__hi) return 0;  // not bound to this data (stbtt_BindData)
+ 
+    cmap = stbtt__find_table(data, fontstart, "cmap");       // required
+    info->loca = stbtt__find_table(data, fontstart, "loca"); // required
+@@ -1415,8 +1435,9 @@ static int stbtt_InitFont_internal(stbtt_fontinfo *info, unsigned char *data, in
+       info->fontdicts = stbtt__new_buf(NULL, 0);
+       info->fdselect = stbtt__new_buf(NULL, 0);
+ 
+-      // @TODO this should use size from table (not 512MB)
+-      info->cff = stbtt__new_buf(data+cff, 512*1024*1024);
++      // bounded by the end of the file, not the 512 MB the table-size TODO suggests
++      if (!stbtt__has(data+cff, 1)) return 0;
++      info->cff = stbtt__new_buf(data+cff, (size_t) (stbtt__hi - (data+cff)));
+       b = info->cff;
+ 
+       // read the header
+@@ -1496,6 +1517,7 @@ static int stbtt_InitFont_internal(stbtt_fontinfo *info, unsigned char *data, in
+ STBTT_DEF int stbtt_FindGlyphIndex(const stbtt_fontinfo *info, int unicode_codepoint)
+ {
+    stbtt_uint8 *data = info->data;
++   STBTT__BIND(info);
+    stbtt_uint32 index_map = info->index_map;
+ 
+    stbtt_uint16 format = ttUSHORT(data + index_map + 0);
+@@ -1624,6 +1646,7 @@ static int stbtt__GetGlyphInfoT2(const stbtt_fontinfo *info, int glyph_index, in
+ 
+ STBTT_DEF int stbtt_GetGlyphBox(const stbtt_fontinfo *info, int glyph_index, int *x0, int *y0, int *x1, int *y1)
+ {
++   STBTT__BIND(info);
+    if (info->cff.size) {
+       stbtt__GetGlyphInfoT2(info, glyph_index, x0, y0, x1, y1);
+    } else {
+@@ -1671,6 +1694,13 @@ static int stbtt__close_shape(stbtt_vertex *vertices, int num_vertices, int was_
+    return num_vertices;
+ }
+ 
++// Composite glyphs recurse through stbtt_GetGlyphShape. A hostile font can make a glyph its own
++// component, or nest fan-outs that multiply, so depth and the components drawn for one top-level
++// glyph are both capped. Only the shape code reads them, one glyph at a time.
++#define STBTT__MAX_COMPOSITE_DEPTH 4
++#define STBTT__MAX_COMPONENTS 64
++static int stbtt__composite_depth, stbtt__components_left;
++
+ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo *info, int glyph_index, stbtt_vertex **pvertices)
+ {
+    stbtt_int16 numberOfContours;
+@@ -1691,9 +1721,13 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo *info, int glyph_index, s
+       stbtt_int32 ins, i,j=0,m,n, next_move, was_off=0, off, start_off=0;
+       stbtt_int32 x,y,cx,cy,sx,sy, scx,scy;
+       stbtt_uint8 *points;
++      stbtt_uint8 *pend = info->data_end;  // the flag and coordinate streams stop here
++      int bad = 0;
++#define STBTT__PT8()  (points < pend ? *points++ : (bad = 1, 0))
+       endPtsOfContours = (data + g + 10);
+       ins = ttUSHORT(data + g + 10 + numberOfContours * 2);
+       points = data + g + 10 + numberOfContours * 2 + 2 + ins;
++      if (points < data || points > pend) return 0;
+ 
+       n = 1+ttUSHORT(endPtsOfContours + numberOfContours*2-2);
+ 
+@@ -1715,9 +1749,9 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo *info, int glyph_index, s
+ 
+       for (i=0; i < n; ++i) {
+          if (flagcount == 0) {
+-            flags = *points++;
++            flags = STBTT__PT8();
+             if (flags & 8)
+-               flagcount = *points++;
++               flagcount = STBTT__PT8();
+          } else
+             --flagcount;
+          vertices[off+i].type = flags;
+@@ -1728,12 +1762,12 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo *info, int glyph_index, s
+       for (i=0; i < n; ++i) {
+          flags = vertices[off+i].type;
+          if (flags & 2) {
+-            stbtt_int16 dx = *points++;
++            stbtt_int16 dx = STBTT__PT8();
+             x += (flags & 16) ? dx : -dx; // ???
+          } else {
+             if (!(flags & 16)) {
+-               x = x + (stbtt_int16) (points[0]*256 + points[1]);
+-               points += 2;
++               int hi = STBTT__PT8();
++               x = x + (stbtt_int16) (hi*256 + STBTT__PT8());
+             }
+          }
+          vertices[off+i].x = (stbtt_int16) x;
+@@ -1744,16 +1778,21 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo *info, int glyph_index, s
+       for (i=0; i < n; ++i) {
+          flags = vertices[off+i].type;
+          if (flags & 4) {
+-            stbtt_int16 dy = *points++;
++            stbtt_int16 dy = STBTT__PT8();
+             y += (flags & 32) ? dy : -dy; // ???
+          } else {
+             if (!(flags & 32)) {
+-               y = y + (stbtt_int16) (points[0]*256 + points[1]);
+-               points += 2;
++               int hi = STBTT__PT8();
++               y = y + (stbtt_int16) (hi*256 + STBTT__PT8());
+             }
+          }
+          vertices[off+i].y = (stbtt_int16) y;
+       }
++#undef STBTT__PT8
++      if (bad) {  // the glyph's point data runs past the end of the file
++         STBTT_free(vertices, info->userdata);
++         return 0;
++      }
+ 
+       // now convert them to our format
+       num_vertices=0;
+@@ -1763,6 +1802,13 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo *info, int glyph_index, s
+          x     = (stbtt_int16) vertices[off+i].x;
+          y     = (stbtt_int16) vertices[off+i].y;
+ 
++         // each point adds at most a close (2) and a move (1); contour ends that are not
++         // ascending would overrun the m vertices allocated
++         if (num_vertices + 3 > m) {
++            STBTT_free(vertices, info->userdata);
++            return 0;
++         }
++
+          if (next_move == i) {
+             if (i != 0)
+                num_vertices = stbtt__close_shape(vertices, num_vertices, was_off, start_off, sx,sy,scx,scy,cx,cy);
+@@ -1774,6 +1820,10 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo *info, int glyph_index, s
+                // where we can start, and we need to save some state for when we wraparound.
+                scx = x;
+                scy = y;
++               if (i + 1 >= n) {  // a contour of one trailing off-curve point: nothing to read next
++                  STBTT_free(vertices, info->userdata);
++                  return 0;
++               }
+                if (!(vertices[off+i+1].type & 1)) {
+                   // next point is also a curve point, so interpolate an on-point curve
+                   sx = (x + (stbtt_int32) vertices[off+i+1].x) >> 1;
+@@ -1815,8 +1865,14 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo *info, int glyph_index, s
+       stbtt_uint8 *comp = data + g + 10;
+       num_vertices = 0;
+       vertices = 0;
++      if (stbtt__composite_depth >= STBTT__MAX_COMPOSITE_DEPTH) return 0;
++      if (stbtt__composite_depth == 0) stbtt__components_left = STBTT__MAX_COMPONENTS;
+       while (more) {
+          stbtt_uint16 flags, gidx;
++         if (stbtt__components_left-- <= 0) {
++            if (vertices) STBTT_free(vertices, info->userdata);
++            return 0;
++         }
+          int comp_num_verts = 0, i;
+          stbtt_vertex *comp_verts = 0, *tmp = 0;
+          float mtx[6] = {1,0,0,1,0,0}, m, n;
+@@ -1856,7 +1912,9 @@ static int stbtt__GetGlyphShapeTT(const stbtt_fontinfo *info, int glyph_index, s
+          n = (float) STBTT_sqrt(mtx[2]*mtx[2] + mtx[3]*mtx[3]);
+ 
+          // Get indexed glyph.
++         stbtt__composite_depth++;
+          comp_num_verts = stbtt_GetGlyphShape(info, gidx, &comp_verts);
++         stbtt__composite_depth--;
+          if (comp_num_verts > 0) {
+             // Transform vertices.
+             for (i = 0; i < comp_num_verts; ++i) {
+@@ -2296,6 +2354,7 @@ static int stbtt__GetGlyphInfoT2(const stbtt_fontinfo *info, int glyph_index, in
+ 
+ STBTT_DEF int stbtt_GetGlyphShape(const stbtt_fontinfo *info, int glyph_index, stbtt_vertex **pvertices)
+ {
++   STBTT__BIND(info);
+    if (!info->cff.size)
+       return stbtt__GetGlyphShapeTT(info, glyph_index, pvertices);
+    else
+@@ -2304,6 +2363,7 @@ STBTT_DEF int stbtt_GetGlyphShape(const stbtt_fontinfo *info, int glyph_index, s
+ 
+ STBTT_DEF void stbtt_GetGlyphHMetrics(const stbtt_fontinfo *info, int glyph_index, int *advanceWidth, int *leftSideBearing)
+ {
++   STBTT__BIND(info);
+    stbtt_uint16 numOfLongHorMetrics = ttUSHORT(info->data+info->hhea + 34);
+    if (glyph_index < numOfLongHorMetrics) {
+       if (advanceWidth)     *advanceWidth    = ttSHORT(info->data + info->hmtx + 4*glyph_index);
+@@ -2609,6 +2669,7 @@ static stbtt_int32 stbtt__GetGlyphGPOSInfoAdvance(const stbtt_fontinfo *info, in
+ 
+ STBTT_DEF int  stbtt_GetGlyphKernAdvance(const stbtt_fontinfo *info, int g1, int g2)
+ {
++   STBTT__BIND(info);
+    int xAdvance = 0;
+ 
+    if (info->gpos)
+@@ -2633,6 +2694,7 @@ STBTT_DEF void stbtt_GetCodepointHMetrics(const stbtt_fontinfo *info, int codepo
+ 
+ STBTT_DEF void stbtt_GetFontVMetrics(const stbtt_fontinfo *info, int *ascent, int *descent, int *lineGap)
+ {
++   STBTT__BIND(info);
+    if (ascent ) *ascent  = ttSHORT(info->data+info->hhea + 4);
+    if (descent) *descent = ttSHORT(info->data+info->hhea + 6);
+    if (lineGap) *lineGap = ttSHORT(info->data+info->hhea + 8);
+@@ -2659,6 +2721,7 @@ STBTT_DEF void stbtt_GetFontBoundingBox(const stbtt_fontinfo *info, int *x0, int
+ 
+ STBTT_DEF float stbtt_ScaleForPixelHeight(const stbtt_fontinfo *info, float height)
+ {
++   STBTT__BIND(info);
+    int fheight = ttSHORT(info->data + info->hhea + 4) - ttSHORT(info->data + info->hhea + 6);
+    return (float) height / fheight;
+ }
+@@ -4941,6 +5004,12 @@ STBTT_DEF int stbtt_BakeFontBitmap(const unsigned char *data, int offset,
+    return stbtt_BakeFontBitmap_internal((unsigned char *) data, offset, pixel_height, pixels, pw, ph, first_char, num_chars, chardata);
+ }
+ 
++STBTT_DEF void stbtt_BindData(const unsigned char *data, int len)
++{
++   stbtt__lo = data;
++   stbtt__hi = data ? data + (len > 0 ? len : 0) : data;
++}
++
+ STBTT_DEF int stbtt_GetFontOffsetForIndex(const unsigned char *data, int index)
+ {
+    return stbtt_GetFontOffsetForIndex_internal((unsigned char *) data, index);
