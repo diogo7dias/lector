@@ -13,12 +13,13 @@
 // book's text settings, More = the tabbed list menu). See ReaderToolbarUi.
 
 bool EpubReaderActivity::openToolbar() {
-  // Needs a page on screen to paint over; while one is still being built the list menu is
-  // what a press gets.
-  if (SETTINGS.readerMenuStyle != CrossPointSettings::READER_MENU_TOOLBAR || !section || !epub || toolbarOpen) {
+  // Needs a page on screen to paint over (not the End of Book screen); while one is still
+  // being built the list menu is what a press gets.
+  if (SETTINGS.readerMenuStyle != CrossPointSettings::READER_MENU_TOOLBAR || !section || !epub || toolbarOpen ||
+      currentSpineIndex >= epub->getSpineItemsCount()) {
     return false;
   }
-  // ~2 KB while the sheet is up, freed on close; no stack or static home, since most reading
+  // Heap while the sheet is up, freed on close; no stack or static home, since most reading
   // never opens it. Nothrow: a failed allocation falls back to the list menu.
   auto ui = makeUniqueNoThrow<ReaderToolbarUi>(renderer);
   if (!ui) {
