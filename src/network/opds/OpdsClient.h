@@ -25,6 +25,10 @@ enum class ClientStatus {
   PARSE_FAILED,
   EMPTY,
   BAD_CREDENTIALS,
+  // A 401 from another origin than the one asked: the redirect target never got the password.
+  REDIRECTED,
+  // A 5xx answer that outlasted the retries; Cloudflare's 530 means the tunnel behind a host is down.
+  SERVER_ERROR,
   // TLS reached a server whose certificate nothing vouches for; the user can trust it.
   CERT_UNTRUSTED,
   ABORTED

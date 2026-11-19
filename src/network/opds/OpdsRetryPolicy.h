@@ -43,6 +43,9 @@ inline bool isRetryableHttpStatus(const int status) {
   return false;
 }
 
+// True for any 5xx: the server answered and is failing, which is not the feed's fault or the link's.
+inline bool isServerError(const int status) { return status >= 500 && status <= 599; }
+
 // Determines whether a failed attempt should be retried.
 // attemptsMade: 1 for the first attempt, 2 for the second, etc.
 inline bool shouldRetry(const int httpStatus, const int attemptsMade, const int maxAttempts = MAX_ATTEMPTS) {

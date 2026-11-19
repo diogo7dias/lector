@@ -58,6 +58,9 @@ struct Sink {
   std::string* contentDisposition = nullptr;
   // When set, receives the body of a 401 answer, up to HttpDownloader::CHALLENGE_BODY_MAX bytes.
   std::string* challengeBody = nullptr;
+  // When set, receives whether the final response came from an origin that may not carry the
+  // credentials the request started with (a redirect to another host, or down to http).
+  bool* answeredByOtherOrigin = nullptr;
   // Status of the final response, 0 when the request never got one. A caller that
   // shows an error to the reader needs to tell "the server said no" from "the
   // connection never happened".
@@ -164,6 +167,7 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
 
     if (http.aborted()) return HttpDownloader::ABORTED;
     sink.status = status;
+    if (sink.answeredByOtherOrigin) *sink.answeredByOtherOrigin = !fetch_url::mayCarryCredentials(startUrl, url);
     if (status < 0) {
       LOG_ERR("HTTP", "wolfSSL request failed: %s (free %d bytes, largest block %d bytes)", url.c_str(),
               ESP.getFreeHeap(), ESP.getMaxAllocHeap());
@@ -368,6 +372,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const 
   Sink sink;
   sink.write = [&outContent](const uint8_t* data, size_t len) { return outContent.write(data, len) == len; };
   sink.challengeBody = extras.challengeBody;
+  sink.answeredByOtherOrigin = extras.answeredByOtherOrigin;
   const DownloadError result = runGetSecure(url, username, password, extras, sink, timeoutMs);
   if (outError) *outError = result;
   if (outStatus) *outStatus = sink.status;

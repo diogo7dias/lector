@@ -19,6 +19,9 @@ struct HttpRequestExtras {
   std::vector<std::pair<std::string, std::string>> headers;
   // When set, receives the body of a 401 answer (the OPDS authentication document).
   std::string* challengeBody = nullptr;
+  // When set, receives whether the final answer came from another origin than the request
+  // started on, so a 401 there is not a wrong password: the credentials were withheld.
+  bool* answeredByOtherOrigin = nullptr;
 };
 
 namespace request_headers {

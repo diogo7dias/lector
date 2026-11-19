@@ -76,3 +76,18 @@ TEST(OpdsRetryPolicy, TimeoutIsConfiguredForPromptReconnection) {
   EXPECT_EQ(DEFAULT_TIMEOUT_MS, 15000U);
   EXPECT_LT(DEFAULT_TIMEOUT_MS, 60000U);
 }
+
+TEST(OpdsRetryPolicy, EveryFiveHundredIsAServerError) {
+  EXPECT_TRUE(isServerError(500));
+  EXPECT_TRUE(isServerError(502));
+  EXPECT_TRUE(isServerError(530));  // Cloudflare: the tunnel behind a host is down
+  EXPECT_TRUE(isServerError(599));
+}
+
+TEST(OpdsRetryPolicy, OtherStatusesAreNotServerErrors) {
+  EXPECT_FALSE(isServerError(0));
+  EXPECT_FALSE(isServerError(200));
+  EXPECT_FALSE(isServerError(401));
+  EXPECT_FALSE(isServerError(404));
+  EXPECT_FALSE(isServerError(600));
+}

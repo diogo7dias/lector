@@ -27,13 +27,14 @@ const std::string& ifSameServer(const OpdsServer& server, const std::string& url
 // points at another host (a CDN, another catalogue) gets none of them. HttpDownloader
 // repeats the check on every redirect hop. A 401 answer's body is kept for signIn.
 HttpDownloader::RequestExtras extrasFor(const OpdsServer& server, const std::string& url, const std::string& bearer,
-                                        std::string* challenge) {
+                                        std::string* challenge, bool* otherOrigin = nullptr) {
   HttpDownloader::RequestExtras extras;
   if (fetch_url::mayCarryCredentials(server.url, url)) {
     extras.headers = server.activeCustomHeaders();
     extras.bearer = bearer;
   }
   extras.challengeBody = challenge;
+  extras.answeredByOtherOrigin = otherOrigin;
   return extras;
 }
 
@@ -138,6 +139,7 @@ ClientStatus OpdsClient::fetchFeed(const OpdsServer& server, const std::string& 
   std::string bearer = OPDS_TOKENS.get(tokenKey).accessToken;
   std::string challenge;
   bool signInTried = false;
+  bool otherOrigin = false;
 
   for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
     if (isCancelled()) return ClientStatus::ABORTED;
@@ -161,7 +163,7 @@ ClientStatus OpdsClient::fetchFeed(const OpdsServer& server, const std::string& 
       OpdsParserStream stream{parser};
       fetched = HttpDownloader::fetchUrl(url, stream, ifSameServer(server, url, server.username),
                                          ifSameServer(server, url, server.password), &fetchError, &fetchStatus,
-                                         timeoutMs, extrasFor(server, url, bearer, &challenge));
+                                         timeoutMs, extrasFor(server, url, bearer, &challenge, &otherOrigin));
     }
     if (afterAttempt) afterAttempt();
 
@@ -202,15 +204,17 @@ ClientStatus OpdsClient::fetchFeed(const OpdsServer& server, const std::string& 
           continue;
         }
       }
-      LOG_ERR("OPDSCLI", "Server refused credentials (401)");
-      return ClientStatus::BAD_CREDENTIALS;
+      LOG_ERR("OPDSCLI", "Server refused credentials (401%s)", otherOrigin ? ", after a redirect" : "");
+      // Another origin never saw the password, so it cannot have been the wrong one.
+      return otherOrigin ? ClientStatus::REDIRECTED : ClientStatus::BAD_CREDENTIALS;
     }
 
     if (!opds_retry::shouldRetry(fetchStatus, attempt, maxAttempts)) {
       LOG_ERR("OPDSCLI", "Fetch failed (attempt %d/%d, status %d, error %d)", attempt, maxAttempts, fetchStatus,
               static_cast<int>(fetchError));
       if (fetched && !parser) return ClientStatus::PARSE_FAILED;
-      return fetchError == HttpDownloader::NO_CONNECTION ? ClientStatus::UNREACHABLE : ClientStatus::FETCH_FAILED;
+      if (fetchError == HttpDownloader::NO_CONNECTION) return ClientStatus::UNREACHABLE;
+      return opds_retry::isServerError(fetchStatus) ? ClientStatus::SERVER_ERROR : ClientStatus::FETCH_FAILED;
     }
 
     const unsigned long delayMs = opds_retry::backoffMs(attempt);
