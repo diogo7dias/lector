@@ -58,4 +58,8 @@ test('a time zone picked on its screen shows on its row and survives a reboot', 
   await press('Up', 2);
   await tapTwice(100, 608);
   await expect.poll(value, { timeout: 30_000 }).toBeGreaterThan(0);
+
+  // Leave on Home, where the suites after this one expect to start.
+  await screen.getByRole('button', { name: 'Home' }).click();
+  await expect(activity).toHaveText('Home', { timeout: 30_000 });
 });
