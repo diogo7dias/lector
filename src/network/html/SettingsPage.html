@@ -683,7 +683,21 @@
   // Dynamically renders an editable list of OPDS servers, communicating with the
   // /api/opds REST endpoints. Password fields are never pre-filled for security;
   // the "(unchanged)" placeholder indicates an existing password is preserved on save.
+  // Custom headers (e.g. a Cloudflare Access token) work the same way: the name shows,
+  // the value is never sent back, and an empty name removes the header.
   let opdsServers = [];
+
+  function renderOpdsHeader(srv, n, id) {
+    const h = (srv.headers || [])[n] || {};
+    return '<div class="setting-row">' +
+        '<span class="setting-name">Header ' + (n + 1) + ' Name</span>' +
+        '<span class="setting-control"><input type="text" id="opds-h' + n + 'n-' + id + '" value="' + escapeHtml(h.name || '') + '"></span>' +
+      '</div>' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">Header ' + (n + 1) + ' Value</span>' +
+        '<span class="setting-control"><input type="password" id="opds-h' + n + 'v-' + id + '" placeholder="' + (h.hasValue ? '(unchanged)' : '') + '"></span>' +
+      '</div>';
+  }
 
   function renderOpdsServer(srv, idx) {
     const isNew = idx === -1;
@@ -705,6 +719,7 @@
         '<span class="setting-name">Password</span>' +
         '<span class="setting-control"><input type="password" id="opds-pass-' + id + '" placeholder="' + (srv.hasPassword ? '(unchanged)' : '') + '"></span>' +
       '</div>' +
+      renderOpdsHeader(srv, 0, id) + renderOpdsHeader(srv, 1, id) +
       '<div class="opds-actions">' +
         '<button class="btn-small btn-save-server" onclick="saveOpdsServer(' + idx + ')">Save</button>' +
         (isNew ? '' : '<button class="btn-small btn-delete" onclick="deleteOpdsServer(' + idx + ')">Delete</button>') +
@@ -761,6 +776,12 @@
     // omitting it tells the server to keep the existing password.
     const pass = document.getElementById('opds-pass-' + id).value;
     if (pass) data.password = pass;
+    data.headers = [0, 1].map(function(n) {
+      const h = {name: document.getElementById('opds-h' + n + 'n-' + id).value.trim()};
+      const v = document.getElementById('opds-h' + n + 'v-' + id).value;
+      if (v) h.value = v;
+      return h;
+    });
     if (idx >= 0) data.index = idx;
 
     try {

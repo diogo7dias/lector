@@ -12,10 +12,11 @@ namespace protected_paths {
 
 inline constexpr const char* STORE_FOLDER = "/.crosspoint";
 
-// Stored passwords, plus the certificate pins: overwriting those would make the device
-// trust another server. Prefix match, so temp and backup siblings are covered too.
+// Stored passwords and sign-in tokens, plus the certificate pins: overwriting those would
+// make the device trust another server. Prefix match, so temp and backup siblings are covered too.
 inline constexpr const char* PROTECTED_FILES[] = {"/.crosspoint/wifi.json", "/.crosspoint/opds.json",
-                                                  "/.crosspoint/koreader.json", "/.crosspoint/trusted_certs.txt"};
+                                                  "/.crosspoint/opds_tokens.json", "/.crosspoint/koreader.json",
+                                                  "/.crosspoint/trusted_certs.txt"};
 
 // SdFat also opens a name by its generated 8.3 alias (".crosspoint" is CROSSP~1), and an
 // alias cannot be mapped back to its long name.

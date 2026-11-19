@@ -134,6 +134,7 @@ class CrossPointWebServer {
   // Request handlers
   void handleRoot() const;
   void handleJszip() const;
+  void handleEpubOptimizer() const;
   void handleNotFound() const;
   void handleStatus() const;
   void handleReadingList() const;

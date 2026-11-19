@@ -9,6 +9,8 @@ using protected_paths::isProtectedPath;
 TEST(ProtectedPaths, StoresAndTheirSiblingsAreProtected) {
   EXPECT_TRUE(isProtectedFile("/.crosspoint/wifi.json"));
   EXPECT_TRUE(isProtectedFile("/.crosspoint/opds.json"));
+  EXPECT_TRUE(isProtectedFile("/.crosspoint/opds_tokens.json"));
+  EXPECT_TRUE(isProtectedFile("/.crosspoint/opds_tokens.json.tmp"));
   EXPECT_TRUE(isProtectedFile("/.crosspoint/koreader.json"));
   EXPECT_TRUE(isProtectedFile("/.crosspoint/trusted_certs.txt"));
   EXPECT_TRUE(isProtectedFile("/.crosspoint/wifi.json.tmp"));

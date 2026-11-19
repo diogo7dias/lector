@@ -4,9 +4,11 @@
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <OpdsAuth.h>
 #include <OpdsStream.h>
 
 #include "CrossPointSettings.h"
+#include "OpdsTokenStore.h"
 #include "network/FetchUrlPolicy.h"
 #include "util/BookCacheUtils.h"
 #include "util/OpdsFilename.h"
@@ -19,6 +21,89 @@ namespace {
 const std::string& ifSameServer(const OpdsServer& server, const std::string& url, const std::string& secret) {
   static const std::string none;
   return fetch_url::mayCarryCredentials(server.url, url) ? secret : none;
+}
+
+// The same rule for the server's custom headers and its bearer token: a feed link that
+// points at another host (a CDN, another catalogue) gets none of them. HttpDownloader
+// repeats the check on every redirect hop. A 401 answer's body is kept for signIn.
+HttpDownloader::RequestExtras extrasFor(const OpdsServer& server, const std::string& url, const std::string& bearer,
+                                        std::string* challenge) {
+  HttpDownloader::RequestExtras extras;
+  if (fetch_url::mayCarryCredentials(server.url, url)) {
+    extras.headers = server.activeCustomHeaders();
+    extras.bearer = bearer;
+  }
+  extras.challengeBody = challenge;
+  return extras;
+}
+
+// One token request: a form posted to the server's own token endpoint.
+bool requestToken(const std::string& tokenUrl, const std::string& form, const OpdsServer& server,
+                  opds_auth::TokenResponse& out, const uint32_t timeoutMs) {
+  HttpDownloader::RequestExtras extras;
+  extras.headers = server.activeCustomHeaders();
+  std::string response;
+  int status = 0;
+  const bool posted = HttpDownloader::postForm(tokenUrl, form, response, status, extras, timeoutMs);
+  if (!posted || !opds_auth::parseTokenResponse(response.data(), response.size(), out)) {
+    LOG_ERR("OPDSCLI", "Token request failed (status %d)", status);
+    return false;
+  }
+  return true;
+}
+
+// Answers a 401. A server whose authentication document offers the OAuth password flow gets
+// a bearer token: renewed with the stored refresh token when there is one, else from the
+// stored username and password. True when `bearer` holds a token worth one more request.
+// The password and the refresh token go only to the server's own host, token endpoint
+// included; a document that names another host is refused, not followed.
+bool signIn(const OpdsServer& server, const std::string& url, const std::string& challenge, std::string& bearer,
+            const uint32_t timeoutMs) {
+  if (!fetch_url::mayCarryCredentials(server.url, url)) return false;
+  opds_auth::AuthDocument doc;
+  if (!opds_auth::parseAuthDocument(challenge.data(), challenge.size(), doc)) return false;  // plain Basic, or no flow
+#if defined(ESP32)
+  if (ESP.getMaxAllocHeap() < 20 * 1024) {
+    LOG_ERR("OPDSCLI", "Heap too fragmented to sign in (largest=%u)", (unsigned)ESP.getMaxAllocHeap());
+    return false;
+  }
+#endif
+  const std::string key = OpdsTokenStore::keyFor(server.url, server.username);
+  OpdsTokens tokens = OPDS_TOKENS.get(key);
+  opds_auth::TokenResponse issued;
+
+  bool signedIn = false;
+  if (!bearer.empty() && !tokens.refreshToken.empty() &&
+      fetch_url::mayCarryCredentials(server.url, tokens.refreshUrl)) {
+    signedIn =
+        requestToken(tokens.refreshUrl, opds_auth::refreshGrantBody(tokens.refreshToken), server, issued, timeoutMs);
+    // A server that rotates its refresh token sends the new one; otherwise the old one stays.
+    if (signedIn && issued.refreshToken.empty()) issued.refreshToken = tokens.refreshToken;
+  }
+  if (!signedIn) {
+    if (server.username.empty() || server.password.empty()) {
+      LOG_ERR("OPDSCLI", "Server wants a sign-in but no credentials are set");
+      return false;
+    }
+    const std::string tokenUrl = UrlUtils::buildUrl(url, doc.tokenUrl);
+    if (!fetch_url::mayCarryCredentials(server.url, tokenUrl)) {
+      LOG_ERR("OPDSCLI", "Token endpoint is on another host; credentials not sent");
+      return false;
+    }
+    if (!requestToken(tokenUrl, opds_auth::passwordGrantBody(server.username, server.password), server, issued,
+                      timeoutMs)) {
+      return false;
+    }
+    tokens.refreshUrl = doc.refreshUrl.empty() ? tokenUrl : UrlUtils::buildUrl(url, doc.refreshUrl);
+  }
+  LOG_INF("OPDSCLI", "Signed in to %s", server.name.c_str());
+
+  tokens.accessToken = issued.accessToken;
+  tokens.refreshToken = issued.refreshToken;
+  if (tokens.refreshToken.empty()) tokens.refreshUrl.clear();
+  if (!OPDS_TOKENS.put(key, tokens)) LOG_ERR("OPDSCLI", "Token not kept; it serves this visit only");
+  bearer = tokens.accessToken;
+  return true;
 }
 }  // namespace
 
@@ -49,6 +134,11 @@ ClientStatus OpdsClient::fetchFeed(const OpdsServer& server, const std::string& 
     return false;
   };
 
+  const std::string tokenKey = OpdsTokenStore::keyFor(server.url, server.username);
+  std::string bearer = OPDS_TOKENS.get(tokenKey).accessToken;
+  std::string challenge;
+  bool signInTried = false;
+
   for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
     if (isCancelled()) return ClientStatus::ABORTED;
 
@@ -65,12 +155,13 @@ ClientStatus OpdsClient::fetchFeed(const OpdsServer& server, const std::string& 
     HttpDownloader::DownloadError fetchError = HttpDownloader::OK;
     int fetchStatus = 0;
 
+    challenge.clear();
     if (beforeAttempt) beforeAttempt();
     {
       OpdsParserStream stream{parser};
-      fetched =
-          HttpDownloader::fetchUrl(url, stream, ifSameServer(server, url, server.username),
-                                   ifSameServer(server, url, server.password), &fetchError, &fetchStatus, timeoutMs);
+      fetched = HttpDownloader::fetchUrl(url, stream, ifSameServer(server, url, server.username),
+                                         ifSameServer(server, url, server.password), &fetchError, &fetchStatus,
+                                         timeoutMs, extrasFor(server, url, bearer, &challenge));
     }
     if (afterAttempt) afterAttempt();
 
@@ -97,6 +188,20 @@ ClientStatus OpdsClient::fetchFeed(const OpdsServer& server, const std::string& 
     if (fetchError == HttpDownloader::CERT_UNTRUSTED) return ClientStatus::CERT_UNTRUSTED;
 
     if (fetchStatus == 401) {
+      if (!signInTried) {
+        signInTried = true;
+        if (signIn(server, url, challenge, bearer, timeoutMs)) {
+          --attempt;  // a new token is not a failed attempt
+          continue;
+        }
+        if (!bearer.empty()) {
+          // The stored token is dead and no sign-in replaces it: Basic is the only way left.
+          OPDS_TOKENS.put(tokenKey, {});
+          bearer.clear();
+          --attempt;
+          continue;
+        }
+      }
       LOG_ERR("OPDSCLI", "Server refused credentials (401)");
       return ClientStatus::BAD_CREDENTIALS;
     }
@@ -176,17 +281,25 @@ HttpDownloader::DownloadError OpdsClient::downloadBook(
     return error;
   };
 
+  const std::string tokenKey = OpdsTokenStore::keyFor(server.url, server.username);
+  std::string bearer = OPDS_TOKENS.get(tokenKey).accessToken;
+  std::string challenge;
+  bool signInTried = false;
+
   for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
     if (isCancelled()) return giveUp(HttpDownloader::ABORTED);
 
     std::string contentDisposition;
     HttpDownloader::DownloadError result;
+    int status = 0;
+    challenge.clear();
 
     if (beforeAttempt) beforeAttempt();
-    result = HttpDownloader::downloadToFile(
-        downloadUrl, partPath, progress, cancelFlag, ifSameServer(server, downloadUrl, server.username),
-        ifSameServer(server, downloadUrl, server.password),
-        /*allowResume=*/true, server.keepFilename ? &contentDisposition : nullptr, timeoutMs);
+    result = HttpDownloader::downloadToFile(downloadUrl, partPath, progress, cancelFlag,
+                                            ifSameServer(server, downloadUrl, server.username),
+                                            ifSameServer(server, downloadUrl, server.password),
+                                            /*allowResume=*/true, server.keepFilename ? &contentDisposition : nullptr,
+                                            timeoutMs, &status, extrasFor(server, downloadUrl, bearer, &challenge));
     if (afterAttempt) afterAttempt();
 
     if (result == HttpDownloader::OK) {
@@ -222,6 +335,15 @@ HttpDownloader::DownloadError OpdsClient::downloadBook(
 
     if (result == HttpDownloader::ABORTED || isCancelled()) {
       return giveUp(HttpDownloader::ABORTED);
+    }
+
+    // A token that expired between browsing and downloading: renew it and go again.
+    if (status == 401 && !signInTried) {
+      signInTried = true;
+      if (signIn(server, downloadUrl, challenge, bearer, timeoutMs)) {
+        --attempt;
+        continue;
+      }
     }
 
     // Retry only a transfer that dropped. A status the server answered with, a bad

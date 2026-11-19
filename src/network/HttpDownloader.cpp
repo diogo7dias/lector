@@ -1,13 +1,16 @@
 #include "HttpDownloader.h"
 
 #include <Arduino.h>
+#include <HttpHeader.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <ObfuscationUtils.h>
 
+#include <algorithm>
 #include <functional>
 #include <string>
 
+#include "FetchUrlPolicy.h"
 #include "HttpRangePolicy.h"
 #include "WifiFullPower.h"
 #include "util/UrlUtils.h"
@@ -53,6 +56,8 @@ struct Sink {
   // caller can name a file the URL did not name. Left untouched when the server
   // sends no such header.
   std::string* contentDisposition = nullptr;
+  // When set, receives the body of a 401 answer, up to HttpDownloader::CHALLENGE_BODY_MAX bytes.
+  std::string* challengeBody = nullptr;
   // Status of the final response, 0 when the request never got one. A caller that
   // shows an error to the reader needs to tell "the server said no" from "the
   // connection never happened".
@@ -82,9 +87,16 @@ bool isRedirect(int status) {
 }
 
 #if defined(FREEINK_NET_WOLFSSL)
+// Puts the credentials a request carries on the wire (see request_headers::build).
+void addCredentialHeaders(freeink::SecureHttpClient& http, const std::string& username, const std::string& password,
+                          const HttpDownloader::RequestExtras& extras) {
+  const std::string basic = (!username.empty() && !password.empty()) ? basicAuthHeader(username, password) : "";
+  for (const auto& [name, value] : request_headers::build(extras, basic)) http.addHeader(name, value);
+}
+
 HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std::string& username,
-                                         const std::string& password, Sink& sink,
-                                         const uint32_t timeoutMs = HTTP_TIMEOUT_MS) {
+                                         const std::string& password, const HttpDownloader::RequestExtras& extras,
+                                         Sink& sink, const uint32_t timeoutMs = HTTP_TIMEOUT_MS) {
   std::string url = startUrl;
 
   for (int hop = 0; hop <= MAX_REDIRECTS; ++hop) {
@@ -107,11 +119,9 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
     // answers 400 "Duplicate 'User-Agent' header found").
     http.setUserAgent("CrossPoint-ESP32-" CROSSPOINT_VERSION);
     // Credentials go only to the origin they were given for: a redirect to another
-    // host or scheme (a CDN, a downgrade to http) must not receive the password.
-    if (!username.empty() && !password.empty() &&
-        strcasecmp(UrlUtils::extractHost(url).c_str(), UrlUtils::extractHost(startUrl).c_str()) == 0) {
-      http.addHeader("Authorization", basicAuthHeader(username, password));
-    }
+    // host or scheme (a CDN, a downgrade to http) must not receive the password, a
+    // token or a custom header.
+    if (fetch_url::mayCarryCredentials(startUrl, url)) addCredentialHeaders(http, username, password, extras);
 
     if (sink.rangeStart > 0) {
       http.addHeader("Range", "bytes=" + std::to_string(sink.rangeStart) + "-");
@@ -123,6 +133,12 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
     const int status = http.GET(
         [&http, &sink, &bodyStarted, &restartFailed](const uint8_t* data, size_t len) {
           const int code = http.getStatus();
+          if (code == 401 && sink.challengeBody) {
+            const size_t room = HttpDownloader::CHALLENGE_BODY_MAX -
+                                std::min(sink.challengeBody->size(), HttpDownloader::CHALLENGE_BODY_MAX);
+            sink.challengeBody->append(reinterpret_cast<const char*>(data), std::min(len, room));
+            return true;
+          }
           // Redirect bodies are drained through here too; only the final
           // response carries bytes worth keeping.
           if (!http_range::isBodyStatus(code, sink.rangeStart)) return true;
@@ -330,11 +346,14 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
 // mbedTLS path fails to connect or stalls mid-stream. Plain-http URLs still use a
 // WiFiClient inside runGetWolf, so this is safe for non-TLS targets too.
 HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::string& username,
-                                           const std::string& password, Sink& sink,
-                                           const uint32_t timeoutMs = HTTP_TIMEOUT_MS) {
+                                           const std::string& password, const HttpDownloader::RequestExtras& extras,
+                                           Sink& sink, const uint32_t timeoutMs = HTTP_TIMEOUT_MS) {
 #if defined(FREEINK_NET_WOLFSSL)
-  return runGetWolf(url, username, password, sink, timeoutMs);
+  return runGetWolf(url, username, password, extras, sink, timeoutMs);
 #else
+  // esp_http_client keeps its headers across a redirect, so this path cannot honour the
+  // origin rule for tokens and custom headers and sends only the Basic pair. No env
+  // builds it: every one defines FREEINK_NET_WOLFSSL.
   return runGet(url, username, password, sink, timeoutMs);
 #endif
 }
@@ -342,13 +361,14 @@ HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::st
 
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
                               const std::string& password, DownloadError* outError, int* outStatus,
-                              const uint32_t timeoutMs) {
+                              const uint32_t timeoutMs, const RequestExtras& extras) {
   LOG_DBG("HTTP", "Fetching: %s (free %d bytes, largest block %d bytes)", url.c_str(), ESP.getFreeHeap(),
           ESP.getMaxAllocHeap());
   const WifiFullPower fullPower;
   Sink sink;
   sink.write = [&outContent](const uint8_t* data, size_t len) { return outContent.write(data, len) == len; };
-  const DownloadError result = runGetSecure(url, username, password, sink, timeoutMs);
+  sink.challengeBody = extras.challengeBody;
+  const DownloadError result = runGetSecure(url, username, password, extras, sink, timeoutMs);
   if (outError) *outError = result;
   if (outStatus) *outStatus = sink.status;
   return result == OK;
@@ -372,14 +392,15 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
       return true;
     };
   }
-  return runGetSecure(url, username, password, sink, timeoutMs) == OK;
+  return runGetSecure(url, username, password, {}, sink, timeoutMs) == OK;
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress, bool* cancelFlag,
                                                              const std::string& username, const std::string& password,
                                                              const bool allowResume, std::string* contentDisposition,
-                                                             const uint32_t timeoutMs, int* outStatus) {
+                                                             const uint32_t timeoutMs, int* outStatus,
+                                                             const RequestExtras& extras) {
   LOG_DBG("HTTP", "Downloading: %s -> %s", url.c_str(), destPath.c_str());
 
   const WifiFullPower fullPower;
@@ -439,7 +460,8 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     return true;
   };
 
-  const DownloadError result = runGetSecure(url, username, password, sink, timeoutMs);
+  sink.challengeBody = extras.challengeBody;
+  const DownloadError result = runGetSecure(url, username, password, extras, sink, timeoutMs);
   if (outStatus) *outStatus = sink.status;
   // Close before any remove() on the same path; DESTRUCTOR_CLOSES_FILE would
   // otherwise close only after the remove.
@@ -493,4 +515,43 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   }
   LOG_DBG("HTTP", "Downloaded %zu bytes", sink.downloaded);
   return OK;
+}
+
+bool HttpDownloader::postForm(const std::string& url, const std::string& body, std::string& outResponse, int& outStatus,
+                              const RequestExtras& extras, const uint32_t timeoutMs) {
+  outResponse.clear();
+  outStatus = 0;
+#if defined(FREEINK_NET_WOLFSSL)
+  // The body is a password or a refresh token: only the URL is ever logged.
+  LOG_DBG("HTTP", "POST form: %s (free %d bytes, largest block %d bytes)", url.c_str(), ESP.getFreeHeap(),
+          ESP.getMaxAllocHeap());
+  const WifiFullPower fullPower;
+  freeink::SecureHttpClient http;
+  http.setTimeout(timeoutMs);
+  trusted_pins::applyWithPin(http, url.c_str());
+  if (!http.begin(url)) {
+    LOG_ERR("HTTP", "POST bad URL");
+    return false;
+  }
+  http.setUserAgent("CrossPoint-ESP32-" CROSSPOINT_VERSION);
+  addCredentialHeaders(http, "", "", extras);
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  http.addHeader("Accept", "application/json");
+  // No redirects are followed (SecureHttpClient's default): a 3xx is a failure here.
+  const int status = http.sendRequest(
+      "POST", reinterpret_cast<const uint8_t*>(body.data()), body.size(),
+      [&outResponse](const uint8_t* data, size_t len) {
+        outResponse.append(reinterpret_cast<const char*>(data),
+                           std::min(len, CHALLENGE_BODY_MAX - std::min(outResponse.size(), CHALLENGE_BODY_MAX)));
+        return true;
+      });
+  outStatus = std::max(status, 0);
+  return status >= 200 && status < 300;
+#else
+  (void)url;
+  (void)body;
+  (void)extras;
+  (void)timeoutMs;
+  return false;
+#endif
 }
