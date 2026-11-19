@@ -106,7 +106,9 @@ poll();
 class Device:
     def __init__(self, workdir):
         flash = make_flash(os.path.join(workdir, "flash.bin"), BOARD)
-        sd = make_sd(os.path.join(workdir, "sd.img"))
+        # sim/fixtures/sd holds the SD-card TTF fonts only the X4 Pro reads (a good one, a cut-short one).
+        fixtures = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "sd")
+        sd = make_sd(os.path.join(workdir, "sd.img"), fixtures=fixtures if BOARD == "x4pro" else None)
         self.sim = LectorSim(BOARD, flash, sd, workdir)
         self.lock = threading.Lock()
         with self.lock:
