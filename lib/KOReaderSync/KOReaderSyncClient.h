@@ -103,6 +103,10 @@ class KOReaderSyncClient {
    */
   static Error updateProgress(const KOReaderProgress& progress);
 
+  // POST a JSON body to `path` under the KOSync base URL with the KOSync login
+  // (BookOrbit's plugin endpoints share it). Any 2xx is OK.
+  static Error postJson(const char* path, const std::string& body);
+
   /** HTTP status code from the last request (for diagnostics). */
   static int lastHttpCode;
 };

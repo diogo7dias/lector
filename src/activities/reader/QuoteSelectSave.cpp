@@ -8,6 +8,7 @@
 #include "QuoteSelectActivity.h"
 #include "QuoteSidecar.h"
 #include "components/UITheme.h"
+#include "util/QuoteSync.h"
 #include "util/QuoteText.h"
 
 std::string QuoteSelectActivity::chapterTitle() const {
@@ -25,21 +26,50 @@ void QuoteSelectActivity::saveSelectedQuote() {
   // anchor was taken on the start word's own page (see the Confirm handler): the word
   // index is only a tie-break for a passage repeated inside the same paragraph, and
   // the quote text itself is what identifies the words.
-  if (!saveQuoteToFile(quote, quote_text::formatAnchorToken(startAnchor))) {
+  quote_text::QuoteMeta meta;
+  meta.savedAt = quote_sync::nowUtc();
+  // The start page's place in the chapter, in KOReader's units: what BookOrbit is told.
+  if (section) {
+    if (const auto offset = section->getVisibleTextOffsetForPage(static_cast<uint16_t>(startPageNumber))) {
+      meta.textOffset = *offset;
+    }
+  }
+  if (!saveQuoteToFile(quote, quote_text::formatAnchorToken(startAnchor), meta)) {
     // Full sidecar or a failed write: say so before the reader repaints over it.
     GUI.drawPopup(renderer, tr(STR_QUOTE_SAVE_FAILED));
     delay(1200);
+    return;
   }
+  appendClipping(quote, meta.savedAt);
+}
+
+// The Kindle copy of the quote. The book's own quotes file is the record: a failure
+// here is only logged, and the save still counts.
+void QuoteSelectActivity::appendClipping(const std::string& quote, const uint32_t savedAt) const {
+  const std::string entry =
+      quote_text::formatClipping(epub.getTitle(), epub.getAuthor(), chapterTitle(), startPageNumber + 1, quote,
+                                 savedAt ? quote_sync::toLocal(savedAt) : 0);
+  HalFile file = Storage.open(quote_text::CLIPPINGS_PATH, O_RDWR | O_CREAT | O_APPEND);
+  if (!file) {
+    LOG_ERR("QUOTE", "Cannot open %s", quote_text::CLIPPINGS_PATH);
+    return;
+  }
+  if (file.write(entry.data(), entry.size()) != entry.size()) {
+    LOG_ERR("QUOTE", "Clipping write failed");
+    return;
+  }
+  LOG_INF("QUOTE", "Clipping added to %s", quote_text::CLIPPINGS_PATH);
 }
 
 // Atomic-ish read-modify-write append of one "[chapter @anchor]\nquote\n---\n\n"
 // entry to the "<book>_QUOTES.txt" sidecar: stream existing bytes + the new entry
 // into a .tmp, then rotate primary -> .bak, .tmp -> primary, drop .bak (restore
 // .bak on promote failure). Refused when the file would exceed MAX_QUOTES_FILE_BYTES.
-bool QuoteSelectActivity::saveQuoteToFile(const std::string& quote, const std::string& anchorToken) {
+bool QuoteSelectActivity::saveQuoteToFile(const std::string& quote, const std::string& anchorToken,
+                                          const quote_text::QuoteMeta& meta) {
   const std::string path = quote_text::quotesFilePathFor(epub.getPath());
   const std::string tmpPath = path + ".tmp";
-  const std::string entry = quote_text::formatQuoteEntry(chapterTitle(), anchorToken, quote);
+  const std::string entry = quote_text::formatQuoteEntry(chapterTitle(), anchorToken, quote, meta);
 
   size_t existingSize = 0;
   if (Storage.exists(path.c_str())) {

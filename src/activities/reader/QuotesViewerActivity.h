@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "activities/UiListActivity.h"
+#include "util/QuoteText.h"
 
 // Reads back the quotes Grab Quote saved: the "<book>_QUOTES.txt" sidecar written
 // by QuoteSelectActivity, in the same "[chapter]\nquote\n---\n\n" format (see
@@ -21,6 +22,7 @@ class QuotesViewerActivity final : public UiListActivity {
     // quotes saved before anchors existed. Kept verbatim so deleting one quote
     // never strips the others' underlines.
     std::string anchor;
+    quote_text::QuoteMeta meta;  // save time and text offset, kept on rewrite like the anchor
     std::string text;
   };
 

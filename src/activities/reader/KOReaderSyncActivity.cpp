@@ -22,6 +22,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/TrustCertificatePrompt.h"
 #include "util/KOReaderSyncMessage.h"
+#include "util/QuoteSync.h"
 
 namespace {
 DocumentMatchMethod alternateMatchMethod(const DocumentMatchMethod method) {
@@ -176,6 +177,13 @@ void KOReaderSyncActivity::performSync() {
     remoteProgress = std::move(alternateProgress);
     hasAlternateProgress = false;
     result = KOReaderSyncClient::OK;
+  }
+
+  // The server answered: saved quotes go up as BookOrbit highlights whichever way the
+  // position moves. Not on the pull at book open, which only asks for a position. A
+  // failed send is only logged and tried again at the next sync.
+  if (!autoMode && (result == KOReaderSyncClient::OK || result == KOReaderSyncClient::NOT_FOUND)) {
+    quote_sync::push(epubPath, primaryHash);
   }
 
   if (result == KOReaderSyncClient::NOT_FOUND) {

@@ -191,3 +191,47 @@ TEST(QuoteText, NextQuoteRecordUnclosedBracketIsText) {
   EXPECT_EQ("[no close\nquote", buf.substr(rec.textStart, rec.textEnd - rec.textStart));
   EXPECT_FALSE(nextQuoteRecord(buf, pos, rec));
 }
+
+TEST(QuoteText, MetaRoundTripsAndOldReadersKeepTheAnchor) {
+  QuoteMeta meta;
+  meta.savedAt = 1763590000u;
+  meta.textOffset = 4200;
+  const std::string entry = formatQuoteEntry("Ch @t: 1", "@q1:3,7,2", "quote", meta);
+  EXPECT_EQ("\f[Ch @t: 1 @o:4200 @t:1763590000 @q1:3,7,2]\nquote\n---\n\n", entry);
+  std::string chapter, anchor;
+  QuoteMeta back;
+  splitChapterAnchor("Ch @t: 1 @o:4200 @t:1763590000 @q1:3,7,2", chapter, anchor, &back);
+  EXPECT_EQ("Ch @t: 1", chapter);  // a title that merely looks like a token stays whole
+  EXPECT_EQ("@q1:3,7,2", anchor);
+  EXPECT_EQ(1763590000u, back.savedAt);
+  EXPECT_EQ(4200u, back.textOffset);
+  // A reader that only knows anchors still finds this one (old firmware, the reader's underline).
+  splitChapterAnchor("Ch @t: 1 @o:4200 @t:1763590000 @q1:3,7,2", chapter, anchor);
+  EXPECT_EQ("@q1:3,7,2", anchor);
+  // Time only, no anchor; and a record from before any of this.
+  splitChapterAnchor("Ch @t:5", chapter, anchor, &back);
+  EXPECT_EQ("Ch", chapter);
+  EXPECT_EQ(5u, back.savedAt);
+  EXPECT_EQ(QuoteMeta::NO_OFFSET, back.textOffset);
+  splitChapterAnchor("Ch @q1:3,7,2", chapter, anchor, &back);
+  EXPECT_EQ("Ch", chapter);
+  EXPECT_EQ(0u, back.savedAt);
+  // An entry without meta is byte for byte what it always was.
+  EXPECT_EQ("\f[Ch @q1:3,7,2]\nquote\n---\n\n", formatQuoteEntry("Ch", "@q1:3,7,2", "quote"));
+}
+
+TEST(QuoteText, KoreaderDatetimeAndStableFallback) {
+  EXPECT_EQ("2026-11-19 22:05:07", koreaderDatetime(1795125907));
+  EXPECT_EQ(fallbackSavedAt("same words"), fallbackSavedAt("same words"));
+  EXPECT_NE(fallbackSavedAt("same words"), fallbackSavedAt("other words"));
+  EXPECT_GE(fallbackSavedAt("x"), 1577836800u);
+}
+
+TEST(QuoteText, KindleClippingLayout) {
+  EXPECT_EQ(
+      "Dune (Frank Herbert)\n- Your Highlight on Page 12 | Book One | Added on Thursday, November 19, 2026, 10:05 PM"
+      "\n\nFear is the mind-killer.\n==========\n",
+      formatClipping("Dune", "Frank Herbert", "Book One", 12, "Fear is the mind-killer.", 1795125907));
+  EXPECT_EQ("Dune (Frank Herbert)\n- Your Highlight on Page 1\n\nq\n==========\n",
+            formatClipping("Dune", "Frank Herbert", "", 1, "q", 0));
+}

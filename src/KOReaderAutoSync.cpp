@@ -18,6 +18,7 @@
 #include "WifiCredentialStore.h"
 #include "network/opds/BookOrbitMissing.h"
 #include "util/ProgressFile.h"
+#include "util/QuoteSync.h"
 
 namespace {
 
@@ -142,6 +143,7 @@ bool push(const std::string& path) {
     return false;
   }
   const auto result = KOReaderSyncClient::updateProgress(progress);
+  if (result == KOReaderSyncClient::OK) quote_sync::push(path, progress.document);
   LOG_INF("KOAUTO", "Pushed %.4f for %s: result=%d http=%d", static_cast<double>(local.percentage), path.c_str(),
           result, KOReaderSyncClient::lastHttpCode);
   return true;
