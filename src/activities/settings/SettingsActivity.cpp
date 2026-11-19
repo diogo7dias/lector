@@ -296,7 +296,9 @@ void SettingsActivity::rebuildSettingsList() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_INSTALL_OTHER_FIRMWARE, SettingAction::InstallOtherFirmware));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_TIMEZONE, SettingAction::TimeZone));
+  if (halClock.isAvailable()) {
+    systemSettings.push_back(SettingInfo::Action(StrId::STR_TIMEZONE, SettingAction::TimeZone));
+  }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WHATS_NEW, SettingAction::ReleaseNotes));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_ALL_BOOKMARKS, SettingAction::AllBookmarks));
