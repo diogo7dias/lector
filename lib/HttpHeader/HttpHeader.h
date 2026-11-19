@@ -20,6 +20,10 @@ constexpr size_t HTTP_HEADER_VALUE_MAX = 511;
 // name with no value.
 void parseHttpHeaderLine(std::string_view line, HttpHeader& header);
 
+// An edit of a saved header whose value was never shown: the line as typed, except that an
+// empty value under the saved name (any case) keeps the saved value. An empty line clears.
+void parseHttpHeaderEdit(std::string_view line, const HttpHeader& saved, HttpHeader& header);
+
 // Inverse of parseHttpHeaderLine(); empty for an unused slot. With maskValue a
 // non-empty value shows as "******".
 std::string formatHttpHeaderLine(const HttpHeader& header, bool maskValue = false);

@@ -727,8 +727,9 @@ A catalog behind an authentication proxy such as Cloudflare Access takes up to t
 Header** rows, each typed as one `Name: value` line, for example `CF-Access-Client-Id: ...`
 and `CF-Access-Client-Secret: ...`. The row shows the name and hides the value, which is
 stored scrambled like the password. A header named `Authorization` replaces the username and
-password. The web page has a name and a value box for each, and a blank value box keeps the
-saved value. Headers, like the password, go only to the catalog's own host, never to a
+password. Editing a saved header opens with its name alone: type a new value after it, or
+leave it empty to keep the saved one; an empty line removes the header. The web page has a
+name and a value box for each, and a blank value box keeps the saved value. Headers, like the password, go only to the catalog's own host, never to a
 download link that points elsewhere. `Host`, `Content-Length`, `Content-Type`,
 `Transfer-Encoding`, `Connection`, `Range` and `User-Agent` are refused.
 

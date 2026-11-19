@@ -119,12 +119,13 @@ void OpdsSettingsActivity::activateIndex(const int index) {
   // survive navigation and power-loss scenarios.
   if (index >= FIELD_ITEMS && index < BASE_ITEMS) {
     // "Name: value" on one line, so a header takes one keyboard visit and one row. The line
-    // opens as it was saved: the value is already readable to anyone who can edit this row.
+    // opens with the name alone: a saved value is a credential and is never put on screen.
+    // Leaving the value empty under the same name keeps it; an empty line clears the header.
     const size_t slot = static_cast<size_t>(index - FIELD_ITEMS);
     auto handler = [this, slot](const ActivityResult& result) {
       if (result.isCancelled) return;
       HttpHeader header;
-      parseHttpHeaderLine(std::get<KeyboardResult>(result.data).text, header);
+      parseHttpHeaderEdit(std::get<KeyboardResult>(result.data).text, editServer.customHeaders[slot], header);
       if (!isValidHttpHeader(header.name, header.value)) {
         errorMessage = tr(STR_INVALID_HEADER);
         showSaveError = true;
@@ -135,8 +136,9 @@ void OpdsSettingsActivity::activateIndex(const int index) {
       saveServer();
       requestUpdate();
     };
+    const std::string& name = editServer.customHeaders[slot].name;
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, I18N.get(FIELD_NAMES[index]),
-                                                                   formatHttpHeaderLine(editServer.customHeaders[slot]),
+                                                                   name.empty() ? std::string() : name + ": ",
                                                                    HEADER_LINE_MAX, InputType::Text),
                            handler);
     return;
