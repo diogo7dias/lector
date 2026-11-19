@@ -61,6 +61,9 @@ struct PixelCache {
   // Open the cache file, write the header, and allocate a band buffer big enough
   // to hold the tallest single decode block (maxBlockDstRows output rows).
   bool begin(const std::string& cachePath, int w, int h, int ox, int oy, int maxBlockDstRows) {
+    // A box that rounds to nothing (a PNG scaled to under one pixel) has no rows to cache;
+    // bytesPerRow would be 0 and the band sizing below divides by it.
+    if (w <= 0 || h <= 0) return false;
     width = w;
     height = h;
     originX = ox;

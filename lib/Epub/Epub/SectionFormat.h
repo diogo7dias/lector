@@ -162,7 +162,9 @@ namespace {
 //      (-2 to 2) instead of half pixels. Each TextBlock loses its Word Expansion
 //      letterSpacing byte. Word Spacing now runs 50 to 200 and the paragraph indent no
 //      longer has a 3-space floor, so lines lay out differently as well.
-constexpr uint8_t SECTION_FILE_VERSION = 89;
+// v90: GIF images lay out and draw (CrossPoint 2.0.0): a book's GIF used to be left out of
+//      the page, so a page that carries one paginates differently.
+constexpr uint8_t SECTION_FILE_VERSION = 90;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

@@ -1,6 +1,8 @@
 #include "Epub.h"
 
 #include <FsHelpers.h>
+#include <GifCommon.h>
+#include <GifToBmpConverter.h>
 #include <HalStorage.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
@@ -674,21 +676,29 @@ bool Epub::generateCoverBmp(bool cropped) const {
     return false;
   }
 
-  const bool png = !FsHelpers::hasJpgExtension(coverImageHref);
+  const bool jpg = FsHelpers::hasJpgExtension(coverImageHref);
+  const bool gif = FsHelpers::hasGifExtension(coverImageHref);
+  const bool png = !jpg && !gif;
   if (png && !FsHelpers::hasPngExtension(coverImageHref)) {
     LOG_ERR("EBP", "Cover image is not a supported format, skipping");
     return false;
   }
-  const char* const format = png ? "PNG" : "JPG";
+  const char* const format = jpg ? "JPG" : gif ? "GIF" : "PNG";
 
   LOG_DBG("EBP", "Generating BMP from %s cover image (%s mode)", format, cropped ? "cropped" : "fit");
-  const auto coverTempPath = getCachePath() + (png ? "/.cover.png" : "/.cover.jpg");
+  const auto coverTempPath = getCachePath() + (jpg ? "/.cover.jpg" : gif ? "/.cover.gif" : "/.cover.png");
 
   HalFile coverImage;
   if (!Storage.openFileForWrite("EBP", coverTempPath, coverImage)) {
     return false;
   }
-  readItemContentsToStream(coverImageHref, coverImage, 1024);
+  if (gif) {
+    // A GIF runs through a decoder with no size cap of its own: bound what a zip entry may unpack to.
+    GifLimitedWriter limited(coverImage, GifCommon::MAX_FILE_BYTES);
+    readItemContentsToStream(coverImageHref, limited, 1024);
+  } else {
+    readItemContentsToStream(coverImageHref, coverImage, 1024);
+  }
   // Explicitly close() file before reopening for reading
   coverImage.close();
 
@@ -704,8 +714,9 @@ bool Epub::generateCoverBmp(bool cropped) const {
   HalFile coverBmp;
   bool success = Storage.openFileForWrite("EBP", partPath, coverBmp);
   if (success) {
-    success = png ? PngToBmpConverter::pngFileToBmpStream(coverImage, coverBmp, cropped)
-                  : JpegToBmpConverter::jpegFileToBmpStream(coverImage, coverBmp, cropped);
+    success = jpg   ? JpegToBmpConverter::jpegFileToBmpStream(coverImage, coverBmp, cropped)
+              : gif ? GifToBmpConverter::gifFileToBmpStream(coverImage, coverBmp, cropped)
+                    : PngToBmpConverter::pngFileToBmpStream(coverImage, coverBmp, cropped);
   }
   // Explicitly close() files before calling Storage.remove()/rename()
   coverImage.close();

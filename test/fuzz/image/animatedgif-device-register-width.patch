@@ -1,0 +1,17 @@
+Fuzz and host-test build only: keep the 32-bit register width the ESP32-C3 and S3 run. AnimatedGIF
+picks 64-bit words on x86-64 (8-byte scanline copies, a 64-bit LZW bit reader). The device
+also has ALLOWS_UNALIGNED (esp32-hal.h); the build defines it.
+
+diff --git a/src/AnimatedGIF.h b/src/AnimatedGIF.h
+index 1c8f5fd..3a48f3b 100644
+--- a/src/AnimatedGIF.h
++++ b/src/AnimatedGIF.h
+@@ -272,7 +272,7 @@ class AnimatedGIF
+     int GIF_getLoopCount(GIFIMAGE *pGIF);
+ #endif // __cplusplus
+ 
+-#if (INTPTR_MAX == INT64_MAX)
++#if (INTPTR_MAX == INT64_MAX) && !defined(LECTOR_DEVICE_REGISTER_WIDTH)
+ #define ALLOWS_UNALIGNED
+ #define INTELSHORT(p) (*(uint16_t *)p)
+ #define INTELLONG(p) (*(uint64_t *)p)

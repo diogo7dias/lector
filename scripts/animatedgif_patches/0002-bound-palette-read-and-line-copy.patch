@@ -1,0 +1,48 @@
+Subject: [PATCH] Bound the global palette read and the scanline copy
+
+The palette check passed a short file whenever the color table was 2 entries, and the
+word-at-a-time copy wrote up to 7 bytes past the end of the scanline buffer
+(ported from CrossPoint 2.0.0 scripts/patch_animatedgif.py).
+
+---
+diff --git a/src/gif.inl b/src/gif.inl
+index 08fe0dc..8c19d65 100644
+--- a/src/gif.inl
++++ b/src/gif.inl
+@@ -305,10 +305,11 @@ static int GIFParseInfo(GIFIMAGE *pPage, int bInfoOnly)
+         iOffset = 13;
+         if (p[10] & 0x80) // global color table?
+         { // by default, convert to byte-reversed RGB565 for immediate use
+-            // Read enough additional data for the color table
++            // The initial read may already contain the complete color table.
++            // Keep the existing read-ahead for the following block parser.
+             i = (*pPage->pfnRead)(&pPage->GIFFile, &pPage->ucFileBuf[iBytesRead], 3*(1<<iColorTableBits));
+             iBytesRead += i;
+-            if (iColorTableBits != 1 && i < 3*(1<<iColorTableBits)) { // file too small
++            if (iBytesRead < iOffset + 3*(1<<iColorTableBits)) {
+                 pPage->iError = GIF_BAD_FILE;
+                 return 0;
+             }
+@@ -1344,18 +1345,16 @@ static void GIFMakePels(GIFIMAGE *pPage, unsigned int code)
+         if (pPage->iXCount > iPixCount)  /* Pixels fit completely on the line */
+         {
+             pEnd = buf + iPixCount;
+-            while (buf < pEnd) {
+ #ifdef ALLOWS_UNALIGNED
+-// This is a significant perf improvement compared to copying 1 byte at a time
+-// even though it will often copy too many bytes. Since we're not at the end of
+-// the line, it's okay to copy a few extra pixels.
++            while (pEnd - buf >= (int)sizeof(BIGUINT)) {
+                 BIGUINT tmp = *(BIGUINT *) s;
+                 s += sizeof(BIGUINT);
+                 *(BIGUINT *)buf = tmp;
+                 buf += sizeof(BIGUINT);
+-#else
+-                *buf++ = *s++;
++            }
+ #endif
++            while (buf < pEnd) {
++                *buf++ = *s++;
+             }
+             pPage->iXCount -= iPixCount;
+             //         iPixCount = 0;

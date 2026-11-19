@@ -1,0 +1,24 @@
+Subject: [PATCH] Let the build size the scanline buffer
+
+ucLineBuf is MAX_WIDTH bytes; the firmware builds with -DMAX_WIDTH=3072 so ebook GIFs wider
+than 480 px decode (ported from CrossPoint 2.0.0 scripts/patch_animatedgif.py).
+
+---
+diff --git a/src/AnimatedGIF.h b/src/AnimatedGIF.h
+index 3386c23..1c8f5fd 100644
+--- a/src/AnimatedGIF.h
++++ b/src/AnimatedGIF.h
+@@ -64,11 +64,13 @@
+ #define MAX_CODE_SIZE 12
+ 
+ #define MAX_COLORS 256
++#ifndef MAX_WIDTH
+ #ifdef __LINUX__
+ #define MAX_WIDTH 2048
+ #else
+ #define MAX_WIDTH 480
+ #endif // __LINUX__
++#endif // MAX_WIDTH
+ #define LZW_BUF_SIZE (6*MAX_CHUNK_SIZE)
+ #define LZW_HIGHWATER (4*MAX_CHUNK_SIZE)
+ // This buffer is used to store the pixel sequence in reverse order

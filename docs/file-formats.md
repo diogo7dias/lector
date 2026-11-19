@@ -118,6 +118,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 90
+
+Layout only; the binary layout is unchanged. A GIF `<img>` is laid out and drawn (first
+frame) instead of left out of the page, so pages that carry one paginate differently. The
+partial version is 192. The pixel cache tag is unchanged: no existing image decodes to other
+pixels, and a GIF's cache is named like any other (`<n>.t2.pxc`).
+
 ### Version 89
 
 Lean typography pass; the header and the text line change. The header is 44 bytes (was 54)

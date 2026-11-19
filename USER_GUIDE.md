@@ -1166,8 +1166,8 @@ is centred.
 - **Character Spacing** — the space between letters, from -2 (tighter) to +2 (looser) in
   whole pixels. 0 is the font as designed. Changing it re-paginates the book. Settings from an
   older build, which counted half pixels, come back to the nearest whole pixel.
-- **Images** — **Display** (default) draws pictures in grey, **Placeholder** keeps only the
-  picture's alt text, **Suppress** hides them, and **Black & White** draws them as
+- **Images** — **Display** (default) draws pictures (JPEG, PNG and GIF) in grey, **Placeholder**
+  keeps only the picture's alt text, **Suppress** hides them, and **Black & White** draws them as
   a black and white dither, so a page with a picture turns as fast as a text page and skips the
   extra grey refresh. A saved Placeholder or Suppress from an older build, when the row was
   gone and the setting did nothing, comes back as Display.
@@ -1423,7 +1423,8 @@ Press **Ctrl-C** or close the graph window to exit.
 
 - **Large cover images** slow the first open: a cover around 2000 pixels tall takes several
   seconds to convert for the sleep screen and the home thumbnail.
-- **GIFs and progressive JPEGs** in EPUBs are not rendered, and fall back to an `[Image]`
-  placeholder. Ordinary JPEG and PNG images render.
+- **Interlaced GIFs and progressive JPEGs** in EPUBs are not rendered, and fall back to an
+  `[Image]` placeholder. Ordinary JPEG and PNG images render, and so do GIFs: a GIF, whether
+  in the text or as the book's cover, shows its first frame only, up to 3072 pixels wide.
 
 Bugs and logs are welcome as issue tickets.

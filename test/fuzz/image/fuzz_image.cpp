@@ -1,4 +1,4 @@
-// libFuzzer harness for chapter and viewer image decode: ImageDimsProbe on the header, then
+// libFuzzer harness for chapter and viewer image decode (PNG, JPEG, GIF): ImageDimsProbe on the header, then
 // ImageDecoderFactory's decoder as ImageBlock::render and BmpViewerActivity::renderPng call
 // it, into an exact-size frame (or grayscale strip) buffer. Input layout, all-zero bytes
 // being ImageBlock's case (exact size, dithered, cached, portrait X4, BW, whole frame):
@@ -7,7 +7,7 @@
 //   byte 1   bit 0 strip target, bit 1 keep alpha, bit 2 source crop, bits 3-7 probe chunk
 //   bytes 2-5 x, y, width, height as fractions of the screen (ImageBlock's bounds check holds)
 //   bytes 6-7 strip rows and top row, or crop fractions
-//   bytes 8.. the image file; PNG when it starts 0x89, else JPEG
+//   bytes 8.. the image file; PNG when it starts 0x89, GIF when it starts 'G', else JPEG
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 
@@ -72,7 +72,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   const uint8_t mode = data[0], target = data[1];
   const std::string image(reinterpret_cast<const char*>(data + 8), size - 8);
   const bool png = static_cast<uint8_t>(image[0]) == 0x89;
-  const std::string path = png ? "/.crosspoint/epub_1/img_0.png" : "/.crosspoint/epub_1/img_0.jpg";
+  const bool gif = image[0] == 'G';
+  const std::string path = png   ? "/.crosspoint/epub_1/img_0.png"
+                           : gif ? "/.crosspoint/epub_1/img_0.gif"
+                                 : "/.crosspoint/epub_1/img_0.jpg";
   const std::string cachePath = "/.crosspoint/epub_1/img_0.pxc";
 
   Storage.reset();
@@ -93,7 +96,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   if (!decoder) abort();
   ImageDimensions dims{};
   const bool dimsOk = decoder->getDimensions(path, dims);
-  if (png && probeOk && dimsOk && (probed.width != dims.width || probed.height != dims.height)) {
+  if ((png || gif) && probeOk && dimsOk && (probed.width != dims.width || probed.height != dims.height)) {
     fprintf(stderr, "probe %dx%d != decoder %dx%d\n", probed.width, probed.height, dims.width, dims.height);
     abort();
   }
@@ -147,8 +150,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   }
 
   if (getenv("FUZZ_TRACE"))
-    fprintf(stderr, "%s probe %d %dx%d, dims %d %dx%d, decode %d, cache %s\n", png ? "png" : "jpg", probeOk,
-            probed.width, probed.height, dimsOk, dims.width, dims.height, ok,
+    fprintf(stderr, "%s probe %d %dx%d, dims %d %dx%d, decode %d, cache %s\n",
+            png   ? "png"
+            : gif ? "gif"
+                  : "jpg",
+            probeOk, probed.width, probed.height, dimsOk, dims.width, dims.height, ok,
             it != Storage.files.end() ? "written" : "none");
   return 0;
 }
