@@ -362,7 +362,7 @@ void SettingsActivity::rebuildSettingsList() {
   applyGroups(
       systemSettings,
       {
-          {StrId::STR_GRP_POWER, {StrId::STR_TIME_TO_SLEEP, StrId::STR_TOUCH_SLEEP}},
+          {StrId::STR_GRP_POWER, {StrId::STR_TIME_TO_SLEEP, StrId::STR_TOUCH_SLEEP, StrId::STR_WAKE_ON_USB_PLUG_IN}},
           {StrId::STR_GRP_LIBRARY,
            {StrId::STR_SHOW_HIDDEN_FILES, StrId::STR_BOOK_BROWSER_ORDER, StrId::STR_OPEN_BOOK_ON_BOOT,
             StrId::STR_REMOVE_READ_FROM_RECENTS, StrId::STR_MOVE_FINISHED_TO_READ, StrId::STR_MOVE_OPENED_TO_RECENTS}},

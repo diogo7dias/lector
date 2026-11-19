@@ -83,6 +83,12 @@ it saves a little battery by putting the touch screen to sleep after that long w
 input. While it sleeps, touches and the touch Home key below the screen do nothing; press any
 side button, or lock and unlock, to wake it.
 
+**Wake on USB Plug-In** (Settings > System, X4 Pro) is Off by default. When on, plugging in a
+USB cable wakes the sleeping device, so it shows up on the computer without pressing Power.
+The wake comes from the charger starting to charge, so a cable that does not start a charge
+(some chargers with a full battery) does not wake it, and neither does a cable that was
+already charging when the device went to sleep. Press Power then.
+
 ### Taking a screenshot
 
 Hold **Power** and **Volume Down** together. The image is written to `/screenshots/` on the

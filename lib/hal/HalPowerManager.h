@@ -26,6 +26,7 @@ class HalPowerManager {
   enum LockMode { None, NormalSpeed };
   LockMode currentLockMode = None;
   SemaphoreHandle_t modeMutex = nullptr;  // Protect access to currentLockMode
+  bool chargeWake = false;                // see setChargeWake()
 
  public:
 #if BOARD_HAS_PSRAM
@@ -66,6 +67,13 @@ class HalPowerManager {
 
   // Setup wake up GPIO and enter deep sleep
   [[noreturn]] void startDeepSleep() const;
+
+  // Wake on USB plug-in: deep sleep also wakes when the charger's status line starts charging, so the native
+  // USB comes up without the power button. X4 Pro only (supportsChargeWake()); the setting is applied before
+  // each sleep. Not armed when the sleep begins while already charging.
+  void setChargeWake(bool enabled) { chargeWake = enabled; }
+  static bool supportsChargeWake();
+  static bool isCharging();  // charger STAT line high; only meaningful where supportsChargeWake()
 
   // Get battery percentage (range 0-100)
   uint16_t getBatteryPercentage() const;
