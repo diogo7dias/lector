@@ -164,7 +164,11 @@ namespace {
 //      longer has a 3-space floor, so lines lay out differently as well.
 // v90: GIF images lay out and draw (CrossPoint 2.0.0): a book's GIF used to be left out of
 //      the page, so a page that carries one paginates differently.
-constexpr uint8_t SECTION_FILE_VERSION = 90;
+// v91: the built-in ChareInk gains 12 and 16 pt. Text scaled by CSS (headings, small,
+//      sup/sub, font-size spans) used to resolve to the one compiled-in 14 pt font; it now
+//      resolves to the nearest of 12/14/16 like an installed family, so a 14 pt book that
+//      carries scaled text paginates differently.
+constexpr uint8_t SECTION_FILE_VERSION = 91;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

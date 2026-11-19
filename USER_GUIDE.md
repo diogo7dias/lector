@@ -76,7 +76,7 @@ tap while reading are unchanged. Holding a word on the page for half a second lo
 the dictionary; keep the finger down and drag to select a phrase instead (see **Quotes**).
 Spreading two fingers apart on the page makes the text one size
 larger, pinching them together one size smaller; one step per gesture, for this book only,
-like the size row in the light panel. It needs a font with more than one size installed.
+like the size row in the light panel. With ChareInk it steps through 12, 14 and 16 pt.
 
 **Touch Sleep** (Settings > System, X4 Pro) is Off by default. Set to 15 s, 30 s or 1 min,
 it saves a little battery by putting the touch screen to sleep after that long without
@@ -970,8 +970,9 @@ curl -i "http://<server-ip>:17200/users/create" \
 
 ### Fonts
 
-Lector ships with Noto Serif and Noto Sans. Fonts on the SD card are added to that list, and
-can bring scripts the built-in fonts do not cover, including Chinese, Japanese and Korean.
+Lector ships with ChareInk, in regular, bold, italic and bold italic, at 12, 14 and 16 pt. Fonts on
+the SD card are added to that list, and can bring other sizes and scripts the built-in font does
+not cover, including Chinese, Japanese and Korean.
 
 Three ways to install one:
 
@@ -1130,8 +1131,9 @@ covers the page you are judging. Back or Select puts the band away; there is not
 confirm, because every change has already been applied. Sleep timeout and the
 other numbers in Settings use the same band.
 
-- **Font** — Noto Serif, Noto Sans, plus any SD card families; opens a full-screen picker.
-- **Size**.
+- **Font** — ChareInk, plus any SD card families; opens a full-screen picker.
+- **Size** — the sizes the chosen font has: 12, 14 and 16 pt for ChareInk, whatever is installed for
+  an SD card family.
 - **Line Spacing** — 80% to 175%. Full text pages automatically share leftover vertical space above
   and below the text, inside your margins and status bar. Short pages stay at the top;
   EPUB pages with images, rules or ruby keep their layout. This balances line boxes
@@ -1167,8 +1169,8 @@ other numbers in Settings use the same band.
   Arabic and Persian text is shaped once, preserving Alef and Lam order; Latin ligatures remain supported.
   It also honours drop caps (a large first letter spanning two to four lines), small caps,
   text the book keeps as typed (poetry, code) and the book's relative font sizes for
-  headings, paragraphs and words. Sizes need an SD card font that has larger and smaller
-  variants; the built-in font draws every word at your size. **Paragraph Alignment: Book's
+  headings, paragraphs and words. Each is drawn at the nearest size the font has: 12, 14 or 16 pt
+  for ChareInk, whatever is installed for an SD card family. **Paragraph Alignment: Book's
   Style** reads the book's CSS, so it needs this on. The book's fonts and line height are never
   used: the reader's own settings always win. Older builds had separate Embedded Text Style and
   Embedded Layout Style switches: the style is on after the update only if both were on.
