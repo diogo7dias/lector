@@ -434,6 +434,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // GT911 senses it). 0 Off, 1 15 s, 2 30 s, 3 1 min. Off by default: dead touch
   // mid-book read as a bug.
   uint8_t touchSleep = 0;
+  // Wake from deep sleep when a USB cable is plugged in (0 = off, 1 = on). X4 Pro only.
+  uint8_t wakeOnUsbPlugIn = 0;
   unsigned long touchSleepMs() const {
     static constexpr unsigned long MS[] = {0, 15000, 30000, 60000};
     return touchSleep < 4 ? MS[touchSleep] : 0;

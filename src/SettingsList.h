@@ -5,6 +5,7 @@
 #include <HalClock.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <I18n.h>
 #include <SdCardFontRegistry.h>
 
@@ -559,6 +560,9 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
       StrId::STR_TOUCH_SLEEP, &CrossPointSettings::touchSleep,
       {StrId::STR_TOUCH_SLEEP_OFF, StrId::STR_TOUCH_SLEEP_15S, StrId::STR_TOUCH_SLEEP_30S, StrId::STR_TOUCH_SLEEP_1M},
       "touchSleep", StrId::STR_CAT_SYSTEM));
+  // X4 Pro only (hidden elsewhere below); the sleep path reads it, see HalPowerManager::setChargeWake().
+  emit(SettingInfo::Toggle(StrId::STR_WAKE_ON_USB_PLUG_IN, &CrossPointSettings::wakeOnUsbPlugIn, "wakeOnUsbPlugIn",
+                           StrId::STR_CAT_SYSTEM));
 
   // How this reader introduces itself during Nearby Position Sync. Left empty
   // it falls back to a generated "Lector-XXXX" from the MAC.
@@ -814,6 +818,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                     s.nameId == StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION ||
                                     s.nameId == StrId::STR_BACK_SHORT_TO_FILE_BROWSER;
                            }),
+            v.end());
+  }
+  if (!withAbsentHardware && !HalPowerManager::supportsChargeWake()) {
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) { return s.nameId == StrId::STR_WAKE_ON_USB_PLUG_IN; }),
             v.end());
   }
   if (!withAbsentHardware && !halClock.isAvailable()) {

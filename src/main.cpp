@@ -86,6 +86,7 @@ static std::string pickBootBookPath();
 [[noreturn]] static void sleepAgain() {
   logFlush();
   Storage.prepareForDeepSleep();
+  powerManager.setChargeWake(SETTINGS.wakeOnUsbPlugIn != 0);
   powerManager.startDeepSleep();
 }
 
@@ -169,6 +170,7 @@ static void finishDeepSleep(const unsigned long sleepT0, const unsigned long sle
   // chip, so anything still buffered here is lost.
   logFlush();
 
+  powerManager.setChargeWake(SETTINGS.wakeOnUsbPlugIn != 0);
   powerManager.startDeepSleep();
 }
 
@@ -453,8 +455,15 @@ void setup() {
     case HalGPIO::WakeupReason::PowerButton:
       LOG_DBG("MAIN", "Verifying the power button is still held");
       if (!gpio.verifyPowerButtonWakeup()) {
-        LOG_INF("SLP", "Wake press not held through debounce, back to sleep");
-        sleepAgain();
+        // No press, but the charger line is charging: the Wake on USB Plug-In wake. Boot on as for a
+        // button wake (same painted sleep face), minus the held-button bookkeeping.
+        const bool plugInWakeOn = SETTINGS.wakeOnUsbPlugIn != 0 && HalPowerManager::supportsChargeWake();
+        if (!wake_classify::isPlugInWake(plugInWakeOn, false, plugInWakeOn && HalPowerManager::isCharging())) {
+          LOG_INF("SLP", "Wake press not held through debounce, back to sleep");
+          sleepAgain();
+        }
+        LOG_INF("SLP", "USB plug-in wake");
+        break;
       }
       wakePowerReleasePending = true;
       break;
@@ -1021,6 +1030,9 @@ void loop() {
   const unsigned long activityStartTime = millis();
   activityManager.loop();
   const unsigned long activityDuration = millis() - activityStartTime;
+  // Time blocked in the activity (e.g. a synchronous OPDS download) is not idle time.
+  // Only long blocks count: a normal pass takes a few ms and must not slow the timer.
+  if (activityDuration >= 1000) lastActivityTime += activityDuration;
 
   const unsigned long loopDuration = millis() - loopStartTime;
   if (loopDuration > maxLoopDuration) {

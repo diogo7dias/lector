@@ -50,4 +50,12 @@ inline constexpr WakeupReason classify(const BootFacts& f) {
   return WakeupReason::Other;
 }
 
+// Wake on USB Plug-In. Sleep side: arm the charger-line wake only when no charge is running, or the level
+// wake fires at once. Boot side: a deep-sleep wake with the power button not held and the line charging is
+// the cable, so the boot stays up instead of going back to sleep. `enabled` already folds in board support.
+inline constexpr bool armsPlugInWake(const bool enabled, const bool charging) { return enabled && !charging; }
+inline constexpr bool isPlugInWake(const bool enabled, const bool powerHeld, const bool charging) {
+  return enabled && !powerHeld && charging;
+}
+
 }  // namespace wake_classify
