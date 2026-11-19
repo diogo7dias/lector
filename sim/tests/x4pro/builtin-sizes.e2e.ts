@@ -3,7 +3,7 @@ import { test, expect } from 'e2e';
 // The built-in ChareInk comes in 12, 14 and 16 pt. This runs on the card's default selection
 // (the built-in family, no SD font chosen): the Size picker offers the three sizes, and each pick
 // redraws the Text Settings preview, the real page renderer, in a different size. The device lives
-// across the whole suite, so the test puts 14 pt back at the end.
+// across the whole suite, so the test puts 14 pt back and returns Home at the end.
 
 // Size picker rows, top to bottom, once the picker is open over the Size row (y 443).
 const row = { pt12: 379, pt14: 417, pt16: 457 };
@@ -60,5 +60,8 @@ test('ChareInk offers 12, 14 and 16 pt and each redraws the page at its own size
   // Three different sizes draw three different pages.
   expect(new Set(Object.values(ink)).size, `preview ink ${JSON.stringify(ink)}`).toBe(3);
   expect(await preview(), '14 pt is back').toBe(ink['14']);
+  // Later files start from Home.
+  await screen.getByRole('button', { name: 'Home' }).click();
+  await expect(activity).toHaveText('Home', { timeout: 30_000 });
   expect(await log()).not.toMatch(/Guru Meditation|abort\(\)|Backtrace/);
 });
