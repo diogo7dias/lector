@@ -70,8 +70,12 @@ test('Dark sleeps on a black page', async (ctx) => {
 test('None sleeps on an empty page', async (ctx) => {
   const d = await device(ctx);
   await d.pick('none');
+  const frames = async () => Number(await ctx.screen.getByTestId('frames').textContent());
+  const framesBefore = await frames();
   await d.lock();
   expect(await d.panelInk(), 'None: an empty page').toBe(0);
+  // Popup + four pre-clear passes; the white page is the last pass, so no HALF repeats it.
+  expect(await frames() - framesBefore, 'None: no second white flash').toBe(5);
   await d.wake();
 });
 
