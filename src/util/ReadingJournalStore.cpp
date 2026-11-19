@@ -16,11 +16,8 @@ bool localNow(Civil& out) {
   uint8_t month, day, hour, minute;
   if (!halClock.getDateTime(year, month, day, hour, minute)) return false;
   const int64_t utc = clock_zones::utcSeconds(year, month, day, hour, minute);
-  // Same offset rule as HalClock::formatTime, so the journal's date matches the clock shown.
-  const uint8_t q = SETTINGS.clockUtcOffsetQ > 104 ? 104 : SETTINGS.clockUtcOffsetQ;
-  const uint8_t zone = SETTINGS.clockTimeZone;
-  const int offset =
-      zone != 0 && zone < clock_zones::COUNT ? clock_zones::offsetMinutes(zone, utc) : (static_cast<int>(q) - 48) * 15;
+  // Same zone rule as HalClock::formatTime, so the journal's date matches the clock shown.
+  const int offset = clock_zones::offsetMinutes(SETTINGS.clockTimezone, SETTINGS.clockDst, utc);
   out = localTime(utc, offset);
   return true;
 }

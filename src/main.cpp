@@ -432,7 +432,7 @@ void setup() {
   bool scheduledOn = false;
   uint16_t nowMinutes = 0;
   if (SETTINGS.frontlightScheduleEnabled != 0 &&
-      halClock.localMinutes(nowMinutes, SETTINGS.clockUtcOffsetQ, SETTINGS.clockTimeZone)) {
+      halClock.localMinutes(nowMinutes, SETTINGS.clockTimezone, SETTINGS.clockDst)) {
     scheduledOn =
         frontlight::insideSchedule(SETTINGS.frontlightScheduleOn * frontlight::SCHEDULE_STEP_MINUTES,
                                    SETTINGS.frontlightScheduleOff * frontlight::SCHEDULE_STEP_MINUTES, nowMinutes);

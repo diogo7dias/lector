@@ -365,13 +365,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // keeps the configured Book Bar / Chapter Bar edges drawing at its own thickness.
   // Off (the default) is the old behaviour: hiding the bar hides its progress bars too.
   uint8_t sbOffBar = SB_OFFBAR_OFF;
-  // Clock UTC offset in quarter-hour steps, biased by 48 so it fits in uint8_t.
-  // Value 48 = UTC+0, 0 = UTC-12:00, 104 = UTC+14:00.
-  // Quarter-hour granularity supports oddball zones like Nepal (+5:45) and Chatham (+12:45).
-  uint8_t clockUtcOffsetQ = 48;
-  // Clock time zone, a clock_zones index. 0 = Manual: clockUtcOffsetQ applies. Any other
-  // follows that zone's summer time.
-  uint8_t clockTimeZone = 0;
+  // Clock time zone: an index into clock_zones::TABLE (lib/hal/ClockZones.h, CrossPoint's table
+  // in CrossPoint's order, append only). 17 is UTC, clock_zones::UTC_INDEX: SettingsList.h checks
+  // it. A file with no valid zone (CrossPoint writes 255 for "never chosen") takes one from the UTC
+  // offset and city 0.58.0 stored (see migrateFromJson).
+  uint8_t clockTimezone = 17;
+  // Summer time: 0 follows the zone's own rule, 1 forces it on, 2 forces it off.
+  uint8_t clockDst = 0;
   // Clock display format: 0 = 24-hour, 1 = 12-hour
   uint8_t clockFormat = 0;
   // Set once an NTP sync succeeds. Used to skip re-syncing on every WiFi connect.

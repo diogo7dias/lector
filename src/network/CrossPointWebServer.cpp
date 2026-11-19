@@ -1636,6 +1636,9 @@ void CrossPointWebServer::handleGetSettings() const {
         } else if (s.valueGetter) {
           doc["value"] = static_cast<int>(s.valueGetter());
         }
+        // A table enum's 104 names do not fit this buffer or one JsonDocument on a small heap: they
+        // are sent after the row, a few at a time.
+        if (s.enumLabel) break;
         JsonArray options = doc["options"].to<JsonArray>();
         if (!s.enumStringValues.empty()) {
           for (const auto& opt : s.enumStringValues) {
@@ -1692,7 +1695,27 @@ void CrossPointWebServer::handleGetSettings() const {
     } else {
       seenFirst = true;
     }
-    server->sendContent(output);
+    if (s.enumLabel) {
+      // The row without its closing brace, then "options":[...] in chunks that reuse `output`.
+      output[written - 1] = '\0';
+      server->sendContent(output);
+      server->sendContent(",\"options\":[");
+      size_t used = 0;
+      for (uint8_t i = 0; i < s.enumCount; i++) {
+        char label[64];
+        s.enumLabel(i, label, sizeof(label));
+        // The labels are the zone table's: no quote, backslash or control character in them.
+        used += snprintf(output + used, outputSize - used, "%s\"%s\"", i ? "," : "", label);
+        if (used + 80 > outputSize || i + 1 == s.enumCount) {
+          server->sendContent(output);
+          used = 0;
+          yield();
+        }
+      }
+      server->sendContent("]}");
+    } else {
+      server->sendContent(output);
+    }
     yield();                          // Yield to allow WiFi and other tasks to process during a slow send
     resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
   }
@@ -1725,8 +1748,9 @@ void CrossPointWebServer::handlePostSettings() {
       }
       case SettingType::ENUM: {
         const int val = doc[s.key].as<int>();
-        const int maxVal = s.enumStringValues.empty() ? static_cast<int>(s.enumValues.size())
-                                                      : static_cast<int>(s.enumStringValues.size());
+        const int maxVal = s.enumLabel                  ? s.enumCount
+                           : s.enumStringValues.empty() ? static_cast<int>(s.enumValues.size())
+                                                        : static_cast<int>(s.enumStringValues.size());
         if (val >= 0 && val < maxVal && !s.isEnumValueHidden(static_cast<uint8_t>(val))) {
           if (s.valuePtr) {
             SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
