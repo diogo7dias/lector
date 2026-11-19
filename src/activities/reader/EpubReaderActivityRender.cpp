@@ -161,6 +161,15 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     }
     requestUpdate(/*immediate=*/true);
   }
+  // The toolbar's own input asks for the sheet alone, over the page already on screen.
+  if (toolbarOpen) {
+    const bool sheetOnly = toolbarPaintOnly && renderer.frameBufferLoanCount() == pageLoanCount;
+    toolbarPaintOnly = false;
+    if (sheetOnly) {
+      paintToolbar();
+      return;
+    }
+  }
   pageLoanCount = renderer.frameBufferLoanCount();  // everything below repaints the framebuffer
 
   // edge case handling for sub-zero spine index
@@ -356,4 +365,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (showDictionaryMessage) {
     GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
   }
+
+  // A page that just rendered under an open toolbar (a scrub, or the light panel closing)
+  // gets the sheet back on top.
+  if (toolbarOpen) paintToolbar();
 }

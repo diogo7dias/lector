@@ -21,6 +21,11 @@
 #include "util/SortesSelection.h"
 
 void EpubReaderActivity::openReaderMenu() {
+  if (openToolbar()) return;
+  openReaderMenuList();
+}
+
+void EpubReaderActivity::openReaderMenuList() {
   // Child screens (chapter list, settings) release the section; until the next render
   // rebuilds it, the menu shows the cached position, the same one bookPercent() uses.
   const int currentPage = (section ? section->currentPage : nextPageNumber) + 1;

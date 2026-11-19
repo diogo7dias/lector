@@ -444,6 +444,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t chapterStartRefresh = 0;
   // A crosshatch frame before the first page of each chapter entered (one extra refresh).
   uint8_t chapterWipe = 0;
+  // What a short press of Confirm (or the Reader Menu binding) opens in a book: the tabbed
+  // list, or a toolbar sheet over the page (scrub the book, then Contents / Text / More).
+  enum READER_MENU_STYLE { READER_MENU_LIST = 0, READER_MENU_TOOLBAR = 1, READER_MENU_STYLE_COUNT };
+  uint8_t readerMenuStyle = READER_MENU_LIST;
 
   // Reader screen margins. screenMargin is the horizontal (left/right) margin, shared by
   // both sides. The vertical margins always live in screenMarginTop/Bottom;

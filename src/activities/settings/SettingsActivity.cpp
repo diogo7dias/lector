@@ -333,7 +333,7 @@ void SettingsActivity::rebuildSettingsList() {
           // the toggle that hides it.
           {StrId::STR_GRP_LOOK,
            {StrId::STR_PAPERBACK_LOOK, StrId::STR_PAPERBACK_STATUS, StrId::STR_CUSTOMISE_STATUS_BAR,
-            StrId::STR_NIGHT_MODE}},
+            StrId::STR_NIGHT_MODE, StrId::STR_READER_MENU_STYLE}},
           {StrId::STR_GRP_LIBRARY, {StrId::STR_ALL_BOOKMARKS}},
       });
 

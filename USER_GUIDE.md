@@ -463,6 +463,23 @@ This tab appears only when the last sleep screen was a wallpaper that is still o
 
 Press **Back** to close the menu.
 
+### Toolbar style
+
+**Settings > Reader > Reader Menu Style** swaps the list for a toolbar: a sheet over the bottom of
+the page, with the page above it left as it is. The same press, tap or bound action opens it. It applies to
+EPUB books.
+It holds:
+
+- A **scrub row**: drag along the track, or tap it, to jump through the book by chapter; the
+  arrow buttons at each end step one chapter. The line under it names the chapter and gives the
+  page and the percent.
+- Three tiles: **Contents** (the chapter list), **Text** (this book's text settings) and **More**
+  (the tabbed menu above).
+
+Tap a tile to open it, or tap the page above the sheet to close it. On a reader with buttons,
+**Left** and **Right** move between the tiles, **Confirm** opens the marked one, **Up** and
+**Down** step a chapter, and **Back** closes. **Menu Hold** does nothing while the toolbar is up.
+
 ---
 
 ## 7. Bookmarks and quotes
@@ -1179,6 +1196,8 @@ is centred.
   heavier paperback ink: **ON** adds one pixel, **BOLDER** a second pixel to vertical strokes.
   The in-book menu row cycles OFF, ON, BOLDER.
 - **Night mode** — inverts the screen.
+- **Reader Menu Style** — **List** (the tabbed menu, the default) or **Toolbar**, see
+  [section 6](#6-the-in-book-menu).
 - **Customise Status Bar** — see below.
 
 **Library**
