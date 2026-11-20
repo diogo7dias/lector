@@ -166,19 +166,10 @@ class ChapterHtmlSlimParser {
   };
   static constexpr size_t MAX_BOX_SCOPES = 8;
 
-  // Page-break carry-over: a paragraph's orphan/widow lines and a heading kept with what
-  // follows move to the next page instead of being left behind.
-  static constexpr size_t MAX_CARRIED_LINES = 6;
+  // The paragraph being laid out, for the inline images on its current line. Pages always
+  // fill: no line is carried to the next page to avoid an orphan, a widow or a lone heading.
   const ParsedText* layoutParagraph = nullptr;
-  bool layoutParagraphHasDropCap = false;
-  uint8_t paragraphLinesOnPage = 0;
-  uint8_t keepWithNextLines = 0;                       // trailing heading lines on this page
-  uint32_t recentLineOffsets[MAX_CARRIED_LINES] = {};  // visible offsets of this page's last lines, newest last
-  uint8_t recentLineCount = 0;
-  size_t linesToCarry(size_t& paragraphLines) const;
-  size_t keepWithNextCarry() const;
-  bool canCarry(size_t carry) const;
-  void breakPageCarryingLines(size_t carry, size_t paragraphLines, uint32_t visibleOffset);
+  void breakPageAt(uint32_t visibleOffset);
   std::vector<BoxScope> boxScopes;
   static constexpr size_t MAX_GRID_TABLE_COLUMNS = 4;
   // ponytail: buffer at most 160 tokens / 2 KB per row; larger rows use stacked flow.
@@ -235,7 +226,6 @@ class ChapterHtmlSlimParser {
   // 512 anchors needs 16 KB contiguous, and a failed allocation aborts).
   int completedPageCount = 0;
   AnchorPlacement anchors;
-  static_assert(AnchorPlacement::RECENT_LINES == MAX_CARRIED_LINES, "anchors follow the lines that can be carried");
   // Deferred until after the previous text block is flushed. Optional rather than a
   // sentinel value: 0 is a legal hash, so "no anchor pending" needs its own state.
   std::optional<uint64_t> pendingAnchorId;

@@ -118,6 +118,12 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 92
+
+Layout only; the binary layout is unchanged. Fill Pages is always on: no line is carried to
+the next page to avoid a lone first or last line or a heading at the page bottom, so pages
+end full. Page breaks the book asks for still apply. The partial version is 190.
+
 ### Version 90
 
 Layout only; the binary layout is unchanged. A GIF `<img>` is laid out and drawn (first

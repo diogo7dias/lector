@@ -168,7 +168,9 @@ namespace {
 //      sup/sub, font-size spans) used to resolve to the one compiled-in 14 pt font; it now
 //      resolves to the nearest of 12/14/16 like an installed family, so a 14 pt book that
 //      carries scaled text paginates differently.
-constexpr uint8_t SECTION_FILE_VERSION = 91;
+// v92: Fill Pages is always on. No line is carried to the next page to keep a paragraph's
+//      first or last line or a heading from sitting alone, so pages end full.
+constexpr uint8_t SECTION_FILE_VERSION = 92;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
