@@ -17,6 +17,7 @@
 #include "QuoteSelectActivity.h"
 #include "ReaderMargins.h"
 #include "ReaderUtils.h"
+#include "RuledLines.h"
 #include "SdCardFontSystem.h"
 #include "activities/network/NearbyFileTransferActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -98,6 +99,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   renderer.setPaperbackLook(prefs_.paperbackLookBody);
   page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
   renderer.setPaperbackLook(false);
+  // Before the quote underlines, which would otherwise read as ink and cut the rule.
+  ruled_lines::drawPage(renderer, *page, fontId, SETTINGS.getReaderLineCompression(prefs_), orientedMarginLeft,
+                        orientedMarginTop, orientedMarginRight, orientedMarginBottom);
   drawParagraphNumbers(*page, orientedMarginLeft, orientedMarginTop, fontId);
   drawQuoteUnderlines(*page, orientedMarginLeft, orientedMarginTop, fontId);
   if (SETTINGS.debugBorders) {

@@ -288,6 +288,8 @@ class GfxRenderer {
 
   // Drawing
   void drawPixel(int x, int y, bool state = true) const;
+  // Reads one logical pixel of the BW frame buffer; false off the panel or while a strip is active.
+  bool isPixelBlack(int x, int y) const;
   // Fast path for unscaled glyphs: same result as drawPixel() per ink pixel, clipped and rotated once per glyph.
   void drawGlyphBitmap(const uint8_t* bitmap, int width, int height, const glyphBitmap::Frame& frame, bool twoBit,
                        RenderMode mode, bool state) const;

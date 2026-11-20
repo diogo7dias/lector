@@ -652,6 +652,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // per-book ReaderPrefs seed from; the EPUB reader then uses its per-book copy, the
   // TXT/XTC readers use these global values directly.
   uint8_t paperbackLookBody = 1;
+  // Ruled Lines under each text row: 0 Off, 1 Light, 2 Medium, 3 Dark (ruled_lines::Level).
+  // A BW overlay drawn after the page, so it never touches layout or the section cache.
+  uint8_t ruledLines = 0;
   uint8_t paperbackLookStatus = 0;
   // Default paragraph numbering for books that have no per-book override yet. A book
   // already carrying its own reader_override.bin keeps whatever it was set to in the

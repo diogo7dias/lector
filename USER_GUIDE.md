@@ -1215,6 +1215,10 @@ is centred.
 - **Paperback Look**, **Paperback Status Bar**. Paperback Look thickens the reading text like
   heavier paperback ink: **ON** adds one pixel, **BOLDER** a second pixel to vertical strokes.
   The in-book menu row cycles OFF, ON, BOLDER.
+- **Ruled Lines** — a dotted rule under every line of text, like notebook paper: OFF (default),
+  Light, Medium or Dark. EPUB and TXT books (not XTC). The rule breaks around descenders and
+  accents, and it does not change where the text sits, so pages keep their layout. Text
+  Settings' preview and the quote and word selection screens show the page without it.
 - **Night mode** — inverts the screen.
 - **Reader Menu Style** — **List** (the tabbed menu, the default) or **Toolbar**, see
   [section 6](#6-the-in-book-menu).
