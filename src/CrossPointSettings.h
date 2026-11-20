@@ -534,12 +534,17 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // defaults). Elsewhere they stay Disabled: a bound double click delays the single by the
   // double-click window, which a board with nothing to toggle would pay for no reason. Only a
   // field absent from a saved file takes these; a binding the file holds is kept as it is.
+  // The keys-only boards (X3, X4) open the quick panel with a Power double click instead,
+  // their one way in: no top-edge swipe without touch. Power's single click is unbound, so
+  // the double-click window delays nothing.
 #if FREEINK_DEVICE_X4PRO
   static constexpr uint8_t DEFAULT_FRONTLIGHT_TOGGLE = LP_MENU_TOGGLE_FRONTLIGHT;
   static constexpr uint8_t DEFAULT_HOME_READER_MENU = LP_MENU_OPEN_READER_MENU;
+  static constexpr uint8_t DEFAULT_POWER_DOUBLE = LP_MENU_TOGGLE_FRONTLIGHT;
 #else
   static constexpr uint8_t DEFAULT_FRONTLIGHT_TOGGLE = LP_MENU_DISABLED;
   static constexpr uint8_t DEFAULT_HOME_READER_MENU = LP_MENU_DISABLED;
+  static constexpr uint8_t DEFAULT_POWER_DOUBLE = LP_MENU_LIGHT_PANEL;
 #endif
   uint8_t btnBookLeftSingle = LP_MENU_PAGE_PREV;
   uint8_t btnBookLeftDouble = LP_MENU_DISABLED;
@@ -563,10 +568,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // defaulted to: a click does nothing, a hold sleeps. The hold keeps its own threshold
   // (sleepHoldMs), so leaving it on Sleep leaves the sleep hold exactly as it was.
   uint8_t btnBookPowerSingle = LP_MENU_DISABLED;
-  uint8_t btnBookPowerDouble = DEFAULT_FRONTLIGHT_TOGGLE;
+  uint8_t btnBookPowerDouble = DEFAULT_POWER_DOUBLE;
   uint8_t btnBookPowerHold = LP_MENU_SLEEP;
   uint8_t btnUiPowerSingle = LP_MENU_DISABLED;
-  uint8_t btnUiPowerDouble = DEFAULT_FRONTLIGHT_TOGGLE;
+  uint8_t btnUiPowerDouble = DEFAULT_POWER_DOUBLE;
   uint8_t btnUiPowerHold = LP_MENU_SLEEP;
 
   // The binding field for one button and gesture, in or out of a book. Returns a

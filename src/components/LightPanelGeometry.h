@@ -98,9 +98,11 @@ struct Layout {
   int y;
   int width;
   int height;
+  bool hasLight;  // false on a board with no frontlight: no toggle, brightness or warmth row
   bool hasWarmth;
   bool hasAux;
-  Rect toggle;
+  int actionColumns;
+  Rect toggle;  // zero-sized without a light
   StepRow brightness;
   StepRow warmth;  // height 0 when the board has no colour temperature
   StepRow aux;     // height 0 when the context has nothing to put there
@@ -125,7 +127,7 @@ inline bool insideRect(const Rect& rect, const int x, const int y) {
 }
 
 inline Layout forScreen(const int screenWidth, const int lineHeight, const int readoutLineHeight, const bool hasWarmth,
-                        const bool hasAux, const int actionCount) {
+                        const bool hasAux, const int actionCount, const bool hasLight = true) {
   // The steppers give way before the track does: a track too thin to drag would leave the
   // row with nothing the steppers do not already do.
   const int stepsWidth = [&] {
@@ -142,12 +144,15 @@ inline Layout forScreen(const int screenWidth, const int lineHeight, const int r
   layout.x = 0;
   layout.y = 0;
   layout.width = screenWidth;
-  layout.hasWarmth = hasWarmth;
+  layout.hasLight = hasLight;
+  layout.hasWarmth = hasLight && hasWarmth;
   layout.hasAux = hasAux;
 
   int y = kSidePad;
-  layout.toggle = Rect{kSidePad, y, screenWidth - kSidePad * 2, kToggleHeight};
-  y += kToggleHeight + kRowGap;
+  if (hasLight) {
+    layout.toggle = Rect{kSidePad, y, screenWidth - kSidePad * 2, kToggleHeight};
+    y += kToggleHeight + kRowGap;
+  }
 
   const auto place = [&](const Row row, const bool withBar) {
     StepRow out{};
@@ -169,13 +174,16 @@ inline Layout forScreen(const int screenWidth, const int lineHeight, const int r
     return out;
   };
 
-  layout.brightness = place(Row::Brightness, /*withBar=*/true);
-  layout.warmth = hasWarmth ? place(Row::Warmth, /*withBar=*/true) : StepRow{Row::Warmth, y, 0, {}, {}, {}, {}, {}};
+  layout.brightness =
+      hasLight ? place(Row::Brightness, /*withBar=*/true) : StepRow{Row::Brightness, y, 0, {}, {}, {}, {}, {}};
+  layout.warmth =
+      layout.hasWarmth ? place(Row::Warmth, /*withBar=*/true) : StepRow{Row::Warmth, y, 0, {}, {}, {}, {}, {}};
   layout.aux = hasAux ? place(Row::Aux, /*withBar=*/false) : StepRow{Row::Aux, y, 0, {}, {}, {}, {}, {}};
 
   layout.actionCount = std::clamp(actionCount, 0, kMaxActions);
   const int actionHeight = std::max(kMinActionHeight, lineHeight + kActionPadY * 2);
   const int columns = screenWidth >= kWideScreenWidth ? kWideActionColumns : kActionColumns;
+  layout.actionColumns = columns;
   const int actionWidth = (screenWidth - kSidePad * 2 - kActionGap * (columns - 1)) / columns;
   for (int i = 0; i < layout.actionCount; ++i) {
     const int column = i % columns;
@@ -221,6 +229,64 @@ inline Hit hitTest(const Layout& layout, const int x, const int y) {
     if (insideRect(layout.actions[i], x, y)) return Hit{Hit::Kind::Action, Row::None, 0, i};
   }
   return Hit{};
+}
+
+// Where the key cursor sits: a value row, or one button of the action grid.
+struct Cursor {
+  Row row = Row::None;
+  int action = -1;  // index into Layout::actions when on the grid, -1 on a row
+
+  bool onGrid() const { return action >= 0; }
+  bool operator==(const Cursor& other) const { return row == other.row && action == other.action; }
+};
+
+// The value rows this layout shows, top to bottom. Returns how many.
+inline int valueRows(const Layout& layout, Row (&out)[3]) {
+  int count = 0;
+  for (const StepRow* row : {&layout.brightness, &layout.warmth, &layout.aux}) {
+    if (row->height > 0) out[count++] = row->row;
+  }
+  return count;
+}
+
+// Where the cursor starts: the first value row, or the first button when there is none.
+inline Cursor firstCursor(const Layout& layout) {
+  Row rows[3];
+  if (valueRows(layout, rows) > 0) return Cursor{rows[0], -1};
+  return layout.actionCount > 0 ? Cursor{Row::None, 0} : Cursor{};
+}
+
+// Up/Down: one value row at a time, then into the grid a grid row at a time (Down off the
+// last value row lands on the first button). Stops at either end rather than wrapping, like
+// every list on the device.
+inline Cursor moveVertical(const Layout& layout, const Cursor cursor, const int delta) {
+  Row rows[3];
+  const int rowCount = valueRows(layout, rows);
+  const int columns = std::max(1, layout.actionColumns);
+  if (cursor.onGrid()) {
+    const int next = cursor.action + delta * columns;
+    if (next < 0) return rowCount > 0 ? Cursor{rows[rowCount - 1], -1} : cursor;
+    const int lastGridRow = (layout.actionCount - 1) / columns;
+    if (next >= layout.actionCount) {
+      // A short last grid row: Down from above it still gets there, on its last button.
+      return cursor.action / columns < lastGridRow ? Cursor{Row::None, layout.actionCount - 1} : cursor;
+    }
+    return Cursor{Row::None, next};
+  }
+  int index = 0;
+  for (int i = 0; i < rowCount; ++i) {
+    if (rows[i] == cursor.row) index = i;
+  }
+  const int next = index + delta;
+  if (next >= rowCount) return layout.actionCount > 0 ? Cursor{Row::None, 0} : cursor;
+  if (next < 0 || rowCount == 0) return cursor;
+  return Cursor{rows[next], -1};
+}
+
+// Left/Right on the grid: the next or previous button, stopping at either end.
+inline Cursor moveHorizontal(const Layout& layout, const Cursor cursor, const int delta) {
+  if (!cursor.onGrid()) return cursor;
+  return Cursor{Row::None, std::clamp(cursor.action + delta, 0, layout.actionCount - 1)};
 }
 
 // Maps a touch x onto the bar's range: the settings rows' drag-bar rule, unstepped. Past

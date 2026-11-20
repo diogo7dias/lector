@@ -244,3 +244,60 @@ TEST(LightPanelGeometry, AButtonAloneOnTheLastRowSpansIt) {
   EXPECT_EQ(layout.actions[6].width, kScreenWidth - light_panel::kSidePad * 2);
   EXPECT_LT(layout.actions[5].width, layout.actions[6].width);
 }
+
+namespace {
+using light_panel::Cursor;
+
+light_panel::Layout keysOnly(const bool hasAux, const int actionCount) {
+  return light_panel::forScreen(kScreenWidth, kLineHeight, kReadoutLineHeight, /*hasWarmth=*/true, hasAux, actionCount,
+                                /*hasLight=*/false);
+}
+}  // namespace
+
+TEST(LightPanelGeometry, WithoutALightTheBandHoldsNoLightRows) {
+  const auto layout = keysOnly(/*hasAux=*/true, /*actionCount=*/7);
+  EXPECT_FALSE(layout.hasWarmth);
+  EXPECT_EQ(layout.toggle.height, 0);
+  EXPECT_EQ(layout.brightness.height, 0);
+  EXPECT_EQ(layout.warmth.height, 0);
+  EXPECT_EQ(layout.aux.y, light_panel::kSidePad);
+  EXPECT_LT(layout.height, inBook().height);
+  // Nothing on the dropped rows takes a touch.
+  EXPECT_EQ(light_panel::hitTest(layout, kScreenWidth / 2, 2).kind, Hit::Kind::None);
+}
+
+TEST(LightPanelGeometry, KeysWalkTheRowsThenTheGridAGridRowAtATime) {
+  const auto layout = keysOnly(/*hasAux=*/true, /*actionCount=*/7);  // two columns: rows 0-1, 2-3, 4-5, 6
+  Cursor c = light_panel::firstCursor(layout);
+  EXPECT_EQ(c, (Cursor{Row::Aux, -1}));
+  EXPECT_EQ(light_panel::moveVertical(layout, c, -1), c);  // top stops
+  c = light_panel::moveVertical(layout, c, 1);
+  EXPECT_EQ(c, (Cursor{Row::None, 0}));
+  c = light_panel::moveHorizontal(layout, c, 1);
+  EXPECT_EQ(c.action, 1);
+  EXPECT_EQ(light_panel::moveHorizontal(layout, Cursor{Row::None, 6}, 1).action, 6);  // end stops
+  c = light_panel::moveVertical(layout, c, 1);
+  EXPECT_EQ(c.action, 3);
+  c = light_panel::moveVertical(layout, Cursor{Row::None, 5}, 1);
+  EXPECT_EQ(c.action, 6);                                 // the short last row is still reached
+  EXPECT_EQ(light_panel::moveVertical(layout, c, 1), c);  // bottom stops
+  EXPECT_EQ(light_panel::moveVertical(layout, Cursor{Row::None, 1}, -1), (Cursor{Row::Aux, -1}));
+}
+
+TEST(LightPanelGeometry, WithALightTheCursorPassesEveryValueRowFirst) {
+  const auto layout = inBook();
+  Cursor c = light_panel::firstCursor(layout);
+  EXPECT_EQ(c, (Cursor{Row::Brightness, -1}));
+  c = light_panel::moveVertical(layout, c, 1);
+  EXPECT_EQ(c.row, Row::Warmth);
+  c = light_panel::moveVertical(layout, c, 1);
+  EXPECT_EQ(c.row, Row::Aux);
+  EXPECT_TRUE(light_panel::moveVertical(layout, c, 1).onGrid());
+  EXPECT_EQ(light_panel::moveHorizontal(layout, c, 1), c);  // Left/Right off the grid step the row instead
+}
+
+TEST(LightPanelGeometry, NoRowsAndNoAuxStartsOnTheFirstButton) {
+  const auto layout = keysOnly(/*hasAux=*/false, /*actionCount=*/6);
+  EXPECT_EQ(light_panel::firstCursor(layout), (Cursor{Row::None, 0}));
+  EXPECT_EQ(light_panel::moveVertical(layout, Cursor{Row::None, 0}, -1), (Cursor{Row::None, 0}));
+}

@@ -247,7 +247,7 @@ void ActivityManager::loop() {
             requestUpdate(/*immediate=*/true);
           }))
         return;
-    } else if (Frontlight.present() && mappedInput.wasMenuGesture()) {
+    } else if (mappedInput.wasMenuGesture()) {
       lightPanel.show();
       requestUpdate(/*immediate=*/true);
       return;
@@ -596,8 +596,13 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
       goToSettings();
       return true;
     case CrossPointSettings::LP_MENU_LIGHT_PANEL:
-      if (!Frontlight.present() || lightPanel.isActive()) {
-        return false;
+      // The key that opened it puts it away again, as a second swipe does.
+      if (lightPanel.isActive()) {
+        lightPanel.close([this] {
+          if (currentActivity) currentActivity->onRevealed();
+          requestUpdate(/*immediate=*/true);
+        });
+        return true;
       }
       lightPanel.show();
       // Immediate for the same reason the gesture path is: ActivityManager::loop() will
