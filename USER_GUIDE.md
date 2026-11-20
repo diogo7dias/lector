@@ -169,7 +169,6 @@ The Home screen is the entry point. It lists the books you have been reading, an
 - **OPDS Browser** — shown once at least one catalog is configured, see
   [section 9](#9-getting-books-onto-the-device).
 - **File Transfer** — Wi-Fi transfers, see [section 9](#9-getting-books-onto-the-device).
-- **Stats** — what you have read, see [Reading stats](#reading-stats).
 - **Settings** — see [section 12](#12-settings-reference).
 
 **Settings > Controls > Home Back Button** decides what **Back** does here: nothing, resume
@@ -205,32 +204,11 @@ for its title; later visits only read the books that changed. It lists at most 2
 the X3 and X4 and 4096 on the X4 Pro. If the card is empty the list says **No books found on
 the SD card**.
 
-### Reading stats
-
-Every time you close a book (Back, Home, or sleep), Lector adds one line to
-`/stats/journal.txt` on the card: when, how long, how many pages you turned forward, whether
-you reached the end, and the title. Sittings under a minute are not kept. A page left open
-for more than five minutes stops the clock for that page, so a book left on the table does
-not count as reading.
-
-**Stats** on Home leads with this month as a calendar: each day fills from the bottom by how
-long you read that day, the longest day full, and today has a thick outline. Under it are the
-last 7 days, this year, all time and the books finished.
+### End of book
 
 Turning past the last page shows **End of book** with the title and author, the day you
-started and the day you finished, your total time and pages in that book, and the last quote
-you saved from it. Time and pages come from every sitting the journal kept under that title,
-so two books with the same title share them. Dates need the clock. Any books from the same
-folder follow under **Continue with**.
-
-Days need the clock. The X3 and X4 Pro keep one; the X4 has no clock chip, so a Wi-Fi
-connection sets its clock until it next powers off. With the clock set, a sitting is dated. Without it the sitting
-still counts toward the totals, but not toward any day, week or year.
-
-The journal is plain text, one tab-separated line per sitting, so you can open it in a
-spreadsheet, edit it, or delete it to start over. With File Transfer running, the **Stats**
-page in the browser shows the same totals, the last 12 months day by day, and recent
-sessions.
+finished (when the clock is set), and the last quote you saved from it. Any books from the
+same folder follow under **Continue with**.
 
 ---
 

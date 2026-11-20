@@ -23,7 +23,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ProgressFile.h"
-#include "util/ReadingJournalStore.h"
 #include "util/ReadingPercent.h"
 
 void XtcReaderActivity::onEnter() {
@@ -41,7 +40,6 @@ void XtcReaderActivity::onEnter() {
   APP_STATE.openEpubPath = xtc->getPath();
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor());
-  journal.clock.touch(millis());
 
   requestUpdate();
 }
@@ -74,7 +72,6 @@ void XtcReaderActivity::onExit() {
   if (xtc && progressSaveDebouncer.hasPending()) {
     saveProgress(progressSaveDebouncer.lastObservedPosition());
   }
-  if (xtc) reading_journal::append(journal, millis(), xtc->getTitle().c_str());
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
@@ -174,7 +171,6 @@ void XtcReaderActivity::loop() {
 
 void XtcReaderActivity::returnToLastPage() {
   currentPage = xtc->getPageCount() > 0 ? xtc->getPageCount() - 1 : 0;
-  journal.finished = false;  // paged back off the end screen: not finished after all
   requestUpdate();
 }
 
@@ -202,13 +198,10 @@ void XtcReaderActivity::pageTurn(const bool forward) {
   // The end screen returned above; a back press on page 0 turns nothing and counts nothing.
   if (prevTriggered) {
     if (currentPage == 0) return;
-    journal.turn(millis(), false);
     currentPage--;
     requestUpdate();
   } else if (nextTriggered) {
-    journal.turn(millis(), true);
     currentPage++;  // up to getPageCount(), which shows "End of book"
-    if (currentPage >= xtc->getPageCount()) journal.finished = true;
     requestUpdate();
   }
 }
@@ -222,7 +215,7 @@ void XtcReaderActivity::render(RenderLock&&) {
   if (currentPage >= xtc->getPageCount()) {
     // Show end of book screen. Sole load site: runs on the render task (serialized by
     // RenderLock); the main task only reads the suggestions once the flag is published.
-    endOfBookOptions.loadOnce(xtc->getPath(), xtc->getTitle(), xtc->getAuthor(), journal);
+    endOfBookOptions.loadOnce(xtc->getPath(), xtc->getTitle(), xtc->getAuthor());
     renderer.clearScreen();
     endOfBookOptions.render(renderer, mappedInput);
     renderer.displayBuffer();

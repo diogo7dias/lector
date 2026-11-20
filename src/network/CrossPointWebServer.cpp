@@ -37,7 +37,6 @@
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
-#include "html/StatsPageHtml.generated.h"
 #include "html/js/epub_optimizerJs.generated.h"
 #include "html/js/jszip_minJs.generated.h"
 #include "sleep/SleepWallpaperIndexStore.h"
@@ -201,7 +200,6 @@ void CrossPointWebServer::begin() {
 
   // Font management endpoints
   server->on("/fonts", HTTP_GET, [this] { handleFontsPage(); });
-  server->on("/stats", HTTP_GET, [this] { handleStatsPage(); });
   server->on("/api/fonts", HTTP_GET, [this] { handleFontList(); });
   server->on("/api/fonts/upload", HTTP_POST, [this] { handleFontUpload(); }, [this] { handleFontUploadData(); });
   server->on("/api/fonts/delete", HTTP_POST, [this] { handleFontDelete(); });
@@ -2369,11 +2367,6 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 void CrossPointWebServer::handleFontsPage() const {
   sendStaticContent(server.get(), FontsPageHtml, sizeof(FontsPageHtml), FontsPageHtmlETag, "text/html");
   LOG_DBG("WEB", "Served fonts page");
-}
-
-// The page reads /stats/journal.txt through /download and does the sums itself.
-void CrossPointWebServer::handleStatsPage() const {
-  sendStaticContent(server.get(), StatsPageHtml, sizeof(StatsPageHtml), StatsPageHtmlETag, "text/html");
 }
 
 void CrossPointWebServer::handleFontList() const {

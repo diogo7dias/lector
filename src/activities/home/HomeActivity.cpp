@@ -21,7 +21,6 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
-#include "StatsActivity.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/network/NearbyFileTransferActivity.h"
 #include "components/BusyBanner.h"
@@ -33,7 +32,7 @@
 #include "util/DeferredFavorite.h"
 
 int HomeActivity::menuRowCount() const {
-  int count = 5;  // File Browser, Library, File transfer, Stats, Settings
+  int count = 4;  // File Browser, Library, File transfer, Settings
   if (hasOpdsServers) {
     count++;
   }
@@ -147,9 +146,6 @@ void HomeActivity::loop() {
       case HomeMenuItem::FILE_TRANSFER:
         onFileTransferOpen();
         break;
-      case HomeMenuItem::STATS:
-        onStatsOpen();
-        break;
       case HomeMenuItem::SETTINGS_MENU:
         onSettingsOpen();
         break;
@@ -249,9 +245,9 @@ void HomeActivity::render(RenderLock&&) {
   // no per-book cover generation, so the home stays fast. A menu selection passes -1
   // so no book row is highlighted.
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_LIBRARY), tr(STR_NEARBY_SYNC), tr(STR_STATS),
+  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_LIBRARY), tr(STR_NEARBY_SYNC),
                                         tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Library, Transfer, Book, Settings};
+  std::vector<UIIcon> menuIcons = {Folder, Library, Transfer, Settings};
 
   if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
@@ -329,17 +325,12 @@ void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToR
 
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 
-// A child of Home, like Stats, so Back lands on the Library row again.
+// A child of Home, so Back lands on the Library row again.
 void HomeActivity::onLibraryOpen() {
   startActivityForResult(std::make_unique<LibraryActivity>(renderer, mappedInput), [](const ActivityResult&) {});
 }
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
-
-// A child of Home rather than a replacement, so Back lands on the Stats row again.
-void HomeActivity::onStatsOpen() {
-  startActivityForResult(std::make_unique<StatsActivity>(renderer, mappedInput), [](const ActivityResult&) {});
-}
 
 void HomeActivity::onFileTransferOpen() {
   activityManager.replaceActivity(

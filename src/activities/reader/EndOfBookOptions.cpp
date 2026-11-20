@@ -1,12 +1,15 @@
 #include "EndOfBookOptions.h"
 
+#include <ClockZones.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalStorage.h>
 #include <I18n.h>
 
 #include <algorithm>
 #include <cstdio>
+#include <ctime>
 
 #include "CrossPointSettings.h"
 #include "ReaderUtils.h"
@@ -19,7 +22,6 @@
 #include "util/ButtonNavigator.h"
 #include "util/NextBookFinder.h"
 #include "util/QuoteText.h"
-#include "util/ReadingJournalStore.h"
 
 namespace {
 // Display name without the file extension, mirroring the file browser rows
@@ -58,13 +60,24 @@ std::string lastQuote(const std::string& bookPath) {
   return buf.substr(record.textStart, record.textEnd - record.textStart);
 }
 
-void formatDate(char* out, const size_t size, const reading_journal::Civil& d) {
-  snprintf(out, size, "%04d-%02d-%02d", d.year, d.month, d.day);
+// Today's local date as YYYY-MM-DD, in the zone the clock settings name. False when the
+// clock was never set.
+bool formatToday(char* out, const size_t size) {
+  uint16_t year;
+  uint8_t month, day, hour, minute;
+  if (!halClock.getDateTime(year, month, day, hour, minute)) return false;
+  const int64_t utc = clock_zones::utcSeconds(year, month, day, hour, minute);
+  const time_t local =
+      static_cast<time_t>(utc + clock_zones::offsetMinutes(SETTINGS.clockTimezone, SETTINGS.clockDst, utc) * 60);
+  tm t{};
+  gmtime_r(&local, &t);
+  snprintf(out, size, "%04d-%02d-%02d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
+  return true;
 }
 }  // namespace
 
 void EndOfBookOptions::loadOnce(const std::string& currentBookPath, const std::string& title,
-                                const std::string& bookAuthor, const reading_journal::Session& sitting) {
+                                const std::string& bookAuthor) {
   if (isLoaded.load(std::memory_order_acquire)) {
     return;
   }
@@ -75,30 +88,10 @@ void EndOfBookOptions::loadOnce(const std::string& currentBookPath, const std::s
   bookTitle = title;
   author = bookAuthor;
   quote = lastQuote(currentBookPath);
-  // Every sitting the journal kept, plus this one, which is written only when the book closes.
-  reading_journal::BookHistory history;
-  history.title = title.c_str();
-  reading_journal::bookHistory(history);
-  const uint32_t seconds = history.totals.seconds + sitting.clock.seconds();
-  const uint32_t pages = history.totals.pages + sitting.pages;
-  timeLine[0] = '\0';
-  if (seconds >= reading_journal::MIN_SESSION_S) {  // "0m" says nothing
-    char duration[16];
-    reading_journal::formatDuration(duration, sizeof(duration), seconds);
-    snprintf(timeLine, sizeof(timeLine), tr(STR_STATS_TIME_PAGES), duration, static_cast<unsigned long>(pages));
-  }
-  reading_journal::Civil today;
   datesLine[0] = '\0';
-  if (reading_journal::localNow(today)) {
-    char finished[12], started[12];
-    formatDate(finished, sizeof(finished), today);
-    if (history.haveStart) {
-      formatDate(started, sizeof(started), history.start);
-      snprintf(datesLine, sizeof(datesLine), tr(STR_EOB_DATES), started, finished);
-    } else {
-      snprintf(datesLine, sizeof(datesLine), tr(STR_EOB_FINISHED_ON), finished);
-    }
-  }
+  char finished[12];
+  if (formatToday(finished, sizeof(finished)))
+    snprintf(datesLine, sizeof(datesLine), tr(STR_EOB_FINISHED_ON), finished);
 
   // Release-publish so the main task, which gates all access on isLoaded, never
   // observes a partially built list
@@ -182,8 +175,7 @@ int EndOfBookOptions::drawFinished(const GfxRenderer& renderer, const Rect& area
   lines(bookTitle.c_str(), 2, EpdFontFamily::BOLD);
   lines(author.c_str(), 1);
   y += metrics.verticalSpacing;
-  lines(datesLine, 2);
-  lines(timeLine, 1);
+  lines(datesLine, 1);
   if (!quote.empty()) {
     std::string shown = "\"" + quote + "\"";
     std::replace(shown.begin(), shown.end(), '\n', ' ');

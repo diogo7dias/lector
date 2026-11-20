@@ -1,7 +1,7 @@
 # Home and navigation
 
 Home is the first screen after boot: a list of rows (Browse Files, Library, OPDS Browser,
-Nearby Sync, Stats, Settings). The sim card has an OPDS server, so the OPDS row is there; the
+Nearby Sync, Settings). The sim card has an OPDS server, so the OPDS row is there; the
 menu is anchored to the bottom, so a row added or removed moves every row above Settings. On the
 X4 Pro a first tap arms a row with a dashed outline, a second tap opens it, and the
 capacitive Home key comes back from anywhere.
@@ -24,16 +24,16 @@ capacitive Home key comes back from anywhere.
 Preconditions: baseline (fresh `lv start x4pro`).
 
 - **Boot.** Run `lv state`. `activity` is `Home`, `frames` above 0.
-- **Arm.** Tap Browse Files once: `lv tap 240 464`. `activity` stays `Home`; each edge strip of
-  the row is partly inked: `lv ink 20 442 440 2` (top), `lv ink 20 485 440 2` (bottom),
-  `lv ink 20 442 2 45` (left), `lv ink 458 442 2 45` (right), each `ink/area` between 0.3 and 0.9.
-- **Open.** `lv tap 240 464` again. `activity` becomes `FileBrowser`.
+- **Arm.** Tap Browse Files once: `lv tap 240 517`. `activity` stays `Home`; each edge strip of
+  the row is partly inked: `lv ink 20 495 440 2` (top), `lv ink 20 538 440 2` (bottom),
+  `lv ink 20 495 2 45` (left), `lv ink 458 495 2 45` (right), each `ink/area` between 0.3 and 0.9.
+- **Open.** `lv tap 240 517` again. `activity` becomes `FileBrowser`.
 - **Home key.** `lv press home`. `activity` becomes `Home`.
 - **Fast tap.** `lv tap 240 729 0` twice (Settings, zero hold). `activity` becomes `Settings`.
 - **Proof.** `lv shot home-armed` after the first tap, `lv shot filebrowser` after the second.
 
-Rows on x4pro, top to bottom: Browse Files y 464, Library 517, OPDS Browser 570, Nearby Sync 623,
-Stats 676, Settings 729. The Library recipe is in [library.md](./library.md).
+Rows on x4pro, top to bottom: Browse Files y 517, Library 570, OPDS Browser 623, Nearby Sync 676,
+Settings 729. The Library recipe is in [library.md](./library.md).
 
 ## Gotchas
 

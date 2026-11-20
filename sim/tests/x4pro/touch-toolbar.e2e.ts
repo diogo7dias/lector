@@ -42,9 +42,9 @@ test('the toolbar menu scrubs, opens a tile and closes', async ({ app, screen })
   const resume = (await ink(0, 200, 480, 60)) > 5_000;
   await setStyle();
   if (resume) {
-    await tapTwice(240, 232); // the book's row on Home
+    await tapTwice(240, 259); // the book's row on Home
   } else {
-    await tapTwice(240, 464); // Browse Files
+    await tapTwice(240, 517); // Browse Files
     await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
     await tapTwice(150, 279); // test_kerning_ligature.epub
   }
