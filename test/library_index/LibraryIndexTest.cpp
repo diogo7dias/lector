@@ -451,3 +451,48 @@ TEST_F(LibraryIndexTest, PastTheCapTheWalkStopsAndSaysSo) {
   EXPECT_EQ(index.bookCount(), CLIX_MAX_RECORDS);
   EXPECT_NE(index.header().flags & CLIX_FLAG_TRUNCATED, 0);
 }
+
+TEST_F(LibraryIndexTest, DisablingMetadataSkipsEpubParsingAndRebuildsOnModeSwitch) {
+  add("/books/file_name_a.epub", "Real Title A", "Real Author A");
+  add("/books/file_name_b.epub", "Real Title B", "Real Author B");
+
+  BuildStats stats;
+  ASSERT_TRUE(buildLibraryIndex("/", libraryIndexPath(), stats, nullptr, nullptr, /*useMetadata=*/false));
+  EXPECT_EQ(stats.parsed, 0u);
+  EXPECT_EQ(fake_epub::parses, 0);
+  {
+    LibraryIndexFile index;
+    ASSERT_TRUE(index.open(libraryIndexPath()));
+    EXPECT_FALSE(index.metadataEnabled());
+  }
+  auto r = rows();
+  ASSERT_EQ(r.size(), 2u);
+  EXPECT_EQ(r[0].title, "file_name_a");
+  EXPECT_EQ(r[0].author, "");
+  EXPECT_EQ(r[1].title, "file_name_b");
+  EXPECT_EQ(r[1].author, "");
+
+  // Switching metadata back on must ignore the filename-only prior index and parse EPUBs.
+  ASSERT_TRUE(buildLibraryIndex("/", libraryIndexPath(), stats, nullptr, nullptr, /*useMetadata=*/true));
+  EXPECT_EQ(stats.reused, 0u);
+  EXPECT_EQ(stats.parsed, 2u);
+  {
+    LibraryIndexFile index;
+    ASSERT_TRUE(index.open(libraryIndexPath()));
+    EXPECT_TRUE(index.metadataEnabled());
+  }
+  r = rows();
+  ASSERT_EQ(r.size(), 2u);
+  EXPECT_EQ(r[0].title, "Real Title A");
+  EXPECT_EQ(r[0].author, "Real Author A");
+
+  // Switching metadata back off must strip cached metadata instead of reusing it.
+  fake_epub::parses = 0;
+  ASSERT_TRUE(buildLibraryIndex("/", libraryIndexPath(), stats, nullptr, nullptr, /*useMetadata=*/false));
+  EXPECT_EQ(stats.reused, 0u);
+  EXPECT_EQ(fake_epub::parses, 0);
+  r = rows();
+  ASSERT_EQ(r.size(), 2u);
+  EXPECT_EQ(r[0].title, "file_name_a");
+  EXPECT_EQ(r[0].author, "");
+}

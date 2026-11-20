@@ -26,6 +26,7 @@ class LibraryIndexFile {
   ClixValidity validity() const { return lastValidity; }
   const ClixHeader& header() const { return head; }
   uint16_t bookCount() const { return opened ? head.bookCount : 0; }
+  bool metadataEnabled() const { return opened && (head.flags & CLIX_FLAG_NO_METADATA) == 0; }
 
   // Up to `count` records from `first` in one read. Returns how many were read,
   // each already checked with recordInBounds (a bad one stops the batch).

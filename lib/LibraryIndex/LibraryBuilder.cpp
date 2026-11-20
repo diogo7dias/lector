@@ -76,6 +76,7 @@ struct Build {
   std::unique_ptr<StagedEntry> entry;
   ClixRecord batch[16];  // loading the previous index: one sector of records
   uint32_t nameBytes = 0;
+  bool useMetadata = true;
   bool stop = false;
   bool failed = false;
 };
@@ -123,6 +124,10 @@ uint32_t packModified(HalFile& file) {
 
 bool loadPrior(Build& b) {
   if (!b.previous.open(b.indexPath) || b.previous.bookCount() == 0) return true;
+  if (b.previous.metadataEnabled() != b.useMetadata) {
+    b.previous.close();
+    return true;
+  }
   const size_t count = b.previous.bookCount();
   b.prior = makeUniqueNoThrow<PriorEntry[]>(count);
   if (!b.prior) {
@@ -199,7 +204,7 @@ bool stageBook(Build& b, const char* path, const std::string_view name, const ui
   } else {
     title.clear();
     author.clear();
-    if (FsHelpers::hasEpubExtension(name)) {
+    if (b.useMetadata && FsHelpers::hasEpubExtension(name)) {
       stats.parsed++;
       Epub epub(path, CACHE_DIR);
       if (!epub.loadMetadata(title, author)) {
@@ -380,7 +385,7 @@ bool emitIndex(Build& b, const SortKey* keys, const uint16_t count, const std::s
   ClixHeader head{};
   std::memcpy(head.magic, CLIX_MAGIC, sizeof(head.magic));
   head.formatVersion = CLIX_FORMAT_VERSION;
-  head.flags = b.stats->truncated ? CLIX_FLAG_TRUNCATED : 0;
+  head.flags = (b.stats->truncated ? CLIX_FLAG_TRUNCATED : 0) | (b.useMetadata ? 0 : CLIX_FLAG_NO_METADATA);
   head.bookCount = count;
   layoutSections(head, b.nameBytes);
 
@@ -419,7 +424,7 @@ bool isLibraryBookName(const std::string_view name) {
 }
 
 bool buildLibraryIndex(const char* rootPath, const char* indexPath, BuildStats& stats, ProgressFn progress,
-                       void* progressCtx) {
+                       void* progressCtx, const bool useMetadata) {
   stats = {};
   auto b = makeUniqueNoThrow<Build>();
   if (!b) {
@@ -430,6 +435,7 @@ bool buildLibraryIndex(const char* rootPath, const char* indexPath, BuildStats& 
   b->stats = &stats;
   b->progress = progress;
   b->progressCtx = progressCtx;
+  b->useMetadata = useMetadata;
   b->entry = makeUniqueNoThrow<StagedEntry>();
   if (!b->entry) {
     LOG_ERR("LIBIDX", "OOM: staged entry");

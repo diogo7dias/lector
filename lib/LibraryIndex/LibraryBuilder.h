@@ -53,9 +53,10 @@ using ProgressFn = void (*)(void* ctx);
 
 // Walk `rootPath` and write the index to `indexPath`. On false the previous
 // index is untouched, unless the failure came between removing it and renaming
-// the new one in, when there is none.
+// the new one in, when there is none. `useMetadata` false skips opening EPUBs
+// and lists every book by its filename stem with an empty author.
 bool buildLibraryIndex(const char* rootPath, const char* indexPath, BuildStats& stats, ProgressFn progress = nullptr,
-                       void* progressCtx = nullptr);
+                       void* progressCtx = nullptr, bool useMetadata = true);
 
 // Where the firmware keeps its index.
 const char* libraryIndexPath();

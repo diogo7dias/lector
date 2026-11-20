@@ -43,7 +43,7 @@ test('the Clear Reading Cache warning left idle drops to low power', async ({ ap
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
   await press('Down', 3); // System
   await press('Confirm');
-  await press('Down', 14); // Clear Reading Cache (no Time Zone rows: the X4 has no clock chip)
+  await press('Down', 15); // Clear Reading Cache (no Time Zone rows: the X4 has no clock chip)
   await press('Confirm');
   await expect(activity).toHaveText('ClearCache', { timeout: 30_000 });
 

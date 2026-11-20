@@ -367,24 +367,24 @@ void SettingsActivity::rebuildSettingsList() {
                   {StrId::STR_GRP_HOLD, {StrId::STR_LONG_PRESS_MENU, StrId::STR_MENU_HOLD, StrId::STR_POPUP_ITEMS}},
               });
 
-  applyGroups(
-      systemSettings,
-      {
-          {StrId::STR_GRP_POWER, {StrId::STR_TIME_TO_SLEEP, StrId::STR_TOUCH_SLEEP}},
-          {StrId::STR_GRP_LIBRARY,
-           {StrId::STR_SHOW_HIDDEN_FILES, StrId::STR_BOOK_BROWSER_ORDER, StrId::STR_OPEN_BOOK_ON_BOOT,
-            StrId::STR_REMOVE_READ_FROM_RECENTS, StrId::STR_MOVE_FINISHED_TO_READ, StrId::STR_MOVE_OPENED_TO_RECENTS}},
-          // Device Name leads: it is the name this reader broadcasts to another one during
-          // Nearby Position Sync, so it belongs with the network rows rather than stranded
-          // at the bottom of the category, which is where it sat.
-          {StrId::STR_GRP_NETWORK,
-           {StrId::STR_DEVICE_NAME, StrId::STR_WIFI_NETWORKS, StrId::STR_KOREADER_SYNC, StrId::STR_OPDS_SERVERS,
-            StrId::STR_SHARE_CREDENTIALS}},
-          {StrId::STR_GRP_DEVICE,
-           {StrId::STR_LANGUAGE, StrId::STR_TIMEZONE, StrId::STR_CLOCK_DST, StrId::STR_WAKE_ON_USB_PLUG_IN,
-            StrId::STR_CLEAN_STORAGE, StrId::STR_CLEAR_READING_CACHE, StrId::STR_CHECK_UPDATES,
-            StrId::STR_SD_FIRMWARE_UPDATE, StrId::STR_INSTALL_OTHER_FIRMWARE, StrId::STR_WHATS_NEW}},
-      });
+  applyGroups(systemSettings,
+              {
+                  {StrId::STR_GRP_POWER, {StrId::STR_TIME_TO_SLEEP, StrId::STR_TOUCH_SLEEP}},
+                  {StrId::STR_GRP_LIBRARY,
+                   {StrId::STR_LIBRARY_USE_METADATA, StrId::STR_SHOW_HIDDEN_FILES, StrId::STR_BOOK_BROWSER_ORDER,
+                    StrId::STR_OPEN_BOOK_ON_BOOT, StrId::STR_REMOVE_READ_FROM_RECENTS, StrId::STR_MOVE_FINISHED_TO_READ,
+                    StrId::STR_MOVE_OPENED_TO_RECENTS}},
+                  // Device Name leads: it is the name this reader broadcasts to another one during
+                  // Nearby Position Sync, so it belongs with the network rows rather than stranded
+                  // at the bottom of the category, which is where it sat.
+                  {StrId::STR_GRP_NETWORK,
+                   {StrId::STR_DEVICE_NAME, StrId::STR_WIFI_NETWORKS, StrId::STR_KOREADER_SYNC, StrId::STR_OPDS_SERVERS,
+                    StrId::STR_SHARE_CREDENTIALS}},
+                  {StrId::STR_GRP_DEVICE,
+                   {StrId::STR_LANGUAGE, StrId::STR_TIMEZONE, StrId::STR_CLOCK_DST, StrId::STR_WAKE_ON_USB_PLUG_IN,
+                    StrId::STR_CLEAN_STORAGE, StrId::STR_CLEAR_READING_CACHE, StrId::STR_CHECK_UPDATES,
+                    StrId::STR_SD_FIRMWARE_UPDATE, StrId::STR_INSTALL_OTHER_FIRMWARE, StrId::STR_WHATS_NEW}},
+              });
 }
 
 void SettingsActivity::onEnter() {

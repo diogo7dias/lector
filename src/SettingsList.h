@@ -583,6 +583,9 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
   emit(SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles, "showHiddenFiles",
                            StrId::STR_CAT_SYSTEM));
 
+  emit(SettingInfo::Toggle(StrId::STR_LIBRARY_USE_METADATA, &CrossPointSettings::libraryUseMetadata,
+                           "libraryUseMetadata", StrId::STR_CAT_SYSTEM));
+
   emit(SettingInfo::Enum(StrId::STR_BOOK_BROWSER_ORDER, &CrossPointSettings::bookBrowserOrder,
                          {StrId::STR_BOOK_ORDER_ALPHABETICAL, StrId::STR_BOOK_ORDER_RANDOM,
                           StrId::STR_BOOK_ORDER_RECENTLY_ADDED, StrId::STR_BOOK_ORDER_LAST_READ},

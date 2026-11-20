@@ -10,6 +10,7 @@
 
 #include <algorithm>
 
+#include "CrossPointSettings.h"
 #include "activities/ActivityManager.h"
 #include "activities/RenderLock.h"
 #include "components/BusyBanner.h"
@@ -49,15 +50,17 @@ void LibraryActivity::onExit() {
 // `force`. Takes the render lock itself when the caller does not hold it.
 void LibraryActivity::refreshIndex(const bool force) {
   const uint32_t generation = Storage.bookGeneration();
+  const bool useMetadata = SETTINGS.libraryUseMetadata != 0;
   library::LibraryIndexFile index;
-  bool usable = !force && builtThisBoot && builtAtGeneration == generation && index.open(library::libraryIndexPath());
+  bool usable = !force && builtThisBoot && builtAtGeneration == generation && index.open(library::libraryIndexPath()) &&
+                index.metadataEnabled() == useMetadata;
   if (!usable) {
     index.close();
     BusyBanner banner(renderer, tr(STR_LIBRARY_REBUILDING));
     library::BuildStats stats;
     const uint32_t startMs = millis();
     LOG_INF("LIB", "rebuilding, free heap %u", static_cast<unsigned>(ESP.getFreeHeap()));
-    if (library::buildLibraryIndex("/", library::libraryIndexPath(), stats, feedWatchdog, nullptr)) {
+    if (library::buildLibraryIndex("/", library::libraryIndexPath(), stats, feedWatchdog, nullptr, useMetadata)) {
       builtThisBoot = true;
       builtAtGeneration = generation;
     }
