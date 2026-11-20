@@ -940,6 +940,7 @@ void loop() {
       bindingsApplied = true;
     }
 
+    bool confirmFired = false;
     // Sleep goes straight down from here: this file owns the device.
     const auto runBoundFunction = [&](const uint8_t function) {
       if (function == CrossPointSettings::LP_MENU_QUICK_LOCK) {
@@ -949,6 +950,10 @@ void loop() {
       if (activityManager.isQuickLocked()) return;
       if (function == CrossPointSettings::LP_MENU_SLEEP) {
         enterDeepSleep();
+      }
+      if (function == CrossPointSettings::LP_MENU_CONFIRM) {
+        confirmFired = true;
+        return;
       }
       activityManager.runBoundAction(function);
     };
@@ -1021,6 +1026,13 @@ void loop() {
       if (fired.valid && !fired.replayRawEdge) runBoundFunction(fired.function);
       mappedInputManager.setHomeKeyOverride(/*suppress=*/true, fired.valid && fired.replayRawEdge);
     }
+
+    // Two-pass synthetic Confirm for LP_MENU_CONFIRM: press on this pass, release on the next
+    // unless an activity transition suppressed it.
+    static button_replay::SideKey confirmReplay;
+    if (mappedInputManager.takeConfirmReleaseSuppressed()) confirmReplay.reset();
+    const button_replay::Injection confirmInjection = confirmReplay.onPass(/*intercepted=*/true, confirmFired);
+    mappedInputManager.setConfirmOverride(confirmInjection.press, confirmInjection.release);
   }
 
   // Refresh the battery icon when USB is plugged or unplugged.

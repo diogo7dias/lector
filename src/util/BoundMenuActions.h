@@ -100,6 +100,8 @@ enum LONG_PRESS_MENU_FUNCTION {
   // Opens the reader's own menu, what Confirm does on a press (CrossPoint's Home long press).
   // Only a book has one, so it is greyed outside a book.
   LP_MENU_OPEN_READER_MENU = 37,
+  // Synthesizes a Confirm press+release on the active screen (CrossPoint's shortPwrBtn = Confirm).
+  LP_MENU_CONFIRM = 38,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 

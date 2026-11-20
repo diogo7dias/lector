@@ -66,3 +66,8 @@ TEST(BoundActionScope, ToggleFrontlightWorksAnywhereButTheReaderMenuNeedsABook) 
   EXPECT_EQ(LP_MENU_TOGGLE_FRONTLIGHT, LP_MENU_QUICK_LOCK + 1);
   EXPECT_EQ(LP_MENU_OPEN_READER_MENU, LP_MENU_QUICK_LOCK + 2);
 }
+
+TEST(BoundActionScope, ConfirmWorksAnywhereAndKeepsEnumOrder) {
+  EXPECT_TRUE(allowedOutsideBook(LP_MENU_CONFIRM));
+  EXPECT_EQ(LP_MENU_CONFIRM, LP_MENU_OPEN_READER_MENU + 1);
+}

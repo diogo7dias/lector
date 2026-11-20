@@ -45,6 +45,7 @@ class MappedInputManager {
   void suppressHeldButtonRelease() const {
     releaseGate.arm(buttonMask(&HalGPIO::isPressed));
     hintStroke.clear();
+    confirmReleaseSuppressed = true;
   }
 
   // True while any physical button is down.
@@ -166,6 +167,16 @@ class MappedInputManager {
     homeKeySuppressed = suppress;
     homeKeyInjected = inject;
   }
+  // Synthesizes a two-pass Confirm press+release for the LP_MENU_CONFIRM button binding.
+  void setConfirmOverride(const bool injectPress, const bool injectRelease) {
+    confirmInjectPress = injectPress;
+    confirmInjectRelease = injectRelease;
+  }
+  bool takeConfirmReleaseSuppressed() const {
+    const bool suppressed = confirmReleaseSuppressed;
+    confirmReleaseSuppressed = false;
+    return suppressed;
+  }
   void clearBindingOverrides();
 
   // True when the control axis is flipped relative to the physical buttons: the user opted into
@@ -242,6 +253,9 @@ class MappedInputManager {
   SideKeyOverride sideKeyOverrides[2];
   bool homeKeySuppressed = false;
   bool homeKeyInjected = false;
+  bool confirmInjectPress = false;
+  bool confirmInjectRelease = false;
+  mutable bool confirmReleaseSuppressed = false;
 
   // A touch tap is latched in update(); all consumers must read the same release event.
   mutable bool touchTapValid = false;

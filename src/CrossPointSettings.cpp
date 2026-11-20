@@ -392,8 +392,8 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
   // Both old keys are read straight from the document: their fields are gone, so the
   // settings-list walk above no longer loads them.
   if (!doc["btnUiPowerSingle"].is<uint8_t>()) {
-    // 0 Ignore, 1 Sleep, 2 Page turn, 3 Force refresh, 4 Footnotes — the retired
-    // SHORT_PWRBTN enum, spelled out here because nothing else needs it any more.
+    // CrossPoint's SHORT_PWRBTN enum: 0 Ignore, 1 Sleep, 2 Page turn, 3 Force refresh,
+    // 4 Footnotes, 5 Confirm, 6 Clipping, 7 Bookmark, 8 Sync, 9 Reader menu.
     const uint8_t single = [&]() -> uint8_t {
       switch (doc["shortPwrBtn"] | (uint8_t)0) {
         case 1:
@@ -404,6 +404,16 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
           return LP_MENU_FORCE_REFRESH;
         case 4:
           return LP_MENU_FOOTNOTES;
+        case 5:
+          return LP_MENU_CONFIRM;
+        case 6:
+          return LP_MENU_GRAB_QUOTE;
+        case 7:
+          return LP_MENU_BOOKMARK;
+        case 8:
+          return LP_MENU_KOSYNC;
+        case 9:
+          return LP_MENU_OPEN_READER_MENU;
         default:
           return LP_MENU_DISABLED;
       }

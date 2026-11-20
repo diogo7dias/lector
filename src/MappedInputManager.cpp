@@ -367,6 +367,8 @@ void MappedInputManager::clearBindingOverrides() {
   for (auto& override : sideKeyOverrides) override = SideKeyOverride{};
   homeKeySuppressed = false;
   homeKeyInjected = false;
+  confirmInjectPress = false;
+  confirmInjectRelease = false;
 }
 
 bool MappedInputManager::wasScreenLongPress(int& x, int& y, const bool keepContact) const {
@@ -435,6 +437,7 @@ list_swipe::Scroll MappedInputManager::wasListScrollSwipe() const {
 
 bool MappedInputManager::wasPressed(const Button button) const {
   if (button == Button::Back && wasBackGesture()) return true;
+  if (button == Button::Confirm && confirmInjectPress) return true;
   return mapButton(button, &HalGPIO::wasPressed);
 }
 
@@ -443,6 +446,7 @@ bool MappedInputManager::wasReleased(const Button button) const {
   // suppressHeldButtonRelease(). The keys are gated one by one in mapButton(); the back
   // gesture is a touch event that belongs to no key, so it waits while any release is owed.
   if (button == Button::Back && wasBackGesture()) return !releaseGate.armed();
+  if (button == Button::Confirm && confirmInjectRelease) return true;
   // See setPowerReleaseOverride(): the reader's double-click detector holds a power release
   // back for one window and then replays it here, so every consumer keeps its existing code.
   if (button == Button::Power) {

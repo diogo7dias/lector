@@ -112,6 +112,23 @@ int main() {
   assert(legacy.migrate(old));
   assert(legacy.btnBookPowerDouble == LP_MENU_DISABLED);
   assert(legacy.btnUiPowerDouble == LP_MENU_DISABLED);
+
+  // CrossPoint SHORT_PWRBTN 5..9 migrate cleanly into Power single bindings.
+  const struct { uint8_t raw; uint8_t book; uint8_t ui; } cases[] = {
+    {5, LP_MENU_CONFIRM, LP_MENU_CONFIRM},
+    {6, LP_MENU_GRAB_QUOTE, LP_MENU_DISABLED},
+    {7, LP_MENU_BOOKMARK, LP_MENU_DISABLED},
+    {8, LP_MENU_KOSYNC, LP_MENU_DISABLED},
+    {9, LP_MENU_OPEN_READER_MENU, LP_MENU_DISABLED},
+  };
+  for (const auto& c : cases) {
+    CrossPointSettings s;
+    Document d;
+    d.values["shortPwrBtn"] = {c.raw};
+    assert(s.migrate(d));
+    assert(s.btnBookPowerSingle == c.book);
+    assert(s.btnUiPowerSingle == c.ui);
+  }
 }
 '''
 with tempfile.TemporaryDirectory() as directory:
