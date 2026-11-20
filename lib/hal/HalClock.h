@@ -50,7 +50,7 @@ class HalClock {
 
   // Minutes since local midnight (0-1439). `zone` is SETTINGS.clockTimezone and `dst`
   // SETTINGS.clockDst (see ClockZones.h); every caller passes the same two, so the status bar,
-  // Home, the Light Schedule and the reading journal show one local time.
+  // Home, the Light Schedule and the end-of-book date show one local time.
   // Returns false if RTC is not available.
   bool localMinutes(uint16_t& minutes, uint8_t zone, uint8_t dst) const;
 

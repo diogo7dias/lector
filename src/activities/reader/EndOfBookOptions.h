@@ -4,8 +4,6 @@
 #include <string>
 #include <vector>
 
-#include "util/ReadingJournal.h"
-
 class GfxRenderer;
 struct Rect;
 class MappedInputManager;
@@ -21,13 +19,11 @@ class EndOfBookOptions {
   static constexpr size_t MAX_SUGGESTIONS = 3;
 
   // Scans the book's folder for suggestions and gathers what the finished page says about
-  // the book (author, dates, time and pages from the journal plus `sitting`, which is not
-  // written yet, and the last saved quote); no-op when already loaded. Call ONLY from
-  // the reader's render() (the render task, serialized by RenderLock) — the loaded flag
-  // is the release/acquire publication point that lets the main task read the finished
-  // list safely.
-  void loadOnce(const std::string& currentBookPath, const std::string& title, const std::string& author,
-                const reading_journal::Session& sitting);
+  // the book (author, the date it was finished and the last saved quote); no-op when
+  // already loaded. Call ONLY from the reader's render() (the render task, serialized by
+  // RenderLock): the loaded flag is the release/acquire publication point that lets the
+  // main task read the finished list safely.
+  void loadOnce(const std::string& currentBookPath, const std::string& title, const std::string& author);
 
   // True when the suggestion menu is showing and should own the reader's input.
   bool menuActive() const;
@@ -58,7 +54,6 @@ class EndOfBookOptions {
   std::string author;
   std::string quote;
   char datesLine[64] = "";
-  char timeLine[40] = "";
 
   std::string fullPath(size_t index) const;
   // Draws the book's lines from y down inside `area`; returns the y below them.

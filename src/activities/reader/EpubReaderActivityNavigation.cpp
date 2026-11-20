@@ -142,9 +142,6 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn, const bool repaint) {
   // when a spine change drops the section.
   RenderLock lock(*this);
   if (!sortesMode && isForwardTurn && sessionPages < std::numeric_limits<int>::max()) ++sessionPages;
-  if (!sortesMode) {
-    journal.turn(millis(), isForwardTurn);
-  }
   returnHistory.finishReturn(false);
   pendingOffsetJump.reset();
   clearDeferredReposition();

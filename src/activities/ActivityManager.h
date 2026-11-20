@@ -26,7 +26,6 @@ enum class HomeMenuItem {
   LIBRARY,
   OPDS_BROWSER,
   FILE_TRANSFER,
-  STATS,
   SETTINGS_MENU,
 };
 

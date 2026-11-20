@@ -50,7 +50,6 @@
 #include "util/BookProgressFile.h"
 #include "util/DeferredFavorite.h"
 #include "util/ProgressFile.h"
-#include "util/ReadingJournalStore.h"
 #include "util/SortesSelection.h"
 
 namespace {
@@ -144,7 +143,6 @@ void EpubReaderActivity::onEnter() {
     currentSpineIndex = sortes::below(count, esp_random);
   } else {
     loadLinkStack();
-    journal.clock.touch(millis());
     openedSpine = currentSpineIndex;
     openedPage = nextPageNumber;
   }
@@ -214,8 +212,6 @@ void EpubReaderActivity::onExit() {
   // be deleted: the numbers only have to be ordered, never contiguous.
   const uint32_t readOrder = ++APP_STATE.readOrderCounter;
   APP_STATE.saveToFile();
-
-  if (epub) reading_journal::append(journal, millis(), epub->getTitle().c_str());
 
   // Update this book's home-list progress badge from the current position. One write
   // per reading session (setProgress skips if unchanged), so no page-turn cost.

@@ -184,7 +184,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (currentSpineIndex == epub->getSpineItemsCount()) {
     // Sole load site: runs on the render task (serialized by RenderLock); the main
     // task only reads the suggestions once the loaded flag is published
-    endOfBookOptions.loadOnce(epub->getPath(), epub->getTitle(), epub->getAuthor(), journal);
+    endOfBookOptions.loadOnce(epub->getPath(), epub->getTitle(), epub->getAuthor());
     renderer.clearScreen();
     endOfBookOptions.render(renderer, mappedInput);
     renderer.displayBuffer(endOfBookPainted ? HalDisplay::FAST_REFRESH : HalDisplay::HALF_REFRESH);

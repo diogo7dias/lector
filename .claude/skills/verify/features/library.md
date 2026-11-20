@@ -21,12 +21,12 @@ path.
 
 Preconditions: baseline (fresh `lv start x4pro`); the card holds the two test books.
 
-- **Open.** `lv tap 240 517` twice (Library). `activity` becomes `Library`. `lv log LIBIDX` shows
+- **Open.** `lv tap 240 570` twice (Library). `activity` becomes `Library`. `lv log LIBIDX` shows
   `built: 2 books (0 reused, 2 parsed ...)`. `lv shot lib-list`: two rows, "JPEG Image Tests" then
   "Kerning & Ligature Edge Cases" with "Crosspoint Test Fixtures" under it, `1/2 books` top right.
 - **Open a book.** `lv tap 240 133` twice (the second row). `activity` becomes `EpubReader`;
   `lv log "LIB\]"` shows `open /test_kerning_ligature.epub`.
-- **Follow.** `lv press home`; `lv log Filing` shows the move into `/recents/`. `lv tap 240 517` twice
+- **Follow.** `lv press home`; `lv log Filing` shows the move into `/recents/`. `lv tap 240 570` twice
   again: `lv log LIBIDX` shows a second `built: 2 books (1 reused, 1 parsed ...)`, and the list is
   the same two rows. Tapping the row opens the book from `/recents/`.
 - Per-row text is logged at debug level only: x4 (`default` env) shows `row N: title | author` lines,

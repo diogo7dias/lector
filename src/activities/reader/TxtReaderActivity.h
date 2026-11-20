@@ -10,7 +10,6 @@
 #include "SimpleReaderShortcut.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
-#include "util/ReadingJournal.h"
 
 class TxtReaderActivity final : public Activity {
   std::unique_ptr<Txt> txt;
@@ -50,7 +49,6 @@ class TxtReaderActivity final : public Activity {
   // removed in onExit, after the Txt handle is released, the same ordering the EPUB
   // reader uses for its move-on-exit filing.
   bool pendingDeleteBook = false;
-  reading_journal::Session journal;
   // Status bar only, this sitting: forward turns ("+N").
   int sessionPages = 0;
   // Pages-to-paragraph answer for page paraPagesFor (-1 = none), kept so a redraw of

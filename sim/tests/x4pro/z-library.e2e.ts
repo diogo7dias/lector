@@ -23,7 +23,7 @@ test('Library opens by touch and follows a book into /recents', async ({ app, sc
 
   const visit = async () => {
     const from = (await log()).length;
-    await tapTwice(240, 517); // Library, under Browse Files
+    await tapTwice(240, 570); // Library, under Browse Files
     await expect(activity).toHaveText('Library', { timeout: 30_000 });
     await expect.poll(async () => (await log()).slice(from).includes('built:'), { timeout: 60_000 }).toBe(true);
     const books = Number(/built: (\d+) books/.exec((await log()).slice(from))?.[1]);

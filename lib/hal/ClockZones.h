@@ -214,7 +214,7 @@ inline int64_t utcSeconds(const int year, const int month, const int day, const 
 
 // Offset of the zone from UTC at the instant `utc`, in minutes, summer time included. Every
 // local time in the firmware comes from here (status bar and Home clock, Light Schedule,
-// reading journal), so they cannot disagree. Sets the process TZ each time rather than
+// end-of-book date), so they cannot disagree. Sets the process TZ each time rather than
 // remembering that it did: an NTP sync resets it to UTC, and the next answer would then be
 // the wrong one.
 inline int offsetMinutes(const uint8_t zone, const uint8_t dst, const int64_t utc) {
