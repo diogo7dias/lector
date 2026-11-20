@@ -763,13 +763,10 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
       computeLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore);
   const size_t lineCount = std::min(maxLines, includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1);
 
-  const bool endIsKnown = includeLastLine && lineCount == lineBreakIndices.size();
   for (size_t i = 0; i < lineCount; ++i) {
-    linesAfterCurrent = endIsKnown ? static_cast<int>(lineCount - 1 - i) : -1;
     extractLine(i, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore, lineBreakIndices, processLine,
                 processLineCtx, renderer, fontId);
   }
-  linesAfterCurrent = -1;
   // A full pass ends the paragraph; the block may then be reused for the next one.
   paragraphContinues =
       (!includeLastLine || lineCount < lineBreakIndices.size()) && (paragraphContinues || lineCount > 0);

@@ -21,24 +21,6 @@ TEST(AnchorPlacement, BlockTargetLandsOnThePageOfItsFirstLine) {
   EXPECT_EQ(pageOf(anchors, 1), 4);
 }
 
-TEST(AnchorPlacement, BlockTargetFollowsItsFirstLineWhenCarried) {
-  AnchorPlacement anchors;
-  anchors.waitForContent(1);
-  anchors.lineAdded(2);
-  anchors.lineAdded(2);
-  anchors.linesCarried(2, 3);
-  EXPECT_EQ(pageOf(anchors, 1), 3);
-}
-
-TEST(AnchorPlacement, ACarryThatLeavesTheFirstLineBehindDoesNotMoveTheTarget) {
-  AnchorPlacement anchors;
-  anchors.waitForContent(1);
-  anchors.lineAdded(2);
-  anchors.lineAdded(2);
-  anchors.linesCarried(1, 3);
-  EXPECT_EQ(pageOf(anchors, 1), 2);
-}
-
 TEST(AnchorPlacement, ImageOrRuleCountsAsContent) {
   AnchorPlacement anchors;
   anchors.waitForContent(1);
@@ -59,25 +41,13 @@ TEST(AnchorPlacement, InlineTargetLandsOnTheLineHoldingItsOffset) {
   EXPECT_EQ(pageOf(anchors, 7), 2);
 }
 
-TEST(AnchorPlacement, InlineTargetFollowsACarriedLine) {
-  AnchorPlacement anchors;
-  anchors.waitForLine(7, 50);
-  anchors.lineStarting(0, 1);
-  anchors.lineAdded(1);
-  anchors.lineStarting(100, 1);
-  anchors.linesCarried(1, 2);
-  anchors.lineAdded(2);
-  EXPECT_EQ(pageOf(anchors, 7), 2);
-}
-
 TEST(AnchorPlacement, BlockEndPlacesTargetsOnTheLastLine) {
   AnchorPlacement anchors;
   anchors.waitForLine(7, 50);
   anchors.lineStarting(0, 3);
   anchors.lineAdded(3);
   anchors.blockEnded(3);
-  anchors.linesCarried(1, 4);
-  EXPECT_EQ(pageOf(anchors, 7), 4);
+  EXPECT_EQ(pageOf(anchors, 7), 3);
 }
 
 TEST(AnchorPlacement, ABlockThatPlacedNothingLandsOnTheLastPage) {
