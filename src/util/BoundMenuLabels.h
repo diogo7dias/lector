@@ -96,6 +96,10 @@ inline StrId boundMenuActionLabel(const uint8_t function) {
       return StrId::STR_OPEN_READER_MENU;
     case CrossPointSettings::LP_MENU_CONFIRM:
       return StrId::STR_CONFIRM;
+    case CrossPointSettings::LP_MENU_NEXT_CHAPTER:
+      return StrId::STR_NEXT_CHAPTER;
+    case CrossPointSettings::LP_MENU_PREV_CHAPTER:
+      return StrId::STR_PREV_CHAPTER;
     case CrossPointSettings::LP_MENU_POPUP:
     default:
       return StrId::STR_MENU_POPUP;

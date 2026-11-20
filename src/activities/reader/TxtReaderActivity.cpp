@@ -10,6 +10,7 @@
 #include <Serialization.h>
 #include <Utf8.h>
 
+#include <algorithm>
 #include <limits>
 
 #include "CrossPointSettings.h"
@@ -147,6 +148,14 @@ void TxtReaderActivity::pageTurn(const bool forward) {
   } else {
     onGoHome();
   }
+}
+
+void TxtReaderActivity::skipPages(const int delta) {
+  if (totalPages <= 0) return;
+  const int target = std::clamp(currentPage + delta, 0, totalPages - 1);
+  if (target == currentPage) return;
+  currentPage = target;
+  requestUpdate();
 }
 
 void TxtReaderActivity::initializeReader() {

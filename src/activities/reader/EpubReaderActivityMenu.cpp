@@ -161,6 +161,8 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
     // was remapped), paging is an action like any other and the reader can always run it.
     case CrossPointSettings::LP_MENU_PAGE_PREV:
     case CrossPointSettings::LP_MENU_PAGE_NEXT:
+    case CrossPointSettings::LP_MENU_NEXT_CHAPTER:
+    case CrossPointSettings::LP_MENU_PREV_CHAPTER:
       return true;
     case CrossPointSettings::LP_MENU_DISABLED:
     default:
@@ -270,6 +272,12 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       return true;
     case CrossPointSettings::LP_MENU_PAGE_NEXT:
       pageTurn(true);
+      return true;
+    case CrossPointSettings::LP_MENU_NEXT_CHAPTER:
+      skipChapter(true);
+      return true;
+    case CrossPointSettings::LP_MENU_PREV_CHAPTER:
+      skipChapter(false);
       return true;
     case CrossPointSettings::LP_MENU_DISABLED:
     default:

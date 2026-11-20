@@ -71,3 +71,10 @@ TEST(BoundActionScope, ConfirmWorksAnywhereAndKeepsEnumOrder) {
   EXPECT_TRUE(allowedOutsideBook(LP_MENU_CONFIRM));
   EXPECT_EQ(LP_MENU_CONFIRM, LP_MENU_OPEN_READER_MENU + 1);
 }
+
+TEST(BoundActionScope, ChapterSkipRequiresOpenBookAndKeepsEnumOrder) {
+  EXPECT_FALSE(allowedOutsideBook(LP_MENU_NEXT_CHAPTER));
+  EXPECT_FALSE(allowedOutsideBook(LP_MENU_PREV_CHAPTER));
+  EXPECT_EQ(LP_MENU_NEXT_CHAPTER, LP_MENU_CONFIRM + 1);
+  EXPECT_EQ(LP_MENU_PREV_CHAPTER, LP_MENU_CONFIRM + 2);
+}

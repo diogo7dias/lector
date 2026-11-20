@@ -45,6 +45,11 @@ bool TxtReaderActivity::runBoundAction(const uint8_t function) {
     return true;
   }
 
+  if (function == CrossPointSettings::LP_MENU_NEXT_CHAPTER || function == CrossPointSettings::LP_MENU_PREV_CHAPTER) {
+    skipPages(function == CrossPointSettings::LP_MENU_NEXT_CHAPTER ? 10 : -10);
+    return true;
+  }
+
   if (function == CrossPointSettings::LP_MENU_OPEN_READER_MENU) {
     openSettingsPopup();  // what Confirm opens here
     return true;

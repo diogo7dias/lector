@@ -102,6 +102,9 @@ enum LONG_PRESS_MENU_FUNCTION {
   LP_MENU_OPEN_READER_MENU = 37,
   // Synthesizes a Confirm press+release on the active screen (CrossPoint's shortPwrBtn = Confirm).
   LP_MENU_CONFIRM = 38,
+  // Skips to the next or previous chapter (or +/-10 pages in chapterless TXT/XTC).
+  LP_MENU_NEXT_CHAPTER = 39,
+  LP_MENU_PREV_CHAPTER = 40,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 
