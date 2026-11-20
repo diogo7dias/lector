@@ -32,7 +32,7 @@ test('the toolbar menu scrubs, opens a tile and closes', async ({ app, screen })
     await tapTwice(240, 729); // Settings
     await expect(activity).toHaveText('Settings', { timeout: 30_000 });
     await tapTwice(100, 114); // Reader
-    await tapTwice(150, 413); // Reader Menu Style: List <-> Toolbar
+    await tapTwice(150, 443); // Reader Menu Style: List <-> Toolbar
     await screen.getByRole('button', { name: 'Home' }).click();
     await expect(activity).toHaveText('Home', { timeout: 30_000 });
   };

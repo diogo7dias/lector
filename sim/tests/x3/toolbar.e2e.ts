@@ -29,7 +29,7 @@ test('the toolbar menu opens, steps a chapter and closes by the buttons', async 
     await expect(activity).toHaveText('Settings', { timeout: 30_000 });
     await press('Down'); // Reader
     await press('Confirm');
-    await press('Down', 11); // Reader Menu Style
+    await press('Down', 12); // Reader Menu Style
     await press('Confirm'); // List <-> Toolbar
     await press('Back'); // to the tabs
     await press('Back'); // to Home
@@ -104,7 +104,7 @@ test('the toolbar menu opens a tile by Confirm, and the list style comes back', 
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
   await press('Down'); // Reader
   await press('Confirm');
-  await press('Down', 11); // Reader Menu Style
+  await press('Down', 12); // Reader Menu Style
   await press('Confirm'); // Toolbar -> List
   await press('Back');
   await press('Back');
