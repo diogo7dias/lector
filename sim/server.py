@@ -8,6 +8,7 @@ Boots that board's firmware from its last `pio run` on a fresh card, then serves
   GET  /state        {"frames", "activity", "ink", "asleep", "controller"} as JSON
   GET  /ink/<x>/<y>/<w>/<h>  {"ink", "area"}: dark pixels in that box of the upright panel
   POST /press/<key>[?ms=]  the board's keys (see lector_sim.buttons; ms = hold, default 150); power sleeps, or wakes when asleep
+  POST /double/<key>  two quick clicks of that key, inside the firmware's double-click window
   POST /reboot       cut the power and switch on again (flash and card persist)
   POST /tap/<x>/<y>[?ms=N]  touch the upright panel (480x800) for N ms (300), touch boards only
   POST /swipe/<x1>/<y1>/<x2>/<y2>[?ms=N&hold=H]  slide a finger across it over N ms (300), after
@@ -15,7 +16,7 @@ Boots that board's firmware from its last `pio run` on a fresh card, then serves
   POST /pinch/<spanStart>/<spanEnd>  two fingers on a vertical line through the centre, apart by
        spanStart px, move to spanEnd px apart (spread when larger, pinch when smaller)
 """
-import io, json, os, re, sys, tempfile, threading
+import io, json, os, re, sys, tempfile, threading, time
 from urllib.parse import parse_qs
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -148,6 +149,13 @@ class Device:
                 # Long enough for the sleep hold on every board.
                 self.sim.press(key, hold=1.2, settle=False)
 
+    def double(self, key):
+        with self.lock:
+            # Two 80 ms clicks 80 ms apart: well inside the 280 ms window (ButtonGestures.h).
+            self.sim.press(key, hold=0.08, settle=False)
+            time.sleep(0.08)
+            self.sim.press(key, hold=0.08)
+
     def reboot(self):
         with self.lock:
             self.sim.reboot()
@@ -221,6 +229,8 @@ def handler(device):
                 device.pinch(*spans)
             elif parts[0] == "press" and len(parts) == 2 and parts[1] in KEYS:
                 device.press(parts[1], int(parse_qs(query).get("ms", ["150"])[0]) / 1000)
+            elif parts[0] == "double" and len(parts) == 2 and parts[1] in KEYS:
+                device.double(parts[1])
             elif parts == ["reboot"]:
                 device.reboot()
             else:

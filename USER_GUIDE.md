@@ -76,7 +76,7 @@ tap while reading are unchanged. Holding a word on the page for half a second lo
 the dictionary; keep the finger down and drag to select a phrase instead (see **Quotes**).
 Spreading two fingers apart on the page makes the text one size
 larger, pinching them together one size smaller; one step per gesture, for this book only,
-like the size row in the light panel. With ChareInk it steps through 12, 14 and 16 pt.
+like the size row in the quick panel. With ChareInk it steps through 12, 14 and 16 pt.
 
 **Touch Sleep** (Settings > System, X4 Pro) is Off by default. Set to 15 s, 30 s or 1 min,
 it saves a little battery by putting the touch screen to sleep after that long without
@@ -356,8 +356,9 @@ of them can be pointed at any action.
 
 On the X4 Pro a fresh device starts with a double press of **Home** and a double click of
 **Power** bound to **Toggle Frontlight**, and holding **Home** in a book bound to **Open Reader
-Menu**. Both are ordinary actions in the list, so any button can take them; a binding you have
-already saved is kept as it is. Other boards start with those gestures unbound.
+Menu**. On the X3 and X4 a fresh device starts with a double click of **Power** bound to
+**Quick Panel**. All of these are ordinary actions in the list, so any button can take them; a
+binding you have already saved is kept as it is. Every other gesture starts unbound.
 
 **Pop-up Items** decides which rows the quick pop-up those bindings can open actually
 contains.
@@ -371,7 +372,7 @@ gesture, in the book, outside it or both. Firing it leaves the screen as it is w
 **Locked** badge in the corner, and touch and every button stop answering until you fire the
 same gesture again. Holding **Power** still sleeps while that hold is set to Sleep, **Time to
 Sleep** still runs (pressing things does not hold it back), and any sleep ends the lock. It
-is refused while a transfer is running or the light panel is open.
+is refused while a transfer is running or the quick panel is open.
 
 Text Settings is no longer one of the actions on offer, and is no longer a pop-up row.
 It is reached from Settings, or from the in-book menu. A binding that pointed at it
@@ -1074,17 +1075,27 @@ belongs to, so the rows here appear in the same order as on the device.
 - **Show Wallpaper Name**, **Show Wallpaper Position** — what is drawn over the wallpaper. Both off by default.
 - **Shuffle Wallpapers** — reshuffle the rotation now.
 
+**Quick Panel**
+
+The quick panel is a band over the top of the screen. Open it by swiping down from the top
+edge, or with a button bound to **Quick Panel** (on the X3 and X4, a double click of **Power**
+out of the box); the same gesture, **Back** or **Confirm** on a row put it away. It holds a
+grid of actions for where you are (Refresh, Rotate, Continue Reading, Random Book, Search and
+Settings outside a book), a size or sort row, and the battery and free space. **Volume Up** and
+**Volume Down** move the cursor down the rows and on through the grid, **Left** and **Right**
+step a row or move along the grid, and **Confirm** runs the highlighted button.
+
 **Frontlight** (boards with a frontlight)
 
-The frontlight has no rows in Settings. The light panel (swipe down from the top edge, or bind
-**Frontlight** to a button) holds on or off, brightness and warmth. **Toggle Frontlight**, a
+The frontlight has no rows in Settings. The quick panel adds its rows on these boards: on or
+off, brightness and warmth. **Toggle Frontlight**, a
 button action, flips it without opening the panel. The other frontlight options live on the web
 settings page only: **Max Brightness** (the top of the panel's brightness track, 10 to 100,
 default 30; a brightness above it is brought down), **Restore on Wake** (on by default), and **Light Schedule**
 (at each wake inside the set hours the light comes on by itself) with its **Light On From** and
 **Light On Until** times (20:00 and 07:00 by default, in quarter-hour steps).
 
-In a book the light panel also has **Align Left** and **Justify**, which set the book's paragraph
+In a book the quick panel also has **Align Left** and **Justify**, which set the book's paragraph
 alignment (for that EPUB alone; in a TXT book, for every TXT book), and **Paragraph Spacing**,
 which turns the extra space between an EPUB's paragraphs on or off for that book.
 

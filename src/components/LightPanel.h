@@ -5,6 +5,7 @@
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -13,6 +14,8 @@
 
 #include "BannerStyle.h"
 #include "CrossPointSettings.h"
+#include "LightPanelContext.h"
+#include "LightPanelDraw.h"
 #include "LightPanelGeometry.h"
 #include "MappedInputManager.h"
 #include "SliderLook.h"
@@ -29,23 +32,6 @@
 //
 // Every light change applies to the hardware immediately; SETTINGS is written once, on
 // close, so a drag across the track does not spend a file write per pixel.
-namespace light_panel {
-
-// What the host puts in the panel for the screen that is currently up. Rebuilt every time
-// the panel opens and after every step, so a value shown in the aux row is never stale.
-struct Context {
-  // The aux row: Text Size in a book, Sort outside one. Empty text means the context has
-  // nothing to step, and the row is not drawn at all.
-  char auxText[48] = {};
-  // CrossPointSettings::LONG_PRESS_MENU_FUNCTION values, in grid order.
-  uint8_t actions[kMaxActions] = {};
-  int actionCount = 0;
-
-  bool hasAux() const { return auxText[0] != '\0'; }
-};
-
-}  // namespace light_panel
-
 class LightPanel {
  public:
   // buildContext fills in what belongs in the panel here; runAction is handed one of the
@@ -58,27 +44,38 @@ class LightPanel {
     stepAux_ = std::move(stepAux);
   }
 
+  // Opens on every board. Without a frontlight (X3, X4) it is the aux row, the action grid
+  // and the readout, driven by keys alone.
   void show() {
-    if (!Frontlight.present()) return;
     on_ = Frontlight.isOn();
     brightness_ = Frontlight.brightness();
     warmth_ = Frontlight.warmth();
-    selected_ = light_panel::Row::Brightness;
     actionPressed_ = -1;
     dragging_ = light_panel::Row::None;
     rebuildContext();
+    // The first row the layout will show; render() has not run yet, so it is worked out here.
+    if (Frontlight.present()) {
+      cursor_ = {light_panel::Row::Brightness, -1};
+    } else if (context_.hasAux()) {
+      cursor_ = {light_panel::Row::Aux, -1};
+    } else {
+      cursor_ = {light_panel::Row::None, context_.actionCount > 0 ? 0 : -1};
+    }
     readFreeSpace();
     active_ = true;
+    LOG_DBG("PANEL", "Open (%d actions)", context_.actionCount);
   }
 
   bool isActive() const { return active_; }
 
   void close(const std::function<void()>& requestUpdate) {
     active_ = false;
+    LOG_DBG("PANEL", "Close");
     const uint8_t on = on_ ? 1 : 0;
-    // A panel opened and closed unchanged costs no settings write (write throttling).
-    if (SETTINGS.frontlightOn != on || SETTINGS.frontlightBrightness != brightness_ ||
-        SETTINGS.frontlightWarmth != warmth_) {
+    // A panel opened and closed unchanged costs no settings write (write throttling). With no
+    // frontlight the values were never the user's to change, so nothing is written either.
+    if (Frontlight.present() && (SETTINGS.frontlightOn != on || SETTINGS.frontlightBrightness != brightness_ ||
+                                 SETTINGS.frontlightWarmth != warmth_)) {
       SETTINGS.frontlightOn = on;
       SETTINGS.frontlightBrightness = brightness_;
       SETTINGS.frontlightWarmth = warmth_;
@@ -89,6 +86,13 @@ class LightPanel {
 
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
     if (!active_) return false;
+
+    // Confirm on a grid button fires it: the keys-only boards have no other way to.
+    if (cursor_.onGrid() && cursor_.action < context_.actionCount &&
+        input.wasPressed(MappedInputManager::Button::Confirm)) {
+      runAction(context_.actions[cursor_.action], requestUpdate);
+      return true;
+    }
 
     // A second top swipe puts the panel away: the gesture that opened it is the one the
     // hand is already making.
@@ -167,11 +171,11 @@ class LightPanel {
           break;
         case light_panel::Hit::Kind::Step:
           input.spendTouchContact();
-          selected_ = hit.row;
+          cursor_ = {hit.row, -1};
           step(hit.row, hit.delta, requestUpdate);
           break;
         case light_panel::Hit::Kind::Track: {
-          selected_ = hit.row;
+          cursor_ = {hit.row, -1};
           dragging_ = hit.row;
           const auto& bar = hit.row == light_panel::Row::Warmth ? layout_.warmth.bar : layout_.brightness.bar;
           if (setValue(hit.row, light_panel::valueForX(bar, tx, 0, maxFor(hit.row)))) requestUpdate();
@@ -188,16 +192,18 @@ class LightPanel {
       return true;
     }
 
-    // Buttons: Up/Down pick the row, Left/Right step it. Same small step the numeric
-    // settings rows use, so the two feel like one control. The action grid is touch-only:
-    // on a board without touch the panel cannot be opened by a gesture in the first place.
-    nav_.onPressAndContinuous({MappedInputManager::Button::Up},
-                              [this, &requestUpdate] { moveSelection(-1, requestUpdate); });
-    nav_.onPressAndContinuous({MappedInputManager::Button::Down},
-                              [this, &requestUpdate] { moveSelection(1, requestUpdate); });
+    // Buttons: Up/Down move one cursor over the value rows and on through the action grid,
+    // Left/Right step a row (the same small step the numeric settings rows use) or move
+    // along the grid, and Confirm fires the button under the cursor (above).
+    nav_.onPressAndContinuous({MappedInputManager::Button::Up}, [this, &requestUpdate] {
+      moveCursor(light_panel::moveVertical(layout_, cursor_, -1), requestUpdate);
+    });
+    nav_.onPressAndContinuous({MappedInputManager::Button::Down}, [this, &requestUpdate] {
+      moveCursor(light_panel::moveVertical(layout_, cursor_, 1), requestUpdate);
+    });
     // One step per press, held or not, like the steppers on screen.
-    nav_.onPress({MappedInputManager::Button::Left}, [this, &requestUpdate] { step(selected_, -1, requestUpdate); });
-    nav_.onPress({MappedInputManager::Button::Right}, [this, &requestUpdate] { step(selected_, 1, requestUpdate); });
+    nav_.onPress({MappedInputManager::Button::Left}, [this, &requestUpdate] { stepOrMove(-1, requestUpdate); });
+    nav_.onPress({MappedInputManager::Button::Right}, [this, &requestUpdate] { stepOrMove(1, requestUpdate); });
     return true;
   }
 
@@ -208,7 +214,8 @@ class LightPanel {
     const int screenWidth = renderer.getScreenWidth();
     const int lineHeight = renderer.getLineHeight(banner::FONT_ID);
     layout_ = light_panel::forScreen(screenWidth, lineHeight, renderer.getLineHeight(UI_10_FONT_ID),
-                                     Frontlight.hasColorTemperature(), context_.hasAux(), context_.actionCount);
+                                     Frontlight.hasColorTemperature(), context_.hasAux(), context_.actionCount,
+                                     Frontlight.present());
 
     // Physical top crop (X4 crops ~9px, X3 none): the backing reaches the physical
     // edge while the rows sit below the crop, matching message popups.
@@ -220,22 +227,22 @@ class LightPanel {
     topInset_ = viewTop;
 
     const int bandHeight = layout_.height + topInset_;
-    stipplePageBelow(renderer, bandHeight);
+    light_panel::stipplePageBelow(renderer, bandHeight);
 
     renderer.fillRect(0, 0, screenWidth, bandHeight, false);
     renderer.fillRect(0, bandHeight - banner::RULE, screenWidth, banner::RULE, true);
 
     // The in-book menu's look without its rules: full-width rows, the selected row filled
     // black, the steppers drawn as its boxed minus and plus.
-    drawToggleRow(renderer);
+    if (layout_.hasLight) drawToggleRow(renderer);
     drawSliderRow(renderer, layout_.brightness, Sun24Icon, brightness_);
     if (layout_.hasWarmth) drawSliderRow(renderer, layout_.warmth, Thermometer24Icon, warmth_);
     if (layout_.hasAux) drawAuxRow(renderer, layout_.aux, context_.auxText);
 
     for (int i = 0; i < layout_.actionCount; ++i) {
-      drawBox(renderer, layout_.actions[i], I18N.get(boundMenuActionLabel(context_.actions[i])));
+      drawBox(renderer, layout_.actions[i], I18N.get(boundMenuActionLabel(context_.actions[i])), cursor_.action == i);
     }
-    drawReadout(renderer);
+    light_panel::drawReadout(renderer, layout_.readout, topInset_, freeBytes_);
   }
 
   bool processRender(GfxRenderer& renderer) const {
@@ -269,18 +276,6 @@ class LightPanel {
     requestUpdate();
   }
 
-  // One pixel in two, on a checkerboard: dark enough to read as a shade over the page and
-  // sparse enough to leave the words under it legible. Only black pixels are written, so
-  // the page is darkened rather than replaced — which is why this is a loop and not
-  // fillRectDither(LightGray), whose white pixels would erase it.
-  void stipplePageBelow(const GfxRenderer& renderer, const int bandHeight) const {
-    const int width = renderer.getScreenWidth();
-    const int height = renderer.getScreenHeight();
-    for (int y = bandHeight; y < height; ++y) {
-      for (int x = (y & 1); x < width; x += 2) renderer.drawPixel(x, y, true);
-    }
-  }
-
   // Frontlight as a menu row: the name at the left, On or Off at the right.
   void drawToggleRow(const GfxRenderer& renderer) const {
     const auto& rect = layout_.toggle;
@@ -291,13 +286,18 @@ class LightPanel {
                       state, true);
   }
 
-  // A framed box with its label centred.
-  void drawBox(const GfxRenderer& renderer, const light_panel::Rect& rect, const char* label) const {
+  // A framed box with its label centred; filled black with white text under the key cursor.
+  void drawBox(const GfxRenderer& renderer, const light_panel::Rect& rect, const char* label,
+               const bool selected) const {
     const int y = rect.y + topInset_;
-    renderer.drawRect(rect.x, y, rect.width, rect.height, light_panel::kRule, true);
+    if (selected) {
+      renderer.fillRect(rect.x, y, rect.width, rect.height, true);
+    } else {
+      renderer.drawRect(rect.x, y, rect.width, rect.height, light_panel::kRule, true);
+    }
     const int textWidth = renderer.getTextWidth(banner::FONT_ID, label);
     const int textY = y + (rect.height - renderer.getLineHeight(banner::FONT_ID)) / 2;
-    renderer.drawText(banner::FONT_ID, rect.x + (rect.width - textWidth) / 2, textY, label, true);
+    renderer.drawText(banner::FONT_ID, rect.x + (rect.width - textWidth) / 2, textY, label, !selected);
   }
 
   // Icon, track, number, then the two steppers. The row is named by its icon rather than
@@ -348,33 +348,9 @@ class LightPanel {
   // like the in-book menu's selected row, and the row is then drawn in white. True when
   // the row is selected.
   bool drawSelection(const GfxRenderer& renderer, const light_panel::StepRow& row) const {
-    if (selected_ != row.row) return false;
+    if (cursor_.onGrid() || cursor_.row != row.row) return false;
     renderer.fillRect(0, row.y + topInset_, layout_.width, row.height, true);
     return true;
-  }
-
-  // Battery and free space, in the small UI font. No rule above it: the button grid it
-  // follows is already a row of boxes, and a line under those read as a second border.
-  void drawReadout(const GfxRenderer& renderer) const {
-    const auto& rect = layout_.readout;
-    const int y = rect.y + topInset_;
-
-    char left[32];
-    snprintf(left, sizeof(left), "%s %u%%", I18N.get(StrId::STR_BATTERY),
-             static_cast<unsigned>(powerManager.getBatteryPercentage()));
-    renderer.drawText(UI_10_FONT_ID, rect.x, y, left, true);
-
-    char right[32];
-    // Whole gigabytes below ten get a decimal; above it the tenth is noise on a card this
-    // size and the shorter string is easier to read at a glance.
-    const double gigabytes = static_cast<double>(freeBytes_) / (1024.0 * 1024.0 * 1024.0);
-    if (gigabytes < 10.0) {
-      snprintf(right, sizeof(right), "%.1f GB %s", gigabytes, I18N.get(StrId::STR_FREE_SPACE));
-    } else {
-      snprintf(right, sizeof(right), "%d GB %s", static_cast<int>(gigabytes + 0.5), I18N.get(StrId::STR_FREE_SPACE));
-    }
-    const int width = renderer.getTextWidth(UI_10_FONT_ID, right);
-    renderer.drawText(UI_10_FONT_ID, rect.x + rect.width - width, y, right, true);
   }
 
   void applyLight() {
@@ -416,21 +392,18 @@ class LightPanel {
     if (setValue(row, current + delta)) requestUpdate();
   }
 
-  void moveSelection(const int delta, const std::function<void()>& requestUpdate) {
-    light_panel::Row order[3] = {light_panel::Row::Brightness, light_panel::Row::Warmth, light_panel::Row::Aux};
-    int count = 1;
-    if (Frontlight.hasColorTemperature()) {
-      count = 2;
-    } else {
-      order[1] = light_panel::Row::Aux;
-    }
-    if (context_.hasAux()) count++;
-    int index = 0;
-    for (int i = 0; i < count; ++i) {
-      if (order[i] == selected_) index = i;
-    }
-    selected_ = order[std::clamp(index + delta, 0, count - 1)];
+  void moveCursor(const light_panel::Cursor next, const std::function<void()>& requestUpdate) {
+    if (next == cursor_) return;
+    cursor_ = next;
     requestUpdate();
+  }
+
+  void stepOrMove(const int delta, const std::function<void()>& requestUpdate) {
+    if (cursor_.onGrid()) {
+      moveCursor(light_panel::moveHorizontal(layout_, cursor_, delta), requestUpdate);
+    } else {
+      step(cursor_.row, delta, requestUpdate);
+    }
   }
 
   bool active_ = false;
@@ -438,7 +411,7 @@ class LightPanel {
   uint8_t brightness_ = 0;
   uint8_t warmth_ = 0;
   uint64_t freeBytes_ = 0;
-  light_panel::Row selected_ = light_panel::Row::Brightness;
+  light_panel::Cursor cursor_{light_panel::Row::Brightness, -1};
   light_panel::Row dragging_ = light_panel::Row::None;
   int actionPressed_ = -1;
   light_panel::Context context_{};
