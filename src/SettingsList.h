@@ -467,6 +467,10 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
                          {StrId::STR_STATE_OFF, StrId::STR_STATE_ON, StrId::STR_BOLDER}, "paperbackLookBody",
                          StrId::STR_CAT_READER));
 
+  emit(SettingInfo::Enum(StrId::STR_RULED_LINES, &CrossPointSettings::ruledLines,
+                         {StrId::STR_STATE_OFF, StrId::STR_LIGHT, StrId::STR_MEDIUM, StrId::STR_DARK}, "ruledLines",
+                         StrId::STR_CAT_READER));
+
   // Defaults for the three per-book looks that used to be reachable only from the
   // in-book menu. Changing one here sets what the NEXT freshly opened book starts
   // with; a book that already has its own override keeps its own value, and the

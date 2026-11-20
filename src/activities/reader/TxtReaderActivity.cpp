@@ -17,6 +17,7 @@
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
+#include "RuledLines.h"
 #include "SdCardFontSystem.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
@@ -305,6 +306,15 @@ void TxtReaderActivity::renderPage() {
   renderer.setPaperbackLook(SETTINGS.paperbackLookBody);
   renderLines();
   renderer.setPaperbackLook(false);
+  if (const int step = ruled_lines::dotStep(SETTINGS.ruledLines)) {
+    const auto isBlack = [this](int x, int y) { return renderer.isPixelBlack(x, y); };
+    const auto plot = [this](int x, int y) { renderer.drawPixel(x, y); };
+    int y = cachedOrientedMarginTop + verticalOffset + lineHeight - 1;
+    for (size_t i = 0; i < currentPageLines.size(); ++i, y += lineHeight) {
+      if (!currentPageLines[i].empty())
+        ruled_lines::drawRow(cachedOrientedMarginLeft, contentWidth, y, step, isBlack, plot);
+    }
+  }
   renderStatusBar();
 
   ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);

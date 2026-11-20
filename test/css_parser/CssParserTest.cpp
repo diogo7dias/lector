@@ -528,6 +528,18 @@ TEST_F(CssParserTest, StoresFirstLetterRulesSeparately) {
   EXPECT_EQ(reader.resolveStyle("p", "", "", chapter, 1, true).initialLetter, 4);
 }
 
+// CrossInk discussion #962: a publisher class with capitals must still find its ::first-letter rule.
+TEST_F(CssParserTest, MixedCaseFirstLetterClassMatches) {
+  CssParser writer(cachePath());
+  ASSERT_EQ(loadCss(writer, "p.x01-FM-Intro-CO::first-letter { font-size: 2.6em; float: left; }\n"),
+            CssParser::ParseResult::Complete);
+  ASSERT_TRUE(writer.saveToCache(true));
+  CssParser reader(cachePath());
+  ASSERT_EQ(reader.loadFromCache(), CssParser::CacheLoadResult::Complete);
+  EXPECT_TRUE(reader.resolveStyle("p", "x01-FM-Intro-CO", "", nullptr, 0, true).floatLeft);
+  EXPECT_TRUE(writer.resolveStyle("p", "x01-FM-Intro-CO", "", nullptr, 0, true).floatLeft);
+}
+
 TEST_F(CssParserTest, CacheHydrationRejectsNonFiniteStyleLengths) {
   CssParser writer(cachePath());
   ASSERT_EQ(loadCss(writer, ".a { margin-top: 2em; }\n"), CssParser::ParseResult::Complete);
