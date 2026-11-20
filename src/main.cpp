@@ -122,7 +122,11 @@ static std::string pickBootBookPath();
   // Behind the sleep face: the reader's onExit above has saved the position it pushes.
   ko_auto_sync::onSleep();
   // Quick Resume keeps the page on the panel, so the wake needs it back in the framebuffer.
-  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME) quick_resume::saveFrame(renderer);
+  if (wake_face::usesQuickResumeForSleep(SETTINGS.sleepScreen, SETTINGS.quickResumeSleepScreen, fromTimeout)) {
+    quick_resume::saveFrame(renderer);
+  } else {
+    quick_resume::clearFrame();
+  }
 
   sleepTFrame = millis();
 
@@ -500,7 +504,7 @@ void setup() {
   // framebuffer and arm no clear at all. The destination's first paint is promoted to a
   // clean pass by both X4 drivers anyway, and on the X3 the restored frame is the baseline
   // of that first paint. A missing or short frame wakes like any other painted face.
-  if (paintedFaceWake && SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME &&
+  if (paintedFaceWake && wake_face::quickResumePossible(SETTINGS.sleepScreen, SETTINGS.quickResumeSleepScreen) &&
       quick_resume::restoreFrame()) {
     wakeInputs.paintedFaceWake = false;
     if (gpio.deviceIsX3()) renderer.cleanupGrayscaleWithFrameBuffer();

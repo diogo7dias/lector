@@ -239,6 +239,11 @@ void SettingsActivity::rebuildSettingsList() {
     // stay in the shared list for the web page.
     if (setting.webOnly) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
+      // Every sleep is already Quick Resume when that face is selected.
+      if (setting.valuePtr == &CrossPointSettings::quickResumeSleepScreen &&
+          SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME) {
+        continue;
+      }
       displaySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_READER) {
       // Settings merged into "Text Settings"
@@ -316,7 +321,8 @@ void SettingsActivity::rebuildSettingsList() {
                   {StrId::STR_GRP_SCREEN,
                    {StrId::STR_REFRESH_FREQ, StrId::STR_CHAPTER_START_REFRESH, StrId::STR_CHAPTER_WIPE,
                     StrId::STR_SUNLIGHT_FADING_FIX, StrId::STR_HIDE_BATTERY, StrId::STR_SCREEN_CALIBRATION}},
-                  {StrId::STR_GRP_SLEEP_SCREEN, {StrId::STR_SLEEP_SCREEN, StrId::STR_FAST_UNLOCK}},
+                  {StrId::STR_GRP_SLEEP_SCREEN,
+                   {StrId::STR_SLEEP_SCREEN, StrId::STR_QUICK_RESUME_TIMEOUT, StrId::STR_FAST_UNLOCK}},
                   {StrId::STR_GRP_WALLPAPER,
                    {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER, StrId::STR_SHOW_SLEEP_IMAGE_FILENAME,
                     StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, StrId::STR_SHUFFLE_WALLPAPERS}},

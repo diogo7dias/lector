@@ -21,6 +21,7 @@
 #include "SleepTiming.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
+#include "sleep/WakeFacePolicy.h"
 #include "util/DeferredFavorite.h"
 
 namespace {
@@ -88,7 +89,9 @@ void SleepActivity::onEnter() {
   // face adds (and the frame Quick Resume saves) is in normal polarity.
   const bool frameWasInverted = display.isInverted();
   display.setInverted(false);
-  if (frameWasInverted && keepsPage(SETTINGS.sleepScreen)) renderer.invertScreen();
+  const bool quickResume =
+      wake_face::usesQuickResumeForSleep(SETTINGS.sleepScreen, SETTINGS.quickResumeSleepScreen, fromTimeout);
+  if (frameWasInverted && (quickResume || keepsPage(SETTINGS.sleepScreen))) renderer.invertScreen();
 
   // Run and land any queued favourite rename before the folder is touched and before the
   // state below is written. The renames DELIBERATELY start here, not at the press: on a
@@ -116,7 +119,9 @@ void SleepActivity::onEnter() {
 
 void SleepActivity::renderSleepScreen() const {
   // Quick Resume asks nothing of the card and keeps the page: no popup, no scrub.
-  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME) return renderQuickResumeScreen();
+  if (wake_face::usesQuickResumeForSleep(SETTINGS.sleepScreen, SETTINGS.quickResumeSleepScreen, fromTimeout)) {
+    return renderQuickResumeScreen();
+  }
 
   // The "Entering sleep" popup, in the reader's orientation when locking from a book.
   // Both faces read the card and can take seconds, so the press gets a visible answer

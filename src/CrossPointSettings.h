@@ -38,6 +38,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     INVERTED_BLACK_AND_WHITE = 2,
     SLEEP_SCREEN_COVER_FILTER_COUNT
   };
+  enum QUICK_RESUME_SLEEP_SCREEN {
+    QUICK_RESUME_NEVER = 0,
+    QUICK_RESUME_AFTER_TIMEOUT = 1,
+    QUICK_RESUME_SLEEP_SCREEN_COUNT
+  };
 
   // Action for a short Back press on the home menu, where Back has no navigation target.
   enum HOME_BACK_ACTION {
@@ -307,6 +312,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // Sleep screen settings
   uint8_t sleepScreen = CUSTOM;
+  // Use Quick Resume on idle-timeout sleep while keeping sleepScreen for manual locks.
+  uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
   // Night mode: inverted output polarity on the reading surfaces only
   // (resolved per render by ActivityManager via Activity::appliesNightMode).
   uint8_t screenInverted = 0;

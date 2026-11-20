@@ -61,4 +61,18 @@ inline constexpr WakeClear wakeClearFor(const bool fastUnlock) {
 inline constexpr bool firstPageTurnCleans(const WakeClear clear, const bool isX3) {
   return clear == WakeClear::DriveAll && !isX3;
 }
+
+// Whether a sleep uses Quick Resume (keeps the page + moon, saves the frame for wake).
+// Matches CrossPoint's quickResumeSleepScreen: always when Sleep Screen is Quick Resume,
+// or on idle-timeout sleep when Quick Resume on Timeout is enabled.
+inline constexpr bool usesQuickResumeForSleep(const uint8_t sleepScreen, const uint8_t quickResumeOnTimeout,
+                                              const bool fromTimeout) {
+  constexpr uint8_t kQuickResumeMode = 6;
+  return sleepScreen == kQuickResumeMode || (fromTimeout && quickResumeOnTimeout != 0);
+}
+
+inline constexpr bool quickResumePossible(const uint8_t sleepScreen, const uint8_t quickResumeOnTimeout) {
+  constexpr uint8_t kQuickResumeMode = 6;
+  return sleepScreen == kQuickResumeMode || quickResumeOnTimeout != 0;
+}
 }  // namespace wake_face
