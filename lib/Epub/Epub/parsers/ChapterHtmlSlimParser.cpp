@@ -2082,6 +2082,16 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       // A heading group keeps the book's alignment, like the headings in it, so its subtitle
       // lines up with the title under a reader alignment override (CrossInk cb58ab50d).
       if (cssStyle.hasTextAlign() && strcmp(name, "hgroup") == 0) blockStyle.alignment = cssStyle.textAlign;
+      if (strcmp(name, "blockquote") == 0) {
+        // A quote the book leaves unstyled still reads as one: 1 em in from each side, shrunk
+        // so nested quotes cannot eat the text column (CrossInk 43b3a78aa). A side the book's
+        // CSS sets keeps its value.
+        const int inset = self->blockStyleStack.back().totalHorizontalInset() + blockStyle.totalHorizontalInset();
+        const auto quoteMargin =
+            static_cast<int16_t>(std::clamp((self->viewportWidth / 2 - inset) / 2, 0, static_cast<int>(emSize)));
+        if (!cssStyle.hasMarginLeft()) blockStyle.marginLeft = quoteMargin;
+        if (!cssStyle.hasMarginRight()) blockStyle.marginRight = quoteMargin;
+      }
       self->applyBlockFontScale(blockStyle, cssStyle, name);
       self->openBoxScope(blockStyle, cssStyle);
       const auto accumulated =

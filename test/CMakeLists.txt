@@ -251,6 +251,7 @@ add_subdirectory(collapsible_sections)
 add_subdirectory(ligature_guard)
 add_subdirectory(space_fallback)
 add_subdirectory(word_spacing)
+add_subdirectory(blockquote_inset)
 add_subdirectory(text_block_fonts)
 add_subdirectory(book_metadata_cache)
 add_subdirectory(zip_file)
@@ -267,4 +268,10 @@ add_subdirectory(pinch_font_resize)
 
 if(LECTOR_FUZZ)
   add_subdirectory(fuzz)
+endif()
+
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_FOUND)
+  add_test(NAME SharedBuiltinFontTables
+    COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/scripts/test_shared_builtin_font_tables.py)
 endif()

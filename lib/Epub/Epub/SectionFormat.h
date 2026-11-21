@@ -170,7 +170,9 @@ namespace {
 //      carries scaled text paginates differently.
 // v92: Fill Pages is always on. No line is carried to the next page to keep a paragraph's
 //      first or last line or a heading from sitting alone, so pages end full.
-constexpr uint8_t SECTION_FILE_VERSION = 92;
+// v93: An unstyled blockquote is inset 1 em from each side (shrunk when nested), so
+//      chapters with quotes wrap differently.
+constexpr uint8_t SECTION_FILE_VERSION = 93;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
