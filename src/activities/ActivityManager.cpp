@@ -29,7 +29,6 @@
 #include "network/CrossPointWebServerActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
-#include "settings/ReleaseNotesActivity.h"
 #include "settings/SettingsActivity.h"
 #include "util/FullScreenMessageActivity.h"
 #include "util/OrientationCycle.h"
@@ -353,18 +352,6 @@ void ActivityManager::loop() {
 
       // onEnter may request another pending action, we will handle it in the next loop iteration
       continue;
-    }
-  }
-
-  // What's New once after an update, only over Home: a wake into a book never shows it.
-  // The activity marks it seen on entry, which ends this.
-  if (APP_STATE.releaseNotesSeen < ReleaseNotesActivity::REVISION && pendingAction == PendingAction::None &&
-      !lightPanel.isActive() && currentActivity && currentActivity->isHomeActivity()) {
-    if (auto notes = makeUniqueNoThrow<ReleaseNotesActivity>(renderer, mappedInput)) {
-      pushActivity(std::move(notes));
-    } else {
-      APP_STATE.releaseNotesSeen = ReleaseNotesActivity::REVISION;  // not saved: it shows again next boot
-      LOG_ERR("ACT", "OOM: What's New");
     }
   }
 

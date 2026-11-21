@@ -24,7 +24,6 @@
 #include "OpdsServerStore.h"
 #include "OtaUpdateActivity.h"
 #include "PopupItemsActivity.h"
-#include "ReleaseNotesActivity.h"
 #include "ScreenCalibrationActivity.h"
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
@@ -304,7 +303,6 @@ void SettingsActivity::rebuildSettingsList() {
   if (halClock.isAvailable()) {
     systemSettings.push_back(SettingInfo::Action(StrId::STR_TIMEZONE, SettingAction::TimeZone));
   }
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_WHATS_NEW, SettingAction::ReleaseNotes));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_ALL_BOOKMARKS, SettingAction::AllBookmarks));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
@@ -383,7 +381,7 @@ void SettingsActivity::rebuildSettingsList() {
                   {StrId::STR_GRP_DEVICE,
                    {StrId::STR_LANGUAGE, StrId::STR_TIMEZONE, StrId::STR_CLOCK_DST, StrId::STR_WAKE_ON_USB_PLUG_IN,
                     StrId::STR_CLEAN_STORAGE, StrId::STR_CLEAR_READING_CACHE, StrId::STR_CHECK_UPDATES,
-                    StrId::STR_SD_FIRMWARE_UPDATE, StrId::STR_INSTALL_OTHER_FIRMWARE, StrId::STR_WHATS_NEW}},
+                    StrId::STR_SD_FIRMWARE_UPDATE, StrId::STR_INSTALL_OTHER_FIRMWARE}},
               });
 }
 
@@ -712,9 +710,6 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::AllBookmarks:
         startActivityForResult(std::make_unique<AllBookmarksActivity>(renderer, mappedInput), resultHandler);
-        break;
-      case SettingAction::ReleaseNotes:
-        startActivityForResult(std::make_unique<ReleaseNotesActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::DownloadFonts:
         startDownloadActivity(makeUniqueNoThrow<FontDownloadActivity>(renderer, mappedInput));

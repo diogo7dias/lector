@@ -41,7 +41,6 @@
 #include "activities/ActivityManager.h"
 #include "activities/boot_sleep/QuickResumeFrame.h"
 #include "activities/boot_sleep/SleepActivity.h"
-#include "activities/settings/ReleaseNotesActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "activities/util/LowBatteryNoticeActivity.h"
 #include "components/UITheme.h"
@@ -407,9 +406,7 @@ void setup() {
   }
 
   SETTINGS.loadFromFile();
-  // A card that has never held state is a fresh install: nothing on it is new to its
-  // reader, so What's New waits for the next update. The badge seeding below saves it.
-  if (!APP_STATE.loadFromFile()) APP_STATE.releaseNotesSeen = ReleaseNotesActivity::REVISION;
+  APP_STATE.loadFromFile();
   // Restore the anti-ghost budget the last session spent. Without this the count starts
   // at zero on every wake — and since waking is a chip reset, that is every lock — so a
   // device used in short sessions never reaches the full discharge and ghosts forever.
