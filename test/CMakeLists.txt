@@ -269,3 +269,9 @@ add_subdirectory(pinch_font_resize)
 if(LECTOR_FUZZ)
   add_subdirectory(fuzz)
 endif()
+
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_FOUND)
+  add_test(NAME SharedBuiltinFontTables
+    COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/scripts/test_shared_builtin_font_tables.py)
+endif()

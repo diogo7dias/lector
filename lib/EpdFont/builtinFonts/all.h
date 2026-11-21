@@ -1,23 +1,9 @@
 #pragma once
 
-#include <builtinFonts/cozette_10_regular.h>
-#include <builtinFonts/cozette_12_regular.h>
-#include <builtinFonts/cozette_14_regular.h>
-#include <builtinFonts/cozette_digits_13.h>
-#include <builtinFonts/cozette_digits_26.h>
-#include <builtinFonts/cozette_digits_39.h>
-#include <builtinFonts/chareink_12_bold.h>
-#include <builtinFonts/chareink_12_bolditalic.h>
-#include <builtinFonts/chareink_12_italic.h>
-#include <builtinFonts/chareink_12_regular.h>
-#include <builtinFonts/chareink_14_bold.h>
-#include <builtinFonts/chareink_14_bolditalic.h>
-#include <builtinFonts/chareink_14_italic.h>
-#include <builtinFonts/chareink_14_regular.h>
-#include <builtinFonts/chareink_16_bold.h>
-#include <builtinFonts/chareink_16_bolditalic.h>
-#include <builtinFonts/chareink_16_italic.h>
-#include <builtinFonts/chareink_16_regular.h>
-#include <builtinFonts/ubuntu_10_regular.h>
-#include <builtinFonts/ubuntu_12_regular.h>
-#include <builtinFonts/ubuntu_14_regular.h>
+// PlatformIO builds share byte-identical generated font tables (share_builtin_tables.py).
+// Host builds use the face headers as they are; those stay the converter's output.
+#ifdef LECTOR_SHARED_BUILTIN_FONT_TABLES
+#include <BuiltinFontsShared.generated.h>
+#else
+#include <builtinFonts/all_faces.h>
+#endif
