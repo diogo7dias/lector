@@ -38,6 +38,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     INVERTED_BLACK_AND_WHITE = 2,
     SLEEP_SCREEN_COVER_FILTER_COUNT
   };
+  enum QUICK_RESUME_SLEEP_SCREEN {
+    QUICK_RESUME_NEVER = 0,
+    QUICK_RESUME_AFTER_TIMEOUT = 1,
+    QUICK_RESUME_SLEEP_SCREEN_COUNT
+  };
 
   // Action for a short Back press on the home menu, where Back has no navigation target.
   enum HOME_BACK_ACTION {
@@ -228,6 +233,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr auto LP_MENU_QUICK_LOCK = bound_action::LP_MENU_QUICK_LOCK;
   static constexpr auto LP_MENU_TOGGLE_FRONTLIGHT = bound_action::LP_MENU_TOGGLE_FRONTLIGHT;
   static constexpr auto LP_MENU_OPEN_READER_MENU = bound_action::LP_MENU_OPEN_READER_MENU;
+  static constexpr auto LP_MENU_CONFIRM = bound_action::LP_MENU_CONFIRM;
+  static constexpr auto LP_MENU_NEXT_CHAPTER = bound_action::LP_MENU_NEXT_CHAPTER;
+  static constexpr auto LP_MENU_PREV_CHAPTER = bound_action::LP_MENU_PREV_CHAPTER;
   static constexpr auto LONG_PRESS_MENU_FUNCTION_COUNT = bound_action::LONG_PRESS_MENU_FUNCTION_COUNT;
 
   // The three buttons the Buttons screen binds, in the order it lists them. Left and
@@ -307,6 +315,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // Sleep screen settings
   uint8_t sleepScreen = CUSTOM;
+  // Use Quick Resume on idle-timeout sleep while keeping sleepScreen for manual locks.
+  uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
   // Night mode: inverted output polarity on the reading surfaces only
   // (resolved per render by ActivityManager via Activity::appliesNightMode).
   uint8_t screenInverted = 0;
@@ -509,6 +519,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // 2=Title). See OpdsFilenameFormat. Persisted via a category-less SettingInfo::Enum,
   // edited from the OPDS server list; hidden from the on-device Settings screen.
   uint8_t opdsFilenameFormat = 0;
+  // Read EPUB title/author metadata when building the Library index; off lists filenames only.
+  uint8_t libraryUseMetadata = 1;
   // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;

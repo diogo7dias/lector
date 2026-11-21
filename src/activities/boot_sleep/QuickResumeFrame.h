@@ -18,4 +18,7 @@ bool saveFrame(const GfxRenderer& renderer);
 // painted face.
 bool restoreFrame();
 
+// Deletes any stale saved frame so a non-Quick-Resume sleep cannot restore an older page.
+void clearFrame();
+
 }  // namespace quick_resume

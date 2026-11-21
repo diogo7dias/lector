@@ -39,4 +39,8 @@ bool restoreFrame() {
   return whole;
 }
 
+void clearFrame() {
+  if (Storage.exists(FRAME_PATH)) Storage.remove(FRAME_PATH);
+}
+
 }  // namespace quick_resume

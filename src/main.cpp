@@ -122,7 +122,11 @@ static std::string pickBootBookPath();
   // Behind the sleep face: the reader's onExit above has saved the position it pushes.
   ko_auto_sync::onSleep();
   // Quick Resume keeps the page on the panel, so the wake needs it back in the framebuffer.
-  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME) quick_resume::saveFrame(renderer);
+  if (wake_face::usesQuickResumeForSleep(SETTINGS.sleepScreen, SETTINGS.quickResumeSleepScreen, fromTimeout)) {
+    quick_resume::saveFrame(renderer);
+  } else {
+    quick_resume::clearFrame();
+  }
 
   sleepTFrame = millis();
 
@@ -500,7 +504,7 @@ void setup() {
   // framebuffer and arm no clear at all. The destination's first paint is promoted to a
   // clean pass by both X4 drivers anyway, and on the X3 the restored frame is the baseline
   // of that first paint. A missing or short frame wakes like any other painted face.
-  if (paintedFaceWake && SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME &&
+  if (paintedFaceWake && wake_face::quickResumePossible(SETTINGS.sleepScreen, SETTINGS.quickResumeSleepScreen) &&
       quick_resume::restoreFrame()) {
     wakeInputs.paintedFaceWake = false;
     if (gpio.deviceIsX3()) renderer.cleanupGrayscaleWithFrameBuffer();
@@ -936,6 +940,7 @@ void loop() {
       bindingsApplied = true;
     }
 
+    bool confirmFired = false;
     // Sleep goes straight down from here: this file owns the device.
     const auto runBoundFunction = [&](const uint8_t function) {
       if (function == CrossPointSettings::LP_MENU_QUICK_LOCK) {
@@ -945,6 +950,10 @@ void loop() {
       if (activityManager.isQuickLocked()) return;
       if (function == CrossPointSettings::LP_MENU_SLEEP) {
         enterDeepSleep();
+      }
+      if (function == CrossPointSettings::LP_MENU_CONFIRM) {
+        confirmFired = true;
+        return;
       }
       activityManager.runBoundAction(function);
     };
@@ -1017,6 +1026,13 @@ void loop() {
       if (fired.valid && !fired.replayRawEdge) runBoundFunction(fired.function);
       mappedInputManager.setHomeKeyOverride(/*suppress=*/true, fired.valid && fired.replayRawEdge);
     }
+
+    // Two-pass synthetic Confirm for LP_MENU_CONFIRM: press on this pass, release on the next
+    // unless an activity transition suppressed it.
+    static button_replay::SideKey confirmReplay;
+    if (mappedInputManager.takeConfirmReleaseSuppressed()) confirmReplay.reset();
+    const button_replay::Injection confirmInjection = confirmReplay.onPass(/*intercepted=*/true, confirmFired);
+    mappedInputManager.setConfirmOverride(confirmInjection.press, confirmInjection.release);
   }
 
   // Refresh the battery icon when USB is plugged or unplugged.

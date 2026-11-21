@@ -70,6 +70,8 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   bool flushQueuedProgress();
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
+  // Jump to the next chapter, or back to the start of the current/previous chapter.
+  void skipChapter(bool forward);
   // Jump to a paragraph number as shown by the paragraph-number marks. Numbering restarts
   // at 1 in every chapter, so the number is always an ordinal within the current one.
   void jumpToParagraph(int target);

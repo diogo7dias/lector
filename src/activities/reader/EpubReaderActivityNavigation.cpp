@@ -178,6 +178,38 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn, const bool repaint) {
   if (repaint) requestUpdate();
 }
 
+void EpubReaderActivity::skipChapter(const bool forward) {
+  if (!epub || !section) {
+    requestUpdate();
+    return;
+  }
+  RenderLock lock(*this);
+  if (forward) {
+    if (currentSpineIndex >= epub->getSpineItemsCount()) return;
+    recordJumpOrigin();
+    clearDeferredReposition();
+    currentSpineIndex++;
+    nextPageNumber = 0;
+    section.reset();
+  } else {
+    if (section->currentPage > 0) {
+      recordJumpOrigin();
+      clearDeferredReposition();
+      section->currentPage = 0;
+    } else if (currentSpineIndex > 0) {
+      recordJumpOrigin();
+      clearDeferredReposition();
+      currentSpineIndex--;
+      nextPageNumber = 0;
+      section.reset();
+    } else {
+      return;
+    }
+  }
+  lock.unlock();
+  requestUpdate();
+}
+
 void EpubReaderActivity::applyQueuedTurns() {
   // While a refresh holds the render lock, pageTurn would block the loop and the presses made
   // meanwhile would never be polled; they wait in queuedTurns until the panel is free.

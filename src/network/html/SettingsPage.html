@@ -464,10 +464,16 @@
     if (pwrBtnFootnoteBackRow) {
       pwrBtnFootnoteBackRow.style.display = powerOpensFootnotes ? '' : 'none';
     }
+    // 6 is SLEEP_SCREEN_MODE::QUICK_RESUME: every sleep already uses Quick Resume.
+    const quickResumeTimeoutRow = document.getElementById('row-setting-quickResumeSleepScreen');
+    if (quickResumeTimeoutRow) {
+      quickResumeTimeoutRow.style.display = getControlValue('sleepScreen') === 6 ? 'none' : '';
+    }
   }
 
   function handleSettingChanged(key) {
-    if (key === 'btnBookPowerSingle' || key === 'btnBookPowerDouble' || key === 'btnBookPowerHold') {
+    if (key === 'btnBookPowerSingle' || key === 'btnBookPowerDouble' || key === 'btnBookPowerHold' ||
+        key === 'sleepScreen') {
       updateSettingsVisibility();
     }
     markChanged();

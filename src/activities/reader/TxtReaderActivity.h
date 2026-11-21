@@ -66,6 +66,7 @@ class TxtReaderActivity final : public Activity {
   // One page forward or back. Shared
   // by the side keys and by a paging action bound to any other button.
   void pageTurn(bool forward);
+  void skipPages(int delta);
   void renderStatusBar() const;
   // Pages after the current one wholly inside the paragraph running off its bottom
   // (">P.N"), as the EPUB reader counts them. -1 when the file cannot be read.

@@ -50,6 +50,11 @@ bool XtcReaderActivity::runBoundAction(const uint8_t function) {
     return true;
   }
 
+  if (function == CrossPointSettings::LP_MENU_NEXT_CHAPTER || function == CrossPointSettings::LP_MENU_PREV_CHAPTER) {
+    skipChapter(function == CrossPointSettings::LP_MENU_NEXT_CHAPTER);
+    return true;
+  }
+
   if (function == CrossPointSettings::LP_MENU_OPEN_READER_MENU) {
     openChapterSelection();  // what Confirm opens here
     return true;
@@ -204,6 +209,35 @@ void XtcReaderActivity::pageTurn(const bool forward) {
     currentPage++;  // up to getPageCount(), which shows "End of book"
     requestUpdate();
   }
+}
+
+void XtcReaderActivity::skipChapter(const bool forward) {
+  if (!xtc || xtc->getPageCount() == 0) return;
+  const uint32_t lastPage = xtc->getPageCount() - 1;
+  uint32_t target = currentPage;
+  if (xtc->hasChapters() && !xtc->getChapters().empty()) {
+    const auto& chapters = xtc->getChapters();
+    if (forward) {
+      for (const auto& ch : chapters) {
+        if (ch.startPage > currentPage) {
+          target = std::min<uint32_t>(ch.startPage, lastPage);
+          break;
+        }
+      }
+    } else {
+      for (auto it = chapters.rbegin(); it != chapters.rend(); ++it) {
+        if (it->startPage < currentPage) {
+          target = it->startPage;
+          break;
+        }
+      }
+    }
+  } else {
+    target = forward ? std::min<uint32_t>(currentPage + 10, lastPage) : (currentPage > 10 ? currentPage - 10 : 0);
+  }
+  if (target == currentPage) return;
+  currentPage = target;
+  requestUpdate();
 }
 
 void XtcReaderActivity::render(RenderLock&&) {

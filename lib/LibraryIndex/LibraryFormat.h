@@ -49,7 +49,8 @@ inline constexpr uint16_t CLIX_MAX_RECORDS = 2048;
 #endif
 
 enum ClixFlags : uint8_t {
-  CLIX_FLAG_TRUNCATED = 1 << 0,  // more books on the card than CLIX_MAX_RECORDS
+  CLIX_FLAG_TRUNCATED = 1 << 0,    // more books on the card than CLIX_MAX_RECORDS
+  CLIX_FLAG_NO_METADATA = 1 << 1,  // built from filenames only (libraryUseMetadata = 0)
 };
 
 #pragma pack(push, 1)

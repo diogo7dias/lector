@@ -56,3 +56,20 @@ TEST(WakeFacePolicy, FirstPageTurnCleansAfterADriveAllWakeExceptOnTheX3) {
   EXPECT_FALSE(wake_face::firstPageTurnCleans(WakeClear::Blank, false));    // the blank already cleaned
   EXPECT_FALSE(wake_face::firstPageTurnCleans(WakeClear::Blank, true));
 }
+
+TEST(WakeFacePolicy, QuickResumeOnTimeoutAppliesOnlyToTimeoutSleeps) {
+  constexpr uint8_t kCustom = 2;
+  constexpr uint8_t kQuickResume = 6;
+  // Face = Quick Resume: both manual and timeout locks use Quick Resume regardless of toggle.
+  EXPECT_TRUE(wake_face::usesQuickResumeForSleep(kQuickResume, 0, false));
+  EXPECT_TRUE(wake_face::usesQuickResumeForSleep(kQuickResume, 0, true));
+  EXPECT_TRUE(wake_face::quickResumePossible(kQuickResume, 0));
+  // Face = Custom, timeout toggle off: neither lock uses Quick Resume.
+  EXPECT_FALSE(wake_face::usesQuickResumeForSleep(kCustom, 0, false));
+  EXPECT_FALSE(wake_face::usesQuickResumeForSleep(kCustom, 0, true));
+  EXPECT_FALSE(wake_face::quickResumePossible(kCustom, 0));
+  // Face = Custom, timeout toggle on: only timeout sleep uses Quick Resume, and wake may restore.
+  EXPECT_FALSE(wake_face::usesQuickResumeForSleep(kCustom, 1, false));
+  EXPECT_TRUE(wake_face::usesQuickResumeForSleep(kCustom, 1, true));
+  EXPECT_TRUE(wake_face::quickResumePossible(kCustom, 1));
+}
