@@ -118,6 +118,12 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 93
+
+Layout only; the binary layout is unchanged. A `<blockquote>` whose CSS sets no side margin
+is inset 1 em from that side, shrunk so nested quotes keep half the column, so chapters with
+quotes wrap differently. The partial version is 189.
+
 ### Version 92
 
 Layout only; the binary layout is unchanged. Fill Pages is always on: no line is carried to
