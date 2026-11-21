@@ -1,4 +1,4 @@
-// Pure suffix helpers for sleep-wallpaper filenames (.bmp / .pxc).
+// Pure suffix helpers for sleep-wallpaper filenames (.bmp).
 // Deliberately free of Arduino types, APP_STATE, and Storage so this
 // translation unit can be compiled in the host test environment.
 
@@ -13,7 +13,7 @@ namespace FavoriteImage {
 namespace {
 
 constexpr std::string_view kFavoriteSuffix = "_F";
-constexpr size_t kExtLen = 4;  // ".bmp" / ".pxc"
+constexpr size_t kExtLen = 4;  // ".bmp"
 
 }  // namespace
 
@@ -26,7 +26,7 @@ bool isImageExtension(std::string_view filename) {
     lower[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(ext[i])));
   }
   const std::string_view lowered(lower, kExtLen);
-  return lowered == ".bmp" || lowered == ".pxc";
+  return lowered == ".bmp";
 }
 
 bool hasFavoriteSuffix(std::string_view filename) {

@@ -221,8 +221,7 @@ TEST(NearbyFilePayloads, TheLargestOfferStillFitsOnePacket) {
 }
 
 TEST(NearbyFilePayloads, CarriesEpubContentOffsetAndNativePageRecords) {
-  for (const std::string name :
-       {"Book.epub", "Book.EPUB", "Book.txt", "Book.md", "Book.xtc", "Book.xtch", "Book.pxc"}) {
+  for (const std::string name : {"Book.epub", "Book.EPUB", "Book.txt", "Book.md", "Book.xtc", "Book.xtch"}) {
     OfferPayload sent;
     sent.fileName = name;
     sent.fileSize = 1234;

@@ -51,7 +51,7 @@ DecideInput cleanInput() {
 
 // FAT directory order is arbitrary, so the fingerprint must not depend on it.
 TEST(SleepIndexReconcile, FingerprintIsOrderIndependent) {
-  std::vector<Entry> a = {{"x.pxc", 100, 5000}, {"y.bmp", 200, 6000}, {"z.pxc", 300, 7000}};
+  std::vector<Entry> a = {{"x.bmp", 100, 5000}, {"y.bmp", 200, 6000}, {"z.bmp", 300, 7000}};
   std::vector<Entry> b = {a[2], a[0], a[1]};
   EXPECT_EQ(fingerprintOf(a), fingerprintOf(b));
 }
@@ -60,29 +60,29 @@ TEST(SleepIndexReconcile, FingerprintIsOrderIndependent) {
 // because macOS/Windows preserve source mtimes on copy, so a same-name
 // replacement can carry the old mtime.
 TEST(SleepIndexReconcile, FingerprintSeesEveryKindOfChange) {
-  const std::vector<Entry> base = {{"x.pxc", 100, 5000}, {"y.bmp", 200, 6000}};
+  const std::vector<Entry> base = {{"x.bmp", 100, 5000}, {"y.bmp", 200, 6000}};
   const uint32_t fp = fingerprintOf(base);
 
-  EXPECT_NE(fp, fingerprintOf({{"x.pxc", 100, 5000}}));                                         // removed
-  EXPECT_NE(fp, fingerprintOf({{"x.pxc", 100, 5000}, {"y.bmp", 200, 6000}, {"n.pxc", 1, 2}}));  // added
-  EXPECT_NE(fp, fingerprintOf({{"x2.pxc", 100, 5000}, {"y.bmp", 200, 6000}}));                  // renamed
-  EXPECT_NE(fp, fingerprintOf({{"x.pxc", 100, 5001}, {"y.bmp", 200, 6000}}));                   // replaced (size)
-  EXPECT_NE(fp, fingerprintOf({{"x.pxc", 101, 5000}, {"y.bmp", 200, 6000}}));                   // touched (mtime)
+  EXPECT_NE(fp, fingerprintOf({{"x.bmp", 100, 5000}}));                                         // removed
+  EXPECT_NE(fp, fingerprintOf({{"x.bmp", 100, 5000}, {"y.bmp", 200, 6000}, {"n.bmp", 1, 2}}));  // added
+  EXPECT_NE(fp, fingerprintOf({{"x2.bmp", 100, 5000}, {"y.bmp", 200, 6000}}));                  // renamed
+  EXPECT_NE(fp, fingerprintOf({{"x.bmp", 100, 5001}, {"y.bmp", 200, 6000}}));                   // replaced (size)
+  EXPECT_NE(fp, fingerprintOf({{"x.bmp", 101, 5000}, {"y.bmp", 200, 6000}}));                   // touched (mtime)
 }
 
 // A favorite toggle renames the file; the counterpart membership check must
 // refuse to append the renamed file as "new" — in both directions.
 TEST(SleepIndexReconcile, CounterpartSuppressesFavoriteRenameAppends) {
   NameHashSet set;
-  set.add(sleep_reconcile::nameHash("a.pxc"));
+  set.add(sleep_reconcile::nameHash("a.bmp"));
   set.add(sleep_reconcile::nameHash("b_F.bmp"));
   set.finalize();
 
-  EXPECT_TRUE(knownToIndex(set, "a.pxc"));    // unchanged
-  EXPECT_TRUE(knownToIndex(set, "a_F.pxc"));  // favorited since the index was built
+  EXPECT_TRUE(knownToIndex(set, "a.bmp"));    // unchanged
+  EXPECT_TRUE(knownToIndex(set, "a_F.bmp"));  // favorited since the index was built
   EXPECT_TRUE(knownToIndex(set, "b_F.bmp"));  // unchanged
   EXPECT_TRUE(knownToIndex(set, "b.bmp"));    // unfavorited since the index was built
-  EXPECT_FALSE(knownToIndex(set, "c.pxc"));   // genuinely new
+  EXPECT_FALSE(knownToIndex(set, "c.bmp"));   // genuinely new
 }
 
 // A favorite toggle renames in place, and the device patches the persisted
@@ -91,19 +91,19 @@ TEST(SleepIndexReconcile, CounterpartSuppressesFavoriteRenameAppends) {
 // starts lying and every later unlock scans again. mtime and size are the same
 // on both sides because a FAT rename copies every field but the name.
 TEST(SleepIndexReconcile, FavoriteRenamePatchMatchesAFullRescan) {
-  const std::vector<Entry> before = {{"a.pxc", 111, 900}, {"b.pxc", 222, 1200}, {"c.bmp", 333, 1500}};
+  const std::vector<Entry> before = {{"a.bmp", 111, 900}, {"b.bmp", 222, 1200}, {"c.bmp", 333, 1500}};
   const uint32_t snapshot = fingerprintOf(before);
 
   std::vector<Entry> after = before;
-  after[1].name = "b_F.pxc";
+  after[1].name = "b_F.bmp";
   const uint32_t patched =
-      snapshot + sleep_reconcile::entryHash("b_F.pxc", 222, 1200) - sleep_reconcile::entryHash("b.pxc", 222, 1200);
+      snapshot + sleep_reconcile::entryHash("b_F.bmp", 222, 1200) - sleep_reconcile::entryHash("b.bmp", 222, 1200);
   EXPECT_EQ(patched, fingerprintOf(after));
 
   // Unfavoriting returns to the original, so a toggle on and off leaves no
   // drift for a later reconcile to trip over.
   const uint32_t undone =
-      patched + sleep_reconcile::entryHash("b.pxc", 222, 1200) - sleep_reconcile::entryHash("b_F.pxc", 222, 1200);
+      patched + sleep_reconcile::entryHash("b.bmp", 222, 1200) - sleep_reconcile::entryHash("b_F.bmp", 222, 1200);
   EXPECT_EQ(undone, snapshot);
 }
 
@@ -123,13 +123,13 @@ TEST(SleepIndexReconcile, PatchedSnapshotKeepsTheColdBootFromWalking) {
 TEST(SleepIndexReconcile, NameHashSetMembership) {
   NameHashSet set;
   set.reserve(3);
-  set.add(sleep_reconcile::nameHash("one.pxc"));
-  set.add(sleep_reconcile::nameHash("two.pxc"));
-  set.add(sleep_reconcile::nameHash("two.pxc"));  // duplicate records collapse
+  set.add(sleep_reconcile::nameHash("one.bmp"));
+  set.add(sleep_reconcile::nameHash("two.bmp"));
+  set.add(sleep_reconcile::nameHash("two.bmp"));  // duplicate records collapse
   set.finalize();
   EXPECT_EQ(set.size(), 2u);
-  EXPECT_TRUE(set.contains(sleep_reconcile::nameHash("one.pxc")));
-  EXPECT_FALSE(set.contains(sleep_reconcile::nameHash("three.pxc")));
+  EXPECT_TRUE(set.contains(sleep_reconcile::nameHash("one.bmp")));
+  EXPECT_FALSE(set.contains(sleep_reconcile::nameHash("three.bmp")));
 }
 
 // The decision matrix.
@@ -216,8 +216,8 @@ TEST(SleepIndexReconcile, DecidePlanMatrix) {
 // so the snapshot can be patched in place and the next boot skips the walk.
 
 TEST(SleepIndexSnapshot, DeletionRemovesTheEntryContributionExactly) {
-  const uint32_t hashA = sleep_reconcile::entryHash("a.pxc", 111, 5000);
-  const uint32_t hashB = sleep_reconcile::entryHash("b.pxc", 222, 6000);
+  const uint32_t hashA = sleep_reconcile::entryHash("a.bmp", 111, 5000);
+  const uint32_t hashB = sleep_reconcile::entryHash("b.bmp", 222, 6000);
 
   sleep_reconcile::Snapshot snap;
   snap.fingerprint = hashA + hashB;
@@ -244,7 +244,7 @@ TEST(SleepIndexSnapshot, DeletionClampsAtZeroLive) {
 
 // A single-file add appends one record: the contribution goes in, no dead slot.
 TEST(SleepIndexSnapshot, AdditionAddsTheEntryContribution) {
-  const uint32_t hashA = sleep_reconcile::entryHash("a.pxc", 111, 5000);
+  const uint32_t hashA = sleep_reconcile::entryHash("a.bmp", 111, 5000);
   const uint32_t hashNew = sleep_reconcile::entryHash("new.bmp", 333, 7000);
 
   sleep_reconcile::Snapshot snap;

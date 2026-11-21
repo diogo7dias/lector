@@ -19,19 +19,19 @@ const CandidateNamer NAMER = [](const std::string_view name, const std::string_v
 
 TEST(NearbyFileRules, AcceptsTheFormatsThisReaderOpens) {
   for (const char* name :
-       {"Book.epub", "notes.txt", "readme.md", "comic.xtc", "strip.xtch", "wallpaper.pxc", "cover.png", "sleep.bmp"}) {
+       {"Book.epub", "notes.txt", "readme.md", "comic.xtc", "strip.xtch", "cover.png", "sleep.bmp"}) {
     EXPECT_TRUE(isAcceptedFilename(name)) << name;
   }
 }
 
 TEST(NearbyFileRules, MatchesTheExtensionRegardlessOfCase) {
   EXPECT_TRUE(isAcceptedFilename("BOOK.EPUB"));
-  EXPECT_TRUE(isAcceptedFilename("Wallpaper.PxC"));
+  EXPECT_TRUE(isAcceptedFilename("Wallpaper.BmP"));
 }
 
 TEST(NearbyFileRules, RejectsAnythingThisReaderCannotOpen) {
-  for (const char* name : {"payload.bin", "settings.json", "firmware.bin", "archive.zip", "script.sh", "noextension",
-                           "trailingdot.", ".epub", ""}) {
+  for (const char* name : {"payload.bin", "settings.json", "firmware.bin", "archive.zip", "script.sh", "wallpaper.pxc",
+                           "noextension", "trailingdot.", ".epub", ""}) {
     EXPECT_FALSE(isAcceptedFilename(name)) << name;
   }
 }

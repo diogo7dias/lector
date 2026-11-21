@@ -15,19 +15,14 @@ using FavoriteImage::hasFavoriteSuffix;
 using FavoriteImage::isImageExtension;
 using FavoriteImage::stripFavoriteSuffix;
 
-TEST(IsImageExtension, AcceptsWallpaperExtensions) {
-  EXPECT_TRUE(isImageExtension("a.bmp"));
-  EXPECT_TRUE(isImageExtension("a.pxc"));
-}
+TEST(IsImageExtension, AcceptsWallpaperExtensions) { EXPECT_TRUE(isImageExtension("a.bmp")); }
 
-TEST(IsImageExtension, IsCaseInsensitive) {
-  EXPECT_TRUE(isImageExtension("A.BMP"));
-  EXPECT_TRUE(isImageExtension("A.PxC"));
-}
+TEST(IsImageExtension, IsCaseInsensitive) { EXPECT_TRUE(isImageExtension("A.BMP")); }
 
 TEST(IsImageExtension, RejectsEverythingElse) {
   EXPECT_FALSE(isImageExtension("book.epub"));
   EXPECT_FALSE(isImageExtension("a.png"));
+  EXPECT_FALSE(isImageExtension("a.pxc"));
   EXPECT_FALSE(isImageExtension("notes.txt"));
   EXPECT_FALSE(isImageExtension(""));
 }
@@ -39,7 +34,7 @@ TEST(IsImageExtension, RejectsNameEndingInExtensionLettersWithoutTheDot) {
 
 TEST(IsWallpaperName, AcceptsOrdinaryWallpapers) {
   EXPECT_TRUE(isWallpaperName("sunset.bmp"));
-  EXPECT_TRUE(isWallpaperName("sunset_F.pxc"));
+  EXPECT_TRUE(isWallpaperName("sunset_F.bmp"));
 }
 
 TEST(IsWallpaperName, RejectsDotfiles) {
@@ -57,7 +52,6 @@ TEST(IsWallpaperName, RejectsOtherFileTypes) {
 
 TEST(HasFavoriteSuffix, DetectsSuffix) {
   EXPECT_TRUE(hasFavoriteSuffix("sunset_F.bmp"));
-  EXPECT_TRUE(hasFavoriteSuffix("sunset_F.pxc"));
   EXPECT_FALSE(hasFavoriteSuffix("sunset.bmp"));
 }
 
@@ -82,17 +76,14 @@ TEST(HasFavoriteSuffix, RejectsNonWallpaperFiles) { EXPECT_FALSE(hasFavoriteSuff
 
 TEST(AddFavoriteSuffix, InsertsBeforeExtension) {
   EXPECT_EQ("sunset_F.bmp", addFavoriteSuffix("sunset.bmp"));
-  EXPECT_EQ("sunset_F.PXC", addFavoriteSuffix("sunset.PXC"));
+  EXPECT_EQ("sunset_F.BMP", addFavoriteSuffix("sunset.BMP"));
 }
 
 TEST(AddFavoriteSuffix, IsIdempotent) { EXPECT_EQ("sunset_F.bmp", addFavoriteSuffix("sunset_F.bmp")); }
 
 TEST(AddFavoriteSuffix, LeavesNonWallpapersAlone) { EXPECT_EQ("book.epub", addFavoriteSuffix("book.epub")); }
 
-TEST(StripFavoriteSuffix, RemovesSuffix) {
-  EXPECT_EQ("sunset.bmp", stripFavoriteSuffix("sunset_F.bmp"));
-  EXPECT_EQ("sunset.pxc", stripFavoriteSuffix("sunset_F.pxc"));
-}
+TEST(StripFavoriteSuffix, RemovesSuffix) { EXPECT_EQ("sunset.bmp", stripFavoriteSuffix("sunset_F.bmp")); }
 
 TEST(StripFavoriteSuffix, IsIdempotent) { EXPECT_EQ("sunset.bmp", stripFavoriteSuffix("sunset.bmp")); }
 
@@ -121,7 +112,7 @@ TEST(FavoritePathFor, HandlesRootLevelFiles) {
 }
 
 TEST(FavoritePathFor, HandlesNestedDirectories) {
-  EXPECT_EQ("/sleep pause/a/b/sunset_F.pxc", favoritePathFor("/sleep pause/a/b/sunset.pxc", true));
+  EXPECT_EQ("/sleep pause/a/b/sunset_F.bmp", favoritePathFor("/sleep pause/a/b/sunset.bmp", true));
 }
 
 TEST(FavoritePathFor, HandlesBareNameWithNoDirectory) {

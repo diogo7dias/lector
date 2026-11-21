@@ -1,17 +1,10 @@
 #pragma once
-#include <string>
-#include <utility>
 
 #include "activities/Activity.h"
 
 class BootActivity final : public Activity {
  public:
-  // A .pxc path redraws the wallpaper without banners. An empty or unreadable path
-  // falls back to the centred name on a white screen.
-  explicit BootActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string wallpaperPath = {})
-      : Activity(activity_name::kBoot, renderer, mappedInput), wallpaperPath_(std::move(wallpaperPath)) {}
+  explicit BootActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : Activity(activity_name::kBoot, renderer, mappedInput) {}
   void onEnter() override;
-
- private:
-  std::string wallpaperPath_;
 };
