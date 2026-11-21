@@ -127,9 +127,7 @@ class ActivityManager {
   void goToReader(std::string path, bool allowFastInitialRefresh = false, bool firstTurnCleans = false,
                   bool sortesMode = false);
   void goToSleep(bool fromTimeout = false);
-  // wallpaperPath: see BootActivity — a .pxc wallpaper to unlock over, or empty for the
-  // plain logo boot screen.
-  void goToBoot(std::string wallpaperPath = {});
+  void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goToCrashReport();
   void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE);

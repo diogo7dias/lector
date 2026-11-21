@@ -14,7 +14,6 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
-#include "activities/boot_sleep/PxcSleepRenderer.h"
 #include "activities/home/LibrarySearch.h"
 #include "activities/network/NearbyFileTransferActivity.h"
 #include "activities/reader/DictionaryDefinitionActivity.h"
@@ -133,11 +132,10 @@ void FileBrowserActivity::loadFiles() {
           if (!files.push(filename)) break;
         }
       } else if (FsHelpers::hasBookExtension(filename) || FsHelpers::hasBmpExtension(filename) ||
-                 FsHelpers::hasPngExtension(filename) || FsHelpers::hasJpgExtension(filename) ||
-                 hasPxcExtension(filename)) {
-        // .pxc joins the list so a wallpaper folder can be browsed and triaged on
-        // the device; selecting one opens PxcViewerActivity. .png joins it so a
-        // transparent sleep overlay can be previewed the same way, and .jpg so one can be set as the sleep image.
+                 FsHelpers::hasPngExtension(filename) || FsHelpers::hasJpgExtension(filename)) {
+        // .bmp joins the list so a wallpaper folder can be browsed and triaged on
+        // the device; .png joins it so a transparent sleep overlay can be previewed
+        // the same way, and .jpg so one can be set as the sleep image.
         if (!files.push(filename)) break;
         // Recently Added reads the stamp off the handle the scan already holds — reopening
         // the file for it would double the SD work of listing a folder. Last Read cannot:

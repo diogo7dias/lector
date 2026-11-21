@@ -5,8 +5,6 @@
 #include <cstdint>
 #include <string>
 
-#include "dev/LockLabState.h"
-
 class CrossPointState : public PersistableStore<CrossPointState> {
   CrossPointState() = default;
 
@@ -35,8 +33,6 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // sleep is a chip reset: a RAM-only flag would re-warn on every wake below the
   // threshold. Cleared again once the charge climbs back over LOW_BATTERY_CLEAR_PERCENT.
   bool lowBatteryWarned = false;
-  // What's New revision the reader has seen (ReleaseNotesActivity::REVISION).
-  uint16_t releaseNotesSeen = 0;
   // Wallpaper the last sleep screen actually rendered, or empty when the sleep screen
   // was not a wallpaper. Deep sleep is a chip reset, so the wake has no other way to
   // know what the panel is holding. The wake uses it to tell a wallpaper sleep from a
@@ -81,12 +77,6 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   static const char* getFilePath() { return "/.crosspoint/state.json"; }
   void toJson(JsonDocument& doc) const;
   bool fromJson(JsonVariantConst doc);
-
-#ifdef LECTOR_LOCK_LAB
-  // Bench knobs, not user settings: kept here because this store is the one already
-  // written on the way into sleep, which is the trip being measured.
-  LockLabState lockLab;
-#endif
 };
 
 // Helper macro to access state

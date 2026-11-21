@@ -15,10 +15,8 @@
 #include "TxtReaderActivity.h"
 #include "Xtc.h"
 #include "XtcReaderActivity.h"
-#include "activities/boot_sleep/PxcSleepRenderer.h"
 #include "activities/util/BmpViewerActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
-#include "activities/util/PxcViewerActivity.h"
 #include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "util/BookProgressFile.h"
@@ -133,10 +131,6 @@ void ReaderActivity::onGoToBmpViewer(const std::string& path) {
   activityManager.replaceActivity(std::make_unique<BmpViewerActivity>(renderer, mappedInput, path));
 }
 
-void ReaderActivity::onGoToPxcViewer(const std::string& path) {
-  activityManager.replaceActivity(std::make_unique<PxcViewerActivity>(renderer, mappedInput, path));
-}
-
 void ReaderActivity::onGoToXtcReader(std::unique_ptr<Xtc> xtc) {
   activityManager.replaceActivity(
       std::make_unique<XtcReaderActivity>(renderer, mappedInput, std::move(xtc), initialRefreshCountdown()));
@@ -181,9 +175,6 @@ void ReaderActivity::onEnter() {
       FsHelpers::hasJpgExtension(initialBookPath)) {
     waitForPanel();
     onGoToBmpViewer(initialBookPath);
-  } else if (hasPxcExtension(initialBookPath)) {
-    waitForPanel();
-    onGoToPxcViewer(initialBookPath);
   } else if (FsHelpers::hasXtcExtension(initialBookPath)) {
     auto xtc = loadXtc(initialBookPath);
     if (!xtc) {

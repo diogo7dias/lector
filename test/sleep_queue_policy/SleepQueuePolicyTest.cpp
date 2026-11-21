@@ -35,8 +35,8 @@ struct Fake {
         [&](const size_t i) { return i < records.size() ? records[i] : std::string(); },
         [&](const std::string& n) { return live.count(n) > 0; },
         [](const std::string& n) {
-          // Favorite-rename counterpart: flip a "_F" before the ".pxc".
-          const std::string ext = ".pxc";
+          // Favorite-rename counterpart: flip a "_F" before the ".bmp".
+          const std::string ext = ".bmp";
           if (n.size() < ext.size()) return std::string();
           const std::string stem = n.substr(0, n.size() - ext.size());
           if (stem.size() >= 2 && stem.substr(stem.size() - 2) == "_F") return stem.substr(0, stem.size() - 2) + ext;
@@ -47,7 +47,7 @@ struct Fake {
 
 Fake makeFake(const size_t count, const std::string& prefix = "w") {
   Fake f;
-  for (size_t i = 0; i < count; ++i) f.addLive(prefix + std::to_string(i) + ".pxc");
+  for (size_t i = 0; i < count; ++i) f.addLive(prefix + std::to_string(i) + ".bmp");
   return f;
 }
 
@@ -84,13 +84,13 @@ TEST(SleepQueuePolicy, FreshRecordsServeFirstInOrder) {
   for (int i = 0; i < 5; ++i) before.insert(f.pick(s).basename);
 
   // ...then 3 files land (cold-boot append: records grow, freshNext lags).
-  f.addLive("new0.pxc");
-  f.addLive("new1.pxc");
-  f.addLive("new2.pxc");
+  f.addLive("new0.bmp");
+  f.addLive("new1.bmp");
+  f.addLive("new2.bmp");
 
-  EXPECT_EQ(f.pick(s).basename, "new0.pxc");
-  EXPECT_EQ(f.pick(s).basename, "new1.pxc");
-  EXPECT_EQ(f.pick(s).basename, "new2.pxc");
+  EXPECT_EQ(f.pick(s).basename, "new0.bmp");
+  EXPECT_EQ(f.pick(s).basename, "new1.bmp");
+  EXPECT_EQ(f.pick(s).basename, "new2.bmp");
 
   // The remaining 5 picks of the lap are the 5 old wallpapers not yet shown —
   // fresh files did not displace anyone.
@@ -108,8 +108,8 @@ TEST(SleepQueuePolicy, LapWrapReshufflesOverEverything) {
   auto f = makeFake(6);
   auto s = seeded(f);
   for (int i = 0; i < 3; ++i) f.pick(s);
-  f.addLive("late0.pxc");
-  f.addLive("late1.pxc");
+  f.addLive("late0.bmp");
+  f.addLive("late1.bmp");
   // Drain: 2 fresh + remaining 3 of the lap.
   for (int i = 0; i < 5; ++i) ASSERT_FALSE(f.pick(s).basename.empty());
 
@@ -128,7 +128,7 @@ TEST(SleepQueuePolicy, ManualReshuffleFoldsFreshQueue) {
   auto f = makeFake(5);
   auto s = seeded(f);
   f.pick(s);
-  f.addLive("fresh.pxc");
+  f.addLive("fresh.bmp");
 
   sleep_queue::reshuffle(s, f.records.size(), 77u, 88u);
   EXPECT_EQ(s.freshNext, f.records.size());
@@ -136,7 +136,7 @@ TEST(SleepQueuePolicy, ManualReshuffleFoldsFreshQueue) {
   std::set<std::string> lap;
   for (size_t i = 0; i < f.records.size(); ++i) lap.insert(f.pick(s).basename);
   EXPECT_EQ(lap.size(), 6u);
-  EXPECT_EQ(lap.count("fresh.pxc"), 1u);
+  EXPECT_EQ(lap.count("fresh.bmp"), 1u);
 }
 
 // Dead slots (deleted files) are skipped without ending the lap, and every
@@ -145,7 +145,7 @@ TEST(SleepQueuePolicy, DeadSlotsAreSkipped) {
   auto f = makeFake(20);
   auto s = seeded(f);
   // Delete 6 files behind the index's back.
-  for (int i = 2; i < 20; i += 3) f.live.erase("w" + std::to_string(i) + ".pxc");
+  for (int i = 2; i < 20; i += 3) f.live.erase("w" + std::to_string(i) + ".bmp");
 
   std::set<std::string> shown;
   // 14 live files; every pick must land on a live one.
@@ -163,14 +163,14 @@ TEST(SleepQueuePolicy, DeadSlotsAreSkipped) {
 TEST(SleepQueuePolicy, FavoriteRenameKeepsItsSlot) {
   auto f = makeFake(4);
   auto s = seeded(f);
-  // w1.pxc got favorited on the card: the file is now w1_F.pxc.
-  f.live.erase("w1.pxc");
-  f.live.insert("w1_F.pxc");
+  // w1.bmp got favorited on the card: the file is now w1_F.bmp.
+  f.live.erase("w1.bmp");
+  f.live.insert("w1_F.bmp");
 
   std::set<std::string> shown;
   for (int i = 0; i < 4; ++i) shown.insert(f.pick(s).basename);
-  EXPECT_EQ(shown.count("w1_F.pxc"), 1u);
-  EXPECT_EQ(shown.count("w1.pxc"), 0u);
+  EXPECT_EQ(shown.count("w1_F.bmp"), 1u);
+  EXPECT_EQ(shown.count("w1.bmp"), 0u);
   EXPECT_EQ(shown.size(), 4u);
 }
 
@@ -179,11 +179,11 @@ TEST(SleepQueuePolicy, FavoriteRenameKeepsItsSlot) {
 TEST(SleepQueuePolicy, DeadFreshSlotsAreConsumed) {
   auto f = makeFake(3);
   auto s = seeded(f);
-  f.addLive("a.pxc");
-  f.addLive("b.pxc");
-  f.live.erase("a.pxc");  // gone before it showed
+  f.addLive("a.bmp");
+  f.addLive("b.bmp");
+  f.live.erase("a.bmp");  // gone before it showed
 
-  EXPECT_EQ(f.pick(s).basename, "b.pxc");
+  EXPECT_EQ(f.pick(s).basename, "b.bmp");
   EXPECT_EQ(s.freshNext, f.records.size());
 }
 
@@ -230,7 +230,7 @@ TEST(SleepQueuePolicy, PropertyNoIntraLapRepeats) {
   std::set<std::string> segmentShown;
   for (int step = 0; step < 500; ++step) {
     // Occasionally mutate the world like a cold boot would.
-    if (step % 37 == 21) f.addLive("x" + std::to_string(step) + ".pxc");
+    if (step % 37 == 21) f.addLive("x" + std::to_string(step) + ".bmp");
     if (step % 53 == 13 && !f.live.empty()) f.live.erase(*f.live.begin());
 
     const size_t seededBefore = s.cursor.seededCount;
@@ -255,7 +255,7 @@ TEST(SleepQueuePolicy, PropertyNoIntraLapRepeats) {
 // lap has been shown once, and only then is a rebuild worth its scan.
 TEST(SleepQueuePolicy, ReportsTheLapWrap) {
   Fake fake;
-  for (int i = 0; i < 4; ++i) fake.addLive("w" + std::to_string(i) + ".pxc");
+  for (int i = 0; i < 4; ++i) fake.addLive("w" + std::to_string(i) + ".bmp");
 
   QueueState s;
   sleep_queue::reshuffle(s, fake.records.size(), 7, 13);
@@ -272,12 +272,12 @@ TEST(SleepQueuePolicy, ReportsTheLapWrap) {
 // A pick served from the fresh region is not a lap wrap.
 TEST(SleepQueuePolicy, FreshPickDoesNotReportALapWrap) {
   Fake fake;
-  for (int i = 0; i < 3; ++i) fake.addLive("w" + std::to_string(i) + ".pxc");
+  for (int i = 0; i < 3; ++i) fake.addLive("w" + std::to_string(i) + ".bmp");
   QueueState s;
   sleep_queue::reshuffle(s, fake.records.size(), 7, 13);
-  fake.addLive("fresh.pxc");  // appended after the lap was seeded
+  fake.addLive("fresh.bmp");  // appended after the lap was seeded
 
   const Result r = fake.pick(s);
-  EXPECT_EQ(r.basename, "fresh.pxc");
+  EXPECT_EQ(r.basename, "fresh.bmp");
   EXPECT_FALSE(r.lapWrapped);
 }

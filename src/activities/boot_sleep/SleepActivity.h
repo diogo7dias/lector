@@ -5,7 +5,6 @@
 #include "activities/Activity.h"
 
 class Bitmap;
-struct PxcRenderOptions;
 class SleepOverlay;
 
 class SleepActivity final : public Activity {
@@ -47,8 +46,7 @@ class SleepActivity final : public Activity {
   // call site states its intent and the plan is asked the right question.
   // `overlay`, when set, is drawn over the bitmap in every pass (Cover + Transparent).
   void renderBitmapSleepScreen(Bitmap& bitmap, sleep_face::Face face, SleepOverlay* overlay = nullptr) const;
-  bool renderWallpaperFile(const std::string& filename, const PxcRenderOptions* pxcOptions, uint32_t linePosition,
-                           uint32_t lineTotal) const;
+  bool renderWallpaperFile(const std::string& filename, uint32_t linePosition, uint32_t lineTotal) const;
 
   bool fromTimeout = false;
   // The wallpaper the previous sleep left on the panel. onEnter clears the shared

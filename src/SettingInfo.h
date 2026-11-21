@@ -30,7 +30,6 @@ enum class SettingAction {
   PopupItems,
   Buttons,
   ShareCredentials,
-  ReleaseNotes,
   ScreenCalibration,
   AllBookmarks,
   TimeZone,

@@ -20,7 +20,7 @@ struct BookPosition {
     std::string ext = filename.substr(dot);
     std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
     if (ext == ".epub") return length == 4 || length == 6 || length == 10;
-    return (ext == ".txt" || ext == ".md" || ext == ".xtc" || ext == ".xtch" || ext == ".pxc") && length == 4;
+    return (ext == ".txt" || ext == ".md" || ext == ".xtc" || ext == ".xtch") && length == 4;
   }
 };
 }  // namespace nearby_file

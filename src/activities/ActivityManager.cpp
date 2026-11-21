@@ -29,7 +29,6 @@
 #include "network/CrossPointWebServerActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
-#include "settings/ReleaseNotesActivity.h"
 #include "settings/SettingsActivity.h"
 #include "util/FullScreenMessageActivity.h"
 #include "util/OrientationCycle.h"
@@ -356,18 +355,6 @@ void ActivityManager::loop() {
     }
   }
 
-  // What's New once after an update, only over Home: a wake into a book never shows it.
-  // The activity marks it seen on entry, which ends this.
-  if (APP_STATE.releaseNotesSeen < ReleaseNotesActivity::REVISION && pendingAction == PendingAction::None &&
-      !lightPanel.isActive() && currentActivity && currentActivity->isHomeActivity()) {
-    if (auto notes = makeUniqueNoThrow<ReleaseNotesActivity>(renderer, mappedInput)) {
-      pushActivity(std::move(notes));
-    } else {
-      APP_STATE.releaseNotesSeen = ReleaseNotesActivity::REVISION;  // not saved: it shows again next boot
-      LOG_ERR("ACT", "OOM: What's New");
-    }
-  }
-
   if (requestedUpdate.exchange(false)) {
     // Using direct notification to signal the render task to update
     // Increment counter so multiple rapid calls won't be lost
@@ -444,9 +431,7 @@ void ActivityManager::goToSleep(bool fromTimeout) {
   loop();  // Important: sleep screen must be rendered immediately, the caller will go to sleep right after this returns
 }
 
-void ActivityManager::goToBoot(std::string wallpaperPath) {
-  replaceActivity(std::make_unique<BootActivity>(renderer, mappedInput, std::move(wallpaperPath)));
-}
+void ActivityManager::goToBoot() { replaceActivity(std::make_unique<BootActivity>(renderer, mappedInput)); }
 
 void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::Style style) {
   replaceActivity(std::make_unique<FullScreenMessageActivity>(renderer, mappedInput, std::move(message), style));

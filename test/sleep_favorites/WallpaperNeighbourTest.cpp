@@ -75,9 +75,9 @@ TEST(NeighbourWallpaper, EmptyFolderHasNoNeighbour) {
 
 TEST(NeighbourWallpaper, SingleFileHasNoNeighbourEitherWay) {
   ListFs fs;
-  fs.names = {"only.pxc"};
-  EXPECT_EQ("", neighbourWallpaper(fs, kDir, "only.pxc", true));
-  EXPECT_EQ("", neighbourWallpaper(fs, kDir, "only.pxc", false));
+  fs.names = {"only.bmp"};
+  EXPECT_EQ("", neighbourWallpaper(fs, kDir, "only.bmp", true));
+  EXPECT_EQ("", neighbourWallpaper(fs, kDir, "only.bmp", false));
 }
 
 TEST(NeighbourWallpaper, UnknownFolderYieldsNothing) {
@@ -90,11 +90,11 @@ TEST(NeighbourWallpaper, FollowsTheFileBrowserNaturalOrder) {
   // numbers compare by value, letters ignore case. Names that order calls equal
   // still get a strict order, so neither is skipped.
   ListFs fs;
-  fs.names = {"img10.pxc", "img2.pxc", "B.pxc", "a.pxc", "A.pxc"};
-  EXPECT_EQ("a.pxc", neighbourWallpaper(fs, kDir, "A.pxc", true));
-  EXPECT_EQ("B.pxc", neighbourWallpaper(fs, kDir, "a.pxc", true));
-  EXPECT_EQ("img2.pxc", neighbourWallpaper(fs, kDir, "B.pxc", true));
-  EXPECT_EQ("img10.pxc", neighbourWallpaper(fs, kDir, "img2.pxc", true));
-  EXPECT_EQ("img2.pxc", neighbourWallpaper(fs, kDir, "img10.pxc", false));
-  EXPECT_EQ("A.pxc", neighbourWallpaper(fs, kDir, "a.pxc", false));
+  fs.names = {"img10.bmp", "img2.bmp", "B.bmp", "a.bmp", "A.bmp"};
+  EXPECT_EQ("a.bmp", neighbourWallpaper(fs, kDir, "A.bmp", true));
+  EXPECT_EQ("B.bmp", neighbourWallpaper(fs, kDir, "a.bmp", true));
+  EXPECT_EQ("img2.bmp", neighbourWallpaper(fs, kDir, "B.bmp", true));
+  EXPECT_EQ("img10.bmp", neighbourWallpaper(fs, kDir, "img2.bmp", true));
+  EXPECT_EQ("img2.bmp", neighbourWallpaper(fs, kDir, "img10.bmp", false));
+  EXPECT_EQ("A.bmp", neighbourWallpaper(fs, kDir, "a.bmp", false));
 }
