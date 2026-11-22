@@ -301,7 +301,10 @@ void HomeActivity::render(RenderLock&&) {
       break;
   }
 
-  const auto labels = mappedInput.mapLabels(backLabel, tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  // Same rule as every list band (ListChrome.cpp): on a touch board Select names an action
+  // on the black row only once a side key has shown one.
+  const char* select = mappedInput.showsSelection() ? tr(STR_SELECT) : "";
+  const auto labels = mappedInput.mapLabels(backLabel, select, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (cleanInitialRefresh) {

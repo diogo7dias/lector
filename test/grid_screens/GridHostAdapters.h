@@ -84,13 +84,17 @@ class GfxRendererTarget : public DrawTarget {
 }  // namespace freeink::ui
 
 struct MappedInputManager {
-  enum class Button { Confirm, Back, ScreenDown, ScreenUp, ScreenLeft, ScreenRight, NavNext, NavPrevious };
+  enum class Button { Confirm, Back, Left, Right, ScreenDown, ScreenUp, ScreenLeft, ScreenRight, NavNext, NavPrevious };
   enum class SwipeDir { None, Up, Down, Left, Right };
   bool touch = true;
   bool key = false;
   SwipeDir swipe = SwipeDir::None;
   fui::InputSnapshot snapshot;
   bool hasTouch() const { return touch; }
+  // A key pressed on this screen shows the selection on a touch board (components/KeyFocus.h).
+  bool keyPressed = false;
+  bool showsSelection() const { return !touch || keyPressed; }
+  void suppressHeldButtonRelease() const {}
   bool wasPressed(Button) const { return false; }
   bool wasReleased(Button) const { return false; }
   bool isPressed(Button) const { return false; }

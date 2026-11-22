@@ -84,6 +84,15 @@ void drawListChromeBottom(GfxRenderer& renderer, const MappedInputManager& mappe
   const char* confirm = chrome.confirmHint != nullptr ? chrome.confirmHint : tr(STR_SELECT);
   const char* third = chrome.thirdHint != nullptr ? chrome.thirdHint : tr(STR_DIR_UP);
   const char* fourth = chrome.fourthHint != nullptr ? chrome.fourthHint : tr(STR_DIR_DOWN);
+  if (mappedInput.hasTouch()) {
+    // No front keys stand behind the X4 Pro band, so it stops pretending to be them. The
+    // second slot names what it does to the row a side key selected, and is blank until a
+    // side key selected one. The default up/down pair becomes a page pair, shown only
+    // while there is a page to go to; a screen's own verb there stays.
+    if (!mappedInput.showsSelection()) confirm = "";
+    if (chrome.thirdHint == nullptr) third = chrome.scrolls ? tr(STR_PAGE_UP) : "";
+    if (chrome.fourthHint == nullptr) fourth = chrome.scrolls ? tr(STR_PAGE_DOWN) : "";
+  }
   const auto labels = mappedInput.mapLabels(back, confirm, third, fourth);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

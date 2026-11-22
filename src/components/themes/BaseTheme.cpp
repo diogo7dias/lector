@@ -19,6 +19,7 @@
 #include "components/BannerStyle.h"
 #include "components/HeaderTitle.h"
 #include "components/HintBandGeometry.h"
+#include "components/KeyFocus.h"
 #include "components/ListScrollbar.h"
 #include "components/OptionPopupGeometry.h"
 #include "components/RowHitTest.h"
@@ -574,7 +575,7 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
   int rowY = listTop;
   row_hit::Rows& wrappedHitRows = row_hit::lastRows();
   for (const Row& row : rows) {
-    const bool selected = row.index == selectedIndex;
+    const bool selected = row.index == selectedIndex && key_focus::showsSelection(gpio.hasTouch());
     const int valueX = contentX + contentW - (row.valueW - valueGap);
     // One highlight over the whole measured height, so a row spanning several lines is
     // marked as a single block.
@@ -612,7 +613,7 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
     const int tileY = BaseMetrics::values.verticalSpacing + rect.y +
                       static_cast<int>(i) * (menuMetrics.menuRowHeight + menuMetrics.menuSpacing);
 
-    const bool selected = selectedIndex == i;
+    const bool selected = selectedIndex == i && key_focus::showsSelection(gpio.hasTouch());
 
     std::string labelStr = buttonLabel(i);
     const char* label = labelStr.c_str();
@@ -1393,7 +1394,7 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
                    list_scrollbar::Arrows{hasMoreAbove, hasMoreBelow});
 
   for (const auto& entry : visibleEntries) {
-    const bool selected = (selectorIndex == entry.bookIdx);
+    const bool selected = selectorIndex == entry.bookIdx && key_focus::showsSelection(gpio.hasTouch());
     // The selection paints the whole row and forces white text.
     bool inverted = false;
     if (selected) {

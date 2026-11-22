@@ -44,6 +44,9 @@ struct ListChrome {
   const char* confirmHint = nullptr;
   const char* thirdHint = nullptr;
   const char* fourthHint = nullptr;
+  // The rows run past one screen. Set by the base that paints the list, not by a screen:
+  // on a touch board the two right slots page the list only while there is a page to go to.
+  bool scrolls = false;
   // Side inset for the body. Lists usually run edge to edge; a screen with
   // prose in its rows asks for the theme's content padding.
   int sideInset = 0;

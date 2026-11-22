@@ -1,6 +1,7 @@
 #include "Activity.h"
 
 #include "ActivityManager.h"
+#include "components/KeyFocus.h"
 
 void Activity::onEnter() {
   LOG_INF("ACT", "Entering activity: %s", name.c_str());
@@ -8,6 +9,7 @@ void Activity::onEnter() {
   // brought this screen up, the release belongs to the screen that handled it, not
   // to whatever this one has selected.
   mappedInput.clearHintTap();
+  key_focus::keyPressedHere() = false;
 }
 
 void Activity::onExit() { LOG_DBG("ACT", "Exiting activity: %s", name.c_str()); }

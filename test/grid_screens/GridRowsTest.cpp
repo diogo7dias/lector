@@ -252,6 +252,7 @@ TEST(GridRows, ArmingDoesNotSelectOrActivateAndSurvivesRepaints) {
 TEST(GridRows, ArmingTheSelectedRowOverridesItsFillAndText) {
   GfxRenderer renderer;
   MappedInputManager input;
+  input.keyPressed = true;  // a side key showed the selection
   Grid grid(renderer, input);
   grid.onEnter();
   grid.confirmTaps = true;
@@ -266,6 +267,18 @@ TEST(GridRows, ArmingTheSelectedRowOverridesItsFillAndText) {
   grid.paint();
   EXPECT_FALSE(grid.app.touchActive());
   EXPECT_EQ(grid.uiTarget.fills[0].paint.color, fui::Color::Black);
+  EXPECT_TRUE(grid.uiTarget.texts[0].inverted);
+}
+
+TEST(GridRows, TouchShowsNoSelectionUntilAKeyIsPressed) {
+  GfxRenderer renderer;
+  MappedInputManager input;
+  Grid grid(renderer, input);
+  grid.onEnter();
+  grid.paint();
+  EXPECT_FALSE(grid.uiTarget.texts[0].inverted) << "no black row before a key is pressed";
+  input.keyPressed = true;
+  grid.paint();
   EXPECT_TRUE(grid.uiTarget.texts[0].inverted);
 }
 

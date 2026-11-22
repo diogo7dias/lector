@@ -5,6 +5,7 @@
 #include "ButtonMapping.h"
 #include "ListSwipeGesture.h"
 #include "components/HintBandGeometry.h"
+#include "components/KeyFocus.h"
 #include "util/ReleaseGate.h"
 
 class GfxRenderer;
@@ -33,7 +34,10 @@ class MappedInputManager {
     // pass's edges to decide whether the release it is waiting for has gone by.
     releaseGate.tick(buttonMask(&HalGPIO::isPressed), buttonMask(&HalGPIO::wasReleased));
     listScrollPolled_ = false;
+    if (buttonMask(&HalGPIO::wasPressed) != 0) key_focus::keyPressedHere() = true;
   }
+  // See components/KeyFocus.h.
+  bool showsSelection() const { return key_focus::showsSelection(gpio.hasTouch()); }
 
   // Swallow the release of whatever button is held right now. A screen that acted on the
   // press and opened another screen calls this, so the lift cannot act again on what it

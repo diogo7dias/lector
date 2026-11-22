@@ -41,6 +41,24 @@ inline Arrows forVisibleRange(const int itemCount, const int firstVisible, const
   return Arrows{firstVisible > 0, lastVisible < itemCount - 1};
 }
 
+// Which screen of rows the window shows, for the "2/5" beside the battery: the chevrons
+// say there is more, this says where. pages is 0 when the whole list fits.
+struct Page {
+  int page;
+  int pages;
+};
+
+inline Page pageOf(const int itemCount, const int windowStart, const int visibleRows) {
+  if (itemCount <= 0 || visibleRows <= 0 || itemCount <= visibleRows) return Page{0, 0};
+  const int pages = (itemCount + visibleRows - 1) / visibleRows;
+  const int start = windowStart < 0 ? 0 : windowStart;
+  // The last page only once the last row is on screen; before that, the page the top row
+  // falls on, so a window one row in still reads 1.
+  if (start + visibleRows >= itemCount) return Page{pages, pages};
+  const int page = start / visibleRows + 1;
+  return Page{page < pages ? page : pages - 1, pages};
+}
+
 // The band the chevrons sit in: the rows grown into the vertical spacing above and
 // below them, never further than a chevron and its gap need. Any {x, y, width, height}
 // rect type.

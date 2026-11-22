@@ -4,6 +4,7 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <cstdio>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -35,7 +36,7 @@ void UiListActivity::screenTrampoline(UiScreen& screen, void* user) {
   // The body is reserved from the same bands the chrome paints, so a screen
   // cannot draw a header the list then runs under. A screen wanting a different
   // band still calls setContentMargin itself; this only sets the default.
-  const ListChrome listChrome = self->chrome();
+  const ListChrome listChrome = self->paintedChrome();
   const list_chrome::Bands bands = listChromeBands(self->renderer, listChrome);
   screen.setContentMargin(fui::Insets{static_cast<int16_t>(bands.contentTop),
                                       static_cast<int16_t>(listChrome.sideInset),
@@ -103,6 +104,17 @@ void UiListActivity::moveSelectionTo(const int index) {
   requestUpdate();
 }
 
+void UiListActivity::scrollPage(const int direction) {
+  bool moved = false;
+  {
+    // Same nav-vs-render race as moveSelectionTo: the render task writes
+    // pageRows/top mid-build, so read and mutate under one lock.
+    RenderLock lock(*this);
+    moved = nav.scrollBy(direction * nav.pageRows(), listCount());
+  }
+  if (moved) requestUpdate();
+}
+
 void UiListActivity::loop() {
   if (handleCustomInput() || handleButtons() || routeListTouch()) return;
 
@@ -110,17 +122,18 @@ void UiListActivity::loop() {
   // off-screen) and button navigation pulls the view back to it.
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
-    bool moved = false;
-    {
-      // Same nav-vs-render race as moveSelectionTo: the render task writes
-      // pageRows/top mid-build, so read and mutate under one lock.
-      RenderLock lock(*this);
-      auto& n = nav;
-      const int delta = swipe == MappedInputManager::SwipeDir::Up ? n.pageRows() : -n.pageRows();
-      moved = n.scrollBy(delta, listCount());
-    }
-    if (moved) requestUpdate();
+    scrollPage(swipe == MappedInputManager::SwipeDir::Up ? 1 : -1);
     return;
+  }
+  // The touch band's page pair (ListChrome.cpp) scrolls the way a swipe does. Left and
+  // Right reach a touch board only from that band.
+  if (mappedInput.hasTouch()) {
+    const bool up = mappedInput.wasPressed(MappedInputManager::Button::Left);
+    if (up || mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+      mappedInput.suppressHeldButtonRelease();
+      scrollPage(up ? -1 : 1);
+      return;
+    }
   }
 
   navigateButtons();
@@ -156,6 +169,7 @@ void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, c
   const fui::Rect body = screen.body();
   listBand = Rect{body.x, body.y, body.width, body.height};
   nav.syncToProps(body, rowHeight, screen.theme().listRowGap, listCount(), props);
+  if (!mappedInput.showsSelection()) props.selectedIndex = -1;
 }
 
 void UiListActivity::drawScrollArrows() {
@@ -176,10 +190,22 @@ ListChrome UiListActivity::chrome() const {
   return chrome;
 }
 
+ListChrome UiListActivity::paintedChrome() const {
+  ListChrome painted = chrome();
+  const list_scrollbar::Page page = list_scrollbar::pageOf(listCount(), nav.top, nav.pageRows());
+  painted.scrolls = page.pages > 0;
+  if (painted.scrolls && painted.headerRight == nullptr) {
+    snprintf(pageText, sizeof(pageText), "%d/%d", page.page, page.pages);
+    painted.headerRight = pageText;
+  }
+  return painted;
+}
+
 void UiListActivity::render(RenderLock&&) {
   renderer.clearScreen();
-  drawListChromeTop(renderer, chrome());
+  // The header after the rows: the page counter in it reads the viewport this build settled.
   renderUi();
+  drawListChromeTop(renderer, paintedChrome());
   // Wrapped labels grow rows, so fewer rows can fit than the fixed-height
   // estimate ListNav plans with. list() reports the real layout back
   // (ListNav::onListRendered); when the selection landed past the drawn rows
@@ -187,11 +213,11 @@ void UiListActivity::render(RenderLock&&) {
   // strictly advances toward the selection each pass.
   for (int pass = 0; nav.consumeRebuildNeeded() && pass < 8; ++pass) {
     renderer.clearScreen();
-    drawListChromeTop(renderer, chrome());
     renderUi();
+    drawListChromeTop(renderer, paintedChrome());
   }
   drawScrollArrows();
-  drawListChromeBottom(renderer, mappedInput, chrome());
+  drawListChromeBottom(renderer, mappedInput, paintedChrome());
   if (drawOverlay()) return;
   // A popup or banner painted over this screen leaves its band on the panel, so the
   // first paint after it leaves is a clean one. drawOverlay() returning above means
