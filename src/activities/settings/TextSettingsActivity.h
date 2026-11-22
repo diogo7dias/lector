@@ -101,6 +101,7 @@ class TextSettingsActivity final : public UiGridActivity {
   Row editRow_ = Row::Count;
   uint8_t editStart_ = 0;  // the value when it opened: an unchanged value costs no write
   bool stripDragging_ = false;
+  bool stripContact_ = false;     // the live contact began on the strip
   adjust_strip::Layout strip_{};  // as last painted, so a touch hits what is on screen
   bool editing() const { return editRow_ != Row::Count; }
   int previewHeight() const;

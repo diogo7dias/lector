@@ -20,6 +20,7 @@ void TextSettingsActivity::openEdit(const Row row) {
   editRow_ = row;
   editStart_ = *field;
   stripDragging_ = false;
+  stripContact_ = false;
   strip_ = {};  // laid out by the first paint; nothing to hit before it
   // The list moves down under the strip; a finger still on the row that opened it must not
   // land on the strip's track now sitting where that row was.
@@ -76,6 +77,9 @@ bool TextSettingsActivity::handleEditInput() {
 
 // Same contact model as the light panel: minus and plus act once per press, the track
 // follows the finger for the whole contact once a drag starts on it, wherever it wanders.
+// A contact first seen on the strip belongs to it until it lifts, lift pass included: the
+// base reads Back before this runs, and a quick flick along the track from its left end is
+// also the Back gesture, so the pass it ends on is swallowed rather than handed back.
 bool TextSettingsActivity::handleStripTouch() {
   const SettingInfo* info = settingOf(editRow_);
   if (!info || !mappedInput.hasTouch()) return false;
@@ -84,8 +88,10 @@ bool TextSettingsActivity::handleStripTouch() {
   const bool down = mappedInput.wasScreenTouchDown(x, y);
   const bool held = !down && mappedInput.isScreenTouchHeld(x, y);
   if (!down && !held) {
+    const bool ended = stripContact_;
+    stripContact_ = false;
     stripDragging_ = false;
-    return false;
+    return ended;
   }
   const row_slider::Bar bar{strip_.track.x, strip_.track.y, strip_.track.width, strip_.track.height};
   const auto dragTo = [&](const int at) {
@@ -101,13 +107,21 @@ bool TextSettingsActivity::handleStripTouch() {
     dragTo(liveX);
     return true;
   }
-  if (!down) return false;
-  switch (adjust_strip::hitTest(strip_, x, y)) {
+  const adjust_strip::Hit hit = adjust_strip::hitTest(strip_, x, y);
+  if (!stripContact_) {
+    if (hit == adjust_strip::Hit::None) return false;
+    stripContact_ = true;
+  } else if (!down) {
+    return true;
+  }
+  switch (hit) {
     case adjust_strip::Hit::Minus:
+      if (!down) return true;  // a finger sliding onto a stepper does not press it
       mappedInput.spendTouchContact();
       stepEdit(-stepOf(editRow_, false));
       return true;
     case adjust_strip::Hit::Plus:
+      if (!down) return true;
       mappedInput.spendTouchContact();
       stepEdit(stepOf(editRow_, false));
       return true;

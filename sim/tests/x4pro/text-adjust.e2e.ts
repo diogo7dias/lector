@@ -45,6 +45,22 @@ test('line spacing adjusts in place under the preview', async ({ app, screen }) 
   await tapOnce(370, 456);
   await tapOnce(370, 456);
   await expect.poll(value, { timeout: 30_000 }).toBe(before.value);
+
+  // A slow drag along the track carries the value with the finger, and a quick flick from
+  // the track's left end (the Back gesture's edge) moves it too rather than closing the strip.
+  const swipe = (query: string) =>
+    fetch(`${app.baseUrl}/swipe/40/456/300/456${query}`, { method: 'POST' }).then(() =>
+      expect(busy).toHaveText('no', { timeout: 30_000 }),
+    );
+  await swipe('?ms=1500&hold=300');
+  await expect.poll(value, { timeout: 30_000 }).not.toBe(before.value);
+  await swipe('');
+  expect(await stepper(), 'the flick left the strip open').toBeGreaterThan(0);
+  // A tap on the track jumps there: x 68 of the 20..322 track is 95, the default 95%
+  // (80 to 175), so the suites after this one read the book they expect.
+  await tapOnce(68, 456);
+  await expect.poll(value, { timeout: 30_000 }).toBe(before.value);
+
   await tapOnce(60, 781); // Done
   await expect.poll(stepper, { timeout: 30_000 }).toBe(0);
   await expect(activity).toHaveText('TextSettings');

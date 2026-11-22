@@ -1345,14 +1345,13 @@ Session**, **Pages to Paragraph**. Alongside them:
   before this firmware did.
 - **Device Name** — how this reader introduces itself to another during Nearby Sync. Left
   empty, it falls back to a generated `Lector-XXXX` name derived from the MAC address.
-- **Maintenance** — the rows you need a few times a year, one level down:
-  - **Clean Up Storage** — removes cached data for books that are no longer on the card.
-    Books keep their progress.
-  - **Clear Reading Cache**.
-  - **Check for updates**, **SD Card Firmware Update** and **Install Other Firmware** — see
-    [section 13](#13-updating-the-firmware).
-
-  Back from Maintenance returns to the Maintenance row in System.
+- **Maintenance** — the rows you need a few times a year, one level down. Back from it
+  returns to the Maintenance row.
+- **Maintenance > Clean Up Storage** — removes cached data for books that are no longer on
+  the card. Books keep their progress.
+- **Maintenance > Clear Reading Cache**.
+- **Maintenance > Check for updates**, **SD Card Firmware Update** and **Install Other
+  Firmware** — see [section 13](#13-updating-the-firmware).
 - **What's New** — the notes for this release. After an update they also open once by
   themselves, the first time Home appears; **OK** or Back closes them. A fresh install skips
   that.
