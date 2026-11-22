@@ -25,7 +25,7 @@ test('holds a word, drags across lines, saves the passage as a quote', async ({ 
   // the contents page. A fresh open starts on the cover: turn one page to the contents.
   const box = await panel.boundingBox();
   if (!box) throw new Error('no panel on the page');
-  const resume = (await ink(230, 60)) > 5_000;
+  const resume = (await ink(230, 60)) > 500; // blank on a fresh card
   if (resume) {
     await tapOnce(240, 259); // the book's row on Home
   } else {

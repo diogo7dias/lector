@@ -26,7 +26,7 @@ test('night mode, frontlight and go home from the in-book menu', async ({ app, s
 
   // The suite shares one card: an earlier test may have filed the book into Recents (Home
   // then lists it as its first row, blank on a fresh card).
-  if ((await ink(0, 200, 480, 60)) > 5_000) {
+  if ((await ink(0, 200, 480, 60)) > 500) { // blank on a fresh card
     await tapOnce(240, 259); // the book's row on Home
   } else {
     await tapOnce(240, 517); // Browse Files

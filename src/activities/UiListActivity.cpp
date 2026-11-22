@@ -169,7 +169,12 @@ void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, c
   const fui::Rect body = screen.body();
   listBand = Rect{body.x, body.y, body.width, body.height};
   nav.syncToProps(body, rowHeight, screen.theme().listRowGap, listCount(), props);
-  if (!mappedInput.showsSelection()) props.selectedIndex = -1;
+  if (!mappedInput.showsSelection()) {
+    // Hidden selection: no row is painted selected, and the list's after-layout follow
+    // check must not chase a row it was told is not there (it would scroll the list).
+    props.selectedIndex = -1;
+    nav.followPending = false;
+  }
 }
 
 void UiListActivity::drawScrollArrows() {

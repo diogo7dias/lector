@@ -42,7 +42,8 @@ test('Quick Lock ignores input until its own gesture fires again', async ({ app,
   await expect(frames).not.toHaveText(locked ?? '', { timeout: 30_000 });
   await expect(busy).toHaveText('no', { timeout: 30_000 });
   const unlocked = await frames.textContent();
-  await panel.tap({ position: { x: 100, y: 368 } });
+  // A side key shows the black row: a repaint that opens nothing.
+  await screen.getByRole('button', { name: 'Down' }).click();
   await expect(frames, 'input answers again').not.toHaveText(unlocked ?? '', { timeout: 30_000 });
   await expect(busy).toHaveText('no', { timeout: 30_000 });
 

@@ -41,7 +41,7 @@ test('a time zone picked on its screen shows on its row', async ({ app, screen }
   expect(await value(), 'UTC is the default and fits the row').toBeGreaterThan(0);
   await openTimeZone(); // opens on UTC
   await press('Down', 2); // London / Dublin / Lisbon, then Berlin / Paris / Madrid / Rome
-  await tapOnce(100, 700);
+  await tapOnce(180, 781); // the band's Select, shown once a side key picked a row
   await expect.poll(value, { timeout: 30_000 }).toBe(0);
 
   // Out of Settings and back in: the row is read from the saved setting, not from the screen.
@@ -53,7 +53,7 @@ test('a time zone picked on its screen shows on its row', async ({ app, screen }
   expect(await value(), 'the zone stayed after Settings was left').toBe(0);
   await openTimeZone(); // opens on Berlin
   await press('Up', 2);
-  await tapOnce(100, 608);
+  await tapOnce(180, 781); // Select: back on UTC
   await expect.poll(value, { timeout: 30_000 }).toBeGreaterThan(0);
 
   // Leave on Home, where the suites after this one expect to start.

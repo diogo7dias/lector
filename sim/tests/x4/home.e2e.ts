@@ -54,9 +54,9 @@ test('the Clear Reading Cache warning left idle drops to low power', async ({ ap
     })
     .toBe(true);
 
-  // The popup opens on Cancel, so nothing is cleared. Settings resumes underneath without
-  // a new "Entering activity" line: Home is the next name the log gives.
-  await press('Confirm');
+  // Back answers Cancel, so nothing is cleared. Settings resumes underneath without a new
+  // "Entering activity" line: Home is the next name the log gives.
+  await press('Back');
   await press('Back'); // System list to the Settings tabs
   await press('Back');
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
