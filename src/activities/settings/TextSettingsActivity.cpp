@@ -578,8 +578,6 @@ ListChrome TextSettingsActivity::chrome() const {
   // Back closes the screen: a number is edited on its own screen now, so nothing
   // here is ever mid-edit.
   chrome.confirmHint = confirmLabel;
-  chrome.thirdHint = tr(STR_DIR_UP);
-  chrome.fourthHint = tr(STR_DIR_DOWN);
   return chrome;
 }
 

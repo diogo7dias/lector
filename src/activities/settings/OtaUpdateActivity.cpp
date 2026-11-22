@@ -99,6 +99,7 @@ UiStatusActivity::StatusView OtaUpdateActivity::statusView() const {
       // draw a pair of labels that no touch was ever routed to.
       view.cancelLabel = tr(STR_CANCEL);
       view.acceptLabel = tr(STR_UPDATE);
+      view.acceptCannotUndo = true;
       view.backHint = tr(STR_CANCEL);
       view.confirmHint = tr(STR_UPDATE);
       break;
@@ -117,6 +118,7 @@ UiStatusActivity::StatusView OtaUpdateActivity::statusView() const {
       view.lines = {tr(STR_NO_UPDATE), newVersionLine.c_str(), nullptr, nullptr};
       view.cancelLabel = tr(STR_BACK);
       view.acceptLabel = tr(STR_INSTALL_ANYWAY);
+      view.acceptCannotUndo = true;
       view.confirmHint = tr(STR_INSTALL_ANYWAY);
       break;
     case FAILED:

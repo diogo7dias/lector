@@ -114,14 +114,6 @@ TEST(TwoTapGate, EveryClearConditionIsWiredToTheGate) {
       << "a physical key (or the hint band standing in for one) no longer ends the arm";
   EXPECT_TRUE(contains(host, "} else if (!result.event) {")) << "a tap on empty space no longer ends the arm";
   EXPECT_TRUE(contains(host, "twoTapGate.clear();"));
-
-  const std::string input = readSource(MAPPED_INPUT_SOURCE);
-  EXPECT_TRUE(contains(input, "if (gpio.wasAnyPressed()) clearRowTapArm();"));
-  EXPECT_TRUE(contains(input, "clearRowTapArm();  // a tap on empty space"));
-  // Scrolling: the list scroll swipe and the plain swipe both end it.
-  EXPECT_GE(input.find("clearRowTapArm();", input.find("MappedInputManager::wasListScrollSwipe")), 0u);
-  EXPECT_TRUE(contains(readSource(ACTIVITY_SOURCE), "mappedInput.clearRowTapArm();"))
-      << "leaving a screen no longer ends the arm";
 }
 
 // --- a board without touch is untouched -------------------------------------
@@ -149,11 +141,6 @@ TEST(TwoTapGate, NoActionIsNotAControlAndNeverArms) {
   EXPECT_FALSE(gate.armed());
 }
 
-TEST(TwoTapGate, NoRowIsArmedUntilOneIs) {
-  two_tap::armedRow() = two_tap::kNoRow;
-  EXPECT_EQ(two_tap::armedRow(), -1);
-}
-
 // --- one gate per routing point, not one per screen -------------------------
 
 TEST(TwoTapGate, TheGateSitsOnTheSharedFreeInkUiDispatchAndNotInScreens) {
@@ -166,24 +153,15 @@ TEST(TwoTapGate, TheGateSitsOnTheSharedFreeInkUiDispatchAndNotInScreens) {
 
 TEST(TwoTapGate, DragsAndLongPressesAreNeverArmed) {
   const std::string host = readSource(UI_APP_HOST_SOURCE);
-  EXPECT_TRUE(contains(host, "event.dragPermille < 0 && !event.longPress && !host_->twoTapExempt(event.action)"));
+  EXPECT_TRUE(contains(host, "event.dragPermille < 0 && !event.longPress && host_->needsConfirmTap(event)"));
 }
 
-// Every exemption is stated at the site that registers the action, with its reason.
-TEST(TwoTapGate, EveryExemptionIsDeclaredAtItsCallSite) {
-  const std::string status = readSource(STATUS_ACTIVITY_SOURCE);
-  EXPECT_TRUE(contains(status, "exemptFromTwoTap(ACTION_SLIDER);"));
-  EXPECT_TRUE(contains(status, "EXEMPT from two-tap confirmation"))
-      << "the slider exemption no longer says why it is exempt";
-}
-
-// The three surfaces that route their own contacts instead of going through UiAppHost
-// are exempt by code path; each says so at the routing function, so the exemption stays
-// a decision rather than something nobody noticed.
-TEST(TwoTapGate, TheSelfRoutingSurfacesSayWhyTheyAreExempt) {
-  for (const char* path : {KEYBOARD_SOURCE, OPTION_POPUP_HEADER, LIGHT_PANEL_HEADER}) {
-    EXPECT_TRUE(contains(readSource(path), "EXEMPT from two-tap confirmation")) << path;
-  }
+// A tap opens. Only a control a screen names as one that cannot be undone arms first,
+// so the default answer of the host is no.
+TEST(TwoTapGate, OnlyNamedControlsAskForAConfirmingTap) {
+  const std::string hostHeader = readSource(UI_APP_HOST_HEADER);
+  EXPECT_TRUE(
+      contains(hostHeader, "virtual bool needsConfirmTap(const freeink::ui::ActionEvent&) const { return false; }"));
 }
 
 // --- the armed control is outlined, never filled ----------------------------
@@ -194,9 +172,4 @@ TEST(TwoTapGate, TheArmedControlIsDrawnAsDashedTwoPixelLines) {
   EXPECT_TRUE(contains(tokens, "style.borderDashed = true;"));
   EXPECT_TRUE(contains(tokens, "outlineArmedControl(tokens.listRow.active"));
   EXPECT_TRUE(contains(tokens, "outlineArmedControl(tokens.button.active"));
-
-  // The self-painted row lists share one painter, so they cannot drift from it.
-  const std::string theme = readSource(BASE_THEME_SOURCE);
-  EXPECT_TRUE(contains(theme, "if (armed) {"));
-  EXPECT_TRUE(contains(theme, "renderer.fillRect(rect.x + at, rect.y, run, kRule);"));
 }

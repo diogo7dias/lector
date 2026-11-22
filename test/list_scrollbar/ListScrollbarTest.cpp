@@ -84,3 +84,25 @@ TEST(ListScrollbar, OutsideBandReachesIntoSpacing) {
 }
 
 }  // namespace
+
+// The "2/5" beside the battery: which screen of rows is showing.
+TEST(ListScrollbarPage, AListThatFitsHasNoPages) {
+  EXPECT_EQ(list_scrollbar::pageOf(10, 0, 10).pages, 0);
+  EXPECT_EQ(list_scrollbar::pageOf(0, 0, 10).pages, 0);
+}
+
+TEST(ListScrollbarPage, TheLastPageOnlyOnceTheLastRowShows) {
+  // 24 rows, 22 on screen: one row in is still the first page, the end is the second.
+  EXPECT_EQ(list_scrollbar::pageOf(24, 0, 22).page, 1);
+  EXPECT_EQ(list_scrollbar::pageOf(24, 1, 22).page, 1);
+  EXPECT_EQ(list_scrollbar::pageOf(24, 2, 22).page, 2);
+  EXPECT_EQ(list_scrollbar::pageOf(24, 2, 22).pages, 2);
+}
+
+TEST(ListScrollbarPage, MiddlePagesCountFromTheTopRow) {
+  EXPECT_EQ(list_scrollbar::pageOf(100, 0, 10).page, 1);
+  EXPECT_EQ(list_scrollbar::pageOf(100, 10, 10).page, 2);
+  EXPECT_EQ(list_scrollbar::pageOf(100, 45, 10).page, 5);
+  EXPECT_EQ(list_scrollbar::pageOf(100, 90, 10).page, 10);
+  EXPECT_EQ(list_scrollbar::pageOf(100, 89, 10).page, 9);
+}

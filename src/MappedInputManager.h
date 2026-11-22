@@ -5,7 +5,7 @@
 #include "ButtonMapping.h"
 #include "ListSwipeGesture.h"
 #include "components/HintBandGeometry.h"
-#include "components/TwoTapGate.h"
+#include "components/KeyFocus.h"
 #include "util/ReleaseGate.h"
 
 class GfxRenderer;
@@ -34,7 +34,10 @@ class MappedInputManager {
     // pass's edges to decide whether the release it is waiting for has gone by.
     releaseGate.tick(buttonMask(&HalGPIO::isPressed), buttonMask(&HalGPIO::wasReleased));
     listScrollPolled_ = false;
+    if (buttonMask(&HalGPIO::wasPressed) != 0) key_focus::keyPressedHere() = true;
   }
+  // See components/KeyFocus.h.
+  bool showsSelection() const { return key_focus::showsSelection(gpio.hasTouch()); }
 
   // Swallow the release of whatever button is held right now. A screen that acted on the
   // press and opened another screen calls this, so the lift cannot act again on what it
@@ -58,19 +61,12 @@ class MappedInputManager {
   bool hasTouch() const;
   // The front-button hardware id a tap on the hint band stands for, or -1. Non-consuming.
   int tappedHintHardware() const;
-  // The list item a tap landed on, out of the rows the last list draw painted, in two
-  // steps on a board with touch (see components/TwoTapGate.h). Armed = the first tap on a
-  // row: the caller moves its selection there and repaints, and runs nothing. Activate =
-  // a second tap on that same row. None = the tap was somewhere else, nothing tappable
-  // was drawn, or the board has no touch panel.
-  //
-  // This is the routing point for the screens that paint their own rows instead of going
-  // through FreeInkUI (home, the file browser, the end-of-book suggestions); every
-  // FreeInkUI screen is gated in UiAppHost instead.
-  enum class RowTap : uint8_t { None, Armed, Activate };
-  RowTap wasRowTapped(int& item) const;
-  // Drops the armed row: a screen change, a scroll, a physical key, a tap on nothing.
-  void clearRowTapArm() const;
+  // True when a tap landed on one of the rows the last list draw painted; `item` is that
+  // row. False when the tap was somewhere else, nothing tappable was drawn, or the board
+  // has no touch panel. The routing point for the screens that paint their own rows
+  // instead of going through FreeInkUI (home, the file browser, the end-of-book
+  // suggestions). None of them holds an action that cannot be undone, so a tap opens.
+  bool wasRowTapped(int& item) const;
   // True when a logical point sits in the button-hint band. A tap there belongs
   // to the button painted under it, so a screen that also routes taps of its own
   // (every FreeInkUI screen) has to leave it alone, or the row under the band
@@ -261,9 +257,6 @@ class MappedInputManager {
   mutable bool touchTapValid = false;
   mutable float touchTapX = 0.0f;
   mutable float touchTapY = 0.0f;
-
-  // Two-tap confirmation for the self-painted row lists. One armed row; no allocation.
-  mutable two_tap::Gate rowTapGate;
 
   mutable bool touchHeldOverrideValid = false;
   mutable unsigned long touchHeldOverrideMs = 0;

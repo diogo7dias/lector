@@ -67,7 +67,7 @@ void UiStatusActivity::buildChoiceBand(UiScreen& screen, const StatusView& view)
   fui::ListProps props;
   props.items = choiceItems_.data();
   props.count = static_cast<uint16_t>(count);
-  props.selectedIndex = static_cast<int16_t>(choiceIndex_);
+  props.selectedIndex = mappedInput.showsSelection() ? static_cast<int16_t>(choiceIndex_) : -1;
   props.topIndex = static_cast<uint16_t>(top);
   props.action = ACTION_CHOICE;
   props.rowHeight = rowHeight;
@@ -113,6 +113,10 @@ void UiStatusActivity::buildList(UiScreen& screen, const StatusView& view) {
   const fui::Rect body = screen.body();
   listBand_ = Rect{body.x, body.y, body.width, body.height};
   listNav_.syncToProps(body, rowHeight, theme.listRowGap, listCount_, props);
+  if (!mappedInput.showsSelection()) {
+    props.selectedIndex = -1;  // see UiListActivity::syncListViewport
+    listNav_.followPending = false;
+  }
   screen.list(props);
 }
 

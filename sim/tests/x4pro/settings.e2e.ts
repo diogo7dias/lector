@@ -6,11 +6,9 @@ test('a toggled setting survives a reboot', async ({ app, screen }) => {
   const activity = screen.getByTestId('activity');
   const busy = screen.getByTestId('busy');
   const panel = screen.getByRole('img', { name: 'Device screen' });
-  const tapTwice = async (x: number, y: number) => {
-    for (let i = 0; i < 2; i++) {
-      await panel.tap({ position: { x, y } });
-      await expect(busy).toHaveText('no', { timeout: 30_000 });
-    }
+  const tapOnce = async (x: number, y: number) => {
+    await panel.tap({ position: { x, y } });
+    await expect(busy).toHaveText('no', { timeout: 30_000 });
   };
   // The value column of "Show Wallpaper Position" in Settings > Display: OFF or ON.
   const value = async () => (await (await fetch(`${app.baseUrl}/ink/400/403/76/22`)).json()).ink as number;
@@ -20,16 +18,16 @@ test('a toggled setting survives a reboot', async ({ app, screen }) => {
       await screen.getByRole('button', { name: 'Home' }).click();
       await expect(activity).toHaveText('Home', { timeout: 30_000 });
     }
-    await tapTwice(240, 729); // Settings
+    await tapOnce(240, 729); // Settings
     await expect(activity).toHaveText('Settings', { timeout: 30_000 });
-    await tapTwice(100, 84); // Display
+    await tapOnce(100, 84); // Display
   };
 
   await openDisplay();
   const log = await (await fetch(`${app.baseUrl}/log`)).text();
   expect(log, 'every Settings row is in a group map').not.toContain('not in a group map');
   const off = await value();
-  await tapTwice(150, 413); // Show Wallpaper Position
+  await tapOnce(150, 413); // Show Wallpaper Position
   await expect.poll(value, { timeout: 30_000 }).not.toBe(off);
   const on = await value();
 

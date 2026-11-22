@@ -154,17 +154,10 @@ void HomeActivity::loop() {
     }
   };
 
-  // A tap picks the row it landed on; on a board with touch it takes a second tap on
-  // that same row to open it (components/TwoTapGate.h). The first tap only moves the
-  // selection under the outline the row is drawn with while it is armed.
+  // A tap opens the row it landed on.
   int tappedItem = 0;
-  const auto rowTap = mappedInput.wasRowTapped(tappedItem);
-  if (rowTap != MappedInputManager::RowTap::None && tappedItem >= 0 && tappedItem < menuCount) {
+  if (mappedInput.wasRowTapped(tappedItem) && tappedItem >= 0 && tappedItem < menuCount) {
     selectorIndex = tappedItem;
-    if (rowTap == MappedInputManager::RowTap::Armed) {
-      requestUpdate();
-      return;
-    }
     activateSelection();
     return;
   }
@@ -308,7 +301,10 @@ void HomeActivity::render(RenderLock&&) {
       break;
   }
 
-  const auto labels = mappedInput.mapLabels(backLabel, tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  // Same rule as every list band (ListChrome.cpp): on a touch board Select names an action
+  // on the black row only once a side key has shown one.
+  const char* select = mappedInput.showsSelection() ? tr(STR_SELECT) : "";
+  const auto labels = mappedInput.mapLabels(backLabel, select, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (cleanInitialRefresh) {

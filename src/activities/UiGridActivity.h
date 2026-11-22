@@ -69,6 +69,8 @@ class UiGridActivity : public Activity, protected UiAppHost {
   bool usesWrappedRows() const;
   int rowHeightFor(int index) const;
   wrapped_list::Window keysOnlyWindow() const;
+  // One screen of rows on (1) or back (-1): the touch band's page pair.
+  void pageBy(int direction);
   int selected() const { return selected_; }
   void setSelected(int index);
   // Up and Down move a whole grid row so the column is kept; Left and Right move
@@ -93,4 +95,7 @@ class UiGridActivity : public Activity, protected UiAppHost {
   // What the last build laid out, for the chevrons render() paints after the app.
   Rect scrollArrowBand_{};
   list_scrollbar::Arrows scrollArrows_{false, false};
+  // Which screen of rows the last build showed, for the counter beside the battery.
+  list_scrollbar::Page scrollPage_{0, 0};
+  char pageText_[12] = {};
 };

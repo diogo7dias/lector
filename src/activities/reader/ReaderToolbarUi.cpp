@@ -35,14 +35,6 @@ ReaderToolbarUi::ReaderToolbarUi(GfxRenderer& renderer) : UiAppHost(renderer) {}
 void ReaderToolbarUi::begin() {
   resetUi();
   pending_ = Routed{};
-  armedTool_ = -1;
-  setArmHook(&ReaderToolbarUi::onArm, this);
-  // Only the tiles carry a second tap on a touch screen (see TwoTapGate.h): a tap on the
-  // page above the sheet, a chapter step and a drag along the track each act at once.
-  exemptFromTwoTap(ACTION_DISMISS);
-  exemptFromTwoTap(ACTION_PREV);
-  exemptFromTwoTap(ACTION_NEXT);
-  exemptFromTwoTap(ACTION_SCRUB);
   for (fui::ActionId id = ACTION_DISMISS; id <= ACTION_SCRUB; ++id) {
     app.on(id, &ReaderToolbarUi::onAction, this);
   }
@@ -70,10 +62,6 @@ void ReaderToolbarUi::onAction(const fui::ActionEvent& event, void* user) {
   // A handled action repaints through the reader's own path, not through app.invalidate():
   // the page underneath is the reader's to draw.
   self->app.clearTapFlash();
-}
-
-void ReaderToolbarUi::onArm(const fui::ActionEvent& event, void* user) {
-  if (event.action == ACTION_TOOL) static_cast<ReaderToolbarUi*>(user)->armedTool_ = event.value;
 }
 
 void ReaderToolbarUi::screenFn(UiScreen& screen, void* user) {

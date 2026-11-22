@@ -14,11 +14,9 @@ test('night mode, frontlight and go home from the in-book menu', async ({ app, s
   }
 
   const panel = screen.getByRole('img', { name: 'Device screen' });
-  const tapTwice = async (x: number, y: number) => {
-    for (let i = 0; i < 2; i++) {
-      await panel.tap({ position: { x, y } });
-      await expect(busy).toHaveText('no', { timeout: 30_000 });
-    }
+  const tapOnce = async (x: number, y: number) => {
+    await panel.tap({ position: { x, y } });
+    await expect(busy).toHaveText('no', { timeout: 30_000 });
   };
   const ink = async (x: number, y: number, w: number, h: number) =>
     (await (await fetch(`${app.baseUrl}/ink/${x}/${y}/${w}/${h}`)).json()).ink;
@@ -28,12 +26,12 @@ test('night mode, frontlight and go home from the in-book menu', async ({ app, s
 
   // The suite shares one card: an earlier test may have filed the book into Recents (Home
   // then lists it as its first row, blank on a fresh card).
-  if ((await ink(0, 200, 480, 60)) > 5_000) {
-    await tapTwice(240, 259); // the book's row on Home
+  if ((await ink(0, 200, 480, 60)) > 500) { // blank on a fresh card
+    await tapOnce(240, 259); // the book's row on Home
   } else {
-    await tapTwice(240, 517); // Browse Files
+    await tapOnce(240, 517); // Browse Files
     await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
-    await tapTwice(150, 279); // test_kerning_ligature.epub
+    await tapOnce(150, 279); // test_kerning_ligature.epub
   }
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
   await expect(busy).toHaveText('no', { timeout: 30_000 });
@@ -43,7 +41,7 @@ test('night mode, frontlight and go home from the in-book menu', async ({ app, s
   const openLook = async () => {
     await panel.tap({ position: { x: 240, y: 400 } });
     await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
-    await tapTwice(100, 143);
+    await tapOnce(100, 143);
   };
   const closeMenu = async () => {
     for (let i = 0; i < 2; i++) {
@@ -56,8 +54,8 @@ test('night mode, frontlight and go home from the in-book menu', async ({ app, s
   await openLook();
   const lightOff = await ink(380, 650, 100, 30);
   // The row just tapped is the highlighted one, so each value is compared on a row that is not.
-  await tapTwice(100, 663);
-  await tapTwice(100, 623);
+  await tapOnce(100, 663);
+  await tapOnce(100, 623);
   expect(await ink(380, 650, 100, 30), 'the Frontlight value changed in place').not.toBe(lightOff);
   await closeMenu();
   await expect.poll(async () => (await body()) === day, { timeout: 30_000 }).toBe(false);
@@ -71,8 +69,8 @@ test('night mode, frontlight and go home from the in-book menu', async ({ app, s
 
   // Both back off: the same page as before.
   await openLook();
-  await tapTwice(100, 663);
-  await tapTwice(100, 623);
+  await tapOnce(100, 663);
+  await tapOnce(100, 623);
   expect(await ink(380, 650, 100, 30), 'Frontlight reads OFF again').toBe(lightOff);
   await closeMenu();
   await expect.poll(body, { timeout: 30_000 }).toBe(day);
@@ -80,7 +78,7 @@ test('night mode, frontlight and go home from the in-book menu', async ({ app, s
   // Device is the fourth heading; Go Home is its last row.
   await panel.tap({ position: { x: 240, y: 400 } });
   await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
-  await tapTwice(100, 263);
-  await tapTwice(100, 543);
+  await tapOnce(100, 263);
+  await tapOnce(100, 543);
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
 });

@@ -149,6 +149,31 @@ void UiGridActivity::setSelected(const int index) {
   requestUpdate();
 }
 
+void UiGridActivity::pageBy(const int direction) {
+  const int count = cellCount();
+  if (count == 0) return;
+  if (!usesWrappedRows()) {
+    moveSelection(direction * gridLayout().visibleRows, 0);
+    return;
+  }
+  {
+    // A wrapped window runs forward from its offset and walks back from a selection below
+    // it. Down: the selection goes to the last row of the next page, so the window ends
+    // there and stays full at the end of the list. Up: the window starts a page back.
+    RenderLock lock(*this);
+    const wrapped_list::Window win = keysOnlyWindow();
+    const int step = std::max(1, win.count);
+    if (direction > 0) {
+      selected_ = std::min(count - 1, win.first + step * 2 - 1);
+      scrollRow_ = keysOnlyWindow().first;
+    } else {
+      selected_ = std::max(0, win.first - step);
+      scrollRow_ = selected_;
+    }
+  }
+  requestUpdate();
+}
+
 void UiGridActivity::moveSelection(const int deltaRows, const int deltaCells) {
   const int count = cellCount();
   if (count == 0) return;
@@ -188,6 +213,7 @@ void UiGridActivity::buildScreen(UiScreen& screen) {
     // Chevrons in the spacing above and below the rows, as every list draws them.
     scrollArrowBand_ = list_scrollbar::outsideBand(pane, UITheme::getInstance().getMetrics().verticalSpacing);
     scrollArrows_ = list_scrollbar::forWindow(count, win.first, win.count);
+    scrollPage_ = list_scrollbar::pageOf(count, win.first, win.count);
     return;
   }
   const settings_grid::Layout layout = gridLayout();
@@ -198,6 +224,7 @@ void UiGridActivity::buildScreen(UiScreen& screen) {
   }
   scrollArrowBand_ = list_scrollbar::outsideBand(pane, UITheme::getInstance().getMetrics().verticalSpacing);
   scrollArrows_ = list_scrollbar::forWindow(layout.totalRows, layout.scrollRow, layout.visibleRows);
+  scrollPage_ = list_scrollbar::pageOf(layout.totalRows, layout.scrollRow, layout.visibleRows);
 }
 
 // One cell: a box that answers to a tap, its name in the small face over its
@@ -207,7 +234,7 @@ void UiGridActivity::buildScreen(UiScreen& screen) {
 void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings_grid::Rect& rect) {
   const auto& theme = screen.theme();
   auto& target = screen.frame().target();
-  const bool isSelected = index == selected_;
+  const bool isSelected = index == selected_ && mappedInput.showsSelection();
   const fui::Rect box{static_cast<int16_t>(rect.x), static_cast<int16_t>(rect.y), static_cast<int16_t>(rect.width),
                       static_cast<int16_t>(rect.height)};
 
@@ -255,7 +282,7 @@ void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings
 void UiGridActivity::buildRow(UiScreen& screen, const int index, const fui::Rect& box) {
   const auto& theme = screen.theme();
   auto& target = screen.frame().target();
-  const bool isSelected = index == selected_;
+  const bool isSelected = index == selected_ && mappedInput.showsSelection();
 
   fui::ButtonProps props;
   props.action = ACTION_CELL;
@@ -325,6 +352,16 @@ void UiGridActivity::loop() {
     onBackButton();
     return;
   }
+  // The touch band's page pair (ListChrome.cpp): Left and Right reach a touch board only
+  // from that band, and each moves a screen of rows.
+  if (mappedInput.hasTouch()) {
+    const bool up = mappedInput.wasPressed(MappedInputManager::Button::Left);
+    if (up || mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+      mappedInput.suppressHeldButtonRelease();
+      pageBy(up ? -1 : 1);
+      return;
+    }
+  }
 
   // Rows on the side pair, cells on the front pair, and each press counted once.
   // ScreenUp/ScreenDown/ScreenLeft/ScreenRight rather than the raw buttons, so a
@@ -354,9 +391,16 @@ void UiGridActivity::loop() {
 
 void UiGridActivity::render(RenderLock&&) {
   renderer.clearScreen();
-  const ListChrome bands = chrome();
-  drawListChromeTop(renderer, bands);
   renderUi();
+  // After the build, so the page counter reads the window it settled. The header sits
+  // above the grid pane, so painting it second covers nothing.
+  ListChrome bands = chrome();
+  bands.scrolls = scrollPage_.pages > 0;
+  if (bands.scrolls && bands.headerRight == nullptr) {
+    snprintf(pageText_, sizeof(pageText_), "%d/%d", scrollPage_.page, scrollPage_.pages);
+    bands.headerRight = pageText_;
+  }
+  drawListChromeTop(renderer, bands);
   if (reservedHeight() > 0) {
     const list_chrome::Bands measured = listChromeBands(renderer, bands);
     drawReserved(Rect{0, measured.contentTop, renderer.getScreenWidth(), reservedHeight()});

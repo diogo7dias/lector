@@ -141,8 +141,15 @@ class UiStatusActivity : public Activity, protected UiAppHost {
     // reader should not have to find on the hint band. They are the same two
     // answers the keys give: the left one calls onBackButton(), the right one
     // onConfirmButton().
+    // Touch boards only: a keys-only board answers with its keys, and the band names
+    // the accept button there when confirmHint does not.
     const char* cancelLabel = nullptr;
     const char* acceptLabel = nullptr;
+    // The accept button, or the answer of the choice list at this index, does something
+    // that cannot be undone (delete, clear, flash, forget). Its first tap arms it and a
+    // second tap runs it (components/TwoTapGate.h). -1 = no such answer.
+    bool acceptCannotUndo = false;
+    int choiceCannotUndo = -1;
     // Comparison shape: a headline, the two sides, a line naming which is
     // ahead, and the choices as a list at the foot of the body. It wins over
     // both other shapes when the first side carries a label.
@@ -225,6 +232,7 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   virtual int sliderStep() const { return 1; }
 
   void buildScreen(UiScreen& screen);
+  bool needsConfirmTap(const freeink::ui::ActionEvent& event) const override;
 
  private:
   // A FAST paint is promoted to HALF on entry, on a reveal and when the title

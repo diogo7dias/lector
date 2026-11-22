@@ -100,6 +100,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
   int listCount() const override { return sections.visibleCount(rows.data(), static_cast<int>(rows.size())); }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
+  // Delete Cache acts on the tap that reaches it, so it takes a confirming second tap.
+  bool needsConfirmTap(const freeink::ui::ActionEvent& event) const override;
   void onRowAction(const freeink::ui::ActionEvent& event) override { activateIndex(event.value); }
   // The book block above the list is chrome, not rows: title, author, chapter and
   // progress. The base reserves the band it paints, so the two cannot drift.

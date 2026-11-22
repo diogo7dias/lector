@@ -1,6 +1,6 @@
 import { test, expect } from 'e2e';
 
-// Home > Library by touch: the first tap arms a row, the second opens it. Opening a book files it
+// Home > Library by touch: one tap opens a row. Opening a book files it
 // into /recents; the next visit lists the same number of books and opens it from its new path.
 // Named to run last on the board: opening a book reorders Home's recents for every file after it.
 test('Library opens by touch and follows a book into /recents', async ({ app, screen }) => {
@@ -13,24 +13,22 @@ test('Library opens by touch and follows a book into /recents', async ({ app, sc
     await screen.getByRole('button', { name: 'Home' }).click();
     await expect(activity).toHaveText('Home', { timeout: 30_000 });
   }
-  const tapTwice = async (x: number, y: number) => {
-    for (let i = 0; i < 2; i++) {
-      await panel.tap({ position: { x, y } });
-      await expect(busy).toHaveText('no', { timeout: 30_000 });
-    }
+  const tapOnce = async (x: number, y: number) => {
+    await panel.tap({ position: { x, y } });
+    await expect(busy).toHaveText('no', { timeout: 30_000 });
   };
   const log = async () => (await fetch(`${app.baseUrl}/log`)).text();
 
   const visit = async () => {
     const from = (await log()).length;
-    await tapTwice(240, 570); // Library, under Browse Files
+    await tapOnce(240, 570); // Library, under Browse Files
     await expect(activity).toHaveText('Library', { timeout: 30_000 });
     await expect.poll(async () => (await log()).slice(from).includes('built:'), { timeout: 60_000 }).toBe(true);
     const books = Number(/built: (\d+) books/.exec((await log()).slice(from))?.[1]);
     return { books, from };
   };
   const openFirst = async (from: number) => {
-    await tapTwice(240, 88); // the first row: the title that sorts first
+    await tapOnce(240, 88); // the first row: the title that sorts first
     await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
     const path = /\[LIB\] open (\S+)/.exec((await log()).slice(from))?.[1];
     await screen.getByRole('button', { name: 'Home' }).click();

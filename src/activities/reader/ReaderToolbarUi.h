@@ -45,24 +45,14 @@ class ReaderToolbarUi : public UiAppHost {
   void render() { renderUi(); }
   // Routes one loop-task input frame and returns the action it mapped to, if any.
   Routed route(const MappedInputManager& input);
-  // The tile a first tap just armed (it acts on the second), else -1; read once, then cleared.
-  // The tiles are plain tap targets with no outline of their own, so the reader moves its
-  // focus pill onto this one to show what the next tap will open.
-  int takeArmedTool() {
-    const int tool = armedTool_;
-    armedTool_ = -1;
-    return tool;
-  }
 
  private:
   static void screenFn(UiScreen& screen, void* user);
   static void onAction(const freeink::ui::ActionEvent& event, void* user);
-  static void onArm(const freeink::ui::ActionEvent& event, void* user);
   void buildToolbar(UiScreen& screen);
 
   Model model_;
   Routed pending_;
-  int armedTool_ = -1;
   // fui::ButtonProps embeds a 324-byte StyleSet: kept off the stack (AGENTS.md: locals stay
   // under 256 bytes).
   freeink::ui::ButtonProps stepProps_;

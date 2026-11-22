@@ -672,18 +672,16 @@ void FileBrowserActivity::loop() {
     return;
   }
 
-  // A tapped row selects, and a second tap on that same row opens it
-  // (components/TwoTapGate.h): the wrapped list records the rect of each row it paints,
-  // so a two-line title answers over both of its lines.
+  // A tap opens the row it landed on: the wrapped list records the rect of each row it
+  // paints, so a two-line title answers over both of its lines.
   if (mappedInput.hasTouch()) {
     // The render task rebuilds the table under this same lock.
     RenderLock lock(*this);
     int tappedRow = 0;
-    const auto rowTap = mappedInput.wasRowTapped(tappedRow);
-    if (rowTap != MappedInputManager::RowTap::None && tappedRow >= 0 && tappedRow < totalRowCount()) {
+    if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < totalRowCount()) {
       selectorIndex = static_cast<size_t>(tappedRow);
       lock.unlock();  // Activation can reload the listing and acquire its own lock.
-      if (rowTap == MappedInputManager::RowTap::Activate) activateSelected(/*holdAction=*/false);
+      activateSelected(/*holdAction=*/false);
       requestUpdate();
       return;
     }

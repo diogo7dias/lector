@@ -3,7 +3,6 @@
 #include <string>
 
 #include "activities/UiStatusActivity.h"
-#include "components/OptionPopup.h"
 
 // Settings' two cache sweeps, one confirm-sweep-report flow. Clear Cache wipes ALL
 // book caches. Clean Storage (orphansOnly) removes only the caches of books no longer
@@ -20,7 +19,6 @@ class ClearCacheActivity final : public UiStatusActivity {
  protected:
   StatusView statusView() const override;
   bool handleCustomInput() override;
-  bool drawOverlay() override;
   void onConfirmButton() override;
   void onBackButton() override;
 
@@ -35,7 +33,6 @@ class ClearCacheActivity final : public UiStatusActivity {
   // The result line counts things, so it cannot be a translated constant; it is
   // built once when the sweep ends and handed to the view by pointer.
   std::string resultLine;
-  OptionPopup confirmPopup;
   void beginClear();
   void clearCache();
   bool clearAllCaches(int& clearedCount, int& failedCount);

@@ -20,27 +20,25 @@ test('a TTF family draws its own glyphs, a corrupt one falls back to ChareInk', 
     await expect(activity).toHaveText('Home', { timeout: 30_000 });
   }
   const panel = screen.getByRole('img', { name: 'Device screen' });
-  const tapTwice = async (x: number, y: number) => {
-    for (let i = 0; i < 2; i++) {
-      await panel.tap({ position: { x, y } });
-      await expect(busy).toHaveText('no', { timeout: 30_000 });
-    }
+  const tapOnce = async (x: number, y: number) => {
+    await panel.tap({ position: { x, y } });
+    await expect(busy).toHaveText('no', { timeout: 30_000 });
   };
   // Ink of the preview text above the settings list.
   const preview = async () =>
     ((await (await fetch(`${app.baseUrl}/ink/0/60/480/340`)).json()) as { ink: number }).ink;
   const log = async () => await (await fetch(`${app.baseUrl}/log`)).text();
   const pick = async (y: number) => {
-    await tapTwice(240, 413); // Font row
+    await tapOnce(240, 413); // Font row
     await expect(activity).toHaveText('FontPicker', { timeout: 30_000 });
-    await tapTwice(200, y);
+    await tapOnce(200, y);
     await expect(busy).toHaveText('no', { timeout: 60_000 });
   };
 
-  await tapTwice(240, 729); // Settings
+  await tapOnce(240, 729); // Settings
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
-  await tapTwice(100, 114); // Reader
-  await tapTwice(100, 84); // Text Settings
+  await tapOnce(100, 114); // Reader
+  await tapOnce(100, 84); // Text Settings
   await expect(activity).toHaveText('TextSettings', { timeout: 30_000 });
   // Re-pick ChareInk first: the preview of a just-opened screen differs by a few hundred pixels from
   // one redrawn after a font pick, so the reference is taken the same way as every later reading.

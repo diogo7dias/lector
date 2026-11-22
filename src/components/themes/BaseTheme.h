@@ -234,9 +234,7 @@ class BaseTheme {
   // popup and tab goes through this rather than filling a rectangle itself, so one
   // setting reaches all of them. Section heading bands are NOT selections: they keep
   // their own solid fill in every style.
-  // armed = this row is the one a first tap armed (components/TwoTapGate.h): it is
-  // outlined rather than filled, and returns false so its text keeps its normal ground.
-  bool drawSelection(const GfxRenderer& renderer, Rect rect, bool armed = false) const;
+  bool drawSelection(const GfxRenderer& renderer, Rect rect) const;
 
   // Greedy word-wrap in the one UI face. Line 0 is wrapped to firstLineMaxWidth (room
   // for an inline badge or a right-hand label), later lines to restMaxWidth. A word

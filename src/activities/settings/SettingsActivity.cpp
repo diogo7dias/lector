@@ -480,17 +480,24 @@ void SettingsActivity::onBackButton() {
   onGoHome();
 }
 
+// What Confirm does to this row, for the band: a switch says which way it goes, a choice
+// says it changes, and anything else opens.
+static const char* confirmVerb(const SettingInfo& setting) {
+  if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
+    return SETTINGS.*(setting.valuePtr) ? tr(STR_TURN_OFF) : tr(STR_TURN_ON);
+  }
+  if (setting.type == SettingType::ACTION) return tr(STR_OPEN);
+  return tr(STR_CHANGE);
+}
+
 ListChrome SettingsActivity::chrome() const {
   ListChrome chrome;
   chrome.title = mode == Mode::Hub ? tr(STR_SETTINGS_TITLE) : I18N.get(categoryName(selectedCategory));
   if (mode == Mode::Hub) chrome.footerRight = CROSSPOINT_VERSION;
 
   const int index = selected();
-  const bool onSleepTimeout = mode == Mode::Category && index >= 0 && index < settingsCount &&
-                              settings[index].nameId == StrId::STR_TIME_TO_SLEEP;
-  chrome.confirmHint = onSleepTimeout ? tr(STR_SELECT) : tr(STR_TOGGLE);
-  chrome.thirdHint = tr(STR_DIR_UP);
-  chrome.fourthHint = tr(STR_DIR_DOWN);
+  const bool onSetting = mode == Mode::Category && index >= 0 && index < settingsCount;
+  chrome.confirmHint = onSetting ? confirmVerb(settings[index]) : tr(STR_OPEN);
   return chrome;
 }
 

@@ -16,14 +16,6 @@ void ClearCacheActivity::onEnter() {
   UiStatusActivity::onEnter();
 
   state = WARNING;
-  const char* options[] = {tr(STR_CANCEL), orphansOnly ? tr(STR_CLEAN_BUTTON) : tr(STR_CLEAR_BUTTON)};
-  confirmPopup.show(orphansOnly ? tr(STR_CLEAN_STORAGE) : tr(STR_CLEAR_READING_CACHE), options, 2, 0, [this](int idx) {
-    if (idx == 1) {
-      beginClear();
-    } else {
-      goBack();
-    }
-  });
   requestUpdate();
 }
 
@@ -43,6 +35,9 @@ UiStatusActivity::StatusView ClearCacheActivity::statusView() const {
       }
       view.backHint = tr(STR_CANCEL);
       view.confirmHint = orphansOnly ? tr(STR_CLEAN_BUTTON) : tr(STR_CLEAR_BUTTON);
+      view.cancelLabel = view.backHint;
+      view.acceptLabel = view.confirmHint;
+      view.acceptCannotUndo = true;
       break;
     case CLEARING:
       view.lines = {orphansOnly ? tr(STR_CLEANING_STORAGE) : tr(STR_CLEARING_CACHE), nullptr, nullptr, nullptr};
@@ -63,12 +58,9 @@ UiStatusActivity::StatusView ClearCacheActivity::statusView() const {
 }
 
 bool ClearCacheActivity::handleCustomInput() {
-  if (state == WARNING) return confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); });
   // The sweep runs on this task; nothing is listening until it ends.
   return state == CLEARING;
 }
-
-bool ClearCacheActivity::drawOverlay() { return state == WARNING && confirmPopup.processRender(renderer, mappedInput); }
 
 void ClearCacheActivity::onConfirmButton() {
   if (state == WARNING) beginClear();

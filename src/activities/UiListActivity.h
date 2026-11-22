@@ -113,6 +113,12 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Named apart from UiAppHost::routeTouch so the host overload stays visible
   // (not name-hidden) to subclasses with extra touch surfaces.
   bool routeListTouch();
+  // chrome() plus what the base knows and the screen does not: whether the rows scroll,
+  // and which page is showing (beside the battery, unless the screen put a count there).
+  ListChrome paintedChrome() const;
+  mutable char pageText[12] = {};
+  // Moves the viewport one page (direction -1 or 1); the selection stays put.
+  void scrollPage(int direction);
 
   const bool wantsTouchLongPress;
 };

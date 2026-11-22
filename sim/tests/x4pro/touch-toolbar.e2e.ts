@@ -16,12 +16,7 @@ test('the toolbar menu scrubs, opens a tile and closes', async ({ app, screen })
   }
 
   const panel = screen.getByRole('img', { name: 'Device screen' });
-  const tapTwice = async (x: number, y: number) => {
-    for (let i = 0; i < 2; i++) {
-      await panel.tap({ position: { x, y } });
-      await expect(busy).toHaveText('no', { timeout: 30_000 });
-    }
-  };
+
   const tapOnce = async (x: number, y: number) => {
     await panel.tap({ position: { x, y } });
     await expect(busy).toHaveText('no', { timeout: 60_000 });
@@ -29,24 +24,24 @@ test('the toolbar menu scrubs, opens a tile and closes', async ({ app, screen })
   const ink = async (x: number, y: number, w: number, h: number) =>
     (await (await fetch(`${app.baseUrl}/ink/${x}/${y}/${w}/${h}`)).json()).ink as number;
   const setStyle = async () => {
-    await tapTwice(240, 729); // Settings
+    await tapOnce(240, 729); // Settings
     await expect(activity).toHaveText('Settings', { timeout: 30_000 });
-    await tapTwice(100, 114); // Reader
-    await tapTwice(150, 443); // Reader Menu Style: List <-> Toolbar
+    await tapOnce(100, 114); // Reader
+    await tapOnce(150, 443); // Reader Menu Style: List <-> Toolbar
     await screen.getByRole('button', { name: 'Home' }).click();
     await expect(activity).toHaveText('Home', { timeout: 30_000 });
   };
 
   // The suite shares one card: an earlier test may have filed the book into Recents (Home then
   // lists it as its first row). Asked before Settings, which leaves Home with another row selected.
-  const resume = (await ink(0, 200, 480, 60)) > 5_000;
+  const resume = (await ink(0, 200, 480, 60)) > 500; // blank on a fresh card
   await setStyle();
   if (resume) {
-    await tapTwice(240, 259); // the book's row on Home
+    await tapOnce(240, 259); // the book's row on Home
   } else {
-    await tapTwice(240, 517); // Browse Files
+    await tapOnce(240, 517); // Browse Files
     await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
-    await tapTwice(150, 279); // test_kerning_ligature.epub
+    await tapOnce(150, 279); // test_kerning_ligature.epub
   }
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
   await expect(busy).toHaveText('no', { timeout: 30_000 });
@@ -65,9 +60,7 @@ test('the toolbar menu scrubs, opens a tile and closes', async ({ app, screen })
   await expect.poll(() => ink(0, 0, 480, 580), { timeout: 60_000 }).not.toBe(before);
   await expect.poll(band, { timeout: 30_000 }).toBeLessThan(withoutSheet / 2);
 
-  // The Contents tile arms on the first tap and opens the chapter list on the second.
-  await tapOnce(90, 757);
-  expect(await activity.textContent(), 'the first tap only arms').toBe('EpubReader');
+  // The Contents tile opens the chapter list on one tap.
   await tapOnce(90, 757);
   await expect(activity).toHaveText('EpubReaderChapterSelection', { timeout: 30_000 });
   await panel.tap({ position: { x: 60, y: 780 } }); // Back
@@ -82,7 +75,7 @@ test('the toolbar menu scrubs, opens a tile and closes', async ({ app, screen })
 
   // More opens the tabbed menu (an entered screen, so the label changes).
   await tapOnce(240, 400);
-  await tapTwice(390, 757);
+  await tapOnce(390, 757);
   await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
 
   // Back to the list, so later suites find the default menu.

@@ -1,6 +1,7 @@
 #include "Activity.h"
 
 #include "ActivityManager.h"
+#include "components/KeyFocus.h"
 
 void Activity::onEnter() {
   LOG_INF("ACT", "Entering activity: %s", name.c_str());
@@ -8,10 +9,7 @@ void Activity::onEnter() {
   // brought this screen up, the release belongs to the screen that handled it, not
   // to whatever this one has selected.
   mappedInput.clearHintTap();
-  // Leaving a screen ends any two-tap arm it left behind (components/TwoTapGate.h).
-  // The FreeInkUI hosts clear their own with the activity they belong to; the
-  // self-painted row lists share one gate, so it is cleared here.
-  mappedInput.clearRowTapArm();
+  key_focus::keyPressedHere() = false;
 }
 
 void Activity::onExit() { LOG_DBG("ACT", "Exiting activity: %s", name.c_str()); }

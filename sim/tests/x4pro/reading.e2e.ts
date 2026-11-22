@@ -10,15 +10,13 @@ test('opens a book, swipes a page, opens the menu, resumes after a reboot', asyn
   await expect(activity).toHaveText('Home', { timeout: 120_000 });
 
   const panel = screen.getByRole('img', { name: 'Device screen' });
-  const tapTwice = async (x: number, y: number) => {
-    for (let i = 0; i < 2; i++) {
-      await panel.tap({ position: { x, y } });
-      await expect(busy).toHaveText('no', { timeout: 30_000 });
-    }
+  const tapOnce = async (x: number, y: number) => {
+    await panel.tap({ position: { x, y } });
+    await expect(busy).toHaveText('no', { timeout: 30_000 });
   };
-  await tapTwice(240, 517); // Browse Files
+  await tapOnce(240, 517); // Browse Files
   await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
-  await tapTwice(150, 279); // test_kerning_ligature.epub
+  await tapOnce(150, 279); // test_kerning_ligature.epub
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
   await expect(busy).toHaveText('no', { timeout: 30_000 });
 

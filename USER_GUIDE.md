@@ -56,23 +56,29 @@ Inverted Tap become the matching gesture for both directions.
 
 ### Tapping, on a device with a touch screen
 
-A tap takes two steps. The first tap on a row, a button or any other control highlights it
-with a thin outline and does nothing else. A second tap on that same control runs it. A tap
-on a different control moves the outline there instead of running anything, so only one
-control is ever highlighted and a mis-aimed tap costs nothing.
+A tap runs what it lands on: a row opens, a button acts. Back undoes a wrong open.
 
-In Settings and Text Settings, the outlined row is waiting for confirmation; it is
-never filled black. The first tap leaves the button selection where it was. The
-second tap selects and runs the outlined row.
+A few actions cannot be undone, so they take a second tap: Clear Reading Cache, Clean Up
+Storage, a firmware update, forgetting a Wi-Fi network, Delete Cache in the reader menu, and
+the Confirm button of every "Delete?" question. The first tap draws a dashed outline round
+that button and does nothing else; a second tap on the same button runs it. A tap anywhere
+else, a scroll or a side key drops the outline.
 
-The highlight goes away when you scroll the list, leave the screen, or tap an empty part of
-the screen. Moving the selection with the side keys clears it too, and the on-screen Back and
-Select buttons along the bottom edge act on the first tap, as the physical buttons do.
+A question asks once. On the X4 Pro it shows its two answers as buttons at the foot of the
+screen and no button band; on the X3 and X4 the band names what Back and Confirm answer.
 
-Three things are deliberately left on a single tap, because a confirming tap would get in the
-way: the on-screen keyboard, sliders (brightness, text size and the rest, which are dragged or
-stepped), and the Yes/No pop-ups, which are already a question being answered. Page turns by
-tap while reading are unchanged. Holding a word on the page for half a second looks it up in
+On the X4 Pro a list arrives with no black row: a tap opens what it lands on, so a selection
+means nothing to a finger. Press a side key and the black row appears and walks with the key.
+The band along the bottom has no keys behind it, so it stops pretending to be them: Back on
+the left; the second slot names what it does to the black row (Open, Change, Turn on, Turn
+off) and stays blank until a side key showed one; Page Up and Page Down on the right, shown
+only while the list runs past one screen.
+
+On every device a list that scrolls shows which screen of it you are on beside the battery,
+as 2/5, and the Settings band says what Confirm does to the row it is on: Open, Change, Turn
+on or Turn off, instead of Toggle.
+
+Page turns by tap while reading are unchanged. Holding a word on the page for half a second looks it up in
 the dictionary; keep the finger down and drag to select a phrase instead (see **Quotes**).
 Spreading two fingers apart on the page makes the text one size
 larger, pinching them together one size smaller; one step per gesture, for this book only,

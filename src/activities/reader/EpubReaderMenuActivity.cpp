@@ -370,6 +370,12 @@ void EpubReaderMenuActivity::navigateButtons() {
   });
 }
 
+bool EpubReaderMenuActivity::needsConfirmTap(const freeink::ui::ActionEvent& event) const {
+  if (event.action != ACTION_ROW) return false;
+  const int index = sections.itemIndex(rows.data(), static_cast<int>(rows.size()), event.value);
+  return index >= 0 && items[index].action == MenuAction::DELETE_CACHE;
+}
+
 void EpubReaderMenuActivity::activateIndex(const int visibleIndex) {
   const int index = sections.itemIndex(rows.data(), static_cast<int>(rows.size()), visibleIndex);
   if (index < 0) return;
