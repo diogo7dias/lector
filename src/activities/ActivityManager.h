@@ -27,6 +27,7 @@ enum class HomeMenuItem {
   OPDS_BROWSER,
   FILE_TRANSFER,
   SETTINGS_MENU,
+  QUICK_PANEL,
 };
 
 /**
@@ -126,6 +127,8 @@ class ActivityManager {
   // sleep face, so the first page turn runs the clean pass (wake_face::firstPageTurnCleans).
   void goToReader(std::string path, bool allowFastInitialRefresh = false, bool firstTurnCleans = false,
                   bool sortesMode = false);
+  // The reader's short Back: the screen the open book was launched from (APP_STATE.readerOrigin).
+  void goToReaderOrigin();
   void goToSleep(bool fromTimeout = false);
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);

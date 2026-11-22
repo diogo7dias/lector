@@ -51,3 +51,32 @@ test('Power double click opens the quick panel and Confirm fires a grid button',
   expect((await log()).slice(from)).toContain('[PANEL] Close');
   await expect(activity).toHaveText('Home');
 });
+
+// The Power double click shows nowhere on screen, so keys-only Home lists the panel as a row:
+// Quick Panel, just above Settings. Confirm opens it through the same action, Back puts it
+// away. Starts and ends on Browse Files, where the file before left Home.
+test('the Quick Panel row on Home opens the panel', async ({ app, screen }) => {
+  await app.open('/');
+  const activity = screen.getByTestId('activity');
+  const busy = screen.getByTestId('busy');
+  await expect(activity).toHaveText('Home', { timeout: 60_000 });
+
+  const press = async (name: string, times = 1) => {
+    for (let i = 0; i < times; i++) {
+      await screen.getByRole('button', { name }).click();
+      await expect(busy).toHaveText('no', { timeout: 60_000 });
+    }
+  };
+  const log = async () => (await fetch(`${app.baseUrl}/log`)).text();
+
+  await press('Down', 4); // Library, OPDS Browser, Nearby Sync, Quick Panel
+  const from = (await log()).length;
+  await press('Confirm');
+  await expect.poll(async () => (await log()).slice(from).includes('[PANEL] Open'), { timeout: 30_000 }).toBe(true);
+  // Opened on the press: the release of that Confirm must not fire a grid button.
+  expect((await log()).slice(from)).not.toContain('[PANEL] Close');
+  await press('Back');
+  await expect.poll(async () => (await log()).slice(from).includes('[PANEL] Close'), { timeout: 30_000 }).toBe(true);
+  await expect(activity).toHaveText('Home');
+  await press('Up', 4); // back on Browse Files for the next file
+});

@@ -38,7 +38,7 @@ test('the Clear Reading Cache warning left idle drops to low power', async ({ ap
     return entered < 0 ? '' : text.slice(entered);
   };
 
-  await press('Down', 4); // Settings, after Library, OPDS Browser and Nearby Sync
+  await press('Down', 5); // Settings, after Library, OPDS Browser, Nearby Sync and Quick Panel
   await press('Confirm');
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
   await press('Down', 3); // System
@@ -60,5 +60,5 @@ test('the Clear Reading Cache warning left idle drops to low power', async ({ ap
   await press('Back'); // System list to the Settings tabs
   await press('Back');
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
-  await press('Up', 4); // Home remembers its row: back to Browse Files
+  await press('Up', 5); // Home remembers its row: back to Browse Files
 });

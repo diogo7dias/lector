@@ -1,4 +1,19 @@
-import { test, expect } from 'e2e';
+import { test, expect, type Locator } from 'e2e';
+
+// Leaves the book (or the browser) for Home and stops on its Settings row. A book's Back
+// returns where it was opened: Home, on its first row, or the browser, whose Back lands Home
+// on Browse Files. Up from the first row wraps to Settings; from Browse Files it is five rows
+// down (Library, OPDS Browser, Nearby Sync, Quick Panel, Settings).
+async function homeOnSettings(activity: Locator, press: (name: string, times?: number) => Promise<void>) {
+  let viaBrowser = false;
+  while ((await activity.textContent()) !== 'Home') {
+    viaBrowser ||= (await activity.textContent()) === 'FileBrowser';
+    const leaving = await activity.textContent();
+    await press('Back');
+    await expect(activity).not.toHaveText(leaving ?? '', { timeout: 30_000 });
+  }
+  await press(viaBrowser ? 'Down' : 'Up', viaBrowser ? 5 : 1);
+}
 
 // Settings > Reader > Reader Menu Style > Toolbar: Confirm in a book paints a sheet over the
 // bottom of the page instead of opening the list menu. Down steps a chapter, Back closes it.
@@ -7,10 +22,6 @@ test('the toolbar menu opens, steps a chapter and closes by the buttons', async 
   const activity = screen.getByTestId('activity');
   const busy = screen.getByTestId('busy');
   await expect(activity).not.toHaveText('', { timeout: 60_000 });
-  if ((await activity.textContent()) !== 'Home') {
-    await screen.getByRole('button', { name: 'Back' }).click(); // an earlier suite left a book open
-    await expect(activity).toHaveText('Home', { timeout: 30_000 });
-  }
 
   const press = async (name: string, times = 1) => {
     for (let i = 0; i < times; i++) {
@@ -18,12 +29,11 @@ test('the toolbar menu opens, steps a chapter and closes by the buttons', async 
       await expect(busy).toHaveText('no', { timeout: 60_000 });
     }
   };
+  await homeOnSettings(activity, press); // an earlier suite may have left a book open
   const ink = async (x: number, y: number, w: number, h: number) =>
     (await (await fetch(`${app.baseUrl}/ink/${x}/${y}/${w}/${h}`)).json()).ink as number;
-  // Home starts on its first row, and Up from there wraps to Settings, the last: the same two
-  // presses whether or not a book is already listed above the menu.
+  // Starts on Home's Settings row.
   const setStyle = async () => {
-    await press('Up'); // Settings
     await press('Confirm');
     await expect(activity).toHaveText('Settings', { timeout: 30_000 });
     await press('Down'); // Reader
@@ -92,13 +102,7 @@ test('the toolbar menu opens a tile by Confirm, and the list style comes back', 
     .poll(async () => (await (await fetch(`${app.baseUrl}/log`)).text()).includes('Exiting activity: EpubReaderChapterSelection'))
     .toBe(true);
 
-  // Leave the book (Back lands on the browser or on Home, by setting). Up from Home's first row
-  // wraps to Settings.
-  await press('Back');
-  await expect.poll(async () => await activity.textContent(), { timeout: 30_000 }).toMatch(/^(Home|FileBrowser)$/);
-  if ((await activity.textContent()) === 'FileBrowser') await press('Back');
-  await expect(activity).toHaveText('Home', { timeout: 30_000 });
-  await press('Up'); // Settings
+  await homeOnSettings(activity, press);
   await press('Confirm');
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
   await press('Down'); // Reader

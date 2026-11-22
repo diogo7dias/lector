@@ -11,6 +11,7 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "activities/ActivityManager.h"
 #include "activities/RenderLock.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -77,6 +78,11 @@ void LibraryActivity::refreshIndex(const bool force) {
   totalHits = 0;
   recount();
   nav.reset();
+  if (startRow > 0 && startRow < rowCount) {
+    nav.selected = startRow;
+    nav.followOnBuild = true;
+  }
+  startRow = 0;
   requestUpdate();
 }
 
@@ -270,6 +276,8 @@ void LibraryActivity::activateIndex(const int index) {
     }
   }
   LOG_INF("LIB", "open %s", path.c_str());
+  // The unfiltered row (one header row), so Back from the book lands on it with no search.
+  APP_STATE.libraryRow = static_cast<uint16_t>(ordinalAt(index - headerRows()) + 1);
   app.clearTapFlash();
   activityManager.goToReader(path);
 }

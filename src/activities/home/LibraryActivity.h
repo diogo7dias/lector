@@ -31,6 +31,8 @@ class LibraryActivity final : public UiListActivity {
   // Rows the list may show; loadWindow shortens it when the index reads short.
   int rowCount = 0;
   bool failed = false;
+  // The row to open on: a book's Back returns to the row that opened it.
+  uint16_t startRow = 0;
 
   std::string searchQuery;
   librarysearch::TopMatches<MAX_HITS> hits;
@@ -60,8 +62,8 @@ class LibraryActivity final : public UiListActivity {
   void applySearch(const std::string& query);
 
  public:
-  explicit LibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : UiListActivity("Library", renderer, mappedInput) {}
+  explicit LibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, uint16_t firstRow = 0)
+      : UiListActivity(activity_name::kLibrary, renderer, mappedInput), startRow(firstRow) {}
   void onEnter() override;
   void onExit() override;
 

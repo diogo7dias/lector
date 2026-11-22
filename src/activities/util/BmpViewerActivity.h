@@ -7,6 +7,7 @@
 
 #include "MappedInputManager.h"
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 
 class BmpViewerActivity final : public Activity {
  public:
@@ -32,10 +33,24 @@ class BmpViewerActivity final : public Activity {
   bool canSetSleepCover() const;
   // A .png or .jpg onto the framebuffer.
   bool renderDecoded();
+  // Touch: the outer thirds step through the folder, the centre opens the actions the
+  // front keys run here. Returns true when the pass was spent.
+  bool handleTouch();
+  // The image delta places along the folder; false at either end.
+  bool openSibling(int delta);
+  void openActionMenu();
+  bool handleActionMenu();
 
   std::string filePath;
   // Arena-backed and bounded; see NameList. A wallpaper folder with thousands of
   // images used to exhaust the heap building this list.
   NameList siblingImages;
   int currentImageIndex = -1;
+
+  // The centre-tap menu: its rows are the key actions for this folder, in key order.
+  enum class MenuAction : uint8_t { SetSleepCover, Favorite, Delete, Pause };
+  OptionPopup actionMenu;
+  MenuAction menuActions[3] = {};
+  int menuChoice = -1;
+  bool menuDirty = false;
 };

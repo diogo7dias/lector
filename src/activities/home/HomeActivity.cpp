@@ -31,16 +31,28 @@
 #include "util/BusyTick.h"
 #include "util/DeferredFavorite.h"
 
-int HomeActivity::menuRowCount() const {
-  int count = 4;  // File Browser, Library, File transfer, Settings
-  if (hasOpdsServers) {
-    count++;
-  }
-  if (bookOrbitMissing > 0) count++;
-  return count;
+void HomeActivity::buildMenuRows() {
+  menuRowsCount = 0;
+  const auto add = [this](const HomeMenuItem item) { menuRows[menuRowsCount++] = item; };
+  if (bookOrbitMissing > 0) add(HomeMenuItem::BOOKORBIT_MISSING);
+  add(HomeMenuItem::FILE_BROWSER);
+  add(HomeMenuItem::LIBRARY);
+  if (hasOpdsServers) add(HomeMenuItem::OPDS_BROWSER);
+  add(HomeMenuItem::FILE_TRANSFER);
+  // Keys only: the Power double click that opens the panel shows nowhere, so it gets a
+  // row. A touch board pulls the panel down from the top edge of every screen.
+  if (!mappedInput.hasTouch()) add(HomeMenuItem::QUICK_PANEL);
+  add(HomeMenuItem::SETTINGS_MENU);
 }
 
-int HomeActivity::getMenuItemCount() const { return static_cast<int>(recentBooks.size()) + menuRowCount(); }
+int HomeActivity::rowOfMenuItem(const HomeMenuItem item) const {
+  for (int i = 0; i < menuRowsCount; i++) {
+    if (menuRows[i] == item) return i;
+  }
+  return 0;
+}
+
+int HomeActivity::getMenuItemCount() const { return static_cast<int>(recentBooks.size()) + menuRowsCount; }
 
 void HomeActivity::loadRecentBooks(int maxBooks) {
   recentBooks.clear();
@@ -99,6 +111,7 @@ void HomeActivity::onEnter() {
   hasOpdsServers = OPDS_STORE.hasServers();
   bookOrbitMissing = bookorbit_missing::findServer() ? bookorbit_missing::savedCount() : 0;
   snprintf(bookOrbitMissingLabel, sizeof(bookOrbitMissingLabel), tr(STR_BOOKORBIT_MISSING), bookOrbitMissing);
+  buildMenuRows();
   if (SETTINGS.homeBackAction == CrossPointSettings::HOME_BACK_SORTES) {
     BusyBanner banner(renderer, tr(STR_SORTES));
     sortesResult = sortes::findBook(sortesBook, esp_random);
@@ -112,9 +125,7 @@ void HomeActivity::onEnter() {
   lastVisibleBookIdx = 0;
 
   const auto base = static_cast<int>(recentBooks.size());
-  selectorIndex = initialMenuItem == HomeMenuItem::NONE
-                      ? 0
-                      : base + menuItemToIndex(initialMenuItem, hasOpdsServers, bookOrbitMissing > 0);
+  selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + rowOfMenuItem(initialMenuItem);
 
   requestUpdate();
 }
@@ -130,7 +141,8 @@ void HomeActivity::loop() {
       return;
     }
     const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
-    switch (indexToMenuItem(menuIndex, hasOpdsServers, bookOrbitMissing > 0)) {
+    if (menuIndex < 0 || menuIndex >= menuRowsCount) return;
+    switch (menuRows[menuIndex]) {
       case HomeMenuItem::BOOKORBIT_MISSING:
         onBookOrbitMissingOpen();
         break;
@@ -148,6 +160,10 @@ void HomeActivity::loop() {
         break;
       case HomeMenuItem::SETTINGS_MENU:
         onSettingsOpen();
+        break;
+      case HomeMenuItem::QUICK_PANEL:
+        // The same entry the Power double click takes.
+        activityManager.runBoundAction(CrossPointSettings::LP_MENU_LIGHT_PANEL);
         break;
       default:
         break;
@@ -177,8 +193,16 @@ void HomeActivity::loop() {
   // A tap wraps; a hold stops at the ends, since a hold that wraps never ends.
   buttonNavigator.onNextStep([&] { moveTo(ButtonNavigator::nextIndex(selectorIndex, menuCount)); });
   buttonNavigator.onPreviousStep([&] { moveTo(ButtonNavigator::previousIndex(selectorIndex, menuCount)); });
-  buttonNavigator.onNextContinuous([&] { moveTo(ButtonNavigator::heldIndex(selectorIndex, menuCount, 1)); });
-  buttonNavigator.onPreviousContinuous([&] { moveTo(ButtonNavigator::heldIndex(selectorIndex, menuCount, -1)); });
+  // A flick arrives through the continuous step too, as in every list; here it pages
+  // the books rather than moving one row.
+  buttonNavigator.onNextContinuous([&] {
+    if (ButtonNavigator::swipeDrivenPass()) return pageBooks(true);
+    moveTo(ButtonNavigator::heldIndex(selectorIndex, menuCount, 1));
+  });
+  buttonNavigator.onPreviousContinuous([&] {
+    if (ButtonNavigator::swipeDrivenPass()) return pageBooks(false);
+    moveTo(ButtonNavigator::heldIndex(selectorIndex, menuCount, -1));
+  });
 
   // Back is otherwise unused on the home menu, so it runs the user's configured
   // action. A Back still held from the screen that was left is handled centrally
@@ -216,6 +240,18 @@ void HomeActivity::loop() {
   }
 }
 
+void HomeActivity::pageBooks(const bool forward) {
+  const int bookCount = static_cast<int>(recentBooks.size());
+  // The window the last paint drew; rows wrap, so a page is however many it fitted.
+  const int shown = lastVisibleBookIdx - firstVisibleBookIdx + 1;
+  const int first = forward ? lastVisibleBookIdx + 1 : std::max(0, firstVisibleBookIdx - shown);
+  // Already at that end: nothing moves, so nothing is painted.
+  if (forward ? first >= bookCount : firstVisibleBookIdx == 0) return;
+  scrollOffset = first;
+  selectorIndex = first;
+  requestUpdate();
+}
+
 void HomeActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
@@ -237,18 +273,44 @@ void HomeActivity::render(RenderLock&&) {
   // "N more above/below" indicators when it scrolls. Replaces the single cover tile —
   // no per-book cover generation, so the home stays fast. A menu selection passes -1
   // so no book row is highlighted.
-  // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_LIBRARY), tr(STR_NEARBY_SYNC),
-                                        tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Library, Transfer, Settings};
-
-  if (hasOpdsServers) {
-    menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
-    menuIcons.insert(menuIcons.begin() + 2, Library);
-  }
-  if (bookOrbitMissing > 0) {
-    menuItems.insert(menuItems.begin(), bookOrbitMissingLabel);
-    menuIcons.insert(menuIcons.begin(), Library);
+  // The rows buildMenuRows() chose, in its order.
+  const char* menuItems[MAX_MENU_ROWS] = {};
+  UIIcon menuIcons[MAX_MENU_ROWS] = {};
+  for (int i = 0; i < menuRowsCount; i++) {
+    switch (menuRows[i]) {
+      case HomeMenuItem::BOOKORBIT_MISSING:
+        menuItems[i] = bookOrbitMissingLabel;
+        menuIcons[i] = Library;
+        break;
+      case HomeMenuItem::FILE_BROWSER:
+        menuItems[i] = tr(STR_BROWSE_FILES);
+        menuIcons[i] = Folder;
+        break;
+      case HomeMenuItem::LIBRARY:
+        menuItems[i] = tr(STR_LIBRARY);
+        menuIcons[i] = Library;
+        break;
+      case HomeMenuItem::OPDS_BROWSER:
+        menuItems[i] = tr(STR_OPDS_BROWSER);
+        menuIcons[i] = Library;
+        break;
+      case HomeMenuItem::FILE_TRANSFER:
+        menuItems[i] = tr(STR_NEARBY_SYNC);
+        menuIcons[i] = Transfer;
+        break;
+      case HomeMenuItem::SETTINGS_MENU:
+        menuItems[i] = tr(STR_SETTINGS_TITLE);
+        menuIcons[i] = Settings;
+        break;
+      case HomeMenuItem::QUICK_PANEL:
+        menuItems[i] = tr(STR_QUICK_PANEL);
+        menuIcons[i] = Settings;
+        break;
+      default:
+        menuItems[i] = "";
+        menuIcons[i] = None;
+        break;
+    }
   }
 
   // drawButtonMenu lays its rows out from the top of this rect and ignores the height,
@@ -257,7 +319,7 @@ void HomeActivity::render(RenderLock&&) {
   // Bottom-anchor the block instead, so the gap under the last row equals the gap
   // between rows. No floor under the top: a sixth row (the BookOrbit one) has to rise
   // into the list's space, or Settings lands on the button hints.
-  const int menuCount = static_cast<int>(menuItems.size());
+  const int menuCount = menuRowsCount;
   const int lastRowBottomWanted = pageHeight - metrics.buttonHintsHeight - metrics.menuSpacing;
   const int menuBlockHeight =
       metrics.verticalSpacing + (menuCount - 1) * (metrics.menuRowHeight + metrics.menuSpacing) + metrics.menuRowHeight;

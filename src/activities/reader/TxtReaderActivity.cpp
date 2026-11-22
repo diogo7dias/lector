@@ -120,9 +120,7 @@ void TxtReaderActivity::loop() {
     return;
   }
 
-  if (ReaderUtils::handleBackNavigation(mappedInput, activityManager, txt ? txt->getPath().c_str() : "",
-                                        {this, [](void* ctx) { static_cast<TxtReaderActivity*>(ctx)->onGoHome(); }},
-                                        backLatch_)) {
+  if (ReaderUtils::handleBackNavigation(mappedInput, activityManager, txt ? txt->getPath().c_str() : "", backLatch_)) {
     return;
   }
 
