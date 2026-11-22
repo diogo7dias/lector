@@ -48,8 +48,6 @@ STR_OPEN_URL_HINT: "Відкрийте посилання у своєму бра
 STR_OR_HTTP_PREFIX: "або http://"
 STR_SCAN_QR_HINT: "або відскануйте QR-код телефоном:"
 STR_CALIBRE_WIRELESS: "Отримати з Calibre"
-STR_NETWORK_LEGEND: "* = Зашифровано | + = Збережено"
-STR_MAC_ADDRESS: "MAC адреса:"
 STR_CHECKING_WIFI: "Перевірка Wi-Fi..."
 STR_ENTER_WIFI_PASSWORD: "Введіть пароль Wi-Fi"
 STR_TO_PREFIX: "до "

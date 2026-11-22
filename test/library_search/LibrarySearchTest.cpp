@@ -94,3 +94,30 @@ TEST(RankMatches, FoldersAreSearchableToo) {
   ASSERT_EQ(hits.size(), 1u);
   EXPECT_EQ(hits[0], 0);
 }
+
+// The Library keeps only the best few matches of a whole-card scan.
+TEST(TopMatches, MatchesRankMatchesWhileUnderCapacity) {
+  const std::vector<std::string> names{"The Great Gatsby", "Galactic Sunset by Night", "Gatsby Notes", "Dune"};
+  librarysearch::TopMatches<8> top;
+  for (size_t i = 0; i < names.size(); i++) {
+    librarysearch::Match m;
+    if (scoreEntry(names[i], "gatsby", m)) top.offer(static_cast<int>(i), m);
+  }
+  const std::vector<int> expected = rankMatches(names, "gatsby");
+  ASSERT_EQ(top.size(), expected.size());
+  for (size_t i = 0; i < top.size(); i++) EXPECT_EQ(top.indexAt(i), expected[i]);
+}
+
+TEST(TopMatches, KeepsTheBestWhenFullAndTiesStayInListingOrder) {
+  librarysearch::TopMatches<3> top;
+  top.offer(0, {2, 5});  // scattered
+  top.offer(1, {1, 4});  // word
+  top.offer(2, {1, 4});  // same word match, later
+  top.offer(3, {0, 0});  // prefix: pushes the scattered one out
+  top.offer(4, {1, 4});  // ties the kept word matches: does not displace them
+  top.offer(5, {2, 0});  // worse than everything kept
+  ASSERT_EQ(top.size(), 3u);
+  EXPECT_EQ(top.indexAt(0), 3);
+  EXPECT_EQ(top.indexAt(1), 1);
+  EXPECT_EQ(top.indexAt(2), 2);
+}

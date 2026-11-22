@@ -85,15 +85,6 @@ void UiStatusActivity::buildList(UiScreen& screen, const StatusView& view) {
   if (listNav_.selected >= listCount_) listNav_.selected = listCount_ - 1;
   if (listNav_.selected < 0) listNav_.selected = 0;
 
-  if (view.listNote != nullptr && view.listNote[0] != '\0') {
-    // Taken first, so the list is measured for the room actually left.
-    const int16_t noteHeight = target.lineHeight(theme.smallText.font);
-    const fui::Rect note = screen.takeBottom(noteHeight, theme.spaceSm);
-    fui::TextStyle style = theme.smallText;
-    style.align = fui::TextAlign::Center;
-    target.text(note, view.listNote, style);
-  }
-
   fui::ListProps props;
   props.items = view.listItems;
   props.count = static_cast<uint16_t>(listCount_);
@@ -110,6 +101,24 @@ void UiStatusActivity::buildList(UiScreen& screen, const StatusView& view) {
   applyKeysOnlyValueStyle(props, theme);
   applyWrappingRowStyle(props, theme);
   applyInvertedSectionHeaderStyle(props, theme);
+  const bool marked = view.listMarks != nullptr;
+  if (marked) {
+    // One line per row, so every row is rowHeight tall and the marks can be placed
+    // without re-deriving a wrap; the layout numbers are named here, not inherited, so
+    // the list and drawListMarks() read the same ones. The marks' slot is held back as
+    // the value inset (each row carries an empty value).
+    props.labelText.maxLines = 1;
+    props.rowHeight = rowHeight;
+    props.rowGap = theme.listRowGap;
+    props.rowInset = theme.listInset;
+    props.sidePadding = theme.listSidePadding;
+    props.scrollIndicatorWidth = theme.listScrollWidth;
+    props.scrollIndicatorInset = theme.listScrollInset;
+    props.scrollIndicatorSide = theme.listScrollSide;
+    const int chipWidth =
+        view.listMarkChip ? target.measureText(theme.smallText.font, view.listMarkChip, theme.smallText).width : 0;
+    props.valueInset = static_cast<int16_t>(row_marks::slotWidth(chipWidth));
+  }
   const fui::Rect body = screen.body();
   listBand_ = Rect{body.x, body.y, body.width, body.height};
   listNav_.syncToProps(body, rowHeight, theme.listRowGap, listCount_, props);
@@ -118,6 +127,80 @@ void UiStatusActivity::buildList(UiScreen& screen, const StatusView& view) {
     listNav_.followPending = false;
   }
   screen.list(props);
+  if (marked) drawListMarks(screen, view, props, body);
+}
+
+void UiStatusActivity::drawListMarks(UiScreen& screen, const StatusView& view, const fui::ListProps& props,
+                                     const fui::Rect& body) const {
+  const auto& theme = screen.theme();
+  auto& target = screen.frame().target();
+  // The same arithmetic fui::list() did for these props: rows inset from the band, the
+  // scroll track cut from their width when the list overflows, a fixed stride.
+  const int stride = props.rowHeight + props.rowGap;
+  const int visible = fui::listVisibleRows(body, props.rowHeight, props.rowGap);
+  const bool overflows = listCount_ > visible;
+  int top = overflows ? std::min<int>(props.topIndex, listCount_ - 1) : 0;
+  if (top < 0) top = 0;
+  int rowX = body.x + props.rowInset;
+  int rowWidth = body.width - 2 * props.rowInset;
+  const int needed = props.scrollIndicatorWidth + props.scrollIndicatorInset + 2;
+  if (overflows && props.scrollIndicatorWidth > 0 && props.rowInset < needed) {
+    const int cut = needed - props.rowInset;
+    rowWidth -= cut;
+    if (props.scrollIndicatorSide == 1) rowX += cut;
+  }
+  const int slotRight = rowX + rowWidth - props.sidePadding;
+
+  // A selected row is inverted (or pilled) by the theme; the marks take its ink.
+  fui::StyleSet styles = theme.listRow.unset() ? fui::defaultListRowStyles() : theme.listRow;
+  if (theme.listSelectionStyle == fui::SelectionStyle::LightPill) {
+    styles.selected.foreground = fui::Paint::solid(fui::Color::Black);
+  } else if (theme.listSelectionStyle != fui::SelectionStyle::InvertFill) {
+    styles.selected = styles.normal;
+  }
+  const int chipText =
+      view.listMarkChip ? target.measureText(theme.smallText.font, view.listMarkChip, theme.smallText).width : 0;
+  const int lineHeight = target.lineHeight(theme.smallText.font);
+  const auto fill = [&target](const row_marks::Rect& r, const fui::Paint& ink) {
+    target.fill(fui::Rect{static_cast<int16_t>(r.x), static_cast<int16_t>(r.y), static_cast<int16_t>(r.width),
+                          static_cast<int16_t>(r.height)},
+                ink);
+  };
+
+  for (int i = top; i < listCount_ && i < top + visible; ++i) {
+    const row_marks::Marks& marks = view.listMarks[i];
+    const int centreY = body.y + (i - top) * stride + props.rowHeight / 2;
+    const fui::Paint ink = (props.selectedIndex == i ? styles.selected : styles.normal).foreground;
+    if (marks.bars >= 0) {
+      const signal_meter::Rect icon = row_marks::barsRect(slotRight, centreY);
+      for (int bar = 0; bar < signal_meter::kBarCount; ++bar) {
+        const signal_meter::Rect r = signal_meter::barRect(icon, bar);
+        if (signal_meter::barIsFilled(bar, marks.bars)) {
+          fill(r, ink);
+        } else {
+          // An outline in fills: the empty bars still show the scale.
+          fill({r.x, r.y, r.width, 1}, ink);
+          fill({r.x, r.y + r.height - 1, r.width, 1}, ink);
+          fill({r.x, r.y, 1, r.height}, ink);
+          fill({r.x + r.width - 1, r.y, 1, r.height}, ink);
+        }
+      }
+    }
+    if (marks.locked) {
+      const row_marks::Rect lock = row_marks::lockRect(slotRight, centreY);
+      for (int part = 0; part < row_marks::kLockParts; ++part) fill(row_marks::lockPart(lock, part), ink);
+    }
+    if (marks.saved && view.listMarkChip) {
+      const row_marks::Rect chip = row_marks::chipRect(slotRight, centreY, chipText, lineHeight);
+      const fui::Rect box{static_cast<int16_t>(chip.x), static_cast<int16_t>(chip.y), static_cast<int16_t>(chip.width),
+                          static_cast<int16_t>(chip.height)};
+      target.stroke(box, ink, row_marks::kStroke, 0);
+      fui::TextStyle chipStyle = fui::textStyleWithForeground(theme.smallText, ink);
+      chipStyle.align = fui::TextAlign::Center;
+      target.text(fui::Rect{box.x, static_cast<int16_t>(box.y + 1), box.width, static_cast<int16_t>(lineHeight)},
+                  view.listMarkChip, chipStyle);
+    }
+  }
 }
 
 void UiStatusActivity::buildComparison(UiScreen& screen, const StatusView& view) {

@@ -5,6 +5,7 @@
 #include <array>
 
 #include "activities/Activity.h"
+#include "components/RowMarks.h"
 #include "components/UiAppHost.h"
 #include "components/themes/BaseTheme.h"  // Rect, for the QR squares the body layout places
 #include "util/ButtonNavigator.h"
@@ -171,8 +172,11 @@ class UiStatusActivity : public Activity, protected UiAppHost {
     const freeink::ui::ListItem* listItems = nullptr;
     int listCount = 0;
     bool listHasSubtitle = false;
-    // A line under the list, for the legend the Wi-Fi picker prints.
-    const char* listNote = nullptr;
+    // Drawn marks at the right of each row, parallel to listItems (the Wi-Fi picker's
+    // chip, padlock and bars). A marked list keeps its rows to one line, so the base
+    // knows where each one is. listMarkChip is the chip's label.
+    const row_marks::Marks* listMarks = nullptr;
+    const char* listMarkChip = nullptr;
     // The centred code's side, when the default 198 px is not what the screen
     // wants. A screen whose whole point is the code (Display QR) asks for the
     // largest square its body holds; 0 keeps the default.
@@ -249,6 +253,9 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   // above them cannot run underneath. Sets choiceCount_.
   void buildChoiceBand(UiScreen& screen, const StatusView& view);
   void buildList(UiScreen& screen, const StatusView& view);
+  // Paints view.listMarks over the rows the list just drew, from the same props.
+  void drawListMarks(UiScreen& screen, const StatusView& view, const freeink::ui::ListProps& props,
+                     const freeink::ui::Rect& body) const;
   void buildSlider(UiScreen& screen, const StatusView& view, const freeink::ui::Rect& rect);
   // Selection and viewport for the list shape, plus the repeat behaviour that
   // steps a row on a press and a page on a hold.

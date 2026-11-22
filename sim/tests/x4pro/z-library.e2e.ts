@@ -28,7 +28,7 @@ test('Library opens by touch and follows a book into /recents', async ({ app, sc
     return { books, from };
   };
   const openFirst = async (from: number) => {
-    await tapOnce(240, 88); // the first row: the title that sorts first
+    await tapOnce(240, 128); // the first book, under Search all books: the title that sorts first
     await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
     const path = /\[LIB\] open (\S+)/.exec((await log()).slice(from))?.[1];
     await screen.getByRole('button', { name: 'Home' }).click();
