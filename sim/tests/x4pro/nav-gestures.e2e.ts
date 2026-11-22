@@ -37,12 +37,13 @@ test('home flick, bottom-edge Home from a book, image viewer taps', async ({ app
 
   // Into a book, then out by the bottom edge. The suite shares one card: the book may already
   // be Home's first row (blank on a fresh card).
-  if ((await ink(0, 230, 480, 60)) > 500) {
+  const listed = (await ink(0, 230, 480, 60)) > 500;
+  if (listed) {
     await tapOnce(240, 259);
   } else {
     await tapOnce(240, 517); // Browse Files
     await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
-    await tapOnce(150, 279); // test_kerning_ligature.epub
+    await tapOnce(150, 248); // test_jpeg_images.epub, whose menu image-filing.e2e.ts maps
   }
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
   await settle();
@@ -51,6 +52,21 @@ test('home flick, bottom-edge Home from a book, image viewer taps', async ({ app
   await expect(activity).toHaveText('EpubReader');
   await post('/swipe/240/795/240/450');
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
+  if (!listed) {
+    // Leaving filed the book into /recents. Later files open it from the card root, so
+    // Remove from Recents (in-book menu > Book) files it back, as image-filing does.
+    await tapOnce(240, 259); // the book's row on Home
+    await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
+    await settle();
+    await panel.tap({ position: { x: 240, y: 400 } });
+    await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
+    const log = async () => (await fetch(`${app.baseUrl}/log`)).text();
+    const from = (await log()).length;
+    await tapOnce(100, 198); // Book
+    await tapOnce(100, 318); // Remove from Recents
+    await expect(activity).toHaveText('Home', { timeout: 30_000 });
+    await expect.poll(async () => (await log()).slice(from)).toContain('-> /test_jpeg_images.epub');
+  }
 
   // Browse Files > read > pics > a.bmp: each the first row under Search, y 124.
   await tapOnce(240, 517);
