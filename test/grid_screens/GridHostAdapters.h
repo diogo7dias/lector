@@ -195,6 +195,8 @@ inline void drawListChromeBottom(GfxRenderer&, const MappedInputManager&, const 
 #include "UiGridActivity.h.inc"
 #include "UiListActivity.h.inc"
 #include "UiAppHost.cpp.inc"
+#include "activities/UiGridText.h"
 #include "UiGridActivity.cpp.inc"
+#include "UiGridCellLook.cpp.inc"
 #include "UiListActivity.cpp.inc"
 // clang-format on

@@ -1,7 +1,7 @@
 import { test, expect } from 'e2e';
 
 // One tap opens; an action that cannot be undone takes a second. Settings > System >
-// Clear Reading Cache shows its answers as buttons with no band: the first tap on Clear
+// Maintenance > Clear Reading Cache shows its answers as buttons with no band: the first tap on Clear
 // only outlines it, the second clears.
 test('Clear Reading Cache needs a confirming second tap, everything before it one tap', async ({ app, screen }) => {
   await app.open('/');
@@ -17,8 +17,10 @@ test('Clear Reading Cache needs a confirming second tap, everything before it on
     (await (await fetch(`${app.baseUrl}/ink/${x}/${y}/${w}/${h}`)).json()).ink as number;
 
   await tap(240, 729); // Settings
-  await tap(100, 173); // System
-  await tap(100, 703); // Clear Reading Cache
+  await tap(240, 323); // System
+  await tap(420, 781); // Page Down
+  await tap(150, 733); // Maintenance
+  await tap(150, 113); // Clear Reading Cache
   await expect(activity).toHaveText('ClearCache', { timeout: 30_000 });
   expect(await ink(0, 762, 480, 38), 'a screen with answer buttons draws no band').toBe(0);
 

@@ -10,13 +10,15 @@
 #include "SettingInfo.h"
 #include "TextSettingsPreview.h"
 #include "activities/UiGridActivity.h"
+#include "components/AdjustStrip.h"
 #include "components/OptionPopup.h"
 #include "components/themes/BaseTheme.h"
 #include "util/HoldRepeat.h"
 
 // Reader text settings: a live page preview in the band above a grid of name-over-value
 // cells, one per setting (UiGridActivity). Toggles flip on Confirm, pickers open an
-// OptionPopup, and numeric cells open the shared slider dialog (IntervalSelectionActivity).
+// OptionPopup, and a numeric cell docks an adjuster under the preview, so the page
+// reflows while the number moves (TextSettingsAdjust.cpp).
 
 class TextSettingsActivity final : public UiGridActivity {
  public:
@@ -93,6 +95,23 @@ class TextSettingsActivity final : public UiGridActivity {
   void applyNumber(Row row, int value);
 
   void activateRow(Row row);
+
+  // The inline adjuster. editRow_ is the number it edits, Row::Count when it is closed;
+  // it is held rather than read from the selection, which a tap or a page can move.
+  Row editRow_ = Row::Count;
+  uint8_t editStart_ = 0;  // the value when it opened: an unchanged value costs no write
+  bool stripDragging_ = false;
+  adjust_strip::Layout strip_{};  // as last painted, so a touch hits what is on screen
+  bool editing() const { return editRow_ != Row::Count; }
+  int previewHeight() const;
+  int stepOf(Row row, bool large) const;
+  void openEdit(Row row);
+  // Puts the adjuster away and writes the value once, if it moved.
+  void closeEdit();
+  void stepEdit(int delta);
+  bool handleEditInput();
+  bool handleStripTouch();
+  void drawStrip(int y);
 
   void applyFamily(int listIndex);
   void applySize(int listIndex);

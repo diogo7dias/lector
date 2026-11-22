@@ -37,8 +37,8 @@ test('a TTF family draws its own glyphs, a corrupt one falls back to ChareInk', 
 
   await tapOnce(240, 729); // Settings
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
-  await tapOnce(100, 114); // Reader
-  await tapOnce(100, 84); // Text Settings
+  await tapOnce(240, 175); // Reader
+  await tapOnce(100, 113); // Text Settings
   await expect(activity).toHaveText('TextSettings', { timeout: 30_000 });
   // Re-pick ChareInk first: the preview of a just-opened screen differs by a few hundred pixels from
   // one redrawn after a font pick, so the reference is taken the same way as every later reading.

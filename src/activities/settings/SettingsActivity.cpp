@@ -97,8 +97,12 @@ void applyGroups(std::vector<SettingInfo>& rows, const std::vector<SettingsGroup
 }  // namespace
 
 namespace {
-// Four settings categories, then the File Transfer activity.
+// Four settings categories, then the File Transfer activity: the hub's five cards.
 constexpr int kCategoryCount = 5;
+constexpr int kSystem = 3;
+constexpr int kFileTransfer = 4;
+// System's rare rows, one level down from it. Not a hub card.
+constexpr int kMaintenance = 5;
 }  // namespace
 
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) const {
@@ -141,7 +145,9 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) const
 
 StrId SettingsActivity::categoryName(const int index) const {
   switch (index) {
-    case 4:
+    case kMaintenance:
+      return StrId::STR_MAINTENANCE;
+    case kFileTransfer:
       return StrId::STR_FILE_TRANSFER;
     case 0:
       return StrId::STR_CAT_DISPLAY;
@@ -162,26 +168,33 @@ std::vector<SettingInfo>& SettingsActivity::categoryRows(const int index) {
       return readerSettings;
     case 2:
       return controlsSettings;
+    case kMaintenance:
+      return maintenanceSettings;
     default:
       return systemSettings;
   }
 }
 
-// The chosen category's rows, group headings dropped. The headings did their work in
-// rebuildSettingsList, which ordered each category by group; a cell names itself, so a
-// heading band would cost a whole grid row to repeat what the order already says.
+// The chosen category's rows under their group headings. The two-column grid of the other
+// touch boards has no heading look, so it keeps dropping them.
 void SettingsActivity::selectCategory(const int index) {
   {
     RenderLock lock(*this);
-    selectedCategory = std::clamp(index, 0, kCategoryCount - 1);
+    selectedCategory = std::clamp(index, 0, kMaintenance);
     settings.clear();
+    const bool headings = usesWrappedRows();
     for (const auto& row : categoryRows(selectedCategory)) {
-      if (row.isHeader) continue;
+      if (row.isHeader && !headings) continue;
       settings.push_back(row);
     }
     settingsCount = static_cast<int>(settings.size());
   }
   setSelected(0);
+}
+
+UiGridActivity::CellLook SettingsActivity::cellLook(const int index) const {
+  if (mode == Mode::Hub) return CellLook::Card;
+  return index >= 0 && index < settingsCount && settings[index].isHeader ? CellLook::Header : CellLook::Row;
 }
 
 int SettingsActivity::cellCount() const { return mode == Mode::Hub ? kCategoryCount : settingsCount; }
@@ -199,18 +212,11 @@ const char* SettingsActivity::cellName(const int index) const {
 
 const char* SettingsActivity::cellValue(const int index) const {
   if (mode == Mode::Hub) {
-    if (index == 4) return nullptr;
     if (index < 0 || index >= kCategoryCount) return nullptr;
-    // Settings only: the group headings applyGroups inserts are rows too.
-    const auto& rows = const_cast<SettingsActivity*>(this)->categoryRows(index);
-    const auto settingCount =
-        std::count_if(rows.begin(), rows.end(), [](const SettingInfo& row) { return !row.isHeader; });
-    char count[24];
-    snprintf(count, sizeof(count), tr(STR_SETTINGS_COUNT_FORMAT), static_cast<unsigned>(settingCount));
-    cellValueScratch = count;
+    cellValueScratch = hubSummary(index);
     return cellValueScratch.c_str();
   }
-  if (index < 0 || index >= settingsCount) return nullptr;
+  if (index < 0 || index >= settingsCount || settings[index].isHeader) return nullptr;
   cellValueScratch = settingValueText(settings[index]);
   return cellValueScratch.c_str();
 }
@@ -222,6 +228,7 @@ void SettingsActivity::rebuildSettingsList() {
   readerSettings.clear();
   controlsSettings.clear();
   systemSettings.clear();
+  maintenanceSettings.clear();
 
   // Pick up any fonts uploaded/deleted over the web server since the last
   // reader activity ran — otherwise the font-family picker shows stale list.
@@ -290,15 +297,19 @@ void SettingsActivity::rebuildSettingsList() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SHARE_CREDENTIALS, SettingAction::ShareCredentials));
   displaySettings.push_back(SettingInfo::Action(StrId::STR_SHUFFLE_WALLPAPERS, SettingAction::ShuffleWallpapers));
   displaySettings.push_back(SettingInfo::Action(StrId::STR_SCREEN_CALIBRATION, SettingAction::ScreenCalibration));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAN_STORAGE, SettingAction::CleanStorage));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
+  // The rows a reader reaches for a few times a year, one level down in Maintenance, so
+  // System's daily rows are not walled in by them. In the order the sub-list shows them.
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_MAINTENANCE, SettingAction::Maintenance));
+  maintenanceSettings.push_back(SettingInfo::Action(StrId::STR_CLEAN_STORAGE, SettingAction::CleanStorage));
+  maintenanceSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
+  maintenanceSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
+  maintenanceSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
   // Deliberately its own row rather than a branch inside Check for Updates: on a
   // device whose USB flashing the vendor locked, this is the only way to put
   // another firmware on it, and it must be findable without first being told
   // there is no update.
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_INSTALL_OTHER_FIRMWARE, SettingAction::InstallOtherFirmware));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
+  maintenanceSettings.push_back(
+      SettingInfo::Action(StrId::STR_INSTALL_OTHER_FIRMWARE, SettingAction::InstallOtherFirmware));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
   if (halClock.isAvailable()) {
     systemSettings.push_back(SettingInfo::Action(StrId::STR_TIMEZONE, SettingAction::TimeZone));
@@ -380,8 +391,7 @@ void SettingsActivity::rebuildSettingsList() {
                     StrId::STR_SHARE_CREDENTIALS}},
                   {StrId::STR_GRP_DEVICE,
                    {StrId::STR_LANGUAGE, StrId::STR_TIMEZONE, StrId::STR_CLOCK_DST, StrId::STR_WAKE_ON_USB_PLUG_IN,
-                    StrId::STR_CLEAN_STORAGE, StrId::STR_CLEAR_READING_CACHE, StrId::STR_CHECK_UPDATES,
-                    StrId::STR_SD_FIRMWARE_UPDATE, StrId::STR_INSTALL_OTHER_FIRMWARE}},
+                    StrId::STR_MAINTENANCE}},
               });
 }
 
@@ -426,7 +436,8 @@ void SettingsActivity::startDownloadActivity(std::unique_ptr<Activity> activity)
     // by OTA/fonts, and settings retains capacity for ALL categories even when
     // it only displays System. Destruction also frees each row's enum/callback data.
     closeRouting();
-    for (auto* rows : {&settings, &displaySettings, &readerSettings, &controlsSettings, &systemSettings}) {
+    for (auto* rows :
+         {&settings, &displaySettings, &readerSettings, &controlsSettings, &systemSettings, &maintenanceSettings}) {
       releaseStorage(*rows);
     }
     settingsCount = 0;
@@ -453,16 +464,16 @@ bool SettingsActivity::handleCustomInput() {
 void SettingsActivity::activateCell(const int index) {
   if (mode == Mode::Hub) {
     // File Transfer is a hub destination, not a category of persisted settings.
-    if (index == 4) {
+    if (index == kFileTransfer) {
       activityManager.goToFileTransfer();
       return;
     }
     // A new screen: its first row shares this cell's action and value, so it would
     // inherit the tap flash.
     app.clearTapFlash();
-    selectedCategory = index;
-    selectCategory(index);
+    // Category first: selectCategory() lands the cursor by the category's own cell looks.
     mode = Mode::Category;
+    selectCategory(index);
     requestUpdate();
     return;
   }
@@ -472,6 +483,14 @@ void SettingsActivity::activateCell(const int index) {
 
 void SettingsActivity::onBackButton() {
   // Back inside a category returns to the hub; from the hub it leaves the screen.
+  if (mode == Mode::Category && selectedCategory == kMaintenance) {
+    // Maintenance is a row of System, so Back lands on that row.
+    selectCategory(kSystem);
+    for (int i = 0; i < settingsCount; ++i) {
+      if (settings[i].action == SettingAction::Maintenance) setSelected(i);
+    }
+    return;
+  }
   if (mode == Mode::Category) {
     mode = Mode::Hub;
     setSelected(selectedCategory);
@@ -496,7 +515,7 @@ ListChrome SettingsActivity::chrome() const {
   if (mode == Mode::Hub) chrome.footerRight = CROSSPOINT_VERSION;
 
   const int index = selected();
-  const bool onSetting = mode == Mode::Category && index >= 0 && index < settingsCount;
+  const bool onSetting = mode == Mode::Category && index >= 0 && index < settingsCount && !settings[index].isHeader;
   chrome.confirmHint = onSetting ? confirmVerb(settings[index]) : tr(STR_OPEN);
   return chrome;
 }
@@ -509,6 +528,7 @@ void SettingsActivity::toggleCurrentSetting() {
     return;
   }
   const auto& setting = settings[selectedSetting];
+  if (setting.isHeader) return;
 
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
     openSleepTimeoutPicker();
@@ -753,6 +773,11 @@ void SettingsActivity::toggleCurrentSetting() {
                                  rebuildSettingsList();
                                  restoreCursorAfterRebuild();
                                });
+        break;
+      case SettingAction::Maintenance:
+        app.clearTapFlash();
+        selectCategory(kMaintenance);
+        requestUpdate();
         break;
       case SettingAction::TimeZone:
         // About 6 KB of rows, so an allocation that can fail rather than abort.

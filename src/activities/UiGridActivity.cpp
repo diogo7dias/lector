@@ -9,6 +9,7 @@
 
 #include "ListSwipeGesture.h"
 #include "MappedInputManager.h"
+#include "activities/UiGridText.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"
@@ -16,6 +17,9 @@
 #include "util/HoldRepeat.h"
 
 namespace fui = freeink::ui;
+using ui_grid_text::paintsSelected;
+using ui_grid_text::wrappedLines;
+using ui_grid_text::wrappingStyle;
 
 UiGridActivity::UiGridActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput)
     : Activity(name, renderer, mappedInput), UiAppHost(renderer) {}
@@ -63,34 +67,8 @@ bool UiGridActivity::usesWrappedRows() const {
   return settings_grid::usesWrappedRows(mappedInput.hasTouch(), display.profile().isX4Pro);
 }
 
-// Rows and cells measure through the same FreeInkUI target they are drawn with, so
-// the line count the height is built from is the line count text() will draw.
-namespace {
-int wrappedLines(const fui::DrawTarget& target, const fui::TextStyle& style, const char* text, const int width) {
-  if (text == nullptr || text[0] == '\0' || width <= 0) return 1;
-  const int16_t lineHeight = target.lineHeight(style.font);
-  if (lineHeight <= 0) return 1;
-  const fui::Size size = fui::measureWrappedText(target, text, style, static_cast<int16_t>(width));
-  return std::max(1, size.height / lineHeight);
-}
-
-// The label style every row and cell measures and draws with: the body face, wrapping
-// over as many lines as it needs.
-fui::TextStyle wrappingStyle(const fui::ThemeTokens& theme) {
-  fui::TextStyle style = theme.bodyText;
-  style.maxLines = 8;
-  return style;
-}
-
-// True when a selected control is drawn with its selected (black) ground. An armed
-// touch (Active) and the tap flash (Focused) outrank it with light grounds, so
-// inverted text on top of either would vanish.
-bool paintsSelected(const fui::State state) {
-  return !fui::hasState(state, fui::StateActive) && !fui::hasState(state, fui::StateFocused);
-}
-}  // namespace
-
 int UiGridActivity::rowHeightFor(const int index) const {
+  if (cellLook(index) == CellLook::Card) return cardHeightFor(index);
   const auto& metrics = UITheme::getInstance().getMetrics();
   const fui::ThemeTokens* theme = sharedUiThemeCell().load(std::memory_order_acquire);
   if (theme == nullptr) return metrics.listRowHeight;
@@ -143,8 +121,16 @@ void UiGridActivity::setSelected(const int index) {
     // The render task reads the selection and the scroll row mid-build; a press
     // landing during a render would otherwise tear one against the other.
     RenderLock lock(*this);
-    selected_ = index;
-    scrollRow_ = usesWrappedRows() ? keysOnlyWindow().first : settings_grid::scrollToShow(gridLayout(), selected_);
+    const int landable = isHeaderCell(index) ? landableFrom(index, 1) : index;
+    selected_ = landable >= 0 ? landable : index;
+    if (usesWrappedRows()) {
+      // A row reached from below that would become the top row brings its heading with it.
+      const bool headingAbove = selected_ > 0 && selected_ <= scrollRow_ && isHeaderCell(selected_ - 1);
+      if (headingAbove) scrollRow_ = selected_ - 1;
+      scrollRow_ = keysOnlyWindow().first;
+    } else {
+      scrollRow_ = settings_grid::scrollToShow(gridLayout(), selected_);
+    }
   }
   requestUpdate();
 }
@@ -165,10 +151,12 @@ void UiGridActivity::pageBy(const int direction) {
     const int step = std::max(1, win.count);
     if (direction > 0) {
       selected_ = std::min(count - 1, win.first + step * 2 - 1);
+      if (isHeaderCell(selected_)) selected_ = std::max(landableFrom(selected_, -1), 0);
       scrollRow_ = keysOnlyWindow().first;
     } else {
       selected_ = std::max(0, win.first - step);
       scrollRow_ = selected_;
+      if (isHeaderCell(selected_)) selected_ = std::max(landableFrom(selected_, 1), 0);
     }
   }
   requestUpdate();
@@ -177,7 +165,11 @@ void UiGridActivity::pageBy(const int direction) {
 void UiGridActivity::moveSelection(const int deltaRows, const int deltaCells) {
   const int count = cellCount();
   if (count == 0) return;
-  setSelected(settings_grid::step(selected_, count, deltaRows, deltaCells, gridLayout().columns));
+  const int next = settings_grid::step(selected_, count, deltaRows, deltaCells, gridLayout().columns);
+  // A heading is walked past in the direction of travel; with nothing landable past it the
+  // cursor stays where it was.
+  const int landable = isHeaderCell(next) ? landableFrom(next, next < selected_ ? -1 : 1) : next;
+  setSelected(landable >= 0 ? landable : selected_);
 }
 
 void UiGridActivity::screenTrampoline(UiScreen& screen, void* user) {
@@ -280,6 +272,16 @@ void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings
 // edge, the selected one reversed. The same two pieces of text the cell stacks, laid
 // out the way GUI.drawList laid them out before the grid.
 void UiGridActivity::buildRow(UiScreen& screen, const int index, const fui::Rect& box) {
+  switch (cellLook(index)) {
+    case CellLook::Header:
+      buildHeader(screen, index, box);
+      return;
+    case CellLook::Card:
+      buildCard(screen, index, box);
+      return;
+    case CellLook::Row:
+      break;
+  }
   const auto& theme = screen.theme();
   auto& target = screen.frame().target();
   const bool isSelected = index == selected_ && mappedInput.showsSelection();

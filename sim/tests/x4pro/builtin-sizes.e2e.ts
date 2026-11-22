@@ -35,8 +35,8 @@ test('ChareInk offers 12, 14 and 16 pt and each redraws the page at its own size
 
   await tapOnce(240, 729); // Settings
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
-  await tapOnce(100, 114); // Reader
-  await tapOnce(100, 84); // Text Settings
+  await tapOnce(240, 175); // Reader
+  await tapOnce(100, 113); // Text Settings
   await expect(activity).toHaveText('TextSettings', { timeout: 30_000 });
 
   const ink: Record<string, number> = {};

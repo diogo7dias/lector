@@ -26,8 +26,8 @@ test('the toolbar menu scrubs, opens a tile and closes', async ({ app, screen })
   const setStyle = async () => {
     await tapOnce(240, 729); // Settings
     await expect(activity).toHaveText('Settings', { timeout: 30_000 });
-    await tapOnce(100, 114); // Reader
-    await tapOnce(150, 443); // Reader Menu Style: List <-> Toolbar
+    await tapOnce(240, 175); // Reader
+    await tapOnce(150, 533); // Reader Menu Style: List <-> Toolbar
     await screen.getByRole('button', { name: 'Home' }).click();
     await expect(activity).toHaveText('Home', { timeout: 30_000 });
   };
