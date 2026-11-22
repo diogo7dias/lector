@@ -18,12 +18,7 @@ test('ChareInk offers 12, 14 and 16 pt and each redraws the page at its own size
     await expect(activity).toHaveText('Home', { timeout: 30_000 });
   }
   const panel = screen.getByRole('img', { name: 'Device screen' });
-  const tapTwice = async (x: number, y: number) => {
-    for (let i = 0; i < 2; i++) {
-      await panel.tap({ position: { x, y } });
-      await expect(busy).toHaveText('no', { timeout: 30_000 });
-    }
-  };
+
   // Ink of the preview text above the settings list.
   const preview = async () =>
     ((await (await fetch(`${app.baseUrl}/ink/0/60/480/340`)).json()) as { ink: number }).ink;
@@ -32,16 +27,16 @@ test('ChareInk offers 12, 14 and 16 pt and each redraws the page at its own size
     await panel.tap({ position: { x, y } });
     await expect(busy).toHaveText('no', { timeout: 30_000 });
   };
-  // A first tap on a row arms it and the second opens it; the picker's items act on one tap.
+  // One tap opens the row's picker, one more picks the size.
   const pick = async (y: number) => {
-    await tapTwice(240, 443);
+    await tapOnce(240, 443);
     await tapOnce(240, y);
   };
 
-  await tapTwice(240, 729); // Settings
+  await tapOnce(240, 729); // Settings
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
-  await tapTwice(100, 114); // Reader
-  await tapTwice(100, 84); // Text Settings
+  await tapOnce(100, 114); // Reader
+  await tapOnce(100, 84); // Text Settings
   await expect(activity).toHaveText('TextSettings', { timeout: 30_000 });
 
   const ink: Record<string, number> = {};

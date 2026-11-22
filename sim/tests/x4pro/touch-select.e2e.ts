@@ -14,11 +14,9 @@ test('holds a word, drags across lines, saves the passage as a quote', async ({ 
   }
 
   const panel = screen.getByRole('img', { name: 'Device screen' });
-  const tapTwice = async (x: number, y: number) => {
-    for (let i = 0; i < 2; i++) {
-      await panel.tap({ position: { x, y } });
-      await expect(busy).toHaveText('no', { timeout: 30_000 });
-    }
+  const tapOnce = async (x: number, y: number) => {
+    await panel.tap({ position: { x, y } });
+    await expect(busy).toHaveText('no', { timeout: 30_000 });
   };
   const log = async () => (await fetch(`${app.baseUrl}/log`)).text();
   const ink = async (y: number, h: number) => (await (await fetch(`${app.baseUrl}/ink/0/${y}/480/${h}`)).json()).ink;
@@ -29,11 +27,11 @@ test('holds a word, drags across lines, saves the passage as a quote', async ({ 
   if (!box) throw new Error('no panel on the page');
   const resume = (await ink(230, 60)) > 5_000;
   if (resume) {
-    await tapTwice(240, 259); // the book's row on Home
+    await tapOnce(240, 259); // the book's row on Home
   } else {
-    await tapTwice(240, 517); // Browse Files
+    await tapOnce(240, 517); // Browse Files
     await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
-    await tapTwice(150, 279); // test_kerning_ligature.epub
+    await tapOnce(150, 279); // test_kerning_ligature.epub
   }
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
   await expect(busy).toHaveText('no', { timeout: 30_000 });

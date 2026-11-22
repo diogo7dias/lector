@@ -16,18 +16,16 @@ async function device({ app, screen }: any) {
   const busy = screen.getByTestId('busy');
   const power = screen.getByRole('button', { name: 'Power' });
   const panel = screen.getByRole('img', { name: 'Device screen' });
-  const tapTwice = async (x: number, y: number) => {
-    for (let i = 0; i < 2; i++) {
-      await panel.tap({ position: { x, y } });
-      await expect(busy).toHaveText('no', { timeout: 30_000 });
-    }
+  const tapOnce = async (x: number, y: number) => {
+    await panel.tap({ position: { x, y } });
+    await expect(busy).toHaveText('no', { timeout: 30_000 });
   };
   await expect(activity).not.toHaveText('', { timeout: 120_000 });
   return {
     activity,
     busy,
     panel,
-    tapTwice,
+    tapOnce,
     ink: async (x: number, y: number, w: number, h: number) =>
       ((await (await fetch(`${app.baseUrl}/ink/${x}/${y}/${w}/${h}`)).json()) as { ink: number }).ink,
     panelInk: async () => Number(await screen.getByTestId('ink').textContent()),
@@ -36,11 +34,11 @@ async function device({ app, screen }: any) {
         await screen.getByRole('button', { name: 'Home' }).click();
         await expect(activity).toHaveText('Home', { timeout: 30_000 });
       }
-      await tapTwice(240, 729); // Settings
+      await tapOnce(240, 729); // Settings
       await expect(activity).toHaveText('Settings', { timeout: 30_000 });
-      await tapTwice(100, 84); // Display
-      await tapTwice(150, 233); // Sleep Screen
-      await tapTwice(240, rowY[face]);
+      await tapOnce(100, 84); // Display
+      await tapOnce(150, 233); // Sleep Screen
+      await tapOnce(240, rowY[face]);
       await screen.getByRole('button', { name: 'Home' }).click();
       await expect(activity).toHaveText('Home', { timeout: 30_000 });
     },
@@ -89,11 +87,11 @@ test('Quick Resume keeps the page and wakes into it', async (ctx) => {
   // turn one page to the contents, whose ink is exact.
   const resume = (await d.ink(0, 200, 480, 60)) > 500; // blank on a fresh card
   if (resume) {
-    await d.tapTwice(240, 259); // the book's row on Home
+    await d.tapOnce(240, 259); // the book's row on Home
   } else {
-    await d.tapTwice(240, 517); // Browse Files
+    await d.tapOnce(240, 517); // Browse Files
     await expect(d.activity).toHaveText('FileBrowser', { timeout: 30_000 });
-    await d.tapTwice(150, 279); // test_kerning_ligature.epub
+    await d.tapOnce(150, 279); // test_kerning_ligature.epub
   }
   await expect(d.activity).toHaveText('EpubReader', { timeout: 60_000 });
   await expect(d.busy).toHaveText('no', { timeout: 30_000 });

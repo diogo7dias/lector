@@ -154,17 +154,10 @@ void HomeActivity::loop() {
     }
   };
 
-  // A tap picks the row it landed on; on a board with touch it takes a second tap on
-  // that same row to open it (components/TwoTapGate.h). The first tap only moves the
-  // selection under the outline the row is drawn with while it is armed.
+  // A tap opens the row it landed on.
   int tappedItem = 0;
-  const auto rowTap = mappedInput.wasRowTapped(tappedItem);
-  if (rowTap != MappedInputManager::RowTap::None && tappedItem >= 0 && tappedItem < menuCount) {
+  if (mappedInput.wasRowTapped(tappedItem) && tappedItem >= 0 && tappedItem < menuCount) {
     selectorIndex = tappedItem;
-    if (rowTap == MappedInputManager::RowTap::Armed) {
-      requestUpdate();
-      return;
-    }
     activateSelection();
     return;
   }

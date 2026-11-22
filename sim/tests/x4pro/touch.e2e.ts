@@ -13,7 +13,6 @@ test('a tap that lifts before the next poll still lands', async ({ app, screen }
   }
   // ms=0: finger down and up back to back, with no poll in between.
   const tap = (x: number, y: number) => fetch(`${app.baseUrl}/tap/${x}/${y}?ms=0`, { method: 'POST' });
-  await tap(240, 729); // arms Settings
-  await tap(240, 729); // opens it
+  await tap(240, 729); // Settings
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
 });

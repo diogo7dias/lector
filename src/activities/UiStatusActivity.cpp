@@ -27,15 +27,7 @@ void UiStatusActivity::onEnter() {
   app.on(ACTION_CHOICE, &UiStatusActivity::choiceTrampoline, this);
   app.on(ACTION_LIST, &UiStatusActivity::listTrampoline, this);
   app.on(ACTION_SLIDER, &UiStatusActivity::sliderTrampoline, this);
-  // EXEMPT from two-tap confirmation: a slider is a continuous value, not a
-  // discrete choice. Its capsule is dragged and its two step buttons are
-  // pressed repeatedly, so a confirming tap per step would make brightness and
-  // font size unusable, and a drag has no discrete control to arm at all.
-  exemptFromTwoTap(ACTION_SLIDER);
-  // Same for the number pad: arming each digit before it typed would make every number
-  // take two taps per figure.
   app.on(ACTION_KEYPAD, &UiStatusActivity::keypadTrampoline, this);
-  exemptFromTwoTap(ACTION_KEYPAD);
   keypadValue_ = -1;
   setArmHook(&UiStatusActivity::armTrampoline, this);
   app.setScreen(&UiStatusActivity::screenTrampoline, this);
@@ -173,7 +165,14 @@ void UiStatusActivity::buildScreen(UiScreen& screen) {
   buildCentredLines(screen, view);
 }
 
+bool UiStatusActivity::needsConfirmTap(const fui::ActionEvent& event) const {
+  const StatusView view = statusView();
+  if (event.action == ACTION_ACCEPT) return view.acceptCannotUndo;
+  return event.action == ACTION_CHOICE && view.choiceCannotUndo >= 0 && event.value == view.choiceCannotUndo;
+}
+
 void UiStatusActivity::buildActions(UiScreen& screen, const StatusView& view) {
+  if (!mappedInput.hasTouch()) return;
   const bool hasCancel = view.cancelLabel != nullptr && view.cancelLabel[0] != '\0';
   const bool hasAccept = view.acceptLabel != nullptr && view.acceptLabel[0] != '\0';
   if (!hasCancel && !hasAccept) return;
@@ -298,10 +297,17 @@ void UiStatusActivity::render(RenderLock&&) {
     GUI.drawScrollArrows(renderer, list_scrollbar::outsideBand(listBand_, metricsSpacing()), arrows);
   }
 
-  const auto labels =
-      mappedInput.mapLabels(view.backHint ? view.backHint : tr(STR_BACK), view.confirmHint ? view.confirmHint : "",
-                            view.thirdHint ? view.thirdHint : "", view.fourthHint ? view.fourthHint : "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  // A touch screen that drew its answers as buttons shows no band: the same answers twice
+  // is one too many places to look.
+  const bool hasButtons = (view.acceptLabel != nullptr && view.acceptLabel[0] != '\0') ||
+                          (view.cancelLabel != nullptr && view.cancelLabel[0] != '\0');
+  if (!(mappedInput.hasTouch() && hasButtons)) {
+    const char* confirm = view.confirmHint ? view.confirmHint : (view.acceptLabel ? view.acceptLabel : "");
+    const auto labels =
+        mappedInput.mapLabels(view.backHint ? view.backHint : tr(STR_BACK), confirm,
+                              view.thirdHint ? view.thirdHint : "", view.fourthHint ? view.fourthHint : "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
 
   if (drawOverlay()) return;
   // Same contract as UiListActivity: a popup painted over this screen (a failure

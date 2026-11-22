@@ -16,6 +16,9 @@ class Grid : public UiGridActivity {
   using UiAppHost::twoTap;
   using UiAppHost::uiTarget;
   using UiGridActivity::selected;
+  // A tap acts at once; a test of the arm turns the confirming tap on for every cell.
+  bool confirmTaps = false;
+  bool needsConfirmTap(const fui::ActionEvent&) const override { return confirmTaps; }
   int cellCount() const override { return 3; }
   const char* cellName(int) const override { return "Setting"; }
   const char* cellValue(int) const override { return "Value"; }
@@ -42,6 +45,8 @@ class List : public UiListActivity {
   using UiAppHost::twoTap;
   using UiAppHost::uiTarget;
   using UiListActivity::nav;
+  bool confirmTaps = false;
+  bool needsConfirmTap(const fui::ActionEvent&) const override { return confirmTaps; }
   int listCount() const override { return 100; }
   void activateIndex(int index) override {
     ++activations;
@@ -143,11 +148,36 @@ TEST(GridRows, RoutedSwipeReleaseIsNotADispatchedAction) {
   EXPECT_EQ(grid.activations, 0);
 }
 
+TEST(ListRows, OneTapOpensARowThatNeedsNoConfirmingTap) {
+  GfxRenderer renderer;
+  MappedInputManager input;
+  List list(renderer, input);
+  list.onEnter();
+  list.paint();
+  tap(list, input, 2);
+  EXPECT_EQ(list.activations, 1);
+  EXPECT_EQ(list.activated, 2);
+  EXPECT_FALSE(list.twoTap().armed());
+}
+
+TEST(GridRows, OneTapOpensACellThatNeedsNoConfirmingTap) {
+  GfxRenderer renderer;
+  MappedInputManager input;
+  Grid grid(renderer, input);
+  grid.onEnter();
+  grid.paint();
+  tap(grid, input, 1);
+  EXPECT_EQ(grid.activations, 1);
+  EXPECT_EQ(grid.activated, 1);
+  EXPECT_FALSE(grid.twoTap().armed());
+}
+
 TEST(ListRows, RoutedSwipePagesAndClearsArmWhileTapsStillActivate) {
   GfxRenderer renderer;
   MappedInputManager input;
   List list(renderer, input);
   list.onEnter();
+  list.confirmTaps = true;
   list.paint();
   tap(list, input, 0);
   ASSERT_TRUE(list.twoTap().armed());
@@ -178,6 +208,7 @@ TEST(GridRows, RoutedSwipeMovesOneRowAndClearsArmWhileTapsStillActivate) {
   MappedInputManager input;
   Grid grid(renderer, input);
   grid.onEnter();
+  grid.confirmTaps = true;
   grid.paint();
   tap(grid, input, 0);
   ASSERT_TRUE(grid.twoTap().armed());
@@ -198,6 +229,7 @@ TEST(GridRows, ArmingDoesNotSelectOrActivateAndSurvivesRepaints) {
   MappedInputManager input;
   Grid grid(renderer, input);
   grid.onEnter();
+  grid.confirmTaps = true;
   grid.paint();
   ASSERT_EQ(grid.selected(), 0);
   tap(grid, input, 1);
@@ -222,6 +254,7 @@ TEST(GridRows, ArmingTheSelectedRowOverridesItsFillAndText) {
   MappedInputManager input;
   Grid grid(renderer, input);
   grid.onEnter();
+  grid.confirmTaps = true;
   grid.paint();
   ASSERT_EQ(grid.uiTarget.fills[0].paint.kind, fui::PaintKind::Solid);
   ASSERT_EQ(grid.uiTarget.fills[0].paint.color, fui::Color::Black);
@@ -273,6 +306,7 @@ TEST(GridRows, OtherTouchBoardsKeepTheirGridAndArmedTextLegible) {
   Grid grid(renderer, input);
   display.device.isX4Pro = false;
   grid.onEnter();
+  grid.confirmTaps = true;
   grid.paint();
   EXPECT_LT(grid.uiTarget.fills[0].rect.width, renderer.getScreenWidth());
   tap(grid, input, 0);

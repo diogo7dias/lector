@@ -29,7 +29,7 @@ void GatedApp::handle(const fui::ActionEvent& event) {
   // A drag carries a position rather than a discrete press (dragPermille >= 0),
   // and a long press is already a deliberate held gesture that confirms itself.
   // Neither is a control a first tap can arm.
-  const bool gated = event.dragPermille < 0 && !event.longPress && !host_->twoTapExempt(event.action);
+  const bool gated = event.dragPermille < 0 && !event.longPress && host_->needsConfirmTap(event);
   if (gated && host_->twoTap().decide(event.action, event.value) == two_tap::Decision::Arm) {
     host_->noteArmed(event);
     return;
@@ -55,7 +55,6 @@ void UiAppHost::resetUi() {
   uiReady = false;
   app.clearBoundHandlers();
   twoTapGate.clear();
-  exemptCount = 0;
   armHook = nullptr;
   armHookUser = nullptr;
   applySharedUiTheme(app, uiTarget);
@@ -65,18 +64,6 @@ void UiAppHost::renderUi() {
   app.setDevice(uiTarget.deviceContext());
   app.render();
   uiReady = true;
-}
-
-void UiAppHost::exemptFromTwoTap(const fui::ActionId action) {
-  if (exemptCount >= kMaxExempt) return;
-  exempt[exemptCount++] = action;
-}
-
-bool UiAppHost::twoTapExempt(const fui::ActionId action) const {
-  for (uint8_t i = 0; i < exemptCount; ++i) {
-    if (exempt[i] == action) return true;
-  }
-  return false;
 }
 
 void UiAppHost::noteArmed(const fui::ActionEvent& event) {

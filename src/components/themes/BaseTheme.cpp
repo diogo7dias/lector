@@ -22,7 +22,6 @@
 #include "components/ListScrollbar.h"
 #include "components/OptionPopupGeometry.h"
 #include "components/RowHitTest.h"
-#include "components/TwoTapGate.h"
 #include "components/UITheme.h"
 #include "components/WrappedListWindow.h"
 #include "components/icons/skull12.h"
@@ -297,26 +296,8 @@ hint_band::Band BaseTheme::hintBand(const GfxRenderer& renderer) const {
                          UITheme::getInstance().getMetrics().buttonHintsHeight, gpio.hasTouch(), gpio.deviceIsX3()};
 }
 
-bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, const bool armed) const {
+bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect) const {
   // One highlight: the row filled, its text knocked out white.
-  if (armed) {
-    // Two-tap confirmation: a row waiting for its confirming tap wears a dashed 2px
-    // border all round, never the filled band, so "armed" can never be misread as
-    // "already opened". Same shape and dashes as the FreeInkUI screens
-    // (components/UIThemeTokens.h, freeink fillDashed: 6px dash, 4px gap).
-    constexpr int kRule = 2, kDash = 6, kGap = 4;
-    for (int at = 0; at < rect.width; at += kDash + kGap) {
-      const int run = std::min(kDash, rect.width - at);
-      renderer.fillRect(rect.x + at, rect.y, run, kRule);
-      renderer.fillRect(rect.x + at, rect.y + rect.height - kRule, run, kRule);
-    }
-    for (int at = 0; at < rect.height; at += kDash + kGap) {
-      const int run = std::min(kDash, rect.height - at);
-      renderer.fillRect(rect.x, rect.y + at, kRule, run);
-      renderer.fillRect(rect.x + rect.width - kRule, rect.y + at, kRule, run);
-    }
-    return false;
-  }
   renderer.fillRect(rect.x, rect.y, rect.width, rect.height);
   return true;
 }
@@ -599,7 +580,7 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
     // marked as a single block.
     bool inverted = false;
     if (selected) {
-      inverted = drawSelection(renderer, Rect(rect.x, rowY, rect.width, row.height), row.index == two_tap::armedRow());
+      inverted = drawSelection(renderer, Rect(rect.x, rowY, rect.width, row.height));
     }
     if (row.valueW > 0) {
       renderer.drawText(UI_10_FONT_ID, valueX, rowY + 3, row.value.c_str(), !inverted);
@@ -648,7 +629,7 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
                     menuMetrics.menuRowHeight);
     bool inverted = false;
     if (selected) {
-      inverted = drawSelection(renderer, tile, itemIndexBase + i == two_tap::armedRow());
+      inverted = drawSelection(renderer, tile);
     } else {
       renderer.drawRect(tile.x, tile.y, tile.width, tile.height, kLine, true);
     }
@@ -1416,7 +1397,7 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
     // The selection paints the whole row and forces white text.
     bool inverted = false;
     if (selected) {
-      inverted = drawSelection(renderer, Rect(rowX, rowY, rowW, entry.height), entry.bookIdx == two_tap::armedRow());
+      inverted = drawSelection(renderer, Rect(rowX, rowY, rowW, entry.height));
     }
 
     // [NN%] badge on line 0: an inverted chip that flips with row selection so it

@@ -131,17 +131,7 @@ bool EpubReaderActivity::handleToolbarInput() {
     case ReaderToolbarUi::Event::None:
       break;
   }
-  if (routed.routed) {
-    // A first tap on a tile arms it (two-tap): the focus pill moves onto it, and the second
-    // tap, or Confirm, opens it.
-    const int armed = toolbarUi->takeArmedTool();
-    if (armed >= 0 && armed != toolbarFocus) {
-      toolbarFocus = armed;
-      toolbarPaintOnly = true;
-      requestUpdate();
-    }
-    return true;
-  }
+  if (routed.routed) return true;
 
   // Buttons act on the press, like the Quick Menu: whatever opened the sheet has already
   // had its release.

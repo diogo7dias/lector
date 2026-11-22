@@ -201,7 +201,8 @@ void EpubReaderActivity::deleteCacheAndGoHome() {
 bool EpubReaderActivity::blockSortesAction() {
   if (!sortesMode) return false;
   auto message =
-      makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_SORTES), tr(STR_SORTES_OPEN_NORMALLY));
+      makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_SORTES), tr(STR_SORTES_OPEN_NORMALLY),
+                                              /*cannotUndo=*/false);
   if (!message) {
     LOG_ERR("SORTES", "OOM: unavailable action message");
     return true;

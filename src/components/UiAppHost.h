@@ -71,6 +71,7 @@ class UiAppHost {
   using UiScreen = UiApp::ScreenType;
 
   explicit UiAppHost(const GfxRenderer& renderer);
+  virtual ~UiAppHost() = default;
 
   // Screen-entry reset: close the routing gate and rebind the shared theme
   // tokens (refreshed for the active UITheme + this target's fonts). Call from
@@ -110,12 +111,12 @@ class UiAppHost {
   // interaction table indexes is released mid-state. Reopens on renderUi().
   void closeRouting() { uiReady = false; }
 
-  // --- two-tap touch confirmation (see components/TwoTapGate.h) -------------
+  // --- confirming tap (see components/TwoTapGate.h) --------------------------
 
-  // Actions a first tap must NOT arm. Stated at the registration site with the
-  // reason it is exempt; nothing is inferred here.
-  void exemptFromTwoTap(freeink::ui::ActionId action);
-  bool twoTapExempt(freeink::ui::ActionId action) const;
+  // A tap runs its action at once. A screen answers true here for the controls whose
+  // action cannot be undone (delete, clear, flash, forget): their first tap only arms
+  // them, and a second tap on the same control runs it. Read on the loop task.
+  virtual bool needsConfirmTap(const freeink::ui::ActionEvent&) const { return false; }
   // Drops the arm and the highlight it paints. Every lifetime rule routes here:
   // leaving the screen, a scroll, a physical key, a tap on empty space.
   void clearTwoTap();
@@ -140,11 +141,6 @@ class UiAppHost {
   std::atomic<bool> uiReady{false};
 
   two_tap::Gate twoTapGate;
-  // Four is every exemption the firmware has (see the call sites); an extra one
-  // is dropped rather than silently gating something it should not.
-  static constexpr uint8_t kMaxExempt = 4;
-  freeink::ui::ActionId exempt[kMaxExempt]{};
-  uint8_t exemptCount = 0;
   ArmHook armHook = nullptr;
   void* armHookUser = nullptr;
   // Set by noteArmed() for the pass routeTouch() is in, so it knows to repaint

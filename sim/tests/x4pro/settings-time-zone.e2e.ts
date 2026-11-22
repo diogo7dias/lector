@@ -8,11 +8,9 @@ test('a time zone picked on its screen shows on its row', async ({ app, screen }
   const activity = screen.getByTestId('activity');
   const busy = screen.getByTestId('busy');
   const panel = screen.getByRole('img', { name: 'Device screen' });
-  const tapTwice = async (x: number, y: number) => {
-    for (let i = 0; i < 2; i++) {
-      await panel.tap({ position: { x, y } });
-      await expect(busy).toHaveText('no', { timeout: 30_000 });
-    }
+  const tapOnce = async (x: number, y: number) => {
+    await panel.tap({ position: { x, y } });
+    await expect(busy).toHaveText('no', { timeout: 30_000 });
   };
   const press = async (name: 'Up' | 'Down', times: number) => {
     for (let i = 0; i < times; i++) {
@@ -31,11 +29,11 @@ test('a time zone picked on its screen shows on its row', async ({ app, screen }
       await screen.getByRole('button', { name: 'Home' }).click();
       await expect(activity).toHaveText('Home', { timeout: 30_000 });
     }
-    await tapTwice(240, 729); // Settings
-    await tapTwice(100, 173); // System
+    await tapOnce(240, 729); // Settings
+    await tapOnce(100, 173); // System
   };
   const openTimeZone = async () => {
-    await tapTwice(100, 583); // Time Zone
+    await tapOnce(100, 583); // Time Zone
     await expect(activity).toHaveText('TimezonePicker', { timeout: 30_000 });
   };
 
@@ -43,7 +41,7 @@ test('a time zone picked on its screen shows on its row', async ({ app, screen }
   expect(await value(), 'UTC is the default and fits the row').toBeGreaterThan(0);
   await openTimeZone(); // opens on UTC
   await press('Down', 2); // London / Dublin / Lisbon, then Berlin / Paris / Madrid / Rome
-  await tapTwice(100, 700);
+  await tapOnce(100, 700);
   await expect.poll(value, { timeout: 30_000 }).toBe(0);
 
   // Out of Settings and back in: the row is read from the saved setting, not from the screen.
@@ -55,7 +53,7 @@ test('a time zone picked on its screen shows on its row', async ({ app, screen }
   expect(await value(), 'the zone stayed after Settings was left').toBe(0);
   await openTimeZone(); // opens on Berlin
   await press('Up', 2);
-  await tapTwice(100, 608);
+  await tapOnce(100, 608);
   await expect.poll(value, { timeout: 30_000 }).toBeGreaterThan(0);
 
   // Leave on Home, where the suites after this one expect to start.

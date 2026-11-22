@@ -11,15 +11,13 @@ test('an image page draws the same after the book is filed into recents', async 
   await expect(activity).toHaveText('Home', { timeout: 120_000 });
 
   const panel = screen.getByRole('img', { name: 'Device screen' });
-  const tapTwice = async (x: number, y: number) => {
-    for (let i = 0; i < 2; i++) {
-      await panel.tap({ position: { x, y } });
-      await expect(busy).toHaveText('no', { timeout: 30_000 });
-    }
+  const tapOnce = async (x: number, y: number) => {
+    await panel.tap({ position: { x, y } });
+    await expect(busy).toHaveText('no', { timeout: 30_000 });
   };
-  await tapTwice(240, 517); // Browse Files
+  await tapOnce(240, 517); // Browse Files
   await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
-  await tapTwice(150, 248); // test_jpeg_images.epub, at the card root
+  await tapOnce(150, 248); // test_jpeg_images.epub, at the card root
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
   await expect(busy).toHaveText('no', { timeout: 30_000 });
 
@@ -44,7 +42,7 @@ test('an image page draws the same after the book is filed into recents', async 
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
   await expect.poll(async () => (await fetch(`${app.baseUrl}/log`)).text()).toContain('-> /recents/test_jpeg_images.epub');
 
-  await tapTwice(240, 259); // the book's row on Home
+  await tapOnce(240, 259); // the book's row on Home
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
   await expect.poll(body, { message: 'the image page reopens with its image', timeout: 60_000 }).toEqual(imagePage);
   expect(await (await fetch(`${app.baseUrl}/log`)).text()).not.toContain('Image file not found');
@@ -53,8 +51,8 @@ test('an image page draws the same after the book is filed into recents', async 
   // returns Home, so the next test finds the card and the screen as they were.
   await panel.tap({ position: { x: 240, y: 400 } }); // centre of the page
   await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
-  await tapTwice(100, 198); // Book
-  await tapTwice(100, 318); // Remove from Recents
+  await tapOnce(100, 198); // Book
+  await tapOnce(100, 318); // Remove from Recents
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
   await expect.poll(async () => (await fetch(`${app.baseUrl}/log`)).text()).toContain('-> /test_jpeg_images.epub');
 });

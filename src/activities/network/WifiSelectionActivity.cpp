@@ -568,6 +568,7 @@ UiStatusActivity::StatusView WifiSelectionActivity::statusView() const {
     case WifiSelectionState::FORGET_PROMPT:
       view.lines = {tr(STR_FORGET_NETWORK), ssidLine.c_str(), tr(STR_FORGET_AND_REMOVE), nullptr};
       view.choices = {tr(STR_CANCEL), tr(STR_FORGET_BUTTON)};
+      view.choiceCannotUndo = 1;
       view.confirmHint = tr(STR_SELECT);
       break;
     case WifiSelectionState::CONNECTION_FAILED:

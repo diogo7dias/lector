@@ -1,61 +1,36 @@
 #include "ConfirmationActivity.h"
 
-#include <GfxRenderer.h>
 #include <I18n.h>
 
-#include "components/UIScale.h"
-
 ConfirmationActivity::ConfirmationActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                           const std::string& heading, const std::string& body)
-    : UiStatusActivity("Confirmation", renderer, mappedInput), heading(heading), body(body) {}
-
-void ConfirmationActivity::onEnter() {
-  UiStatusActivity::onEnter();
-
-  const int fontId = uiScaleSpec().smallFontId;
-  const int maxWidth = renderer.getScreenWidth() - 40;
-  if (!heading.empty()) {
-    safeHeading = renderer.truncatedText(fontId, heading.c_str(), maxWidth, EpdFontFamily::REGULAR);
-  }
-  if (!body.empty()) {
-    safeBody = renderer.truncatedText(fontId, body.c_str(), maxWidth, EpdFontFamily::REGULAR);
-  }
-
-  const char* options[] = {I18N.get(StrId::STR_CANCEL), I18N.get(StrId::STR_CONFIRM)};
-  confirmPopup.show(safeHeading.c_str(), options, 2, 0, [this](const int choice) {
-    ActivityResult res;
-    res.isCancelled = (choice != 1);
-    setResult(std::move(res));
-    finish();
-  });
-
-  requestUpdate(true);
-}
+                                           const std::string& heading, const std::string& body, const bool cannotUndo)
+    : UiStatusActivity("Confirmation", renderer, mappedInput), heading(heading), body(body), cannotUndo(cannotUndo) {}
 
 UiStatusActivity::StatusView ConfirmationActivity::statusView() const {
   StatusView view;
   view.linesAtTop = true;
-  if (!safeHeading.empty()) view.lines[0] = safeHeading.c_str();
-  if (!safeBody.empty()) view.lines[safeHeading.empty() ? 0 : 1] = safeBody.c_str();
-  // The popup carries both answers, so the hint band says nothing.
-  view.backHint = "";
+  // A section wraps its paragraph to the body width, so a long file name or server name
+  // reads whole instead of being cut to one line.
+  if (!heading.empty()) view.sections[0].heading = heading.c_str();
+  if (!body.empty()) {
+    view.sections[0].paragraph = body.c_str();
+    view.sections[0].paragraphMaxLines = 3;
+  }
+  view.backHint = tr(STR_CANCEL);
+  view.confirmHint = tr(STR_CONFIRM);
+  view.cancelLabel = tr(STR_CANCEL);
+  view.acceptLabel = tr(STR_CONFIRM);
+  view.acceptCannotUndo = cannotUndo;
   return view;
 }
 
-bool ConfirmationActivity::handleCustomInput() {
-  if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return true;
-  // The popup went away without an answer (Back, or a tap outside): that is a no.
-  cancel();
-  return true;
-}
+void ConfirmationActivity::onConfirmButton() { answer(true); }
 
-void ConfirmationActivity::onBackButton() { cancel(); }
+void ConfirmationActivity::onBackButton() { answer(false); }
 
-void ConfirmationActivity::cancel() {
+void ConfirmationActivity::answer(const bool yes) {
   ActivityResult res;
-  res.isCancelled = true;
+  res.isCancelled = !yes;
   setResult(std::move(res));
   finish();
 }
-
-bool ConfirmationActivity::drawOverlay() { return confirmPopup.processRender(renderer, mappedInput); }

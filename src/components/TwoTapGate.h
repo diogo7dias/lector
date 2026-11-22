@@ -2,12 +2,14 @@
 
 #include <cstdint>
 
-// Two-tap confirmation for touch input.
+// Confirming tap for touch input.
 //
-// On a board with a touch panel a tap must not act on the spot. The first tap
-// on a control ARMS it — it is highlighted and nothing else happens. A second
-// tap on the SAME control runs the action. A tap on a DIFFERENT control moves
-// the arm without acting, so exactly one control is ever armed.
+// A tap acts on the spot, except on the few controls whose action cannot be
+// undone (delete, clear, flash, forget; UiAppHost::needsConfirmTap names them).
+// The first tap on one of those ARMS it: it is outlined and nothing else
+// happens. A second tap on the SAME control runs the action. A tap on a
+// DIFFERENT control moves the arm without acting, so exactly one control is
+// ever armed.
 //
 // A control is named here by the (action, value) pair FreeInkUI dispatches for
 // it, which is what keeps this a pure policy: no rects, no renderer, no screen,
@@ -70,17 +72,5 @@ class Gate {
   uint16_t action_ = kNoAction;
   int16_t value_ = 0;
 };
-
-// The list row a first tap left armed, for the screens that paint their own
-// rows instead of going through FreeInkUI (home, the file browser, the
-// end-of-book suggestions). Those draws already know each row's item index, so
-// the arm reaches them as one number rather than as a second hit table. -1 =
-// nothing armed, which is always the answer on a board without touch.
-inline constexpr int kNoRow = -1;
-
-inline int& armedRow() {
-  static int row = kNoRow;
-  return row;
-}
 
 }  // namespace two_tap
