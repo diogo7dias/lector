@@ -134,22 +134,20 @@ void UiStatusActivity::drawListMarks(UiScreen& screen, const StatusView& view, c
                                      const fui::Rect& body) const {
   const auto& theme = screen.theme();
   auto& target = screen.frame().target();
-  // The same arithmetic fui::list() did for these props: rows inset from the band, the
-  // scroll track cut from their width when the list overflows, a fixed stride.
-  const int stride = props.rowHeight + props.rowGap;
-  const int visible = fui::listVisibleRows(body, props.rowHeight, props.rowGap);
-  const bool overflows = listCount_ > visible;
-  int top = overflows ? std::min<int>(props.topIndex, listCount_ - 1) : 0;
-  if (top < 0) top = 0;
-  int rowX = body.x + props.rowInset;
-  int rowWidth = body.width - 2 * props.rowInset;
-  const int needed = props.scrollIndicatorWidth + props.scrollIndicatorInset + 2;
-  if (overflows && props.scrollIndicatorWidth > 0 && props.rowInset < needed) {
-    const int cut = needed - props.rowInset;
-    rowWidth -= cut;
-    if (props.scrollIndicatorSide == 1) rowX += cut;
-  }
-  const int slotRight = rowX + rowWidth - props.sidePadding;
+  row_marks::ListLayout layout;
+  layout.band = {body.x, body.y, body.width, body.height};
+  layout.count = listCount_;
+  layout.visible = fui::listVisibleRows(body, props.rowHeight, props.rowGap);
+  layout.topIndex = props.topIndex;
+  layout.rowHeight = props.rowHeight;
+  layout.rowGap = props.rowGap;
+  layout.rowInset = props.rowInset;
+  layout.sidePadding = props.sidePadding;
+  layout.scrollWidth = props.scrollIndicator ? props.scrollIndicatorWidth : 0;
+  layout.scrollInset = props.scrollIndicatorInset;
+  layout.scrollLeft = props.scrollIndicatorSide == 1;
+  const row_marks::RowPlacement place = row_marks::placeRows(layout);
+  const int slotRight = place.slotRight;
 
   // A selected row is inverted (or pilled) by the theme; the marks take its ink.
   fui::StyleSet styles = theme.listRow.unset() ? fui::defaultListRowStyles() : theme.listRow;
@@ -167,9 +165,9 @@ void UiStatusActivity::drawListMarks(UiScreen& screen, const StatusView& view, c
                 ink);
   };
 
-  for (int i = top; i < listCount_ && i < top + visible; ++i) {
+  for (int i = place.top; i < place.end; ++i) {
     const row_marks::Marks& marks = view.listMarks[i];
-    const int centreY = body.y + (i - top) * stride + props.rowHeight / 2;
+    const int centreY = place.rowY(i) + props.rowHeight / 2;
     const fui::Paint ink = (props.selectedIndex == i ? styles.selected : styles.normal).foreground;
     if (marks.bars >= 0) {
       const signal_meter::Rect icon = row_marks::barsRect(slotRight, centreY);
