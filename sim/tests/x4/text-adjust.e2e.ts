@@ -35,7 +35,7 @@ test('a Text Settings number steps in place by the keys', async ({ app, screen }
   await press('Confirm'); // Text Settings, the first row under the TEXT heading
   await expect(activity).toHaveText('TextSettings', { timeout: 30_000 });
 
-  await press('Down', 4); // Line Spacing, after Font, Size, Paperback Look and Anti-Aliasing
+  await press('Down', 3); // Line Spacing, after Font, Size and Paperback Look
   await press('Confirm');
   await expect.poll(stepper, { timeout: 30_000 }).toBeGreaterThan(0);
   const before = await value();

@@ -423,14 +423,6 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
                           "wordSpacing", StrId::STR_CAT_READER)
            .withTextSettings());
 
-  emit(SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
-                           StrId::STR_CAT_READER)
-           .withTextSettings());
-
-  emit(SettingInfo::Enum(StrId::STR_TEXT_CONTRAST, &CrossPointSettings::textContrast,
-                         {StrId::STR_NORMAL, StrId::STR_HIGH, StrId::STR_MAX}, "textContrast", StrId::STR_CAT_READER)
-           .withTextSettings());
-
   // Whole pixels, stored 0..4 and shown -2..+2. A new key: "characterSpacing" held half pixels.
   emit(SettingInfo::Value(StrId::STR_CHARACTER_SPACING, &CrossPointSettings::characterSpacing,
                           {0, reader_defaults::MAX_CHARACTER_SPACING, 1}, "characterSpacingPx", StrId::STR_CAT_READER)

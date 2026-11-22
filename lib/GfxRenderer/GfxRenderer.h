@@ -106,7 +106,6 @@ class GfxRenderer {
   // Images: Display (B/W): image pixels dither to black and white in the B/W pass, and the
   // grayscale passes leave them alone. Set by the reader for the page it is drawing.
   bool ditherImagesInBw_ = false;
-  mutable uint8_t textContrast_ = 0;
 
   // CJK UI font fallback map: primary (built-in, Latin-only) UI font id -> a
   // size-matched SD-card font id that carries CJK glyphs. When a string drawn
@@ -279,8 +278,6 @@ class GfxRenderer {
   // plain bool; reader activities bracket the body/status text regions only, and
   // reset to false so menus/overlays render thin. const (mutates a mutable field)
   // so it can be called on the const GfxRenderer& that layout/render code holds.
-  // Text Contrast for anti-aliased glyphs (0 Normal, 1 High, 2 Max): see glyphBitmap::draw.
-  void setTextContrast(const uint8_t level) const { textContrast_ = level; }
   void setPaperbackLook(const uint8_t level) const { paperbackLook_ = level; }
   uint8_t getPaperbackLook() const { return paperbackLook_; }
   void setDitherImagesInBw(const bool enabled) { ditherImagesInBw_ = enabled; }

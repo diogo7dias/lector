@@ -97,7 +97,9 @@ TEST(ReaderLookFields, SettingTheWholeListTouchesEveryLiveByte) {
                             offsetof(ReaderPrefs, retiredWordExpansion),
                             offsetof(ReaderPrefs, retiredFillPages),
                             offsetof(ReaderPrefs, retiredChapterTime),
-                            offsetof(ReaderPrefs, retiredBookTime)};
+                            offsetof(ReaderPrefs, retiredBookTime),
+                            offsetof(ReaderPrefs, retiredTextAntiAliasing),
+                            offsetof(ReaderPrefs, retiredTextContrast)};
   static_assert(sizeof(retired) / sizeof(retired[0]) == READER_PREFS_RETIRED_BYTES + 1);
   for (size_t i = 0; i < sizeof(ReaderPrefs); ++i) {
     if (std::find(std::begin(retired), std::end(retired), i) != std::end(retired)) continue;

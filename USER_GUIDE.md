@@ -1045,7 +1045,7 @@ On the X4 Pro a family can also be an ordinary TrueType or OpenType font. Make a
 one per style, or upload them from the **Fonts** page of the web interface. The style comes
 from the file name (`Regular`, `Bold`, `Italic`, `BoldItalic` and the usual weight names); a
 folder holding a single file uses it as the regular face. Such a family offers every size from
-8 to 40 pt and renders anti-aliased when **Text Anti-Aliasing** is on. The X4 and X3 skip these
+8 to 40 pt. The X4 and X3 skip these
 folders; they read `.cpfont` families only.
 
 Installed families appear in **Settings > Reader > Text Settings > Reader Font Family**. Full
@@ -1247,10 +1247,6 @@ is centred.
 - **Hidden Dots** — only listed while Guide Dots is on: keeps the widened gaps and draws no dot in them.
 - **Extra Paragraph Spacing** — space between paragraphs instead of a first-line indent.
   When a nested block ends, the enclosing block's top and bottom spacing is not added again.
-- **Text Anti-Aliasing** — smoother edges, slightly slower page turns. On by default.
-- **Text Contrast** — Normal, High or Max, shown while Text Anti-Aliasing is on. High draws
-  the light grey edge pixels as dark grey; Max also draws the dark grey ones black, for
-  crisper, darker anti-aliased text.
 - **Debug Layout Borders** — draws the layout boxes; a diagnostic, not a reading feature.
 
 **Page**

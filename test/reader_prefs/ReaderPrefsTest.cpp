@@ -29,7 +29,7 @@ ReaderPrefs makeSample() {
   p.guideDotsEnabled = 1;
   p.guideDotsHidden = 1;
   p.embeddedStyle = 0;
-  p.textAntiAliasing = 0;
+  p.retiredTextAntiAliasing = 0;
   p.imageRendering = 2;
   p.paragraphNumbering = 2;  // whole book
   p.paperbackLookBody = 0;
@@ -52,7 +52,7 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.characterSpacing, b.characterSpacing);
   EXPECT_EQ(a.retiredChapterTime, b.retiredChapterTime);
   EXPECT_EQ(a.retiredBookTime, b.retiredBookTime);
-  EXPECT_EQ(a.textContrast, b.textContrast);
+  EXPECT_EQ(a.retiredTextContrast, b.retiredTextContrast);
   EXPECT_EQ(a.paragraphNumberPlace, b.paragraphNumberPlace);
   EXPECT_EQ(a.sbBookTitlePos, b.sbBookTitlePos);
   EXPECT_EQ(a.screenMargin, b.screenMargin);
@@ -64,7 +64,7 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.guideDotsEnabled, b.guideDotsEnabled);
   EXPECT_EQ(a.guideDotsHidden, b.guideDotsHidden);
   EXPECT_EQ(a.embeddedStyle, b.embeddedStyle);
-  EXPECT_EQ(a.textAntiAliasing, b.textAntiAliasing);
+  EXPECT_EQ(a.retiredTextAntiAliasing, b.retiredTextAntiAliasing);
   EXPECT_EQ(a.imageRendering, b.imageRendering);
   EXPECT_EQ(a.paragraphNumbering, b.paragraphNumbering);
   EXPECT_EQ(a.paperbackLookBody, b.paperbackLookBody);
@@ -610,7 +610,7 @@ TEST(ReaderPrefs, AV12RecordKeepsItsFieldsAndLeavesTheNewItemOff) {
 // success. The two formats differ only in length, so length is what tells them apart.
 std::string interimV11Record(const ReaderPrefs& p) {
   const auto* raw = reinterpret_cast<const uint8_t*>(&p);
-  constexpr size_t split = offsetof(ReaderPrefs, textAntiAliasing);
+  constexpr size_t split = offsetof(ReaderPrefs, retiredTextAntiAliasing);
   std::string out;
   out.append(reinterpret_cast<const char*>(raw), split);
   out.push_back(static_cast<char>(p.retiredEmbeddedLayoutStyle));  // sat here in the interim build
@@ -622,7 +622,7 @@ TEST(ReaderPrefs, TheInterimV11LayoutIsUnshiftedRatherThanMisread) {
   ReaderPrefs written = makeSample();
   written.embeddedStyle = 1;
   written.retiredEmbeddedLayoutStyle = 0;  // this interim record really did carry its own layout switch
-  written.textAntiAliasing = 1;
+  written.retiredTextAntiAliasing = 1;
   written.imageRendering = 2;
   std::strncpy(written.sdFontFamilyName, "Bookerly", sizeof(written.sdFontFamilyName) - 1);
   written.sbOffBar = 3;
@@ -637,9 +637,9 @@ TEST(ReaderPrefs, TheInterimV11LayoutIsUnshiftedRatherThanMisread) {
 
   ReaderPrefs loaded;
   ASSERT_TRUE(readReaderPrefs(ss, loaded));
-  EXPECT_EQ(0, loaded.embeddedStyle);  // text on, layout off: either off means off
-  EXPECT_EQ(1, loaded.textAntiAliasing);
-  EXPECT_EQ(0, loaded.imageRendering);  // Placeholder was inert before v27, so it resets to Display
+  EXPECT_EQ(0, loaded.embeddedStyle);            // text on, layout off: either off means off
+  EXPECT_EQ(0, loaded.retiredTextAntiAliasing);  // retired: read, then zeroed
+  EXPECT_EQ(0, loaded.imageRendering);           // Placeholder was inert before v27, so it resets to Display
   EXPECT_STREQ("Bookerly", loaded.sdFontFamilyName);
   EXPECT_EQ(3, loaded.sbOffBar);
   EXPECT_EQ(written.statusBarEnabled, loaded.statusBarEnabled);
@@ -650,7 +650,7 @@ TEST(ReaderPrefs, TheInterimV11LayoutIsUnshiftedRatherThanMisread) {
 TEST(ReaderPrefs, AStableV11RecordIsNotMistakenForTheInterimOne) {
   ReaderPrefs written = makeSample();
   written.embeddedStyle = 0;
-  written.textAntiAliasing = 1;
+  written.retiredTextAntiAliasing = 1;
   written.sbOffBar = 3;
 
   std::stringstream ss;
@@ -660,8 +660,8 @@ TEST(ReaderPrefs, AStableV11RecordIsNotMistakenForTheInterimOne) {
 
   ReaderPrefs loaded;
   ASSERT_TRUE(readReaderPrefs(ss, loaded));
-  EXPECT_EQ(0, loaded.embeddedStyle);  // the layout half was seeded from the single old choice
-  EXPECT_EQ(1, loaded.textAntiAliasing);
+  EXPECT_EQ(0, loaded.embeddedStyle);            // the layout half was seeded from the single old choice
+  EXPECT_EQ(0, loaded.retiredTextAntiAliasing);  // retired: read, then zeroed
   EXPECT_EQ(3, loaded.sbOffBar);
 }
 
@@ -844,7 +844,7 @@ TEST(ReaderPrefs, RetiredTimeLeftBytesAreZeroedOnRead) {
 
 TEST(ReaderPrefs, AV18RecordKeepsNormalContrast) {
   auto old = makeSample();
-  old.textContrast = 2;  // outside the v18 record, must not be read
+  old.retiredTextContrast = 2;  // outside the v18 record, must not be read
   std::stringstream file;
   file.put(static_cast<char>(18));
   file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(18));
@@ -852,7 +852,7 @@ TEST(ReaderPrefs, AV18RecordKeepsNormalContrast) {
   bool migrated = false;
   ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
   EXPECT_TRUE(migrated);
-  EXPECT_EQ(0, loaded.textContrast);
+  EXPECT_EQ(0, loaded.retiredTextContrast);
 }
 
 TEST(ReaderPrefs, AV25RecordPutsNumbersByTheText) {

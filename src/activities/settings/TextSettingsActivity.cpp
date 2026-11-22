@@ -187,8 +187,6 @@ constexpr RowSpec ROW_SPECS[] = {
     {&CrossPointSettings::guideDotsHidden, StrId::STR_NONE_OPT, false},         // HiddenDots
     {&CrossPointSettings::embeddedStyle, StrId::STR_NONE_OPT, false},           // EmbeddedStyle
     {&CrossPointSettings::imageRendering, StrId::STR_NONE_OPT, false},          // Images
-    {&CrossPointSettings::textAntiAliasing, StrId::STR_NONE_OPT, false},        // AntiAliasing
-    {&CrossPointSettings::textContrast, StrId::STR_NONE_OPT, false},            // TextContrast
     {&CrossPointSettings::debugBorders, StrId::STR_NONE_OPT, false},            // DebugBorders
 };
 }  // namespace
@@ -256,7 +254,6 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
 
   // The two that change how the ink itself sits on the page.
   rows.push_back(Row::PaperbackLook);
-  rows.push_back(Row::AntiAliasing);
 
   rows.push_back(Row::LineSpacing);
   rows.push_back(Row::ExtraSpacing);
@@ -293,8 +290,6 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
 
   rows.push_back(Row::EmbeddedStyle);
   rows.push_back(Row::Images);
-  // Kept at the end so it coming and going only reflows the last pair of cells.
-  if (look_.textAntiAliasing) rows.push_back(Row::TextContrast);
 
   rows.push_back(Row::DebugBorders);
   return rows;
