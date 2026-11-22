@@ -16,6 +16,10 @@ namespace fui = freeink::ui;
 namespace {
 
 constexpr fui::ActionId ACTION_KEY = 1;
+// Touch only: a tap in the text field moves the cursor there, a tap on [abc] / [***]
+// shows or hides a password. On keys these are Up held and Right held.
+constexpr fui::ActionId ACTION_FIELD = 2;
+constexpr fui::ActionId ACTION_REVEAL = 3;
 
 // ---------------------------------------------------------------------------
 // URL layers. The SDK builtin layouts have no URL variant (":", "/", ".", the
@@ -573,6 +577,19 @@ bool KeyboardEntryActivity::routeKeyTouch() {
                                          static_cast<uint32_t>(millis()));
   if (result.activeChanged) requestUpdate();
   if (!result.event) return result.activeChanged;
+  if (result.event.action == ACTION_REVEAL) {
+    passwordVisible = !passwordVisible;
+    LOG_INF("KBD", "password %s", passwordVisible ? "shown" : "hidden");
+    requestUpdate();
+    return true;
+  }
+  if (result.event.action == ACTION_FIELD) {
+    // The tap's own point: the field is one hit rect, and where in it is the answer.
+    placeCursorAt(tapped ? tx : px, tapped ? ty : py);
+    focus = Focus::Keys;
+    requestUpdate();
+    return true;
+  }
   if (result.event.action != ACTION_KEY) return false;
 
   // A touched key becomes the selection too, so the keys and the buttons agree
@@ -587,6 +604,34 @@ bool KeyboardEntryActivity::routeKeyTouch() {
   focus = Focus::Keys;
   if (activateValue(result.event.value, result.event.longPress)) requestUpdate();
   return true;
+}
+
+void KeyboardEntryActivity::placeCursorAt(const int x, const int y) {
+  // The render task rewrites the line table on every paint.
+  RenderLock lock(*this);
+  if (fieldLineCount == 0) return;
+  int lineIndex = 0;
+  while (lineIndex + 1 < fieldLineCount && y >= fieldLines[lineIndex + 1].y) lineIndex++;
+  const FieldLine& line = fieldLines[lineIndex];
+
+  // Measured on what the field shows, so a masked password lands where its stars are.
+  // Boundaries come from `text`: the mask is per byte, and a cursor inside a code point
+  // would split it.
+  std::string shown = displayTextForCurrentState();
+  size_t best = static_cast<size_t>(line.start);
+  int bestDistance = std::abs(x - line.x);
+  for (size_t pos = utf8Next(text, best); pos <= static_cast<size_t>(line.end) && pos > best;
+       pos = utf8Next(text, pos)) {
+    const int edge = line.x + measureRange(shown, line.start, static_cast<int>(pos));
+    const int distance = std::abs(x - edge);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = pos;
+    }
+    if (edge > x || pos >= text.length()) break;
+  }
+  cursorPos = best;
+  LOG_INF("KBD", "cursor to %u from tap at %d,%d", static_cast<unsigned>(cursorPos), x, y);
 }
 
 void KeyboardEntryActivity::render(RenderLock&&) {
@@ -661,6 +706,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   int cursorPixelX = effectiveMargin;
   int cursorLineY = inputStartY;
   bool cursorDrawn = false;
+  fieldLineCount = 0;
 
   while (true) {
     const int lineEndIdx = lineBreakEnd(displayText, lineStartIdx, maxLineWidth);
@@ -693,6 +739,11 @@ void KeyboardEntryActivity::render(RenderLock&&) {
       }
 
       const int lineStartX = keyboard_field::lineStartX(field, textWidth, centerText);
+      if (fieldLineCount < kMaxFieldLines) {
+        fieldLines[fieldLineCount++] = FieldLine{lineStartIdx, lineEndIdx, lineStartX, inputStartY + inputHeight};
+      } else {
+        fieldLines[kMaxFieldLines - 1].end = lineEndIdx;
+      }
       if (isCursorLine && focus == Focus::Cursor && isPassword && !passwordVisible) {
         // Draw text in 3 parts to avoid block cursor overflowing onto next char.
         // displayText uses '*' for all chars; actual char may be wider than '*'.
@@ -758,11 +809,15 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     line(cX + 1, cBottom, cX + serifW, cBottom);
   }
 
+  // The reveal control's box, kept for its hit rect.
+  fui::Rect toggleBox{};
   if (isPassword) {
     const char* toggleLabel = passwordVisible ? "[***]" : "[abc]";
     const int toggleWidth = renderer.getTextWidth(UI_10_FONT_ID, toggleLabel);
     const int toggleLeft = keyboard_field::toggleX(field, toggleWidth);
     const int toggleY = inputStartY + inputHeight;
+    toggleBox = fui::Rect{static_cast<int16_t>(toggleLeft), static_cast<int16_t>(toggleY),
+                          static_cast<int16_t>(toggleWidth), static_cast<int16_t>(lineHeight)};
     const bool toggleSelected = focus == Focus::PasswordToggle;
 
     if (toggleSelected) {
@@ -881,6 +936,20 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   const int hintsTop = renderer.getScreenHeight() - metrics.buttonHintsHeight;
   props.bottomHitOverflow = static_cast<int16_t>(std::max(0, hintsTop - (kbRect.y + kbRect.height)));
   fui::keyboard(frame, kbRect, props);
+  if (mappedInput.hasTouch()) {
+    // After the keys, so a full table can only lose these two. The field stops short of
+    // the reveal control so the two finger-sized rects never overlap.
+    const int fieldRight = isPassword ? toggleBox.x - 8 : pageWidth - effectiveMargin;
+    const fui::Rect fieldBox{static_cast<int16_t>(effectiveMargin), static_cast<int16_t>(inputStartY),
+                             static_cast<int16_t>(std::max(1, fieldRight - effectiveMargin)),
+                             static_cast<int16_t>(inputHeight + lineHeight)};
+    frame.hit(fui::ensureMinTouchRect(fieldBox, device.minTouchSize, frame.screen()), ACTION_FIELD, 0, fui::InputTouch);
+    if (isPassword) {
+      frame.hit(fui::ensureMinTouchRect(toggleBox, device.minTouchSize, frame.screen()), ACTION_REVEAL, 0,
+                fui::InputTouch);
+    }
+    if (interactions.overflowed()) LOG_ERR("KBD", "hit table full: field or reveal not tappable");
+  }
   interactions.publish();
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));

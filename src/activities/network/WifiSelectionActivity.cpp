@@ -75,21 +75,6 @@ void WifiSelectionActivity::onEnter() {
   scanPending = false;
   joinPending = false;
 
-  // Read the hardware-derived station MAC directly. WiFi.macAddress() depends
-  // on the STA netif already existing, but this screen is entered while WiFi
-  // is often still off (notably after an X4 Pro WiFi session).
-  uint8_t mac[6] = {};
-  char macStr[64];
-  const esp_err_t macResult = esp_read_mac(mac, ESP_MAC_WIFI_STA);
-  if (macResult == ESP_OK) {
-    snprintf(macStr, sizeof(macStr), "%s %02x-%02x-%02x-%02x-%02x-%02x", tr(STR_MAC_ADDRESS), mac[0], mac[1], mac[2],
-             mac[3], mac[4], mac[5]);
-  } else {
-    LOG_ERR("WIFI", "Failed to read station MAC (err=%d)", static_cast<int>(macResult));
-    snprintf(macStr, sizeof(macStr), "%s --", tr(STR_MAC_ADDRESS));
-  }
-  cachedMacAddress = std::string(macStr);
-
   // Trigger first update to show scanning message
   requestUpdate();
 
@@ -440,17 +425,11 @@ void WifiSelectionActivity::promptHiddenSsid() {
                          });
 }
 
-std::string WifiSelectionActivity::getSignalStrengthIndicator(const int32_t rssi) const {
-  if (rssi >= -50) {
-    return "||||";  // Excellent
-  }
-  if (rssi >= -60) {
-    return " |||";  // Good
-  }
-  if (rssi >= -70) {
-    return "  ||";  // Fair
-  }
-  return "   |";  // Very weak
+int WifiSelectionActivity::signalBars(const int32_t rssi) {
+  if (rssi >= -50) return 4;  // Excellent
+  if (rssi >= -60) return 3;  // Good
+  if (rssi >= -70) return 2;  // Fair
+  return 1;                   // Very weak
 }
 
 void WifiSelectionActivity::onComplete(const bool connected) {
@@ -467,21 +446,24 @@ void WifiSelectionActivity::onComplete(const bool connected) {
 
 void WifiSelectionActivity::refreshRows() {
   rowLabels.clear();
-  rowValues.clear();
+  rowMarks.clear();
   rows.clear();
   rowLabels.reserve(networks.size());
-  rowValues.reserve(networks.size());
+  rowMarks.reserve(networks.size());
   for (const WifiNetworkInfo& network : networks) {
     if (network.isHiddenPlaceholder) {
       rowLabels.emplace_back(tr(STR_ADD_HIDDEN_NETWORK));
-      rowValues.emplace_back();
+      rowMarks.emplace_back();
       continue;
     }
     rowLabels.push_back(network.ssid);
-    // The legend under the list says what these mean: a plus for a password
-    // already saved, a star for an encrypted network, then the signal.
-    rowValues.push_back(std::string(network.hasSavedPassword ? "+ " : "") + (network.isEncrypted ? "* " : "") +
-                        getSignalStrengthIndicator(network.rssi));
+    // Drawn, not spelt: a chip for a password already saved, a padlock for an
+    // encrypted network, then the signal bars.
+    row_marks::Marks marks;
+    marks.bars = signalBars(network.rssi);
+    marks.locked = network.isEncrypted;
+    marks.saved = network.hasSavedPassword;
+    rowMarks.push_back(marks);
   }
 
   // Second pass: the strings must stop moving before their addresses are taken.
@@ -490,7 +472,8 @@ void WifiSelectionActivity::refreshRows() {
     rows[i] = freeink::ui::ListItem{};
     rows[i].label = rowLabels[i].c_str();
     rows[i].actionValue = static_cast<int16_t>(i);
-    if (!rowValues[i].empty()) rows[i].value = rowValues[i].c_str();
+    // Empty, not absent: the list holds the marks' slot back as the value's inset.
+    rows[i].value = "";
   }
 }
 
@@ -514,7 +497,6 @@ UiStatusActivity::StatusView WifiSelectionActivity::statusView() const {
   StatusView view;
   view.title = tr(STR_WIFI_NETWORKS);
   view.headerRight = networkCountLine.c_str();
-  view.subtitleLeft = cachedMacAddress.c_str();
 
   // Automatic attempts get their own wording and offer a way out of them.
   const bool autoConnecting = session.state() == wifi_session::State::AUTO_CONNECTING;
@@ -545,7 +527,8 @@ UiStatusActivity::StatusView WifiSelectionActivity::statusView() const {
       }
       view.listItems = rows.data();
       view.listCount = static_cast<int>(rows.size());
-      view.listNote = tr(STR_NETWORK_LEGEND);
+      view.listMarks = rowMarks.data();
+      view.listMarkChip = tr(STR_WIFI_SAVED_CHIP);
       view.confirmHint = tr(STR_CONNECT);
       // Left forgets, right rescans, the same two the list has always bound.
       view.thirdHint =
@@ -572,8 +555,14 @@ UiStatusActivity::StatusView WifiSelectionActivity::statusView() const {
       view.confirmHint = tr(STR_SELECT);
       break;
     case WifiSelectionState::CONNECTION_FAILED:
+      // Retry joins the same network again, with the same password, from here: a
+      // failure is most often the router, and walking back through the list for it
+      // was the only way before. Back (Done) returns to the list.
       view.lines = {tr(STR_CONNECTION_FAILED), connectionError.c_str(), nullptr, nullptr};
-      view.confirmHint = tr(STR_DONE);
+      view.backHint = tr(STR_DONE);
+      view.confirmHint = tr(STR_RETRY);
+      view.cancelLabel = tr(STR_DONE);
+      view.acceptLabel = tr(STR_RETRY);
       break;
   }
   return view;
@@ -713,7 +702,8 @@ void WifiSelectionActivity::onBackButton() {
 void WifiSelectionActivity::onConfirmButton() {
   // Scanning and auto-connect Confirm is taken in handleCustomInput.
   if (state == WifiSelectionState::CONNECTION_FAILED) {
-    session.dismissFailure(millis());
+    connectionError.clear();
+    session.retryJoin(millis());
     pumpSession();
     return;
   }

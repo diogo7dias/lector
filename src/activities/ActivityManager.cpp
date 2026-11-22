@@ -30,6 +30,7 @@
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
+#include "util/BookOrderLabel.h"
 #include "util/FullScreenMessageActivity.h"
 #include "util/OrientationCycle.h"
 
@@ -44,20 +45,6 @@ ActivityManager::ActivityManager(GfxRenderer& renderer, MappedInputManager& mapp
 ActivityManager::~ActivityManager() { assert(false); /* should never be called */ }
 
 namespace {
-
-// The Sort row's current value, for the light panel's aux row outside a book.
-StrId bookOrderLabel(const uint8_t order) {
-  switch (order) {
-    case CrossPointSettings::BOOK_ORDER_RANDOM:
-      return StrId::STR_BOOK_ORDER_RANDOM;
-    case CrossPointSettings::BOOK_ORDER_RECENTLY_ADDED:
-      return StrId::STR_BOOK_ORDER_RECENTLY_ADDED;
-    case CrossPointSettings::BOOK_ORDER_LAST_READ:
-      return StrId::STR_BOOK_ORDER_LAST_READ;
-    default:
-      return StrId::STR_BOOK_ORDER_ALPHABETICAL;
-  }
-}
 
 // What the panel's action grid holds. Refresh and Rotate work anywhere, so they lead both
 // sets; the rest is what you would want where you are. In a book that is the two things

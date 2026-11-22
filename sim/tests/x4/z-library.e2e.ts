@@ -49,6 +49,7 @@ test('Library lists the card, follows a book into /recents and opens it again', 
     return read();
   };
   const openFirst = async (from: number) => {
+    await press('Down'); // past the Search all books row, onto the first book
     await press('Confirm');
     await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
     const path = /\[LIB\] open (\S+)/.exec((await log()).slice(from))?.[1];

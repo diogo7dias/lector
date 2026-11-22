@@ -52,7 +52,8 @@ class KeyboardEntryActivity : public Activity {
 
   // Key hit rects registered by the keyboard component during render();
   // loop() routes touch snapshots against them. 5-row EN layout registers 41
-  // keys, so 48 leaves headroom.
+  // keys; the text field and the password reveal take two more, after the keys,
+  // so an overflow can only ever drop those two.
   freeink::ui::InteractionBuffer<48> interactions;
 
   // GPIO selection over the current layout grid (row/col in layout terms;
@@ -79,6 +80,22 @@ class KeyboardEntryActivity : public Activity {
   freeink::ui::TouchHoldRouter touchRouter;
   /** Routes a contact against the keys the last render published. */
   bool routeKeyTouch();
+
+  // Where each line of the field went in the last paint, so a tap on the field can
+  // land the cursor on the character under the finger. Byte offsets into `text`
+  // (the masked display keeps the same offsets). A rename field of 120 characters
+  // wraps to three or four lines; more than kMaxFieldLines is clamped to the last.
+  struct FieldLine {
+    int start = 0;
+    int end = 0;
+    int x = 0;
+    int y = 0;
+  };
+  static constexpr int kMaxFieldLines = 8;
+  FieldLine fieldLines[kMaxFieldLines];
+  int fieldLineCount = 0;
+  /** Moves the cursor to the character boundary nearest a tap at (x, y). */
+  void placeCursorAt(int x, int y);
 
   int delPressCount = 0;
   bool hintVisible = false;

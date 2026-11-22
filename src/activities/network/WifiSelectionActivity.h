@@ -52,7 +52,8 @@ class WifiSelectionActivity final : public UiStatusActivity {
   // so both outlive it. Rebuilt with the network view.
   std::vector<freeink::ui::ListItem> rows;
   std::vector<std::string> rowLabels;
-  std::vector<std::string> rowValues;
+  // Saved chip, padlock and bars per row, drawn by the base instead of spelt.
+  std::vector<row_marks::Marks> rowMarks;
   void refreshRows();
   // Number of real (scanned) networks, excluding the synthetic hidden-network entry
   size_t realNetworkCount = 0;
@@ -67,8 +68,6 @@ class WifiSelectionActivity final : public UiStatusActivity {
   // Password to potentially save (from keyboard or saved credentials)
   std::string enteredPassword;
 
-  // Cached MAC address string for display
-  std::string cachedMacAddress;
   // Header count and the two message lines the connect screens show, held for
   // the same reason as the rows.
   std::string networkCountLine;
@@ -106,7 +105,7 @@ class WifiSelectionActivity final : public UiStatusActivity {
   bool handleListSideButtons();
   void promptHiddenSsid();
   void promptPasswordEntry();
-  std::string getSignalStrengthIndicator(int32_t rssi) const;
+  static int signalBars(int32_t rssi);
 
   void onComplete(bool connected);
 
