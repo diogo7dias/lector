@@ -82,6 +82,8 @@ void WifiSession::queueJoin(const std::string& ssid, const bool useSavedPassword
   joiningSsid_ = ssid;
   activeSsid_ = ssid;
   joinStartedMs_ = clockMs_;
+  lastJoinUsedSaved_ = useSavedPassword;
+  lastJoinTyped_ = typedPasswordPending_;
   queue(ActionKind::JOIN, ssid);
   pending_.back().useSavedPassword = useSavedPassword;
 }
@@ -231,6 +233,14 @@ void WifiSession::dismissFailure(const uint32_t nowMs) {
   // password, and offering to delete the credential every time trains the reader
   // to throw away a working password over a passing failure.
   showListOrGiveUp();
+}
+
+void WifiSession::retryJoin(const uint32_t nowMs) {
+  if (state_ != State::FAILED || startup_.autoOnly || activeSsid_.empty()) return;
+  clockMs_ = nowMs;
+  typedPasswordPending_ = lastJoinTyped_;
+  setState(State::CONNECTING);
+  queueJoin(activeSsid_, lastJoinUsedSaved_);
 }
 
 void WifiSession::showListOrGiveUp() {

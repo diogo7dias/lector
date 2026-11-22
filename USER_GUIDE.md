@@ -92,6 +92,11 @@ Spreading two fingers apart on the page makes the text one size
 larger, pinching them together one size smaller; one step per gesture, for this book only,
 like the size row in the quick panel. With ChareInk it steps through 12, 14 and 16 pt.
 
+On the keyboard, tap inside the text to put the cursor there; the next key types at that
+spot. In a password field, tap `[abc]` at the right of the field to show the password and
+`[***]` to hide it again. On the X3 and X4 the same two are **Up** held (cursor) and then
+**Right** held (show or hide).
+
 **Touch Sleep** (Settings > System, X4 Pro) is Off by default. Set to 15 s, 30 s or 1 min,
 it saves a little battery by putting the touch screen to sleep after that long without
 input. While it sleeps, touches and the touch Home key below the screen do nothing; press any
@@ -220,6 +225,12 @@ for its title; later visits only read the books that changed. It lists at most 2
 the X3 and X4 and 4096 on the X4 Pro. If the card is empty the list says **No books found on
 the SD card**.
 
+**Search all books**, the first row, searches every book on the card, not just one folder.
+Type a word and press **OK**: the list becomes the books whose title or author matches, best
+first (a title that starts with it, then a word in it, then its letters in order, so `gtg`
+finds *The Great Gatsby*). The search row shows the query and how many books matched; the
+list keeps the best 64. **Clear search**, or **Back**, returns to every book.
+
 ### End of book
 
 Turning past the last page shows **End of book** with the title and author, the day you
@@ -230,13 +241,17 @@ same folder follow under **Continue with**.
 
 ## 4. Browsing files
 
-The file browser shows the current folder path at the top, files with their extensions, and
-folders in brackets, for example `[folder-name]`.
+The file browser shows the folder name at the top, with the order the books are in beside it
+(**Alphabetical**, **Random**, **Recently Added** or **Last Read**, changed from the Sort row
+of the light panel), files with their extensions, folders in brackets, for example
+`[folder-name]`, and the folder's path at the foot of the screen. On the X4 Pro, tap the path
+to go up one folder.
 
 - **Move the cursor** — **Left** (or **Volume Up**) and **Right** (or **Volume Down**). Hold
   either one to move a whole page at a time.
 - **Open** — **Confirm** opens the folder, book or image under the cursor.
-- **File actions** — hold **Confirm** on a file to open a small menu: **Book Info** (EPUB
+- **File actions** — hold **Confirm** on a file (on the X4 Pro, press and hold the row) to
+  open a small menu: **Book Info** (EPUB
   only), **Send to Nearby Reader** (files another reader can accept), **Rename**, **Move to
   folder** and **Delete**. **Book Info** shows the title, the cover (when the book has
   one), the author and the publisher's description, paged with the page buttons; **Back**
@@ -622,10 +637,12 @@ wireless.
 
 **Home > File Transfer** offers four modes, and a fifth on the X4 Pro:
 
-- **Join a Network** — connect to an existing Wi-Fi network. A failed connection returns to
-  the network list; it never offers to forget the network, since a connection drops for
-  reasons that have nothing to do with the password. To forget one deliberately, press
-  Left on a saved network in that list.
+- **Join a Network** — connect to an existing Wi-Fi network. Each network in the list shows a
+  **saved** chip when its password is stored, a padlock when it needs one, and four bars for
+  its signal. A failed connection offers **Retry**, which joins the same network again with
+  the same password, and **Done**, which returns to the network list. It never offers to
+  forget the network, since a connection drops for reasons that have nothing to do with the
+  password. To forget one deliberately, press Left on a saved network in that list.
 - **Create Hotspot** — the device makes a network for your computer or phone to join.
 - **Calibre Wireless** — Calibre device transfers, below.
 - **Nearby Reader** — receive a file straight from another Lector, below.

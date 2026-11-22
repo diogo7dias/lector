@@ -139,6 +139,13 @@ class FileBrowserActivity final : public Activity {
   // the length of a load only: the browser reads it once, in applyBrowserOrder().
   std::vector<uint32_t> sortKeys;
   size_t findEntryRow(const std::string& name) const;
+  // Back's short press and a tap on the path bar: the parent folder, cursor on the one
+  // just left.
+  void goUpOneFolder();
+  // Where the last paint put the path bar, for the tap that goes up a level. Zero
+  // height until the first paint.
+  int pathBarTop = 0;
+  int pathBarBottom = 0;
   // Reloads the folder after `removedPath` left it, keeping the cursor in place.
   void reloadAfterRemoving(const std::string& removedPath);
 

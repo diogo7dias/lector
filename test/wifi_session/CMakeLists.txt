@@ -1,5 +1,6 @@
 add_executable(WifiSessionTest
   WifiSessionTest.cpp
+  WifiSessionRetryTest.cpp
   ${REPO_ROOT}/lib/WifiSession/WifiSession.cpp
 )
 
