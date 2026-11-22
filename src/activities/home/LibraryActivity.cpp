@@ -78,7 +78,7 @@ void LibraryActivity::refreshIndex(const bool force) {
   totalHits = 0;
   recount();
   nav.reset();
-  if (startRow > 0 && startRow < count) {
+  if (startRow > 0 && startRow < rowCount) {
     nav.selected = startRow;
     nav.followOnBuild = true;
   }
@@ -276,7 +276,8 @@ void LibraryActivity::activateIndex(const int index) {
     }
   }
   LOG_INF("LIB", "open %s", path.c_str());
-  APP_STATE.libraryRow = static_cast<uint16_t>(index);
+  // The unfiltered row (one header row), so Back from the book lands on it with no search.
+  APP_STATE.libraryRow = static_cast<uint16_t>(ordinalAt(index - headerRows()) + 1);
   app.clearTapFlash();
   activityManager.goToReader(path);
 }
