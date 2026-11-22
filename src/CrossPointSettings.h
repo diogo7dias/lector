@@ -393,11 +393,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t MIN_WORD_SPACING = reader_defaults::MIN_WORD_SPACING;
   static constexpr uint8_t MAX_WORD_SPACING = reader_defaults::MAX_WORD_SPACING;
   uint8_t wordSpacing = reader_defaults::WORD_SPACING;  // percent of natural space advance; no limit on justification
-  // On by default, as in CrossPoint (Diogo, 2026-11-18). The grey pass costs an extra
-  // refresh on every page turn; the toggle turns it off.
-  uint8_t textAntiAliasing = 1;
-  // How dark anti-aliased greys are drawn (0 Normal, 1 High, 2 Max); only with textAntiAliasing.
-  uint8_t textContrast = 0;
   // Whole pixels between letters, offset: 2 is the font as designed, 0..4 shows as -2..+2.
   uint8_t characterSpacing = reader_defaults::CHARACTER_SPACING;
   // On, with both directions on Swipe Only by default: a swipe works the same wherever the

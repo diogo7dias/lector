@@ -39,8 +39,6 @@
   X(guideDotsEnabled)                \
   X(guideDotsHidden)                 \
   X(embeddedStyle)                   \
-  X(textAntiAliasing)                \
-  X(textContrast)                    \
   X(characterSpacing)                \
   X(imageRendering)
 

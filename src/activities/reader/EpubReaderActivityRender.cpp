@@ -208,7 +208,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // Layout and paint below both measure through the renderer, so Character Spacing is set
   // once here; the deferred extension build in loop() reuses it with the same prefs.
   renderer.setCharacterSpacing(renderSpec.fontId, renderSpec.characterSpacing);
-  renderer.setTextContrast(prefs_.textContrast);
 
   if (!section && !openSectionForRender(renderSpec)) return;
 

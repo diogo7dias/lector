@@ -112,9 +112,8 @@ test('Quick Resume keeps the page and wakes into it', async (ctx) => {
   const bodyBefore = await d.ink(...bodyBox);
   await d.lock();
   expect(await d.ink(...moonBox), 'Quick Resume: the moon replaces the corner').not.toBe(moonBefore);
-  // Not compared with bodyBefore: text anti-aliasing is on by default and the emulator does
-  // not model gray, so before the lock the panel shows the gray planes. The moon's pass is
-  // black and white, so what stays is the page's text: some ink, far from a full or empty page.
+  // The moon's pass is black and white, so what stays is the page's text: some ink, far
+  // from a full or empty page.
   const bodyLocked = await d.ink(...bodyBox);
   expect(bodyLocked, 'Quick Resume: the page stays').toBeGreaterThan(1000);
   expect(bodyLocked, 'Quick Resume: the page stays').toBeLessThan(100000);

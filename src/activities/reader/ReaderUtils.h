@@ -144,18 +144,9 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
   return {prev, next};
 }
 
-// One helper, blocking or deferred: the async form starts the refresh and
-// returns so the caller can overlap CPU work with the panel's refresh time.
-// Async callers must not touch the framebuffer until
-// renderer.waitRefreshComplete() and must rebuild the differential baseline
-// before the next page turn (the tiled grayscale cleanup does).
-inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntilFullRefresh, bool async = false) {
+inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntilFullRefresh) {
   const auto mode = (pagesUntilFullRefresh <= 1) ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
-  if (async) {
-    renderer.displayBufferAsync(mode);
-  } else {
-    renderer.displayBuffer(mode);
-  }
+  renderer.displayBuffer(mode);
   // Restart the countdown after any clean, including one the anti-ghost cap promoted
   // from this FAST: counting on would land the next clean only a turn or two later.
   if (pagesUntilFullRefresh <= 1 || renderer.lastPassCleaned()) {

@@ -168,7 +168,6 @@ void EpubReaderActivity::onExit() {
   Activity::onExit();
   // The reading font's Character Spacing ends with the book.
   renderer.setCharacterSpacing(0, 0);
-  renderer.setTextContrast(0);
 
   // Keep rebuildable font buffers from pinning the heap between reading sessions.
   if (auto* fontCache = renderer.getFontCacheManager()) {

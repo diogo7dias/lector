@@ -30,7 +30,7 @@ test('line spacing adjusts in place under the preview', async ({ app, screen }) 
   await expect(activity).toHaveText('TextSettings', { timeout: 30_000 });
   expect(await stepper(), 'no strip before a number is opened').toBe(0);
 
-  await tapOnce(150, 533); // Line Spacing
+  await tapOnce(150, 503); // Line Spacing
   await expect.poll(stepper, { timeout: 30_000 }).toBeGreaterThan(0);
   const before = { value: await value(), preview: await preview() };
   await tapOnce(432, 456); // plus

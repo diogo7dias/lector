@@ -13,8 +13,8 @@ namespace {
 // Reader Settings rows that do not reach the spec: the font is resolved by the caller,
 // the margins become the viewport, and the rest are draw-only.
 const std::set<std::string> NOT_IN_SPEC = {
-    "fontFamily",     "fontPointSize",  "screenMargin",     "screenMarginTop", "screenMarginBottom",
-    "marginLinkMode", "dynamicMargins", "textAntiAliasing", "textContrast",
+    "fontFamily",         "fontPointSize",  "screenMargin",   "screenMarginTop",
+    "screenMarginBottom", "marginLinkMode", "dynamicMargins",
 };
 
 // Guide dots on, so Hidden Dots has something to change.
