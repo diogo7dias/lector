@@ -240,7 +240,6 @@ void EpubReaderActivity::loop() {
   }
 
   if (ReaderUtils::handleBackNavigation(mappedInput, activityManager, epub ? epub->getPath().c_str() : "",
-                                        {this, [](void* ctx) { static_cast<EpubReaderActivity*>(ctx)->onGoHome(); }},
                                         backLatch_)) {
     return;
   }

@@ -7,8 +7,8 @@ namespace {
 
 using list_swipe::Scroll;
 
-// The X4 Pro reading surface: 480 x 800. Edge bands are the top and bottom 14%,
-// so 112 px each.
+// The X4 Pro reading surface: 480 x 800. The top band is 14% (112 px), the Home edge
+// at the bottom 7% (56 px).
 constexpr int W = 480;
 constexpr int H = 800;
 
@@ -22,8 +22,16 @@ TEST(ListSwipe, ASwipeStartingInTheTopEdgeBandIsLeftToTheMenuGesture) {
   EXPECT_EQ(swipe(240, 40, 240, 400), Scroll::None);
 }
 
-TEST(ListSwipe, ASwipeStartingInTheBottomEdgeBandIsLeftToTheHomeGesture) {
+TEST(ListSwipe, ASwipeUpStartingInTheBottomEdgeBandIsLeftToTheHomeGesture) {
   EXPECT_EQ(swipe(240, H - 40, 240, 300), Scroll::None);
+}
+
+TEST(ListSwipe, ASwipeUpFromTheLastRowsAboveTheHomeEdgeScrolls) {
+  EXPECT_EQ(swipe(240, H - 100, 240, 300), Scroll::PageDown);
+}
+
+TEST(ListSwipe, ASwipeDownStartingInTheHomeEdgeStillScrolls) {
+  EXPECT_EQ(swipe(240, H - 50, 240, H - 2), Scroll::PageUp);
 }
 
 TEST(ListSwipe, AMostlyHorizontalSwipeNeverScrolls) { EXPECT_EQ(swipe(100, 400, 400, 460), Scroll::None); }

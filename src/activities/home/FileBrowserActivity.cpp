@@ -27,6 +27,7 @@
 #include "util/BookCacheUtils.h"
 #include "util/BookFiling.h"
 #include "util/BookFilingNames.h"
+#include "util/BookOrderLabel.h"
 #include "util/BookProgressFile.h"
 #include "util/BrowserRowFile.h"
 #include "util/BusyTick.h"
@@ -677,6 +678,33 @@ void FileBrowserActivity::loop() {
   if (mappedInput.hasTouch()) {
     // The render task rebuilds the table under this same lock.
     RenderLock lock(*this);
+    // A long-press on a book or folder row is the hold of Confirm: the file actions,
+    // or the delete confirmation for a folder. The long-press query does not refuse the
+    // hint band the way the tap does, so the band is left out here.
+    int lx = 0;
+    int ly = 0;
+    if (mode == Mode::Books && mappedInput.wasScreenLongPress(lx, ly) && !mappedInput.isInHintBand(lx, ly)) {
+      const int pressedRow = row_hit::lastRows().itemAt(lx, ly);
+      if (pressedRow >= 0 && pressedRow < totalRowCount() && rowKindAt(pressedRow) == RowKind::Entry) {
+        LOG_INF("FileBrowser", "long-press row %d", pressedRow);
+        selectorIndex = static_cast<size_t>(pressedRow);
+        lock.unlock();
+        activateSelected(/*holdAction=*/true);
+        requestUpdate();
+        return;
+      }
+    }
+    // The path bar is a crumb: a tap on it goes up one folder, which a touch reader has
+    // no other way to do (Back on the band is one tap, but its hold, to the root, is not).
+    int px = 0;
+    int py = 0;
+    if (basepath != "/" && pathBarBottom > pathBarTop && mappedInput.wasScreenTapped(px, py) && py >= pathBarTop &&
+        py < pathBarBottom) {
+      lock.unlock();
+      LOG_INF("FileBrowser", "path tap: up from %s", basepath.c_str());
+      goUpOneFolder();
+      return;
+    }
     int tappedRow = 0;
     if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < totalRowCount()) {
       selectorIndex = static_cast<size_t>(tappedRow);
@@ -731,20 +759,7 @@ void FileBrowserActivity::loop() {
   if (backFired == hold_button::Fired::Short) {
     {
       if (basepath != "/") {
-        const std::string oldPath = basepath;
-
-        {
-          RenderLock lock(*this);
-          basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
-          if (basepath.empty()) basepath = "/";
-          loadFiles();
-
-          const auto pos = oldPath.find_last_of('/');
-          const std::string dirName = oldPath.substr(pos + 1) + "/";
-          selectorIndex = findEntryRow(dirName);
-        }
-
-        requestUpdate();
+        goUpOneFolder();
       } else if (mode == Mode::PickFirmware || mode == Mode::PickFolder) {
         // A picker at root: cancel back to the caller instead of going home.
         ActivityResult res;
@@ -862,8 +877,13 @@ void FileBrowserActivity::render(RenderLock&&) {
     folderName += ")";
   }
   // A long folder name wraps and the band grows with it, so the rows start under it.
-  const int headerHeight = BaseTheme::headerHeightFor(renderer, pageWidth, folderName.c_str());
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, headerHeight}, folderName.c_str());
+  // The order the books are in, from the light panel's Sort row. The pickers keep a fixed
+  // alphabetical list and the wallpaper folders sort by favourite, so they name none.
+  const char* orderLabel =
+      mode == Mode::Books && !isWallpaperFolder() ? I18N.get(bookOrderLabel(SETTINGS.bookBrowserOrder)) : nullptr;
+  const int headerHeight = BaseTheme::headerHeightFor(renderer, pageWidth, folderName.c_str(), orderLabel);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, headerHeight}, folderName.c_str(), nullptr,
+                 orderLabel);
 
   // The path wraps over the lines it needs; the band is reserved from the same wrap.
   const int pathLineHeight =
@@ -899,6 +919,8 @@ void FileBrowserActivity::render(RenderLock&&) {
     const int pathY = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - pathLineHeight;
     const int separatorY = pathY - metrics.verticalSpacing / 2;
     GUI.drawPathBar(renderer, Rect{0, separatorY, pageWidth, pathReserved}, basepath.c_str());
+    pathBarTop = separatorY;
+    pathBarBottom = separatorY + pathReserved;
   }
 
   // Help text
@@ -1077,6 +1099,22 @@ void FileBrowserActivity::reloadAfterRemoving(const std::string& removedPath) {
   } else if (selectorIndex >= static_cast<size_t>(rows)) {
     selectorIndex = static_cast<size_t>(rows - 1);
   }
+}
+
+void FileBrowserActivity::goUpOneFolder() {
+  if (basepath == "/") return;
+  const std::string oldPath = basepath;
+  {
+    RenderLock lock(*this);
+    basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
+    if (basepath.empty()) basepath = "/";
+    loadFiles();
+
+    const auto pos = oldPath.find_last_of('/');
+    const std::string dirName = oldPath.substr(pos + 1) + "/";
+    selectorIndex = findEntryRow(dirName);
+  }
+  requestUpdate();
 }
 
 size_t FileBrowserActivity::findEntryRow(const std::string& name) const {

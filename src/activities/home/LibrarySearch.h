@@ -65,4 +65,39 @@ std::vector<int> rankMatches(const Names& names, const std::string_view query) {
   return hits;
 }
 
+// The best `N` matches of a scan too large to hold, kept in a fixed array: the
+// Library searches every book on the card, and a card can hold thousands. Entries
+// are offered in listing order; a later entry only displaces an earlier one that it
+// beats outright, so equal matches keep listing order, as in rankMatches().
+template <size_t N>
+class TopMatches {
+ public:
+  void clear() { count_ = 0; }
+  size_t size() const { return count_; }
+  int indexAt(const size_t i) const { return hits_[i].index; }
+
+  void offer(const int index, const Match& match) {
+    size_t at = count_;
+    while (at > 0 && worse(hits_[at - 1].match, match)) at--;
+    if (at >= N) return;  // full, and nothing kept is worse than this one
+    const size_t last = count_ < N ? count_ : N - 1;
+    for (size_t i = last; i > at; i--) hits_[i] = hits_[i - 1];
+    hits_[at] = Hit{index, match};
+    if (count_ < N) count_++;
+  }
+
+ private:
+  struct Hit {
+    int index;
+    Match match;
+  };
+  // Strictly worse: a tie is not worse, so the earlier entry stays ahead.
+  static bool worse(const Match& kept, const Match& offered) {
+    if (kept.tier != offered.tier) return kept.tier > offered.tier;
+    return kept.score > offered.score;
+  }
+  Hit hits_[N] = {};
+  size_t count_ = 0;
+};
+
 }  // namespace librarysearch

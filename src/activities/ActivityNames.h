@@ -8,6 +8,7 @@ namespace activity_name {
 
 inline constexpr char kHome[] = "Home";
 inline constexpr char kFileBrowser[] = "FileBrowser";
+inline constexpr char kLibrary[] = "Library";
 inline constexpr char kSettings[] = "Settings";
 inline constexpr char kQuotesViewer[] = "QuotesViewer";
 inline constexpr char kInstalledFonts[] = "InstalledFonts";

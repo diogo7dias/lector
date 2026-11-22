@@ -49,10 +49,14 @@ and the side buttons can be swapped or disabled with **Side Button Layout (reade
 on, **Next Page** and **Previous Page** each take their own gesture: Tap & Swipe, Tap Only,
 Swipe Only (the default), Inverted Tap or Disabled. A swipe to the left goes on, a swipe to the
 right goes back. Taps turn from the outer thirds of the page, or from the whole page when only
-one direction accepts taps; the centre third opens the reader menu. Inverted Tap on either
+one direction accepts taps; the centre of the page opens the reader menu. Inverted Tap on either
 direction swaps the two sides. In a right-to-left EPUB (language Hebrew, Arabic or Persian) the swipes and
 the tap sides run the other way. Older settings files carry over: the old Tap, Swipe and
 Inverted Tap become the matching gesture for both directions.
+
+**Show Reader Menu** (Settings > Controls) is **Tap**, the centre tap, or **Off**. Its old
+**Swipe Up** choice is gone, because a swipe up from the bottom edge now goes Home; a device
+set to it opens the menu by the centre tap.
 
 ### Tapping, on a device with a touch screen
 
@@ -78,11 +82,20 @@ On every device a list that scrolls shows which screen of it you are on beside t
 as 2/5, and the Settings band says what Confirm does to the row it is on: Open, Change, Turn
 on or Turn off, instead of Toggle.
 
+A swipe up from the bottom edge of the screen goes Home from every screen, a book included;
+the Home key below the screen does the same. A swipe up that starts higher on a list scrolls
+it. On Home a flick up or down over the list pages through the books you are reading.
+
 Page turns by tap while reading are unchanged. Holding a word on the page for half a second looks it up in
 the dictionary; keep the finger down and drag to select a phrase instead (see **Quotes**).
 Spreading two fingers apart on the page makes the text one size
 larger, pinching them together one size smaller; one step per gesture, for this book only,
 like the size row in the quick panel. With ChareInk it steps through 12, 14 and 16 pt.
+
+On the keyboard, tap inside the text to put the cursor there; the next key types at that
+spot. In a password field, tap `[abc]` at the right of the field to show the password and
+`[***]` to hide it again. On the X3 and X4 the same two are **Up** held (cursor) and then
+**Right** held (show or hide).
 
 **Touch Sleep** (Settings > System, X4 Pro) is Off by default. Set to 15 s, 30 s or 1 min,
 it saves a little battery by putting the touch screen to sleep after that long without
@@ -175,6 +188,8 @@ The Home screen is the entry point. It lists the books you have been reading, an
 - **OPDS Browser** — shown once at least one catalog is configured, see
   [section 9](#9-getting-books-onto-the-device).
 - **File Transfer** — Wi-Fi transfers, see [section 9](#9-getting-books-onto-the-device).
+- **Quick Panel** — the X3 and X4 only: opens the quick panel (see Settings reference), the same
+  panel a double click of **Power** opens.
 - **Settings** — see [section 12](#12-settings-reference).
 
 **Settings > Controls > Home Back Button** decides what **Back** does here: nothing, resume
@@ -210,6 +225,12 @@ for its title; later visits only read the books that changed. It lists at most 2
 the X3 and X4 and 4096 on the X4 Pro. If the card is empty the list says **No books found on
 the SD card**.
 
+**Search all books**, the first row, searches every book on the card, not just one folder.
+Type a word and press **OK**: the list becomes the books whose title or author matches, best
+first (a title that starts with it, then a word in it, then its letters in order, so `gtg`
+finds *The Great Gatsby*). The search row shows the query and how many books matched; the
+list keeps the best 64. **Clear search**, or **Back**, returns to every book.
+
 ### End of book
 
 Turning past the last page shows **End of book** with the title and author, the day you
@@ -220,13 +241,17 @@ same folder follow under **Continue with**.
 
 ## 4. Browsing files
 
-The file browser shows the current folder path at the top, files with their extensions, and
-folders in brackets, for example `[folder-name]`.
+The file browser shows the folder name at the top, with the order the books are in beside it
+(**Alphabetical**, **Random**, **Recently Added** or **Last Read**, changed from the Sort row
+of the light panel), files with their extensions, folders in brackets, for example
+`[folder-name]`, and the folder's path at the foot of the screen. On the X4 Pro, tap the path
+to go up one folder.
 
 - **Move the cursor** — **Left** (or **Volume Up**) and **Right** (or **Volume Down**). Hold
   either one to move a whole page at a time.
 - **Open** — **Confirm** opens the folder, book or image under the cursor.
-- **File actions** — hold **Confirm** on a file to open a small menu: **Book Info** (EPUB
+- **File actions** — hold **Confirm** on a file (on the X4 Pro, press and hold the row) to
+  open a small menu: **Book Info** (EPUB
   only), **Send to Nearby Reader** (files another reader can accept), **Rename**, **Move to
   folder** and **Delete**. **Book Info** shows the title, the cover (when the book has
   one), the author and the publisher's description, paged with the page buttons; **Back**
@@ -280,6 +305,11 @@ UTF-16 files are not supported and show a message instead.
 
 From the image viewers you can set the picture as your sleep wallpaper. A `.jpg` is converted
 to a panel-sized `sleep.bmp` (Fit or Crop, as **Sleep Screen Cover Mode** says); a `.bmp` is copied as it is.
+
+On the X4 Pro, tap the left third of the screen for the previous picture in the folder and
+the right third for the next one. A tap in the centre opens a menu with what the buttons do
+there: **Set Cover** outside the sleep folders, or the three triage actions inside them.
+Delete still asks before it deletes.
 
 Opening a wallpaper from `/sleep` gives you the triage buttons: **Favorite**, **Pause** and
 **Delete**. Favoriting closes the viewer straight away and takes you back to the folder, so
@@ -344,7 +374,8 @@ on screen.
 
 ### Leaving the book
 
-- **Back** closes the book and returns Home.
+- **Back** closes the book and returns to where you opened it: the file browser folder, the
+  Library, or Home for a book opened anywhere else. This survives sleep.
 - **Hold Back** returns to the file browser, opened in the book's own folder. **Settings > Controls > Short Back to File
   Browser** swaps the two, so a short press goes to the browser instead.
 - **Confirm** opens the [in-book menu](#6-the-in-book-menu).
@@ -606,10 +637,12 @@ wireless.
 
 **Home > File Transfer** offers four modes, and a fifth on the X4 Pro:
 
-- **Join a Network** — connect to an existing Wi-Fi network. A failed connection returns to
-  the network list; it never offers to forget the network, since a connection drops for
-  reasons that have nothing to do with the password. To forget one deliberately, press
-  Left on a saved network in that list.
+- **Join a Network** — connect to an existing Wi-Fi network. Each network in the list shows a
+  **saved** chip when its password is stored, a padlock when it needs one, and four bars for
+  its signal. A failed connection offers **Retry**, which joins the same network again with
+  the same password, and **Done**, which returns to the network list. It never offers to
+  forget the network, since a connection drops for reasons that have nothing to do with the
+  password. To forget one deliberately, press Left on a saved network in that list.
 - **Create Hotspot** — the device makes a network for your computer or phone to join.
 - **Calibre Wireless** — Calibre device transfers, below.
 - **Nearby Reader** — receive a file straight from another Lector, below.

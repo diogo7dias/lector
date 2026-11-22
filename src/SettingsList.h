@@ -340,8 +340,7 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
   // Persisted under CrossPoint's legacy "tapForReaderMenu" key: the old values
   // line up (0 = Off, 1 = Tap), so a settings file carries over either way.
   emit(SettingInfo::Enum(StrId::STR_SHOW_READER_MENU, &CrossPointSettings::showReaderMenu,
-                         {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE_UP}, "tapForReaderMenu",
-                         StrId::STR_CAT_CONTROLS));
+                         {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP}, "tapForReaderMenu", StrId::STR_CAT_CONTROLS));
 
   emit(SettingInfo::Enum(StrId::STR_HOME_BACK_ACTION, &CrossPointSettings::homeBackAction,
                          {StrId::STR_NONE_OPT, StrId::STR_RESUME, StrId::STR_NONE_OPT, StrId::STR_SORTES},

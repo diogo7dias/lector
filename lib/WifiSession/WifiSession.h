@@ -122,6 +122,13 @@ class WifiSession {
   /** The reader acknowledged a failed join. */
   void dismissFailure(uint32_t nowMs);
 
+  /**
+   * The reader asked to try the failed join again: same network, same password
+   * (the stored one, or the one just typed, which is still offered for saving if
+   * it joins). Only from FAILED, and never in autoOnly, which has already finished.
+   */
+  void retryJoin(uint32_t nowMs);
+
   /** The reader left the screen. */
   void cancel(uint32_t nowMs);
 
@@ -162,6 +169,9 @@ class WifiSession {
   std::vector<std::string> autoAttemptedSsids_;
   std::string joiningSsid_;
   std::string activeSsid_;
+  // How the last JOIN got its password, so a retry can ask for the same one.
+  bool lastJoinUsedSaved_ = false;
+  bool lastJoinTyped_ = false;
   bool typedPasswordPending_ = false;
   bool offersToSave_ = false;
   State state_ = State::SCANNING;

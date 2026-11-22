@@ -4,6 +4,8 @@
 
 void CrossPointState::toJson(JsonDocument& doc) const {
   doc["openEpubPath"] = openEpubPath;
+  doc["readerOrigin"] = static_cast<uint8_t>(readerOrigin);
+  doc["libraryRow"] = libraryRow;
   doc["readerActivityLoadCount"] = readerActivityLoadCount;
   doc["lastSleepFromReader"] = lastSleepFromReader;
   doc["fastRefreshesSinceFull"] = fastRefreshesSinceFull;
@@ -30,6 +32,10 @@ void CrossPointState::toJson(JsonDocument& doc) const {
 
 bool CrossPointState::fromJson(JsonVariantConst doc) {
   openEpubPath = doc["openEpubPath"] | "";
+  const uint8_t origin = doc["readerOrigin"] | static_cast<uint8_t>(0);
+  readerOrigin =
+      origin < static_cast<uint8_t>(ReaderOrigin::Count) ? static_cast<ReaderOrigin>(origin) : ReaderOrigin::Home;
+  libraryRow = doc["libraryRow"] | static_cast<uint16_t>(0);
   readerActivityLoadCount = doc["readerActivityLoadCount"] | static_cast<uint8_t>(0);
   lastSleepFromReader = doc["lastSleepFromReader"] | false;
   fastRefreshesSinceFull = doc["fastRefreshesSinceFull"] | static_cast<uint8_t>(0);

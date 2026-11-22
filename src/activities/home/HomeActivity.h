@@ -31,34 +31,17 @@ class HomeActivity final : public Activity {
   // whatever was there. Cleared by that render, so later paints stay FAST.
   bool cleanInitialRefresh = true;
 
-  // Convert HomeMenuItem to menu index (used in onEnter)
-  static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl, bool hasMissing) {
-    int i = 0;
-    if (item == HomeMenuItem::BOOKORBIT_MISSING) return 0;
-    if (hasMissing) ++i;
-    if (item == HomeMenuItem::FILE_BROWSER) return i;
-    ++i;
-    if (item == HomeMenuItem::LIBRARY) return i;
-    ++i;
-    if (item == HomeMenuItem::OPDS_BROWSER) return hasOpdsUrl ? i : 0;
-    if (hasOpdsUrl) ++i;
-    if (item == HomeMenuItem::FILE_TRANSFER) return i;
-    ++i;
-    if (item == HomeMenuItem::SETTINGS_MENU) return i;
-    return 0;
-  }
+  // The rows under the books, in order. Which of the optional ones show depends on the
+  // card, the catalogs and the board, so onEnter builds the list once and every lookup
+  // (count, row to item, item to row, label) reads it.
+  static constexpr int MAX_MENU_ROWS = 7;
+  HomeMenuItem menuRows[MAX_MENU_ROWS] = {};
+  int menuRowsCount = 0;
 
-  // Convert menu index to HomeMenuItem (used in loop)
-  static HomeMenuItem indexToMenuItem(int idx, bool hasOpdsUrl, bool hasMissing) {
-    int i = 0;
-    if (hasMissing && idx == i++) return HomeMenuItem::BOOKORBIT_MISSING;
-    if (idx == i++) return HomeMenuItem::FILE_BROWSER;
-    if (idx == i++) return HomeMenuItem::LIBRARY;
-    if (hasOpdsUrl && idx == i++) return HomeMenuItem::OPDS_BROWSER;
-    if (idx == i++) return HomeMenuItem::FILE_TRANSFER;
-    if (idx == i) return HomeMenuItem::SETTINGS_MENU;
-    return HomeMenuItem::NONE;
-  }
+  void buildMenuRows();
+  int rowOfMenuItem(HomeMenuItem item) const;
+  // A flick pages the books: the next screen of them, or the one before.
+  void pageBooks(bool forward);
   void onSelectBook(const std::string& path);
   void onFileBrowserOpen();
   void onLibraryOpen();
@@ -68,8 +51,6 @@ class HomeActivity final : public Activity {
   void onBookOrbitMissingOpen();
 
   int getMenuItemCount() const;
-  // Menu rows only, excluding books.
-  int menuRowCount() const;
   void loadRecentBooks(int maxBooks);
 
  public:

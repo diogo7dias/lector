@@ -99,9 +99,6 @@ class MappedInputManager {
   bool wasMenuGesture() const;
   // Reader surfaces use this to keep a page-back swipe from becoming an exit.
   bool wasBackGesture() const;
-  // Bottom-edge up-swipe, offered as a reader-menu gesture only where Home is the
-  // capacitive key: elsewhere that swipe already means Home (wasHomeGesture).
-  bool wasReaderMenuSwipeUp() const;
   // Vertical swipe over the body of a list screen, with the gesture bands excluded.
   // ButtonNavigator turns it into the same movement the nav buttons make.
   list_swipe::Scroll wasListScrollSwipe() const;

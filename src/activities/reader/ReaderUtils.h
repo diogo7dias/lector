@@ -96,7 +96,6 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
 inline bool isTouchMenuGesture(const GfxRenderer& renderer, const MappedInputManager& input, bool centreTap = false) {
   if (!input.hasTouch() || readerMenuMode() == reader_touch::MenuMode::Off) return false;
   if (input.wasMenuGesture()) return true;
-  if (readerMenuMode() == reader_touch::MenuMode::SwipeUp && input.wasReaderMenuSwipeUp()) return true;
   if (centreTap) return true;
 
   // With page-turn controls off, detect the centre tap here instead of in
@@ -205,11 +204,6 @@ inline void toggleWallpaperHold(const GfxRenderer& renderer, int& pagesUntilFull
   pagesUntilFullRefresh = 0;
 }
 
-struct BackNavCallback {
-  void* ctx;
-  void (*fn)(void*);
-};
-
 // Pairs a button press with its release WITHIN one activity.
 //
 // The firmware mixes two input models: the Settings family acts on button PRESS, the
@@ -244,12 +238,12 @@ struct ButtonPressLatch {
 // - default: go to file browser
 // - with backShortToFileBrowser: go home
 // Short press (< GO_BACK_OR_HOME_MS):
-// - default: go home
+// - default: back where the book was opened (Home, the browser folder or the Library)
 // - with backShortToFileBrowser: go to file browser.
 // backLatch must already have observed this frame's press (see ButtonPressLatch): both
 // branches below are ignored for a press this activity never saw.
 inline bool handleBackNavigation(const MappedInputManager& mappedInput, ActivityManager& activityManager,
-                                 const char* filePath, BackNavCallback goHome, ButtonPressLatch& backLatch) {
+                                 const char* filePath, ButtonPressLatch& backLatch) {
   // A left-edge right swipe is page-back in the reader, never reader exit.
   if (mappedInput.wasBackGesture()) return false;
   if (!backLatch.seen) {
@@ -260,7 +254,7 @@ inline bool handleBackNavigation(const MappedInputManager& mappedInput, Activity
   }
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_BACK_OR_HOME_MS) {
     if (SETTINGS.backShortToFileBrowser) {
-      goHome.fn(goHome.ctx);
+      activityManager.goHome();
     } else {
       activityManager.goToFileBrowser(filePath);
     }
@@ -271,7 +265,7 @@ inline bool handleBackNavigation(const MappedInputManager& mappedInput, Activity
     if (SETTINGS.backShortToFileBrowser) {
       activityManager.goToFileBrowser(filePath);
     } else {
-      goHome.fn(goHome.ctx);
+      activityManager.goToReaderOrigin();
     }
     return true;
   }

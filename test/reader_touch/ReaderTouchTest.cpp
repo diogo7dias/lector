@@ -50,7 +50,6 @@ TEST(ReaderTouch, TheSwitchOffIgnoresEveryTapIncludingTheMenu) {
 
 TEST(ReaderTouch, MenuOffLeavesTheCentreTapInert) {
   EXPECT_EQ(tapBoth(Gesture::TapOnly, W / 2, H / 2, MenuMode::Off), TapAction::None);
-  EXPECT_EQ(tapBoth(Gesture::TapOnly, W / 2, H / 2, MenuMode::SwipeUp), TapAction::None);
 }
 
 TEST(ReaderTouch, ASoleTapDirectionGetsTheWholePageButTheMenuCentre) {

@@ -47,8 +47,6 @@ STR_OPEN_URL_HINT: "Браузерде осы URL мекенжайын ашың�
 STR_OR_HTTP_PREFIX: "немесе http://"
 STR_SCAN_QR_HINT: "немесе телефонмен QR кодын сканерлеңіз:"
 STR_CALIBRE_WIRELESS: "Calibre сымсыз"
-STR_NETWORK_LEGEND: "* = Шифрланған | + = Сақталған"
-STR_MAC_ADDRESS: "MAC мекенжайы:"
 STR_CHECKING_WIFI: "Wi-Fi тексерілуде..."
 STR_ENTER_WIFI_PASSWORD: "Wi-Fi құпия сөзін енгізіңіз"
 STR_TO_PREFIX: "Желі: "

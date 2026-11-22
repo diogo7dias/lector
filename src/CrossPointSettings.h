@@ -184,7 +184,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // How the reader menu opens on a touch board. Swipe Up is only offered where the
   // Home key is capacitive, since there the bottom edge is otherwise unused.
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
-  enum SHOW_READER_MENU { READER_MENU_OFF = 0, READER_MENU_TAP = 1, READER_MENU_SWIPE_UP = 2, SHOW_READER_MENU_COUNT };
+  // A stored 2 (the old Swipe Up mode) loads as the default, Tap: that swipe is Home now.
+  enum SHOW_READER_MENU { READER_MENU_OFF = 0, READER_MENU_TAP = 1, SHOW_READER_MENU_COUNT };
 
   // How long Power must be held to wake the device from deep sleep. Normal rejects a
   // pocket brush; Fast wakes on any press, which is what Short Power Button Click = Sleep
