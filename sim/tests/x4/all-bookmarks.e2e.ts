@@ -36,12 +36,15 @@ test('All Bookmarks opens the book at the bookmark', async ({ app, screen }) => 
   const [, spine, page] = lastMatch(await log(), /Toggle bookmark at spine (\d+), page (\d+)/g) ?? [];
 
   await press('Right', 2); // read on, so the saved position moves past the bookmark
+  // Back returns where the book was opened: the browser. Its Back goes on Home.
+  await press('Back');
+  await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
   await press('Back');
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
   const readOn = lastMatch(await log(), /Progress saved: spine=(\d+) offset=\d+ page=(\d+)/g);
   expect(readOn?.slice(1), 'reading stopped past the bookmark').not.toEqual([spine, page]);
 
-  await press('Down', 5); // Settings, below the book row and the four menu rows above it
+  await press('Down', 5); // Settings, from Browse Files: Library, OPDS Browser, Nearby Sync, Quick Panel
   await press('Confirm');
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
   await press('Down'); // Reader
@@ -56,7 +59,8 @@ test('All Bookmarks opens the book at the bookmark', async ({ app, screen }) => 
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
   await expect.poll(async () => (await log()).slice(before).includes('Rendered page'), { timeout: 60_000 }).toBe(true);
 
-  // Leaving saves where the reader stands: the bookmarked page.
+  // Leaving saves where the reader stands: the bookmarked page. A book opened from anywhere
+  // but the browser or the Library goes back Home.
   await press('Back');
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
   const saved = lastMatch((await log()).slice(before), /Progress saved: spine=(\d+) offset=\d+ page=(\d+)/g);

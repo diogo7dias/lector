@@ -18,13 +18,12 @@ test('Library lists the card, follows a book into /recents and opens it again', 
   };
   const log = async () => (await fetch(`${app.baseUrl}/log`)).text();
 
-  // Down from Settings wraps to Home's first row, where Up counts the same on every visit:
-  // Settings, Nearby Sync, OPDS Browser, Library.
-  await press('Down');
+  // Up from Settings: Quick Panel, Nearby Sync, OPDS Browser, Library. Each visit after the
+  // first starts there too: a book's Back returns to the Library, whose Back lands Home on its row.
+  await press('Up', 4);
   // known: the book count of the visit before. A visit with no book change skips the rebuild.
   const visit = async (known?: number) => {
     const from = (await log()).length;
-    await press('Up', 4);
     await press('Confirm');
     await expect(activity).toHaveText('Library', { timeout: 30_000 });
     await expect
@@ -52,6 +51,8 @@ test('Library lists the card, follows a book into /recents and opens it again', 
     await press('Confirm');
     await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
     const path = /\[LIB\] open (\S+)/.exec((await log()).slice(from))?.[1];
+    await press('Back');
+    await expect(activity).toHaveText('Library', { timeout: 30_000 });
     await press('Back');
     await expect(activity).toHaveText('Home', { timeout: 30_000 });
     return path as string;

@@ -1,6 +1,7 @@
 #include "ActivityManager.h"
 
 #include <FontCacheManager.h>
+#include <FsHelpers.h>
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <I18n.h>
@@ -26,12 +27,25 @@
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
+#include "home/LibraryActivity.h"
 #include "network/CrossPointWebServerActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
 #include "util/FullScreenMessageActivity.h"
 #include "util/OrientationCycle.h"
+
+namespace {
+// The Home row for the screen being left, so Home opens with that row selected.
+HomeMenuItem homeRowFor(const std::string& activityName) {
+  if (activityName == activity_name::kFileBrowser) return HomeMenuItem::FILE_BROWSER;
+  if (activityName == activity_name::kLibrary) return HomeMenuItem::LIBRARY;
+  if (activityName == activity_name::kOpdsBookBrowser) return HomeMenuItem::OPDS_BROWSER;
+  if (activityName == activity_name::kCrossPointWebServer) return HomeMenuItem::FILE_TRANSFER;
+  if (activityName == activity_name::kSettings) return HomeMenuItem::SETTINGS_MENU;
+  return HomeMenuItem::NONE;
+}
+}  // namespace
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
 
@@ -294,6 +308,8 @@ void ActivityManager::loop() {
       }
 
       ActivityResult pendingResult = std::move(currentActivity->result);
+      // Read before the screen is destroyed: a last screen popping lands Home on its row.
+      const HomeMenuItem homeRow = homeRowFor(currentActivity->name);
 
       // Destroy the current activity
       exitActivity(lock);
@@ -302,7 +318,7 @@ void ActivityManager::loop() {
       if (stackActivities.empty()) {
         LOG_DBG("ACT", "No more activities on stack, going home");
         lock.unlock();  // goHome may acquire its own lock
-        goHome();
+        goHome(homeRow);
         continue;  // Will launch goHome immediately
 
       } else {
@@ -419,8 +435,40 @@ void ActivityManager::goToBrowser() {
 
 void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh, const bool firstTurnCleans,
                                  const bool sortesMode) {
+  // Where the book's short Back returns: the browser or the Library when it was picked
+  // there, Home from anywhere else. The reader reopening itself (a sync, a transfer, a jump
+  // to another book) and the boot that resumes it keep the origin they already have.
+  if (currentActivity) {
+    const std::string& launcher = currentActivity->name;
+    if (launcher == activity_name::kFileBrowser) {
+      APP_STATE.readerOrigin = CrossPointState::ReaderOrigin::FileBrowser;
+    } else if (launcher == activity_name::kLibrary) {
+      APP_STATE.readerOrigin = CrossPointState::ReaderOrigin::Library;
+    } else if (!isReaderActivity() && launcher != activity_name::kBoot && launcher != activity_name::kSleep &&
+               launcher != activity_name::kKOReaderSync && launcher != activity_name::kNearbyFileTransfer) {
+      APP_STATE.readerOrigin = CrossPointState::ReaderOrigin::Home;
+    }
+  }
   replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh,
                                                    firstTurnCleans, sortesMode));
+}
+
+void ActivityManager::goToReaderOrigin() {
+  switch (APP_STATE.readerOrigin) {
+    case CrossPointState::ReaderOrigin::FileBrowser:
+      // The folder, not the book: leaving files an opened book into /recents, so by the
+      // time the browser lists the folder the book may have moved out of it.
+      goToFileBrowser(FsHelpers::extractFolderPath(APP_STATE.openEpubPath));
+      return;
+    case CrossPointState::ReaderOrigin::Library:
+      // As the only screen, so its Back goes Home onto the Library row, as it does when
+      // Home opened it.
+      replaceActivity(std::make_unique<LibraryActivity>(renderer, mappedInput, APP_STATE.libraryRow));
+      return;
+    default:
+      goHome();
+      return;
+  }
 }
 
 void ActivityManager::goToSleep(bool fromTimeout) {
@@ -438,18 +486,7 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
 }
 
 void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
-  if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
-    const auto& activityName = currentActivity->name;
-    if (activityName == activity_name::kFileBrowser) {
-      initialMenuItem = HomeMenuItem::FILE_BROWSER;
-    } else if (activityName == activity_name::kOpdsBookBrowser) {
-      initialMenuItem = HomeMenuItem::OPDS_BROWSER;
-    } else if (activityName == activity_name::kCrossPointWebServer) {
-      initialMenuItem = HomeMenuItem::FILE_TRANSFER;
-    } else if (activityName == activity_name::kSettings) {
-      initialMenuItem = HomeMenuItem::SETTINGS_MENU;
-    }
-  }
+  if (initialMenuItem == HomeMenuItem::NONE && currentActivity) initialMenuItem = homeRowFor(currentActivity->name);
   replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
@@ -529,6 +566,11 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
       goHome();
       return true;
     case CrossPointSettings::LP_MENU_BACK:
+      // A bound Back on the page is the reader's short Back.
+      if (stackActivities.empty() && currentActivity && currentActivity->isReaderActivity()) {
+        goToReaderOrigin();
+        return true;
+      }
       popActivity();
       return true;
     case CrossPointSettings::LP_MENU_SLEEP:

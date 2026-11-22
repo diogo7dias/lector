@@ -11,6 +11,7 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "activities/ActivityManager.h"
 #include "activities/RenderLock.h"
 #include "components/BusyBanner.h"
@@ -71,6 +72,11 @@ void LibraryActivity::refreshIndex(const bool force) {
   count = usable ? index.bookCount() : 0;
   failed = !usable;
   nav.reset();
+  if (startRow > 0 && startRow < count) {
+    nav.selected = startRow;
+    nav.followOnBuild = true;
+  }
+  startRow = 0;
   requestUpdate();
 }
 
@@ -164,6 +170,7 @@ void LibraryActivity::activateIndex(const int index) {
     }
   }
   LOG_INF("LIB", "open %s", path.c_str());
+  APP_STATE.libraryRow = static_cast<uint16_t>(index);
   app.clearTapFlash();
   activityManager.goToReader(path);
 }

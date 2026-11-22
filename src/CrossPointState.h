@@ -12,6 +12,12 @@ class CrossPointState : public PersistableStore<CrossPointState> {
 
  public:
   std::string openEpubPath;
+  // The screen the open book was launched from: a short Back in the reader returns there.
+  // Saved with openEpubPath, because the wake that reopens the book is a chip reset.
+  // libraryRow is the Library row that opened it, so Back lands on the same row.
+  enum class ReaderOrigin : uint8_t { Home = 0, FileBrowser = 1, Library = 2, Count };
+  ReaderOrigin readerOrigin = ReaderOrigin::Home;
+  uint16_t libraryRow = 0;
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
   uint8_t fastRefreshesSinceFull = 0;

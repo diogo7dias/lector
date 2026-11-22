@@ -12,6 +12,7 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "activities/reader/ReaderTouchZones.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/SleepImageTriage.h"
 #include "components/UITheme.h"
@@ -285,30 +286,34 @@ void BmpViewerActivity::doSetSleepCover() {
   onEnter();
 }
 
+bool BmpViewerActivity::openSibling(const int delta) {
+  if (currentImageIndex < 0) {
+    return false;
+  }
+  const int nextIndex = currentImageIndex + delta;
+  if (siblingImages.size() <= 1 || nextIndex < 0 || nextIndex >= static_cast<int>(siblingImages.size())) {
+    return false;
+  }
+  currentImageIndex = nextIndex;
+  std::string dirPath = FsHelpers::extractFolderPath(filePath);
+  if (dirPath.back() != '/') dirPath += "/";
+  filePath = dirPath + std::string(siblingImages[currentImageIndex]);
+  onEnter();
+  return true;
+}
+
 void BmpViewerActivity::loop() {
   // Keep CPU awake/polling so 1st click works
   Activity::loop();
 
-  auto openSibling = [this](const int delta) {
-    if (currentImageIndex < 0) {
-      return false;
-    }
-    const int nextIndex = currentImageIndex + delta;
-    if (siblingImages.size() <= 1 || nextIndex < 0 || nextIndex >= static_cast<int>(siblingImages.size())) {
-      return false;
-    }
-    currentImageIndex = nextIndex;
-    std::string dirPath = FsHelpers::extractFolderPath(filePath);
-    if (dirPath.back() != '/') dirPath += "/";
-    filePath = dirPath + std::string(siblingImages[currentImageIndex]);
-    onEnter();
-    return true;
-  };
+  if (handleActionMenu()) return;
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     activityManager.goToFileBrowser(filePath);
     return;
   }
+
+  if (handleTouch()) return;
 
   const bool triage = crosspoint::sleep::isUnderSleepDirs(filePath);
 
@@ -350,6 +355,85 @@ void BmpViewerActivity::loop() {
     openSibling(1);
     return;
   }
+}
+
+bool BmpViewerActivity::handleTouch() {
+  if (!mappedInput.hasTouch()) return false;
+  int x = 0;
+  int y = 0;
+  // Hint-band taps never reach here: wasScreenTapped() leaves them to the band's keys.
+  if (!mappedInput.wasScreenTapped(x, y)) return false;
+  // The reader's zones, with both directions on taps: left third back, right third on,
+  // the centre of the page the menu.
+  using namespace reader_touch;
+  switch (tapAction(true, Gesture::TapOnly, Gesture::TapOnly, MenuMode::Tap, false, renderer.getScreenWidth(),
+                    renderer.getScreenHeight(), x, y)) {
+    case TapAction::Prev:
+      openSibling(-1);
+      return true;
+    case TapAction::Next:
+      openSibling(1);
+      return true;
+    case TapAction::Menu:
+      openActionMenu();
+      return true;
+    case TapAction::None:
+      return false;
+  }
+  return false;
+}
+
+void BmpViewerActivity::openActionMenu() {
+  // The same actions, and the same labels, as the front keys in this folder.
+  const char* labels[3] = {};
+  int count = 0;
+  if (crosspoint::sleep::isUnderSleepDirs(filePath)) {
+    labels[count] = SleepImageTriage::effectiveFavorite(filePath) ? tr(STR_UNFAV) : tr(STR_FAV);
+    menuActions[count++] = MenuAction::Favorite;
+    labels[count] = tr(STR_DELETE);
+    menuActions[count++] = MenuAction::Delete;
+    labels[count] = crosspoint::sleep::isPaused(filePath) ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE);
+    menuActions[count++] = MenuAction::Pause;
+  } else if (canSetSleepCover()) {
+    labels[count] = tr(STR_SET_SLEEP_COVER);
+    menuActions[count++] = MenuAction::SetSleepCover;
+  }
+  if (count == 0) return;  // Nothing the keys could do here either.
+  menuChoice = -1;
+  actionMenu.show(FavoriteImage::displayNameForPath(filePath).c_str(), labels, count, 0,
+                  [this](const int choice) { menuChoice = choice; });
+  actionMenu.processRender(renderer, mappedInput);
+}
+
+bool BmpViewerActivity::handleActionMenu() {
+  menuDirty = false;
+  if (!actionMenu.handleInput(mappedInput, [this] { menuDirty = true; })) return false;
+  if (menuChoice >= 0) {
+    const MenuAction action = menuActions[menuChoice];
+    menuChoice = -1;
+    switch (action) {
+      case MenuAction::SetSleepCover:
+        doSetSleepCover();
+        break;
+      case MenuAction::Favorite:
+        doToggleFavorite();
+        break;
+      case MenuAction::Delete:
+        promptDelete();
+        break;
+      case MenuAction::Pause:
+        doTogglePause();
+        break;
+    }
+  } else if (menuDirty) {
+    // A row moved: the menu again over the image. Closed without a choice: the image alone.
+    if (actionMenu.isActive()) {
+      actionMenu.processRender(renderer, mappedInput);
+    } else {
+      onEnter();
+    }
+  }
+  return true;
 }
 
 void BmpViewerActivity::doToggleFavorite() {

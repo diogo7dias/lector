@@ -49,10 +49,14 @@ and the side buttons can be swapped or disabled with **Side Button Layout (reade
 on, **Next Page** and **Previous Page** each take their own gesture: Tap & Swipe, Tap Only,
 Swipe Only (the default), Inverted Tap or Disabled. A swipe to the left goes on, a swipe to the
 right goes back. Taps turn from the outer thirds of the page, or from the whole page when only
-one direction accepts taps; the centre third opens the reader menu. Inverted Tap on either
+one direction accepts taps; the centre of the page opens the reader menu. Inverted Tap on either
 direction swaps the two sides. In a right-to-left EPUB (language Hebrew, Arabic or Persian) the swipes and
 the tap sides run the other way. Older settings files carry over: the old Tap, Swipe and
 Inverted Tap become the matching gesture for both directions.
+
+**Show Reader Menu** (Settings > Controls) is **Tap**, the centre tap, or **Off**. Its old
+**Swipe Up** choice is gone, because a swipe up from the bottom edge now goes Home; a device
+set to it opens the menu by the centre tap.
 
 ### Tapping, on a device with a touch screen
 
@@ -77,6 +81,10 @@ only while the list runs past one screen.
 On every device a list that scrolls shows which screen of it you are on beside the battery,
 as 2/5, and the Settings band says what Confirm does to the row it is on: Open, Change, Turn
 on or Turn off, instead of Toggle.
+
+A swipe up from the bottom edge of the screen goes Home from every screen, a book included;
+the Home key below the screen does the same. A swipe up that starts higher on a list scrolls
+it. On Home a flick up or down over the list pages through the books you are reading.
 
 Page turns by tap while reading are unchanged. Holding a word on the page for half a second looks it up in
 the dictionary; keep the finger down and drag to select a phrase instead (see **Quotes**).
@@ -175,6 +183,8 @@ The Home screen is the entry point. It lists the books you have been reading, an
 - **OPDS Browser** — shown once at least one catalog is configured, see
   [section 9](#9-getting-books-onto-the-device).
 - **File Transfer** — Wi-Fi transfers, see [section 9](#9-getting-books-onto-the-device).
+- **Quick Panel** — the X3 and X4 only: opens the quick panel (see Settings reference), the same
+  panel a double click of **Power** opens.
 - **Settings** — see [section 12](#12-settings-reference).
 
 **Settings > Controls > Home Back Button** decides what **Back** does here: nothing, resume
@@ -281,6 +291,11 @@ UTF-16 files are not supported and show a message instead.
 From the image viewers you can set the picture as your sleep wallpaper. A `.jpg` is converted
 to a panel-sized `sleep.bmp` (Fit or Crop, as **Sleep Screen Cover Mode** says); a `.bmp` is copied as it is.
 
+On the X4 Pro, tap the left third of the screen for the previous picture in the folder and
+the right third for the next one. A tap in the centre opens a menu with what the buttons do
+there: **Set Cover** outside the sleep folders, or the three triage actions inside them.
+Delete still asks before it deletes.
+
 Opening a wallpaper from `/sleep` gives you the triage buttons: **Favorite**, **Pause** and
 **Delete**. Favoriting closes the viewer straight away and takes you back to the folder, so
 you can work through a folder at button speed. The rename itself happens later, when you
@@ -344,7 +359,8 @@ on screen.
 
 ### Leaving the book
 
-- **Back** closes the book and returns Home.
+- **Back** closes the book and returns to where you opened it: the file browser folder, the
+  Library, or Home for a book opened anywhere else. This survives sleep.
 - **Hold Back** returns to the file browser, opened in the book's own folder. **Settings > Controls > Short Back to File
   Browser** swaps the two, so a short press goes to the browser instead.
 - **Confirm** opens the [in-book menu](#6-the-in-book-menu).

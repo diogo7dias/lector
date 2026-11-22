@@ -68,7 +68,6 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
 
 namespace {
 constexpr float LEFT_EDGE_BACK_GESTURE_FRAC_X = 0.25f;
-constexpr float BOTTOM_EDGE_BACK_GESTURE_FRAC_Y = 0.14f;
 constexpr float TOP_EDGE_MENU_GESTURE_FRAC_Y = 0.14f;
 // How far down the finger must travel before a top-edge drag counts as the gesture.
 // A fifth of the screen: past any accidental slip, short of a full page-height drag.
@@ -302,7 +301,7 @@ bool MappedInputManager::wasBottomEdgeUpSwipe() const {
   int ey = 0;
   if (decodeSwipe(sx, sy, ex, ey)) {
     const int bottomEdgeTop =
-        renderer.getScreenHeight() - static_cast<int>(renderer.getScreenHeight() * BOTTOM_EDGE_BACK_GESTURE_FRAC_Y);
+        renderer.getScreenHeight() - static_cast<int>(renderer.getScreenHeight() * list_swipe::HOME_EDGE_FRAC_Y);
     if (sy >= bottomEdgeTop && ey < sy && std::abs(ey - sy) > std::abs(ex - sx)) {
       rememberTouchHeldTime();
       return true;
@@ -312,14 +311,13 @@ bool MappedInputManager::wasBottomEdgeUpSwipe() const {
 }
 
 bool MappedInputManager::wasHomeGesture() const {
-  // On a board with a capacitive Home key that key IS Home, which frees the bottom
-  // edge for the reader menu (wasReaderMenuSwipeUp).
+  // The capacitive Home key where there is one, and the bottom-edge up-swipe on every
+  // touch board, the reader included: one way Home on every screen.
   if (gpio.hasHomeKey()) {
     // See setHomeKeyOverride(): the router holds a tap back while it decides whether a
     // second one is coming, and replays it here when it rules the tap a plain single.
     if (homeKeyInjected) return true;
-    if (homeKeySuppressed) return false;
-    return gpio.wasHomeKeyTapped();
+    if (!homeKeySuppressed && gpio.wasHomeKeyTapped()) return true;
   }
   return wasBottomEdgeUpSwipe();
 }
@@ -366,8 +364,6 @@ bool MappedInputManager::getTwoFingerTouch(int& x1, int& y1, int& x2, int& y2) c
 }
 
 bool MappedInputManager::wasScreenTouchReleased() const { return gpio.wasTouchReleased(); }
-
-bool MappedInputManager::wasReaderMenuSwipeUp() const { return gpio.hasHomeKey() && wasBottomEdgeUpSwipe(); }
 
 list_swipe::Scroll MappedInputManager::wasListScrollSwipe() const {
   if (listScrollPolled_) return listScrollThisPass_;

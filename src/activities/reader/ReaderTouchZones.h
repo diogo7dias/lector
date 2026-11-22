@@ -15,8 +15,8 @@ namespace reader_touch {
 // SETTINGS.pageTurnGesture / previousPageGesture. Values match CrossPoint.
 enum class Gesture : uint8_t { TapAndSwipe = 0, TapOnly = 1, SwipeOnly = 2, InvertedTap = 3, Disabled = 4 };
 
-// SETTINGS.showReaderMenu.
-enum class MenuMode : uint8_t { Off = 0, Tap = 1, SwipeUp = 2 };
+// SETTINGS.showReaderMenu. A swipe up from the bottom edge was a third mode; it is Home now.
+enum class MenuMode : uint8_t { Off = 0, Tap = 1 };
 
 enum class TapAction : uint8_t { None, Prev, Next, Menu };
 

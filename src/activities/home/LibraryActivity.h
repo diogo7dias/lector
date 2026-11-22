@@ -22,6 +22,8 @@ class LibraryActivity final : public UiListActivity {
 
   uint16_t count = 0;
   bool failed = false;
+  // The row to open on: a book's Back returns to the row that opened it.
+  uint16_t startRow = 0;
 
   std::string titles[WINDOW];
   std::string authors[WINDOW];
@@ -33,8 +35,8 @@ class LibraryActivity final : public UiListActivity {
   void loadWindow(int start, int wanted);
 
  public:
-  explicit LibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : UiListActivity("Library", renderer, mappedInput) {}
+  explicit LibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, uint16_t firstRow = 0)
+      : UiListActivity(activity_name::kLibrary, renderer, mappedInput), startRow(firstRow) {}
   void onEnter() override;
   void onExit() override;
 
