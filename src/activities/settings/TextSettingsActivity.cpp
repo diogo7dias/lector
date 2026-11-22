@@ -3,7 +3,6 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <Logging.h>
-#include <Memory.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -19,7 +18,6 @@
 #include "SettingsList.h"
 #include "TextSettingsPreview.h"
 #include "activities/settings/FontPickerActivity.h"
-#include "activities/util/IntervalSelectionActivity.h"
 #include "components/RowHitTest.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -107,6 +105,7 @@ void TextSettingsActivity::onEnter() {
 }
 
 void TextSettingsActivity::onExit() {
+  if (editing()) closeEdit();
   commitSettings();
   Activity::onExit();
 }
@@ -136,9 +135,14 @@ void TextSettingsActivity::rebuildSizeList() {
   }
 }
 
-// The preview band above the grid; the base reserves it and hands its rect back.
-int TextSettingsActivity::reservedHeight() const {
+int TextSettingsActivity::previewHeight() const {
   return std::min(PREVIEW_HEIGHT, usableHeight * PREVIEW_MAX_PERCENT / 100) + metrics_.verticalSpacing;
+}
+
+// The preview band above the grid, and the adjuster under it while a number is open; the
+// base reserves both and hands the rect back.
+int TextSettingsActivity::reservedHeight() const {
+  return previewHeight() + (editing() ? adjust_strip::heightFor(renderer.getLineHeight(UI_10_FONT_ID)) : 0);
 }
 
 void TextSettingsActivity::drawReserved(const Rect& rect) {
@@ -147,7 +151,8 @@ void TextSettingsActivity::drawReserved(const Rect& rect) {
   // Character Spacing; the reader sets its own again on its next page.
   const int previewFontId = SETTINGS.getReaderFontId(look_);
   renderer.setCharacterSpacing(previewFontId, look_.characterSpacing - reader_defaults::CHARACTER_SPACING);
-  textsettings::renderPreview(renderer, previewLayout_, look_, rect.y, rect.height - metrics_.verticalSpacing);
+  textsettings::renderPreview(renderer, previewLayout_, look_, rect.y, previewHeight() - metrics_.verticalSpacing);
+  if (editing()) drawStrip(rect.y + previewHeight());
 }
 
 namespace {
@@ -202,6 +207,15 @@ void TextSettingsActivity::loadRowSettings() {
     }
   };
   forEachBaseSetting(keep);
+}
+
+// One press of the adjuster. Front keys move the small step: one unit, or the setting's own
+// step where only multiples of it are valid (the side margin, word spacing). Side keys and
+// a held key's large step move the setting's step.
+int TextSettingsActivity::stepOf(const Row row, const bool large) const {
+  const SettingInfo* info = settingOf(row);
+  const int step = info && info->valueRange.step > 0 ? info->valueRange.step : 1;
+  return large || ROW_SPECS[static_cast<size_t>(row)].coarseSteps ? step : 1;
 }
 
 const SettingInfo* TextSettingsActivity::settingOf(const Row row) const {
@@ -418,6 +432,13 @@ const char* TextSettingsActivity::cellValue(const int index) const {
 void TextSettingsActivity::activateCell(const int index) {
   const auto rows = visibleRows();
   if (index < 0 || index >= static_cast<int>(rows.size())) return;
+  // Confirm, or a tap on the number being adjusted, puts the adjuster away; a tap on
+  // another row puts it away and acts on that row.
+  if (editing()) {
+    const Row was = editRow_;
+    closeEdit();
+    if (rows[index] == was) return;
+  }
   activateRow(rows[index]);
   requestUpdate();
 }
@@ -452,34 +473,9 @@ void TextSettingsActivity::activateRow(const Row row) {
       requestUpdate();
       return;
     }
-    case RowKind::Number: {
-      const SettingInfo* info = settingOf(row);
-      const uint8_t* field = lookField(row);
-      if (!info || !field) return;
-      const SettingInfo::ValueRange range = info->valueRange;
-      // A dedicated slider screen rather than a band over this list. The live
-      // preview under the band is lost, but the row is only two taps away and
-      // the number gets a finger-sized track instead of a header's worth of it.
-      auto dialog = makeUniqueNoThrow<IntervalSelectionActivity>(
-          renderer, mappedInput, "TextSettingNumber", rowNameId(row), info->shownValue(*field),
-          info->shownValue(range.min), info->shownValue(range.max),
-          /*smallStep=*/ROW_SPECS[static_cast<size_t>(row)].coarseSteps ? range.step : 1, /*largeStep=*/range.step);
-      if (!dialog) {
-        LOG_ERR("TXTSET", "OOM: IntervalSelectionActivity");
-        return;
-      }
-      const int offset = info->displayOffset;
-      startActivityForResult(std::move(dialog), [this, row, offset](const ActivityResult& result) {
-        const auto* chosen = std::get_if<IntervalResult>(&result.data);
-        if (!result.isCancelled && chosen != nullptr) {
-          setEditedValue(row, static_cast<int>(chosen->value) - offset);
-          commitSettings();
-        }
-        requestUpdate();
-      });
-      requestUpdate();
+    case RowKind::Number:
+      openEdit(row);
       return;
-    }
     case RowKind::Picker: {
       if (row == Row::Size) {
         openSizePicker();
@@ -538,8 +534,7 @@ void TextSettingsActivity::activateRow(const Row row) {
   requestUpdate();
 }
 
-// The dialog hands the value back once, when it closes, so there is nothing to
-// debounce any more: apply it and let the caller write it.
+// Applies a value and repaints; the write waits for closeEdit().
 void TextSettingsActivity::setEditedValue(const Row row, const int value) {
   const uint8_t* field = lookField(row);
   const SettingInfo* info = settingOf(row);
@@ -553,10 +548,16 @@ void TextSettingsActivity::setEditedValue(const Row row, const int value) {
 
 bool TextSettingsActivity::handleCustomInput() {
   if (optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); })) return true;  // picker owns input
-  return false;
+  return editing() && handleEditInput();
 }
 
-void TextSettingsActivity::onBackButton() { finish(); }
+void TextSettingsActivity::onBackButton() {
+  if (editing()) {
+    closeEdit();
+    return;
+  }
+  finish();
+}
 
 bool TextSettingsActivity::drawOverlay() { return optionPopup_.processRender(renderer, mappedInput); }
 
@@ -564,6 +565,15 @@ ListChrome TextSettingsActivity::chrome() const {
   ListChrome chrome;
   chrome.title = tr(STR_TEXT_SETTINGS);
 
+  // While a number is open, Back and Confirm both put the adjuster away, and the front
+  // pair steps it. On touch the strip carries its own minus and plus.
+  if (editing()) {
+    chrome.backHint = tr(STR_DONE);
+    chrome.confirmHint = tr(STR_DONE);
+    chrome.thirdHint = mappedInput.hasTouch() ? "" : "-";
+    chrome.fourthHint = mappedInput.hasTouch() ? "" : "+";
+    return chrome;
+  }
   const char* confirmLabel = tr(STR_SELECT);
   const auto rows = visibleRows();
   if (selected() < static_cast<int>(rows.size())) {
@@ -575,8 +585,6 @@ ListChrome TextSettingsActivity::chrome() const {
     }
   }
 
-  // Back closes the screen: a number is edited on its own screen now, so nothing
-  // here is ever mid-edit.
   chrome.confirmHint = confirmLabel;
   return chrome;
 }

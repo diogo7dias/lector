@@ -332,3 +332,32 @@ TEST(GridRows, OtherTouchBoardsKeepTheirGridAndArmedTextLegible) {
   EXPECT_EQ(grid.activations, 1);
   display.device.isX4Pro = true;
 }
+
+namespace {
+// Rows 0 and 2 are section headings: drawn, never landed on.
+class HeadedGrid : public Grid {
+ public:
+  using Grid::Grid;
+  using UiGridActivity::moveSelection;
+  using UiGridActivity::setSelected;
+  int cellCount() const override { return 5; }
+  CellLook cellLook(const int index) const override {
+    return index == 0 || index == 2 ? CellLook::Header : CellLook::Row;
+  }
+};
+}  // namespace
+
+TEST(GridRows, KeysAndEntryStepOverSectionHeadings) {
+  GfxRenderer renderer;
+  MappedInputManager input;
+  HeadedGrid grid(renderer, input);
+  grid.onEnter();
+  grid.setSelected(0);
+  EXPECT_EQ(grid.selected(), 1) << "entry lands on the first row under the heading";
+  grid.moveSelection(1, 0);
+  EXPECT_EQ(grid.selected(), 3) << "down walks past the heading";
+  grid.moveSelection(-1, 0);
+  EXPECT_EQ(grid.selected(), 1) << "up walks past it too";
+  grid.moveSelection(-1, 0);
+  EXPECT_EQ(grid.selected(), 1) << "nothing landable above: the cursor stays";
+}

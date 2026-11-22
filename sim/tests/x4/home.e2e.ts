@@ -43,7 +43,9 @@ test('the Clear Reading Cache warning left idle drops to low power', async ({ ap
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
   await press('Down', 3); // System
   await press('Confirm');
-  await press('Down', 15); // Clear Reading Cache (no Time Zone rows: the X4 has no clock chip)
+  await press('Down', 14); // Maintenance, the last row (no Time Zone rows: the X4 has no clock chip)
+  await press('Confirm');
+  await press('Down'); // Clear Reading Cache
   await press('Confirm');
   await expect(activity).toHaveText('ClearCache', { timeout: 30_000 });
 
@@ -57,7 +59,8 @@ test('the Clear Reading Cache warning left idle drops to low power', async ({ ap
   // Back answers Cancel, so nothing is cleared. Settings resumes underneath without a new
   // "Entering activity" line: Home is the next name the log gives.
   await press('Back');
-  await press('Back'); // System list to the Settings tabs
+  await press('Back'); // Maintenance to System
+  await press('Back'); // System to the Settings cards
   await press('Back');
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
   await press('Up', 5); // Home remembers its row: back to Browse Files

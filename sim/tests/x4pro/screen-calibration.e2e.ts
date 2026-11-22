@@ -24,10 +24,8 @@ test('a calibrated edge survives a reboot, and Cancel leaves it alone', async ({
       await home.click();
       await expect(activity).toHaveText('Home', { timeout: 30_000 });
     }
-    for (const [x, y] of [[240, 729], [100, 84], [100, 203]]) {
-      await tap(x, y);
-      await tap(x, y);
-    }
+    // Settings, Display, Screen Calibration: one tap each.
+    for (const [x, y] of [[240, 729], [240, 101], [100, 233]]) await tap(x, y);
     await expect(activity).toHaveText('ScreenCalibration', { timeout: 30_000 });
     await settle();
   };

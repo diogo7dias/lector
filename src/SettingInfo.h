@@ -33,6 +33,7 @@ enum class SettingAction {
   ScreenCalibration,
   AllBookmarks,
   TimeZone,
+  Maintenance,
 };
 
 struct SettingInfo {

@@ -1077,15 +1077,16 @@ are covered in [docs/dictionary.md](./docs/dictionary.md).
 
 ## 12. Settings reference
 
-Settings are one scrolling list. Rows are grouped under section headings such as **Text**,
-**Page** or **Library**, and the sections run in four blocks, in this order: Display,
-Reader, Controls, System. Those four names order the list; they are not printed on screen,
-and a row is found by scrolling to its section heading.
+Settings opens on five cards: **Display**, **Reader**, **Controls**, **System** and **File
+Transfer**. Under each name a line shows how that part is set up now, for example
+`Refresh 15 pages · Sleep: Cover` on Display or `ChareInk 14 · Ruled OFF` on Reader. Open a
+card to see its rows. They are grouped under black section headings such as **Text**, **Page**
+or **Library**. The buttons step over the headings, so every press lands on a row.
 
-Step through the list a row at a time. Hold the same button to scroll: it moves a row at a
+Step through a list a row at a time. Hold the same button to scroll: it moves a row at a
 time, speeds up to five rows at a time after about a second, and stops at the end of the list.
 
-Paths in this reference, such as **Settings > Reader > Dictionary**, name the block a row
+Paths in this reference, such as **Settings > Reader > Dictionary**, name the card a row
 belongs to, so the rows here appear in the same order as on the device.
 
 ### 12.1 Display
@@ -1168,14 +1169,15 @@ which turns the extra space between an EPUB's paragraphs on or off for that book
 **Text Settings** is one scrolling list, banded into **Type**, **Spacing**, **Margins** and
 **Reading Aids**, under a live preview. The preview is a split slice of a real page: the top
 of the page, a dashed cut, then the bottom of the page, so both vertical margins and the
-status bar are on screen at their true size while you tune them. Numeric rows are edited in
-the band across the top: Select arms the number and the header turns into a slider with a
-minus at one end and a plus at the other. Touch anywhere along the track to jump straight
-to that value, or drag along it and the value follows your finger. Left and Right move one
-step, the side buttons move five, and the preview under the band follows, so nothing ever
-covers the page you are judging. Back or Select puts the band away; there is nothing to
-confirm, because every change has already been applied. Sleep timeout and the
-other numbers in Settings use the same band.
+status bar are on screen at their true size while you tune them. Numeric rows (line spacing, the
+spacings, indentation and the margins) are adjusted on the same screen: Select, or a tap on
+the row, docks an adjuster right under the preview, with the setting's name and value, a
+track, and a minus and a plus. Touch anywhere along the track to jump to that value, or drag
+along it and the value follows your finger. Left and Right (or the minus and the plus) move
+one step, and the side buttons move the setting's larger step. The preview reflows with every
+step, so nothing covers the page you are judging. **Done** (Back or Select) puts the adjuster
+away and saves the value once; a tap on another row does the same and then opens that row.
+The other numbers in Settings, such as Time to Sleep, open their own slider screen.
 
 - **Font** — ChareInk, plus any SD card families; opens a full-screen picker.
 - **Size** — the sizes the chosen font has: 12, 14 and 16 pt for ChareInk, whatever is installed for
@@ -1376,11 +1378,13 @@ Session**, **Pages to Paragraph**. Alongside them:
   before this firmware did.
 - **Device Name** — how this reader introduces itself to another during Nearby Sync. Left
   empty, it falls back to a generated `Lector-XXXX` name derived from the MAC address.
-- **Clean Up Storage** — removes cached data for books that are no longer on the card. Books
-  keep their progress.
-- **Clear Reading Cache**.
-- **Check for updates**, **Install Other Firmware** and **SD Card Firmware Update** — see
-  [section 13](#13-updating-the-firmware).
+- **Maintenance** — the rows you need a few times a year, one level down. Back from it
+  returns to the Maintenance row.
+- **Maintenance > Clean Up Storage** — removes cached data for books that are no longer on
+  the card. Books keep their progress.
+- **Maintenance > Clear Reading Cache**.
+- **Maintenance > Check for updates**, **SD Card Firmware Update** and **Install Other
+  Firmware** — see [section 13](#13-updating-the-firmware).
 - **What's New** — the notes for this release. After an update they also open once by
   themselves, the first time Home appears; **OK** or Back closes them. A fresh install skips
   that.
@@ -1391,11 +1395,11 @@ Session**, **Pages to Paragraph**. Alongside them:
 
 Three routes:
 
-- **Over Wi-Fi:** **Settings > System > Check for updates**. Only stable releases are
+- **Over Wi-Fi:** **Settings > System > Maintenance > Check for updates**. Only stable releases are
   offered, never experimental ones. A device already running an experimental build is
   offered the next stable release, which is how it gets back onto a stable line without a
   cable.
-- **From the SD card:** put a firmware `.bin` on the card and use **Settings > System > SD
+- **From the SD card:** put a firmware `.bin` on the card and use **Settings > System > Maintenance > SD
   Card Firmware Update**, or open the `.bin` from the file browser.
 - **Over USB:** the [Lector flasher](https://diogo7dias.github.io/lector-web/)
   installs over Web Serial from a browser.
@@ -1423,7 +1427,7 @@ Some Xteink X3 and X4 units are sold with USB flashing disabled in the factory, 
 bought through Chinese retailers. On a locked unit there is no serial fallback, so these are
 the ways off this firmware, safest first:
 
-1. **SD card.** Put the other firmware's `.bin` on the card and use **Settings > System > SD
+1. **SD card.** Put the other firmware's `.bin` on the card and use **Settings > System > Maintenance > SD
    Card Firmware Update**. Stock, CrossPoint, CrossInk and INX images all install this way.
    Lector points the bootloader at the new image with rollback left disabled, so the new
    firmware stays after its first boot rather than being sent back here.
@@ -1432,7 +1436,7 @@ the ways off this firmware, safest first:
 3. **Over Wi-Fi, with the OTA Unlocker.** The
    [CrossPoint OTA Unlocker](https://crosspointreader.com/#unlock-tool) turns a computer into
    a Wi-Fi hotspot that answers the reader's own update check with a firmware you choose. On
-   the reader, use **Settings > System > Install Other Firmware**: unlike **Check for
+   the reader, use **Settings > System > Maintenance > Install Other Firmware**: unlike **Check for
    updates**, it installs whatever the server offers, including the same version, an older
    one, or a different firmware entirely.
 4. **Last resort:** an SPI flash clip, wiring straight to the flash chip. See

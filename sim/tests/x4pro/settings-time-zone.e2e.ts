@@ -22,7 +22,7 @@ test('a time zone picked on its screen shows on its row', async ({ app, screen }
     (await (await fetch(`${app.baseUrl}/ink/${x}/${y}/${w}/${h}`)).json()).ink as number;
   // The value column of the Time Zone row in Settings > System: "UTC" sits there, while a long
   // zone name wraps onto the line below and leaves it empty.
-  const value = () => ink(380, 573, 82, 22);
+  const value = () => ink(380, 693, 82, 22);
   const openSystem = async () => {
     await expect(activity).not.toHaveText('', { timeout: 120_000 });
     if ((await activity.textContent()) !== 'Home') {
@@ -30,10 +30,10 @@ test('a time zone picked on its screen shows on its row', async ({ app, screen }
       await expect(activity).toHaveText('Home', { timeout: 30_000 });
     }
     await tapOnce(240, 729); // Settings
-    await tapOnce(100, 173); // System
+    await tapOnce(240, 323); // System
   };
   const openTimeZone = async () => {
-    await tapOnce(100, 583); // Time Zone
+    await tapOnce(100, 703); // Time Zone
     await expect(activity).toHaveText('TimezonePicker', { timeout: 30_000 });
   };
 

@@ -13,8 +13,8 @@
 // Base for settings rows (X4 Pro/keys-only) and grids (other touch boards). UiAppHost owns the app-hosting
 // protocol; this base layers the grid protocol on top: the selection and scroll
 // model over settings_grid, the cell painting (a name over its value, one
-// truncation rule), the touch dispatch, and the chrome. A numeric cell opens the
-// shared slider dialog (IntervalSelectionActivity) rather than editing in place.
+// truncation rule, plus heading and card looks), the touch dispatch, and the chrome.
+// What a numeric cell does is the screen's business.
 //
 // Both grid screens used to do all of that themselves, including a hand-rolled
 // hit test that walked the same cells the paint had just walked. Anything that
@@ -55,6 +55,12 @@ class UiGridActivity : public Activity, protected UiAppHost {
   // cannot express: the live text preview. Height in pixels, 0 for none.
   virtual int reservedHeight() const { return 0; }
   virtual void drawReserved(const Rect& rect) {}
+  // How a cell is drawn in the one-column rows. Header: a section heading in the inverted
+  // band that hugs its label; never selected, tapped or landed on by a key. Card: a framed
+  // box with the name over its value, for a hub whose value is a summary line.
+  enum class CellLook : uint8_t { Row, Header, Card };
+  virtual CellLook cellLook(int index) const { return CellLook::Row; }
+  bool isHeaderCell(int index) const { return cellLook(index) == CellLook::Header; }
 
   // --- helpers ---------------------------------------------------------------
   // The band the grid itself gets: the body minus whatever reservedHeight asked
@@ -85,6 +91,12 @@ class UiGridActivity : public Activity, protected UiAppHost {
   void buildScreen(UiScreen& screen);
   void buildCell(UiScreen& screen, int index, const settings_grid::Rect& rect);
   void buildRow(UiScreen& screen, int index, const freeink::ui::Rect& box);
+  // UiGridCellLook.cpp: the heading band and the framed card.
+  void buildHeader(UiScreen& screen, int index, const freeink::ui::Rect& box);
+  void buildCard(UiScreen& screen, int index, const freeink::ui::Rect& box);
+  int cardHeightFor(int index) const;
+  // The nearest landable cell from `index` walking `direction` (+1 or -1), or -1.
+  int landableFrom(int index, int direction) const;
   // The two-column touch grid's cells share one height: the tallest any cell
   // needs for its wrapped name over its wrapped value, so none is cut.
   int tallestCellHeight() const;
