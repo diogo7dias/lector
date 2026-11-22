@@ -92,8 +92,8 @@ test('Library searches every book, and a tap in the field moves the cursor', asy
 test('A password field shows and hides its text on a tap', async ({ app, screen }) => {
   const { activity, tap, log, home } = await setup(app, screen);
   await tap(240, 729); // Settings
-  await tap(100, 173); // System
-  await tap(100, 463); // KOReader Sync
+  await tap(240, 323); // System
+  await tap(100, 553); // KOReader Sync
   await expect(activity).toHaveText('KOReaderSettings', { timeout: 30_000 });
   await tap(100, 128); // Password
   await expect(activity).toHaveText('KeyboardEntry', { timeout: 30_000 });

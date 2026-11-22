@@ -7,10 +7,6 @@ test('a Text Settings number steps in place by the keys', async ({ app, screen }
   const activity = screen.getByTestId('activity');
   const busy = screen.getByTestId('busy');
   await expect(activity).not.toHaveText('', { timeout: 60_000 });
-  if ((await activity.textContent()) !== 'Home') {
-    await screen.getByRole('button', { name: 'Back' }).click(); // an earlier suite left a book open
-    await expect(activity).toHaveText('Home', { timeout: 30_000 });
-  }
   const press = async (name: string, times = 1) => {
     for (let i = 0; i < times; i++) {
       await screen.getByRole('button', { name }).click();
@@ -22,7 +18,16 @@ test('a Text Settings number steps in place by the keys', async ({ app, screen }
   const stepper = () => ink(352, 440, 36, 34); // the strip's boxed minus
   const value = () => ink(380, 410, 82, 22); // the number on the strip's name line
 
-  await press('Up'); // Settings: Home starts on its first row, Up wraps to the last
+  // An earlier suite may have left a book open. Its Back returns where it was opened: Home on
+  // its first row, or the browser, whose Back lands Home on Browse Files, five rows above Settings.
+  let viaBrowser = false;
+  while ((await activity.textContent()) !== 'Home') {
+    viaBrowser ||= (await activity.textContent()) === 'FileBrowser';
+    const leaving = await activity.textContent();
+    await press('Back');
+    await expect(activity).not.toHaveText(leaving ?? '', { timeout: 30_000 });
+  }
+  await press(viaBrowser ? 'Down' : 'Up', viaBrowser ? 5 : 1); // Up from the first row wraps to Settings
   await press('Confirm');
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
   await press('Down'); // Reader
