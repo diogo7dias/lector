@@ -15,6 +15,7 @@
 #include "QuoteSelectActivity.h"
 #include "ReaderPresetStore.h"
 #include "SdCardFontSystem.h"
+#include "WatermarkBuildBail.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "util/SortesSelection.h"
@@ -118,15 +119,16 @@ bool EpubReaderActivity::openSectionForRender(const ReaderRenderSpec& renderSpec
       const bool anchorJump =
           reader_landing::forIncrementalBuild(pendingLanding) == reader_landing::Anchor::FragmentAnchor;
 
-      // Landing well inside a partial: the page (or anchor, via the on-disk map) is already
+      // Landing inside a partial: the page (or anchor, via the on-disk map) is already
       // servable, so don't restart the extension build now -- it re-lays out the WHOLE chapter
-      // from page 0 (minutes of background CPU + SD writes on a giant spine), pure waste when
-      // the reader never nears the watermark this session. loop() starts it lazily once the
-      // reader is within PARTIAL_REBUILD_START_MARGIN pages of the watermark.
-      if (section->isPartial() &&
-          (anchorJump   ? section->getPageForAnchor(pendingAnchor).has_value()
-           : offsetJump ? section->getPageForVisibleTextOffset(*offsetJump).has_value()
-                        : target + PARTIAL_REBUILD_START_MARGIN < static_cast<int>(section->pageCount))) {
+      // from page 0 and its start draws the indexing popup, all before a page that could be
+      // shown at once. loop() starts it after the page is up, once the reader is within
+      // PARTIAL_REBUILD_START_MARGIN pages of the watermark. The margin must not gate this:
+      // an exit leaves the watermark BUILD_WINDOW_AHEAD pages ahead, always inside it, so
+      // every reopen of an unfinished chapter blocked here.
+      if (section->isPartial() && (anchorJump   ? section->getPageForAnchor(pendingAnchor).has_value()
+                                   : offsetJump ? section->getPageForVisibleTextOffset(*offsetJump).has_value()
+                                                : partialServesPage(target, static_cast<int>(section->pageCount)))) {
         LOG_DBG("ERS", "Partial covers target %d of %d; deferring extension build", target, section->pageCount);
       } else {
         const size_t spineBytes = epub->getCumulativeSpineItemSize(currentSpineIndex) -
