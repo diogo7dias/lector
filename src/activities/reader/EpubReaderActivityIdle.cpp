@@ -2,6 +2,7 @@
 #include <Epub/blocks/TextBlock.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -31,11 +32,14 @@ void EpubReaderActivity::runIdleBackgroundWork() {
   // sampled between loop passes, so a press made inside one is never seen. Every
   // background tick below waits while input is active; the input itself is never held.
   const bool inputActive = mappedInput.isInputActive();
+  // Build work also waits on a contact the 5 ms debounce has not committed yet: a tick
+  // started in that gap could swallow the whole press. An idle chapter build runs ticks
+  // back to back, so that gap comes up on every pass.
+  const bool buildInputActive = inputActive || gpio.rawInputActive();
 
-  constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 400;
   if (!inputActive && section && !section->isBuilding() && !RenderLock::peek() && renderer.hasFrameBuffer() &&
-      lastRenderCompleteMs != 0 && millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS &&
-      ESP.getFreeHeap() > RENDER_MIN_FREE_HEAP && ESP.getMaxAllocHeap() > BACKGROUND_BUILD_MIN_MAX_ALLOC &&
+      readerIdle() && ESP.getFreeHeap() > RENDER_MIN_FREE_HEAP &&
+      ESP.getMaxAllocHeap() > BACKGROUND_BUILD_MIN_MAX_ALLOC &&
       (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage)) {
     RenderLock lock;                  // the page table must not change under the scan
     HalPowerManager::Lock fullClock;  // the idle clock drop may already have happened
@@ -62,23 +66,21 @@ void EpubReaderActivity::runIdleBackgroundWork() {
     }
   }
 
-  if (progressSaveDue && !inputActive && !RenderLock::peek() && lastRenderCompleteMs != 0 &&
-      millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS) {
+  if (progressSaveDue && !inputActive && !RenderLock::peek() && readerIdle()) {
     RenderLock lock;  // saveProgress reads the section the render task replaces
     HalPowerManager::Lock fullClock;
     progressSaveDue = false;
     flushQueuedProgress();
   }
 
-  // Lazily resume a partial's extension build once the reader nears its watermark. Far from
-  // it the rebuild is all cost (whole-chapter re-layout from page 0) and no benefit this
-  // session, so reopening a partial deliberately does NOT start it (see the deferral in
-  // render()); crossing this margin is the signal that the reader will actually need pages
-  // past the watermark soon. Uses the last render's viewport so pagination matches the
-  // partial being extended.
-  if (!inputActive && section && !section->isBuilding() && section->isPartial() && !RenderLock::peek() &&
-      buildViewportWidth > 0 && !partialRebuildStartFailed &&
-      section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
+  // Resume a partial's extension build once the reader is idle. Reopening a partial does not
+  // start it (see the deferral in openSectionForRender()), so the page shows first. It re-lays
+  // out the chapter from page 0 and finishes it, or on exit keeps a larger partial than the one
+  // it started from. It must not wait for the reader to near the watermark: an idle build can
+  // leave a partial far past the reader, and the extension would then never start again.
+  // Uses the last render's viewport so pagination matches the partial being extended.
+  if (!buildInputActive && section && !section->isBuilding() && section->isPartial() && !RenderLock::peek() &&
+      buildViewportWidth > 0 && !partialRebuildStartFailed && readerIdle()) {
     RenderLock lock;
     HalPowerManager::Lock fullClock;
     // Reuse the last render's viewport so the extension paginates identically to the partial.
@@ -89,22 +91,23 @@ void EpubReaderActivity::runIdleBackgroundWork() {
       partialRebuildStartFailed = true;
       LOG_ERR("ERS", "Failed to start deferred partial extension build");
     } else {
-      LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,
+      LOG_DBG("ERS", "Reader idle at %d of partial %d, resuming extension build", section->currentPage,
               section->pageCount);
     }
   }
 
-  // Drive any in-progress incremental section build forward, off the page-turn critical path,
-  // but only within a small window ahead of the reader: an unbounded build monopolized the
-  // RenderLock and locked out page turns. The build follows the reader instead, and instant
-  // reopen comes from suspendBuild() persisting the laid-out pages as a partial on exit.
+  // Drive any in-progress incremental section build forward, off the page-turn critical path:
+  // a small window ahead of the reader right after a turn, to the chapter's end once the reader
+  // is idle (backgroundBuildWanted()). Building unbounded right after every turn monopolized the
+  // RenderLock and locked out page turns. Leaving mid-build keeps the pages laid out so far as a
+  // partial (suspendBuild()).
   // Skip while the render mutex is busy so we never delay a pending render; re-check
   // isBuilding() under the lock since render() may have just finished it.
   // While extending a partial (rebuild from a previous session), pageCount is pinned at the
   // partial's watermark until the build catches up, so the window check would wrongly read
   // "far enough ahead" and stall the build at 0 pages -- then the first turn past the
   // watermark re-parses the whole chapter synchronously. Keep ticking until it finalizes.
-  if (!inputActive && !RenderLock::peek() && backgroundBuildWanted() && buildTickHeapGate()) {
+  if (!buildInputActive && !RenderLock::peek() && backgroundBuildWanted() && buildTickHeapGate()) {
     RenderLock lock;
     // Re-check under the lock: render() (which also holds the RenderLock) may have finalized the
     // build between the outer isBuilding() check and acquiring the lock here, in which case
@@ -135,8 +138,7 @@ void EpubReaderActivity::runIdleBackgroundWork() {
     }
   }
 
-  if (!inputActive && lastRenderCompleteMs != 0 && millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS)
-    prefetchNextChapter();
+  if (!buildInputActive && readerIdle()) prefetchNextChapter();
 }
 
 // Lays out the next chapter a couple of pages per idle tick once the reader nears this

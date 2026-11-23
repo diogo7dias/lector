@@ -282,21 +282,16 @@ struct EpubReaderState {
   // deserialization (TextBlock word vectors/strings) and glyph caching allocate
   // through throwing paths that abort() on OOM; skip deferrable work below it.
   static constexpr size_t RENDER_MIN_FREE_HEAP = 24 * 1024;
-  // How many pages to keep laid out ahead of the reader for a still-building section. A page
-  // turn is ~1s on e-ink and a page builds in ~30ms, so the reader can't out-click the builder
-  // -- a tiny buffer is enough. The background build stops once the watermark is this far
-  // ahead and resumes as the reader advances; building unbounded instead locked up input by
-  // monopolizing the RenderLock. A giant single-spine book therefore never finalizes its .bin
-  // in one sitting -- instant reopen comes from Section::suspendBuild() persisting the pages
-  // already laid out as a partial file on exit/sleep.
+  // How many pages to keep laid out ahead of the reader while page turns come in. A page turn
+  // is ~1s on e-ink and a page builds in ~30ms, so the reader can't out-click the builder -- a
+  // tiny buffer is enough. Building unbounded right after every turn locked up input by
+  // monopolizing the RenderLock, so the window holds until the reader has been idle for
+  // IDLE_DEBOUNCE_MS; then the build runs on to the chapter's end (backgroundBuildTickWanted).
+  // Leaving before it ends keeps the pages laid out so far as a partial (Section::suspendBuild()).
   static constexpr int BUILD_WINDOW_AHEAD = 5;
-  // Reopening a partial does NOT immediately restart its extension build (a whole-chapter
-  // re-layout from page 0 -- minutes of background CPU + SD writes on a giant spine, wasted
-  // when the reader never crosses the watermark that session). Instead loop() starts it once
-  // the reader is within this many pages of the watermark: at ~30s per page read and ~100-300ms
-  // per page rebuilt, this margin gives the rebuild ample runway to catch up (and finalize)
-  // before the reader arrives.
-  static constexpr int PARTIAL_REBUILD_START_MARGIN = 15;
+  // How long after the last render the reader counts as idle: past rapid page-flipping, the
+  // background work (prewarm, progress save, chapter builds, next-chapter prefetch) may run.
+  static constexpr unsigned long IDLE_DEBOUNCE_MS = 400;
   // Prefetch the next chapter once the reader is this many pages from this one's end. Only
   // spines up to BUILD_POPUP_BYTE_THRESHOLD: inflating a bigger one holds the loop for seconds.
   // Inflating needs tinfl's 32 KB window in one block.

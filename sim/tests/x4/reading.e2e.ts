@@ -20,10 +20,11 @@ test('opens a book and turns a page', async ({ app, screen }) => {
   await expect.poll(async () => Number(await screen.getByTestId('ink').textContent())).toBeGreaterThan(5_000);
 });
 
-// A chapter still being laid out parks its build a few pages ahead of the reader. Parked,
-// nothing is working, so a reader left idle must still drop to low power. Continues in the
+// A chapter reached by a contents jump is laid out a few pages at a time. Once the reader is
+// idle the build runs on to the chapter's end, so leaving after a page no longer leaves it
+// partial; then nothing is working, and the reader must drop to low power. Continues in the
 // book the test above opened: the suite shares one running device.
-test('an idle reader in a chapter whose build is parked drops to low power', async ({ app, screen }) => {
+test('an idle reader finishes the chapter layout, then drops to low power', async ({ app, screen }) => {
   await app.open('/');
   const activity = screen.getByTestId('activity');
   const busy = screen.getByTestId('busy');
@@ -53,17 +54,18 @@ test('an idle reader in a chapter whose build is parked drops to low power', asy
   await expect.poll(async () => (await sinceChapterOpened()) !== '', { timeout: 60_000 }).toBe(true);
 
   await expect
-    .poll(async () => (await sinceChapterOpened()).includes('Going to low-power mode'), {
-      message: 'the idle reader went to low power',
+    .poll(async () => (await sinceChapterOpened()).includes('Time to parse and build pages'), {
+      message: 'the chapter was laid out to its end while the reader sat idle',
       timeout: 60_000,
     })
     .toBe(true);
-
-  const built = await sinceChapterOpened();
-  expect(built, 'the first chunk was laid out').toContain('Page 7 processed');
-  // A parse step can lay out more than one page, so the page count it parks on varies with
-  // the layout settings; the parse finishing is what says the chapter was not parked.
-  expect(built, 'the build is still parked, so this idle proved the parked case').not.toContain(
-    'Time to parse and build pages',
-  );
+  await expect
+    .poll(
+      async () => {
+        const built = await sinceChapterOpened();
+        return built.indexOf('Going to low-power mode') > built.indexOf('Time to parse and build pages');
+      },
+      { message: 'the reader went to low power once the build was done', timeout: 60_000 },
+    )
+    .toBe(true);
 });
