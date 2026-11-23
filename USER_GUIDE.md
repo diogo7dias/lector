@@ -1,4 +1,4 @@
-<!-- lector-version: 0.59.0 -->
+<!-- lector-version: 0.60.0 -->
 
 # Lector User Guide
 
@@ -159,9 +159,9 @@ from 1 to 30 minutes, or Never. The default is 10 minutes. What it shows while a
 
 A wake from sleep goes straight back into the book, without stopping at any other screen.
 
-**Fast Unlock** (Display settings, on by default) shortens the wait for the recovery button
+**Fast Unlock** (Display settings, off by default) shortens the wait for the recovery button
 chord at wake and paints the page straight over the sleep screen in one pass instead of
-clearing the screen first; the first page turn after a wake then runs the clean pass. Turn
+clearing the screen first; the first page turn after a wake then runs the clean pass. Leave
 it off if a wake ever lands in the recovery firmware picker by itself, or if a faint
 wallpaper stays visible in the first page after a wake.
 
