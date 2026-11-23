@@ -124,6 +124,7 @@ Run `./bin/install-git-hooks` once per clone. The pre-commit hook rejects commit
 ### Build Environment
 * **Standard**: C++20 (`-std=c++2a`). No Exceptions, No RTTI.
 * **Logging**: ALWAYS use `LOG_INF`, `LOG_DBG`, or `LOG_ERR` from `Logging.h`. Raw Serial output is deprecated.
+* **Build jobs**: Cap build jobs at -j$(nproc) (12 on the VPS) for cmake, make, ninja and pio; never use a bare -j or an unlimited job count.
 * **Environments** (in `platformio.ini`):
   * `default`: Development (LOG_LEVEL=2, serial enabled)
   * `gh_release`: Production (LOG_LEVEL=0)
