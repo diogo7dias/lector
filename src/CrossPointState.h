@@ -20,13 +20,6 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   uint16_t libraryRow = 0;
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
-  uint8_t fastRefreshesSinceFull = 0;
-  // The other half of the same budget: ink debt, i.e. how much the passes since the last
-  // discharge actually moved rather than merely how many there were. Carried for the same
-  // reason and written alongside it. A state file from an older build has no such key and
-  // reads back as zero, which is the correct starting point for a session whose panel
-  // history is unknown — the count above still guarantees a discharge.
-  uint16_t inkDebt = 0;
   // Hands out the "read order" stamp the library screens sort by: one number per reading
   // session, only ever compared with another. A counter rather than a clock because this
   // firmware sets no FAT timestamps and most boards have no RTC, so the card itself cannot

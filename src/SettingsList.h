@@ -271,8 +271,6 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
   emit(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, &CrossPointSettings::showSleepWallpaperPosition,
                            "showSleepWallpaperPosition", StrId::STR_CAT_DISPLAY));
 
-  // "Never" (index 5) is back, matching upstream: the reader skips its own cadence, and
-  // DisplayRefreshPolicy still forces a clean after its consecutive-FAST cap.
   emit(SettingInfo::Enum(StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
                          {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
                           StrId::STR_PAGES_30, StrId::STR_REFRESH_NEVER},

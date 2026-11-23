@@ -161,24 +161,17 @@ void SleepActivity::renderSleepScreen() const {
   }
   SleepTiming::mark("popup");
 
-  // Before anything is drawn, and before any sleep face is chosen (Cover mode included): a scrub is about the
-  // panel's charge history, not about which picture is going on top of it.
-  //
-  // This is the lock screen's only defence against a ghost. No face's own paint clears the
-  // panel: every board writes the picture against a baseline that leaves the pixels which
-  // are NOT changing sitting on whatever charge the reader left them with. On the X3 the
-  // grayscale base's requestResync() was mistaken for a clear; it is a sync, and it flashes
-  // only the pure-white part of the frame. See SleepPreClear.h for the waveform cells.
-  //
-  // The cost is a clean pass at lock, which the user does not wait for: it runs after the
-  // device has already been put down. One submission on the X3, four elsewhere.
-  const uint32_t preClearMs = sleepPreClear(renderer, display.profile());
-  LOG_INF("SLP", "pre-clear %ums", static_cast<unsigned>(preClearMs));
+  // Match CrossPoint: every mode below replaces the whole screen, so clean to white once
+  // with HALF_REFRESH first (BLANK skips this and runs that single white HALF_REFRESH itself).
+  if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
+    const uint32_t preClearMs = sleepPreClear(renderer, display.profile());
+    LOG_INF("SLP", "pre-clear %ums", static_cast<unsigned>(preClearMs));
+  }
 
-  // Custom: wallpaper, then cover, then the Lector fallback. Cover: cover, then the
-  // fallback. Quick Resume and the two transparent faces never get here (onEnter keeps the
-  // page on the panel); a value no build offers is migrated to Custom on load, and the
-  // default keeps a stale one from a blank panel.
+  // Custom: wallpaper, then the Lector fallback (never the book cover). Cover: cover, then
+  // the fallback. Quick Resume and Transparent keep the page on the panel above; a value no
+  // build offers is migrated to Custom on load, and the default keeps a stale one from a
+  // blank panel.
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::DARK):
       return renderDefaultSleepScreen(/*dark=*/true);
@@ -217,14 +210,11 @@ void SleepActivity::renderDefaultSleepScreen(const bool dark) const {
   renderer.displayBuffer(plan.base);
 }
 
-// None: an empty page. Drawn without any SD file, like Dark and Light.
-//
-// The pre-clear in renderSleepScreen already ends on an all-white FULL (every board), which
-// IS this page, so a HALF of the same white on top was a second white flash for nothing.
-// The framebuffer is still cleared to match the panel. Wallpaper and cover faces keep their
-// scrub plus base: they paint different content, and the SDK's HALF base is not a verified
-// replacement for the scrub (SleepPreClear.h).
-void SleepActivity::renderBlankSleepScreen() const { renderer.clearScreen(); }
+// None: an empty white page, one HALF_REFRESH (pre-clear was skipped above).
+void SleepActivity::renderBlankSleepScreen() const {
+  renderer.clearScreen();
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
 
 void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Face face,
                                             SleepOverlay* const overlay) const {
@@ -307,7 +297,7 @@ void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Fa
 // there, so the two cannot send each other round in a circle), or the overlay on its own
 // (Cover + Transparent).
 void SleepActivity::renderNoCoverSleepScreen(const CoverFallback fallback) const {
-  if (fallback == CoverFallback::Custom) return renderCustomSleepScreen(/*thenCover=*/false);
+  if (fallback == CoverFallback::Custom) return renderCustomSleepScreen();
   if (fallback == CoverFallback::Overlay) return renderTransparentCustomSleepScreen();
   renderDefaultSleepScreen();
 }

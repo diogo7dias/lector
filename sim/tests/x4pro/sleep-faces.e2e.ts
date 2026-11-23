@@ -72,8 +72,8 @@ test('None sleeps on an empty page', async (ctx) => {
   const framesBefore = await frames();
   await d.lock();
   expect(await d.panelInk(), 'None: an empty page').toBe(0);
-  // Popup + four pre-clear passes; the white page is the last pass, so no HALF repeats it.
-  expect(await frames() - framesBefore, 'None: no second white flash').toBe(5);
+  // Popup + one white HALF_REFRESH (pre-clear skipped for Blank, matching CrossPoint).
+  expect(await frames() - framesBefore, 'None: popup plus one white clean').toBe(2);
   await d.wake();
 });
 

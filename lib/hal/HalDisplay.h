@@ -1,9 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <DeviceProfile.h>
-#include <DisplayRefreshPolicy.h>
 #include <EInkDisplay.h>
-#include <FrameInkMetrics.h>
 #include <WakeClassify.h>
 
 class HalDisplay {
@@ -60,19 +58,8 @@ class HalDisplay {
   // Power management
   void deepSleep();
 
-  // Anti-ghost budget, carried across a lock by the caller. Waking from deep sleep is a
-  // chip reset, so without this the FAST budget starts at zero every session and a reader
-  // who locks the device often never earns the full discharge. See DisplayRefreshPolicy.
-  uint8_t fastRefreshesSinceFull() const { return refreshPolicy.fastSinceFull(); }
-  void seedFastRefreshesSinceFull(uint8_t value) { refreshPolicy.seedFastSinceFull(value); }
-
-  // The ink half of the same budget, carried across a lock the same way. See
-  // DisplayRefreshPolicy's debt thresholds and FrameInkMetrics.
   // Whether any refresh has finished since boot (the silent restart is waiting on its first frame).
   bool hasCompletedRefresh() const { return refreshCompleted; }
-
-  uint16_t inkDebt() const { return refreshPolicy.inkDebt(); }
-  void seedInkDebt(uint16_t value) { refreshPolicy.seedInkDebt(value); }
 
   // Drop the panel's high-voltage rails while leaving the image on the glass. The next
   // paint powers them back up on its own, so this is free to call whenever the device is
@@ -137,36 +124,9 @@ class HalDisplay {
   // which is what makes those rules pure functions a host test can call.
   const DeviceProfile& profile() const { return deviceProfile; }
 
-  // Whether the last pass ran as a clean (HALF or FULL), asked for or promoted by the
-  // anti-ghost cap. Lets a caller's own clean countdown restart after a promotion
-  // instead of spending a second clean a few turns later.
-  bool lastPassCleaned() const { return lastPassWasClean; }
-
  private:
-  // Anti-ghosting cap, ported verbatim from the pre-rebase fork. Every refresh this
-  // class performs is routed through it, so no run of FAST passes can grow long
-  // enough to trap charge in the panel.
-  // `inkScore` is what FrameInkMetrics made of the frame about to be pushed, or 0 on a
-  // path that has no framebuffer to measure (a grayscale plane).
-  RefreshMode applyRefreshPolicy(RefreshMode requested, uint16_t inkScore = 0);
-  // Scores the framebuffer that is about to go to the panel. Returns 0 when the timings
-  // are of no use to the policy (a mode the policy will not promote anyway), so the pass
-  // over 48-52 KB is not paid for nothing.
-  uint16_t scoreFrame(RefreshMode requested);
-  // True only when the caller asked for HALF itself, never when the anti-ghost cap
-  // promoted a FAST into one. See the definition for why the difference matters.
-  bool needsX3HalfResync(RefreshMode requested, RefreshMode actual) const;
-  // Which device this is, latched once in begin() from the hardware detect rather than
-  // re-read from the `gpio` global at each of the three sites that used to ask. The X3's
-  // display rules ("an X3 HALF is not one waveform"; "an X3 grayscale base with a HALF
-  // fallback has to resync first") then all read the same field.
   DeviceProfile deviceProfile;
   EInkDisplay einkDisplay;
-  DisplayRefreshPolicy refreshPolicy;
-  // False until the first pass after begin() has been through applyRefreshPolicy().
-  bool firstPassDone = false;
-  bool lastPassWasClean = false;
-  FrameInkMetrics inkMetrics;
 
   // An async refresh has been started and waitRefreshComplete() has not yet seen it end.
   bool pendingAsync = false;
