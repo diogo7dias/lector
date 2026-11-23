@@ -3,6 +3,7 @@
 #include "EpubReaderState.h"
 #include "ProgressMapper.h"
 #include "ReaderLanding.h"
+#include "WatermarkBuildBail.h"
 #include "activities/Activity.h"
 
 class Page;  // for drawParagraphNumbers (full type in the .cpp via <Epub/Page.h>)
@@ -45,9 +46,11 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // Gate for a background build tick: true when the heap can take parse allocations.
   // Updates buildHeapPaused as a side effect.
   bool buildTickHeapGate();
+  bool readerIdle() const { return lastRenderCompleteMs != 0 && millis() - lastRenderCompleteMs > IDLE_DEBOUNCE_MS; }
   bool backgroundBuildWanted() const {
     return section && section->isBuilding() &&
-           (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
+           backgroundBuildTickWanted(section->isPartial(), static_cast<int>(section->pageCount), section->currentPage,
+                                     BUILD_WINDOW_AHEAD, readerIdle());
   }
   // Draw the indexing popup mid-build (parser image-probe callback and deadline backstop).
   void showBuildPopup();
@@ -241,7 +244,7 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // frequency a giant chapter's background rebuild stretches from ~40s to many
   // minutes, so the reader exits before it can finalize and the next open restarts
   // it from page 0. Reverts to normal power behavior the moment the build finishes,
-  // while it waits for the reader to come within the build window, and while it is
+  // while it waits out the idle debounce past the build window, and while it is
   // heap-paused (no work is happening, so spinning at full speed would only burn
   // battery; the paused gate still retries every loop pass).
   bool skipLoopDelay() override {

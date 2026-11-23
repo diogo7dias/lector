@@ -19,3 +19,14 @@ inline bool waitingPageBecameReadable(const int currentPage, const int pageCount
 inline bool partialServesPage(const int targetPage, const int partialPageCount) {
   return targetPage < partialPageCount;
 }
+
+// Whether loop() lays out more of the current chapter this tick. While the reader turns pages
+// the build keeps only `windowAhead` pages past them, so a tick never sits between a turn and
+// its render. Once the reader has been idle past the debounce it builds on to the chapter's
+// end: a chapter left after a few pages would otherwise stay partial and be laid out again
+// from page 0 every session. An extension of a partial always runs, since its pages past the
+// saved watermark only count once it finishes.
+inline bool backgroundBuildTickWanted(const bool partial, const int pageCount, const int currentPage,
+                                      const int windowAhead, const bool readerIdle) {
+  return partial || readerIdle || pageCount < currentPage + windowAhead;
+}

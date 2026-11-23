@@ -122,10 +122,7 @@ bool EpubReaderActivity::openSectionForRender(const ReaderRenderSpec& renderSpec
       // Landing inside a partial: the page (or anchor, via the on-disk map) is already
       // servable, so don't restart the extension build now -- it re-lays out the WHOLE chapter
       // from page 0 and its start draws the indexing popup, all before a page that could be
-      // shown at once. loop() starts it after the page is up, once the reader is within
-      // PARTIAL_REBUILD_START_MARGIN pages of the watermark. The margin must not gate this:
-      // an exit leaves the watermark BUILD_WINDOW_AHEAD pages ahead, always inside it, so
-      // every reopen of an unfinished chapter blocked here.
+      // shown at once. loop() starts it after the page is up, once the reader is idle.
       if (section->isPartial() && (anchorJump   ? section->getPageForAnchor(pendingAnchor).has_value()
                                    : offsetJump ? section->getPageForVisibleTextOffset(*offsetJump).has_value()
                                                 : partialServesPage(target, static_cast<int>(section->pageCount)))) {
