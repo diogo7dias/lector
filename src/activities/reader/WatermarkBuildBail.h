@@ -13,3 +13,9 @@ inline bool watermarkBuildShouldYield(const int currentPage, const int pageCount
 inline bool waitingPageBecameReadable(const int currentPage, const int pageCountBefore, const int pageCountAfter) {
   return currentPage >= pageCountBefore && currentPage < pageCountAfter;
 }
+
+// True when a reopened partial already holds the landing page: show it now and leave the
+// extension build to loop(), instead of starting it (and its popup) in front of the page.
+inline bool partialServesPage(const int targetPage, const int partialPageCount) {
+  return targetPage < partialPageCount;
+}
