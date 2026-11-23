@@ -1,4 +1,4 @@
-<!-- lector-version: 0.58.0 -->
+<!-- lector-version: 0.59.0 -->
 
 # Lector User Guide
 
@@ -1381,9 +1381,6 @@ Session**, **Pages to Paragraph**. Alongside them:
 - **Maintenance > Clear Reading Cache**.
 - **Maintenance > Check for updates**, **SD Card Firmware Update** and **Install Other
   Firmware** — see [section 13](#13-updating-the-firmware).
-- **What's New** — the notes for this release. After an update they also open once by
-  themselves, the first time Home appears; **OK** or Back closes them. A fresh install skips
-  that.
 
 ---
 
