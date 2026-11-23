@@ -41,6 +41,9 @@ jobs:
       - name: Check src/ for forbidden calls
         run: ./bin/check-forbidden-calls
 
+      - name: Check for uncapped build job counts
+        run: ./bin/check-job-caps
+
   cppcheck:
     runs-on: ubuntu-latest
     steps:
@@ -307,7 +310,7 @@ jobs:
         run: cmake --build build/test
 
       - name: Run tests
-        run: ctest --test-dir build/test --output-on-failure -j
+        run: ctest --test-dir build/test --output-on-failure -j"$(nproc)"
 
   # Each run saves a new object cache per env (a key is never overwritten), and the repo
   # cap is 10 GB, so keep only the newest per env on this ref. A main run also drops PR

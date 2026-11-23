@@ -4,7 +4,7 @@ Build and run:
 
   cmake -S test -B build/test
   cmake --build build/test
-  ctest --test-dir build/test --output-on-failure -j
+  ctest --test-dir build/test --output-on-failure -j$(nproc)
 
 Run a single suite directly:
 

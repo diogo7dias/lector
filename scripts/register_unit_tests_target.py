@@ -21,7 +21,7 @@ env.AddCustomTarget(  # noqa: F821
     actions=[
         f'cmake -S "{TEST_SRC_DIR}" -B "{BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release',
         f'cmake --build "{BUILD_DIR}"',
-        f'ctest --test-dir "{BUILD_DIR}" --output-on-failure -j',
+        f'ctest --test-dir "{BUILD_DIR}" --output-on-failure -j{os.cpu_count()}',
     ],
     title="Host unit tests",
     description="Build and run gtest suites in test/ via CMake/CTest",
