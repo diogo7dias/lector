@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Fails if a tracked script, workflow or doc runs cmake, make, ninja, pio or ctest
+# with an uncapped job count: a bare -j / --jobs / --parallel, or -j0.
+# A bare `cmake --build build/test -j` once spawned about 995 processes on the VPS. (lint-allow)
+# C/C++ sources are skipped (their comments are prose, not commands).
+# To allow a single line, add a `lint-allow` marker to it.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+RE='\b(?:cmake|make|ninja|pio|platformio|ctest)\b[^|;&#\n]*?(?<![\w-])(?:(?:-j|--jobs|--parallel)(?![\w$={]|["'"'"'][0-9$])(?!\s+["'"'"']?[0-9$])|-j\s*0\b)'
+
+hits="$(git grep -nIP "$RE" -- . ':!*.c' ':!*.cpp' ':!*.h' ':!*.hpp' | grep -v 'lint-allow' || true)"
+if [[ -n "$hits" ]]; then
+  echo "$hits"
+  echo "Uncapped build job count found. Use -j\$(nproc) (or a fixed number), never a bare -j or -j0."
+  exit 1
+fi
+echo "No uncapped build job counts."
