@@ -24,5 +24,10 @@ WallpaperPick pickWallpaper(HalFile& dir, const char* sleepDir, const std::strin
 // back to the full walk). `dir` is left at an arbitrary position.
 std::string pickWallpaperByJump(HalFile& dir);
 
+// Walk `dir` starting from a random slot (wrapping once to 0) and pass each wallpaper
+// filename to `tryName` until one succeeds. Guarantees finding a renderable wallpaper if
+// any exists in the folder.
+bool pickWallpaperByScan(HalFile& dir, bool (*tryName)(const char* name, void* ctx), void* ctx);
+
 }  // namespace sleep
 }  // namespace crosspoint

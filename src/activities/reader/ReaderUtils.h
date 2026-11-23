@@ -147,9 +147,7 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
 inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntilFullRefresh) {
   const auto mode = (pagesUntilFullRefresh <= 1) ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
   renderer.displayBuffer(mode);
-  // Restart the countdown after any clean, including one the anti-ghost cap promoted
-  // from this FAST: counting on would land the next clean only a turn or two later.
-  if (pagesUntilFullRefresh <= 1 || renderer.lastPassCleaned()) {
+  if (pagesUntilFullRefresh <= 1) {
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
   } else {
     pagesUntilFullRefresh--;

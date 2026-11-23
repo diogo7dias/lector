@@ -85,17 +85,6 @@ bool deepSleepInProgress = false;
 
 }  // namespace
 
-// The anti-ghost budget lives in RAM, and every reboot is a reset, so it has to be
-// written down before the device goes away. Deep sleep does this in enterDeepSleep();
-// the heap-defrag reboots below are the other routine way a session ends, and without
-// this a reader who trips one (returning from KOReader sync, leaving a WiFi screen)
-// hands the next session a budget of zero and delays the panel's next discharge.
-void persistAntiGhostBudget() {
-  APP_STATE.fastRefreshesSinceFull = display.fastRefreshesSinceFull();
-  APP_STATE.inkDebt = display.inkDebt();
-  APP_STATE.saveToFile();
-}
-
 // SETTINGS.frontlightOn is the saved preference, not the live state: a wake with
 // Restore Light on Wake off leaves the light dark while "was on" stays saved. The
 // live state rides across the reboot so the light comes back exactly as it was.
@@ -117,7 +106,7 @@ static void silentRestartTo(const uint32_t target) {
   // book, looking like a trampoline back to the reader they just exited.
   GUI.drawPopup(activityManager.getRenderer(), tr(STR_LOADING_POPUP));
   markRestartStage(STAGE_POPUP_DRAWN);
-  persistAntiGhostBudget();
+  APP_STATE.saveToFile();
   markRestartStage(STAGE_STATE_SAVED);
   delay(50);
   markRestartStage(STAGE_RESTART_CALLED);

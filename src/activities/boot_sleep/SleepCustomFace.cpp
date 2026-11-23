@@ -1,5 +1,5 @@
 // SleepActivity's Custom face: a wallpaper from the card, picked from /sleep (or the
-// root /sleep.bmp), falling back to the cover and then the plain face.
+// root /sleep.bmp), falling back only to the plain face when no valid wallpaper exists.
 // Split out of SleepActivity.cpp to keep each file under the token limit.
 #include <Bitmap.h>
 #include <HalDisplay.h>
@@ -13,6 +13,7 @@
 #include "SleepInfoOverlay.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WallpaperPick.h"
+#include "util/FavoriteImageNames.h"
 
 // One .bmp wallpaper file onto the panel. Returns false when the file cannot be
 // opened or parsed, which is also how a name that the index still lists but the folder no
@@ -41,7 +42,7 @@ bool SleepActivity::renderWallpaperFile(const std::string& filename, const uint3
   return true;
 }
 
-void SleepActivity::renderCustomSleepScreen(const bool thenCover) const {
+void SleepActivity::renderCustomSleepScreen() const {
   // Look for sleep.bmp on the root of the sd card to determine if we should
   // render a custom sleep screen instead of the default.
   // This takes priority over the /sleep folder.
@@ -74,34 +75,60 @@ void SleepActivity::renderCustomSleepScreen(const bool thenCover) const {
     const bool pickedFromIndex = pick.pickedFromIndex;
     const uint32_t linePosition = pick.linePosition;
     const uint32_t lineTotal = pick.lineTotal;
-    const auto renderChosen = [&](const std::string& name) {
-      return renderWallpaperFile(std::string(sleepDir) + "/" + name, linePosition, lineTotal);
+    const auto renderName = [&](const std::string& name, const uint32_t pos, const uint32_t total) {
+      return renderWallpaperFile(std::string(sleepDir) + "/" + name, pos, total);
     };
 
+    std::string triedAlt;
     if (!chosen.empty()) {
-      if (renderChosen(chosen)) {
+      if (renderName(chosen, linePosition, lineTotal)) {
         dir.close();
         return;
       }
-      // The index named a file that is no longer renderable. Flag the index for rebuild
-      // on the next cold boot and fall back to the jump pick for tonight, rather than
-      // dropping the user to the logo face over one stale record.
+      // A favorite toggle renames x.bmp <-> x_F.bmp without rewriting the index record.
+      // Try the counterpart before declaring the record stale.
+      triedAlt = FavoriteImage::favoriteCounterpart(chosen);
+      if (!triedAlt.empty() && triedAlt != chosen && renderName(triedAlt, linePosition, lineTotal)) {
+        dir.close();
+        return;
+      }
       if (pickedFromIndex) {
         APP_STATE.sleepIndexNeedsRebuild = true;
         LOG_INF("SLP", "index record unrenderable, falling back to jump pick");
+      }
+      // Retry a few O(log N) jump picks before falling back to a linear scan.
+      constexpr int MAX_FALLBACK_JUMPS = 4;
+      for (int attempt = 0; attempt < MAX_FALLBACK_JUMPS; attempt++) {
         const std::string again = crosspoint::sleep::pickWallpaperByJump(dir);
-        if (!again.empty() && renderChosen(again)) {
+        if (again.empty() || again == chosen || again == triedAlt) continue;
+        if (renderName(again, 0, 0)) {
           dir.close();
           return;
         }
       }
     }
+
+    // Last resort: scan the directory from a random slot until any valid wallpaper renders.
+    struct ScanCtx {
+      const SleepActivity* self;
+      const char* sleepDir;
+      const std::string* skipA;
+      const std::string* skipB;
+    } ctx{this, sleepDir, &chosen, &triedAlt};
+    const auto tryScanName = [](const char* name, void* rawCtx) -> bool {
+      const auto* c = static_cast<const ScanCtx*>(rawCtx);
+      if (!c->skipA->empty() && *c->skipA == name) return false;
+      if (!c->skipB->empty() && *c->skipB == name) return false;
+      return c->self->renderWallpaperFile(std::string(c->sleepDir) + "/" + name, 0, 0);
+    };
+    if (crosspoint::sleep::pickWallpaperByScan(dir, tryScanName, &ctx)) {
+      dir.close();
+      return;
+    }
   }
   if (dir) dir.close();
 
-  // No wallpaper to show: the open book's cover, then the Lector fallback. The cover path
-  // comes back here only from Cover + Custom, which passes thenCover=false, so the chain
-  // cannot loop.
-  if (thenCover) return renderCoverSleepScreen();
+  // Match CrossPoint: Custom mode never falls back to the book cover. Only when no valid
+  // wallpaper exists at all does it show the default face.
   renderDefaultSleepScreen();
 }

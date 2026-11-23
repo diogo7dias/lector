@@ -109,7 +109,7 @@ static std::string pickBootBookPath();
   unsigned long sleepTWifi = sleepT0;
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
 
-  // ponytail: no save here. persistAntiGhostBudget() below writes APP_STATE after the paint,
+  // ponytail: no save here. finishDeepSleep() below writes APP_STATE once after the paint,
   // and a JSON rewrite per lock stage was two redundant SD writes on every lock.
   sleepTState = millis();
 
@@ -143,10 +143,8 @@ static std::string pickBootBookPath();
 static void finishDeepSleep(const unsigned long sleepT0, const unsigned long sleepTState,
                             const unsigned long sleepTPaint, const unsigned long sleepTFrame,
                             const unsigned long sleepTWifi) {
-  // Read after the sleep screen has painted, so the passes it just spent are counted,
-  // and written with the state the next boot reads back. This is the lock's only
-  // APP_STATE write: everything set above and in SleepActivity lands with it.
-  persistAntiGhostBudget();
+  // The lock's only APP_STATE write: everything set above and in SleepActivity lands with it.
+  APP_STATE.saveToFile();
 
   const unsigned long sleepTBudget = millis();
   // The paint stage is the one worth breaking down: it was 10112 ms of a 10258 ms lock
@@ -407,11 +405,6 @@ void setup() {
 
   SETTINGS.loadFromFile();
   APP_STATE.loadFromFile();
-  // Restore the anti-ghost budget the last session spent. Without this the count starts
-  // at zero on every wake — and since waking is a chip reset, that is every lock — so a
-  // device used in short sessions never reaches the full discharge and ghosts forever.
-  display.seedFastRefreshesSinceFull(APP_STATE.fastRefreshesSinceFull);
-  display.seedInkDebt(APP_STATE.inkDebt);
   RECENT_BOOKS.loadFromFile();
   // One-time upgrade: books read before the reading badges existed have a percentage in
   // the recents list and no marker beside their cache. Seeding costs at most thirteen
@@ -595,10 +588,13 @@ void setup() {
     const esp_reset_reason_t rst = esp_reset_reason();
     const bool wantsWallpaperIndex = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM ||
                                      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM;
-    if (rst != ESP_RST_DEEPSLEEP && !recoveryFirmwareMode && !rebootedFromPanic && wantsWallpaperIndex) {
-      if (APP_STATE.sleepIndexDirty || APP_STATE.sleepIndexNeedsRebuild ||
-          crosspoint::sleep::windex::indexedFolderChanged() ||
-          (rst != ESP_RST_SW && crosspoint::sleep::windex::folderLooksChanged())) {
+    if (!recoveryFirmwareMode && !rebootedFromPanic && wantsWallpaperIndex) {
+      // On deep-sleep wakes (X3, X4 Pro), skip the SD directory probe when nothing flagged
+      // the index; still honor explicit dirty/rebuild flags so a stale index heals next wake.
+      const bool coldBootProbe =
+          rst != ESP_RST_DEEPSLEEP && (crosspoint::sleep::windex::indexedFolderChanged() ||
+                                       (rst != ESP_RST_SW && crosspoint::sleep::windex::folderLooksChanged()));
+      if (APP_STATE.sleepIndexDirty || APP_STATE.sleepIndexNeedsRebuild || coldBootProbe) {
         renderer.waitRefreshComplete();  // it paints a banner; the blank may still be running
         crosspoint::sleep::windex::reconcileAtColdBoot(renderer);
       }

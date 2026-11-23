@@ -12,12 +12,6 @@ HalDisplay display;
 
 #define SD_SPI_MISO 7
 
-// 0 puts the SSD1677 page turns back on the plain differential, for a kit build that has to
-// compare the two on the same panel.
-#ifndef LECTOR_SSD1677_DRIVE_ALL
-#define LECTOR_SSD1677_DRIVE_ALL 1
-#endif
-
 HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY) {}
 
 HalDisplay::~HalDisplay() {}
@@ -62,99 +56,8 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
   }
 }
 
-// Anti-ghosting cap, restored from the pre-rebase fork, where it was the reason the
-// sleep wallpaper never ghosted. The upstream base has no equivalent: it lets an
-// unbounded run of FAST (differential) passes accumulate, and content held still for
-// minutes then traps charge deep enough that a full inversion at lock cannot undo it.
-// The device evidence was that locking after a cold boot is clean while locking after
-// a session ghosts, with the lock's wipe visibly running either way — i.e. the wipe
-// was never the missing piece; the cap was. Promoting every 13th FAST to a clean pass
-// costs one flash per 13 page turns and keeps the panel from ever getting that deep.
-HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode requested, const uint16_t inkScore) {
-  DisplayRefreshPolicy::Mode policyMode = DisplayRefreshPolicy::Mode::Fast;
-  if (requested == RefreshMode::HALF_REFRESH) {
-    policyMode = DisplayRefreshPolicy::Mode::Clean;
-  } else if (requested == RefreshMode::FULL_REFRESH) {
-    policyMode = DisplayRefreshPolicy::Mode::Full;
-  }
-
-  const DisplayRefreshPolicy::Mode chosen = refreshPolicy.choose(policyMode, inkScore);
-  lastPassWasClean = chosen != DisplayRefreshPolicy::Mode::Fast;
-
-  // SSD1677 differential residue. A plain FAST only drives pixels that differ from the RED
-  // plane, and RED is whatever the firmware last wrote, not what the glass holds: the
-  // gray nudge leaves charge in the anti-aliased edges while cleanupGrayscaleBuffers()
-  // seeds RED with the pure black-and-white frame, and the partial waveform never quite
-  // reaches white, so a pixel that stayed "unchanged" keeps its ghost until the next HALF.
-  // Writing RED as the target's complement (the driver's drive-all, already what night
-  // mode runs on every page) makes every pixel re-pushed to its rail, so each page turn
-  // also erases the residue of the ones before it. The waveform length does not depend on
-  // how many pixels it drives (Ssd1677Driver.cpp displayImpl), so this costs no waveform time.
-  //
-  // Not on the first pass after begin(): the driver's boot promotion to a clean HALF is the
-  // better answer to a panel nobody has painted yet. Not on inverted content (already
-  // drive-all), not on other controllers.
-#if LECTOR_SSD1677_DRIVE_ALL
-  if (chosen == DisplayRefreshPolicy::Mode::Fast && firstPassDone && deviceProfile.controllerIsSsd1677 &&
-      !einkDisplay.isInverted()) {
-    einkDisplay.requestDriveAllNextFast();
-  }
-#endif
-  firstPassDone = true;
-  switch (chosen) {
-    case DisplayRefreshPolicy::Mode::Clean:
-      return RefreshMode::HALF_REFRESH;
-    case DisplayRefreshPolicy::Mode::Full:
-      return RefreshMode::FULL_REFRESH;
-    case DisplayRefreshPolicy::Mode::Fast:
-    default:
-      return RefreshMode::FAST_REFRESH;
-  }
-}
-
-// An X3 HALF is not one waveform. HalDisplay asks the driver to resync first, which turns
-// it into a white-baseline full sync plus a conditioning pass: measured at 2551 ms on an
-// X3, against 2016 ms for an outright FULL and 617 ms for a FAST.
-//
-// That strength is right when a caller asks for HALF on purpose — the sleep screen wants
-// a genuinely clean panel under the wallpaper. It is wrong for a pass the anti-ghost cap
-// promoted out of a FAST. The policy's own design has two tiers: a cheap Clean every 12
-// FAST passes, and a real FULL every 48 because "a Clean pass does not discharge the
-// panel". The resync was collapsing the cheap tier into the expensive one, so the tier
-// that exists to be affordable was costing more than the tier that exists to be thorough.
-//
-// So: resync only when the caller genuinely asked for HALF. A promoted pass takes the
-// driver's plain half scrub, which still drives every pixel to its target ignoring the
-// previous frame — a real clean, just not a full discharge. The every-48 FULL remains the
-// discharge, exactly as the policy intends.
-bool HalDisplay::needsX3HalfResync(const RefreshMode requested, const RefreshMode actual) const {
-  return deviceProfile.isX3 && actual == RefreshMode::HALF_REFRESH && requested == RefreshMode::HALF_REFRESH;
-}
-
-// The frame is only worth measuring when the answer can change what happens. Only a FAST
-// request can be promoted by the ink debt; a caller that already asked for HALF or FULL is
-// getting a clean pass regardless, and the ~2 ms pass over the framebuffer would buy
-// nothing. The metrics state is still updated on those paths — through the driver-side
-// reset below — so the next FAST is scored against what is really on the glass.
-uint16_t HalDisplay::scoreFrame(const RefreshMode requested) {
-  const uint8_t* const fb = einkDisplay.getFrameBuffer();
-  const FrameInkMetrics::Result result =
-      inkMetrics.update(fb, einkDisplay.getDisplayWidthBytes(), einkDisplay.getDisplayHeight());
-  if (requested != RefreshMode::FAST_REFRESH) return 0;
-
-  // Inverted output (night mode) is applied by the driver on its way to the panel, so the
-  // framebuffer this scored is in normal polarity and the score understates what the panel
-  // will actually be asked to do: a dark page drives nearly every pixel. Charge it double,
-  // capped at the scale's own maximum.
-  uint32_t score = result.score;
-  if (einkDisplay.isInverted()) score *= 2;
-  return static_cast<uint16_t>(score > FrameInkMetrics::MAX_SCORE ? FrameInkMetrics::MAX_SCORE : score);
-}
-
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
-  const RefreshMode requested = mode;
-  mode = applyRefreshPolicy(mode, scoreFrame(requested));
-  if (needsX3HalfResync(requested, mode)) {
+  if (deviceProfile.isX3 && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
   }
 
@@ -163,22 +66,9 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen)
 }
 
 void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
-  const RefreshMode requested = mode;
-  mode = applyRefreshPolicy(mode, scoreFrame(requested));
   pendingAsync = true;
-  if (needsX3HalfResync(requested, mode)) {
+  if (deviceProfile.isX3 && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
-  }
-
-  // A promoted pass has multi-phase post-work, so run it synchronously rather than
-  // detached — same trade the pre-rebase fork made.
-  if (mode != requested && mode != RefreshMode::FAST_REFRESH) {
-    einkDisplay.displayBuffer(convertRefreshMode(mode), false);
-    // Ran blocking despite the async request, so there is no wait left for
-    // waitRefreshComplete().
-    refreshCompleted = true;
-    pendingAsync = false;
-    return;
   }
 
   einkDisplay.displayBufferAsyncNoShadow(convertRefreshMode(mode));
@@ -198,17 +88,7 @@ void HalDisplay::setInverted(bool inverted) { einkDisplay.setInverted(inverted);
 
 bool HalDisplay::isInverted() const { return einkDisplay.isInverted(); }
 
-void HalDisplay::deepSleep() {
-  // The panel is about to hold whatever the sleep screen left on it, and the next boot
-  // starts with an empty framebuffer. Nothing measured in this session describes what the
-  // next one will find on the glass.
-  inkMetrics.reset();
-  // The budget the caller wants to carry across the lock has already been read out by
-  // then (see enterDeepSleep); this reset only clears the in-RAM copy the reset would
-  // have wiped anyway.
-  refreshPolicy.reset();
-  einkDisplay.deepSleep();
-}
+void HalDisplay::deepSleep() { einkDisplay.deepSleep(); }
 
 // Safe to call at any time and as often as you like: the driver keeps its own power flag
 // and returns immediately when the rails are already down, so a repeat costs no bus traffic.
@@ -221,11 +101,6 @@ uint8_t* HalDisplay::lendFrameBufferStorage(uint32_t* sizeOut) { return einkDisp
 void HalDisplay::returnFrameBufferStorage() { einkDisplay.returnBuildStorage(); }
 
 void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) {
-  const RefreshMode requested = fallback;
-  // Scored like any other frame. It was charged zero, which made a full-frame image page
-  // (an XTC comic panel, a cover) the cheapest thing the panel ever did to the debt, and
-  // left inkMetrics describing a frame two pushes old for the next page turn's score.
-  fallback = applyRefreshPolicy(fallback, scoreFrame(requested));
   // X3: a HALF fallback means the caller wants a clean base (e.g. the sleep
   // cover, a full-screen swap from arbitrary prior content). Without this, the
   // X3 grayscale base takes its gentle differential happy path and the prior
@@ -344,12 +219,7 @@ static_assert(!LECTOR_X4PRO_SPLIT_MIDS || (phasesAgree(kSplitGray02) && phasesAg
 }  // namespace
 #endif
 
-// The grayscale planes go straight to the driver: there is no refresh mode to choose,
-// the waveform is the gray nudge. They still drive the panel and still leave charge, so
-// they spend the same anti-ghost budget a FAST pass does — otherwise a page with images
-// or text anti-aliasing ages the panel while the budget stands still.
 void HalDisplay::displayGrayBuffer(bool turnOffScreen, bool fullTone) {
-  refreshPolicy.noteExternalFastPass();
   // Null keeps the driver's own waveform. The override is UC8279-X4 bytes only: an X4 Pro
   // that probes as SSD1677 must never be handed it.
   const unsigned char* lut = nullptr;

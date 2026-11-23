@@ -158,21 +158,13 @@ TEST(SleepFacePaint, ThePopupIsCountedSeparatelyAndStillCostsItsOwnSubmission) {
   EXPECT_EQ(totalSubmissions(Face::PlainLector, false, uc8279X4()), 2);
 }
 
-// DisplayRefreshPolicy cannot arbitrate anything on this path. Its choose() is gated on
-// `requested == Mode::Fast` for all three escalation rules, and every sleep-face
-// submission is HALF or FULL, so for the whole sleep path the policy is a no-op that only
-// spends budget. Worse, displayGrayBuffer bypasses choose() outright
-// (HalDisplay::displayGrayBuffer, noteExternalFastPass) — so the grayscale plane pass, the
-// second submission of every tone-carrying face, is a panel drive the policy never sees.
-//
-// Making the policy see it would change escalation timing and therefore the waveform some
-// later page turn runs. Not done here. Recorded so the next reader does not rediscover it.
-TEST(SleepFacePaint, EverySleepBaseIsACleanWaveformSoThePolicyNeverEscalatesIt) {
+// Every sleep base uses a clean waveform (HALF/FULL), never FAST.
+TEST(SleepFacePaint, EverySleepBaseIsACleanWaveform) {
   for (const Row& row : kDevices) {
     for (const Face face : {Face::Wallpaper, Face::CoverFallback, Face::PlainLector}) {
       for (const bool hasTone : {false, true}) {
         const HalDisplay::RefreshMode base = planFor(face, hasTone, row.dev).base;
-        EXPECT_NE(base, HalDisplay::FAST_REFRESH) << row.name << " — a FAST base would become policy-escalatable";
+        EXPECT_NE(base, HalDisplay::FAST_REFRESH) << row.name;
       }
     }
   }

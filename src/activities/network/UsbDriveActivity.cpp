@@ -7,6 +7,7 @@
 #include <I18n.h>
 #include <Logging.h>
 
+#include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "platform/UsbSerialJtagHandoff.h"
@@ -16,7 +17,7 @@ void UsbDriveActivity::onEnter() {
   // The instructions go up before the card leaves the firmware's hands.
   requestUpdateAndWait();
   // Last writes the firmware owes the card: once it is lent, HalStorage refuses them.
-  persistAntiGhostBudget();
+  APP_STATE.saveToFile();
   if (Storage.beginUsbDrive()) {
     enterPhase(Phase::Waiting);
   } else {

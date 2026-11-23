@@ -32,9 +32,7 @@ class SleepActivity final : public Activity {
   void renderBlankSleepScreen() const;
   // Where a face goes when it has nothing of its own to show.
   enum class CoverFallback : uint8_t { Default, Custom, Overlay };
-  // `thenCover` false: no wallpaper means the Lector face, not the cover (Cover + Custom
-  // has already tried the cover).
-  void renderCustomSleepScreen(bool thenCover = true) const;
+  void renderCustomSleepScreen() const;
   void renderCoverSleepScreen(CoverFallback fallback = CoverFallback::Default) const;
   void renderNoCoverSleepScreen(CoverFallback fallback) const;
   // Full-screen wallpaper or cover: cleared page, the bitmap centred (fit or crop), the

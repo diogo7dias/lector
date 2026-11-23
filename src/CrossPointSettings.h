@@ -160,11 +160,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     REFRESH_10 = 2,
     REFRESH_15 = 3,
     REFRESH_30 = 4,
-    // Turns off the reader's own periodic clean, matching upstream. It is not a
-    // promise of no flashes: DisplayRefreshPolicy still forces one on ink debt,
-    // which is what makes the option safe to offer at all. A fork-only "Never"
-    // that disabled everything was removed in 060905bae because residue built up
-    // over a long reading run on the X3.
+    // Disables periodic full/half refreshes in the reader, matching CrossPoint.
     REFRESH_NEVER = 5,
     REFRESH_FREQUENCY_COUNT
   };
@@ -683,12 +679,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Sized to DictionaryRegistry::MAX_NAME_BYTES (static_assert in SettingsList.h): a UTF-8 folder name takes
   // up to 3 bytes per character, and a name stored cut short no longer names a folder.
   char dictionaryName[128] = "";
-  // Fast Unlock (1 = on). Shortens the recovery-chord settle window the wake waits out
-  // before routing, 500 ms to 100 ms on the X3/X4 button ladder (the X4 Pro is 20 ms
-  // either way). Chosen from code inspection, so the row exists to switch back without
-  // a reflash if a wake ever lands in the recovery picker by itself. The clearing blank
-  // can overlap this window. See wake_face::inputSettleMs.
-  uint8_t fastUnlock = 1;
+  // Fast Unlock (0 = off by default). When off, waking from a painted sleep face runs a
+  // clearing pass (matching CrossPoint) so the wallpaper does not ghost onto the first page.
+  // When on, skips the clearing pass (DriveAll FAST) and shortens the X3/X4 ladder settle.
+  uint8_t fastUnlock = 0;
   // What boot opens by itself, before the ordinary routing has its say. LAST_BOOK always
   // opens the last-read book, RANDOM picks one of the books in progress. There is no OFF:
   // an unlock lands on a book. Held Back and a prior reader crash still skip both modes,

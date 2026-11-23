@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <esp_random.h>
 
 #include <cstring>
@@ -199,15 +200,23 @@ WallpaperPick pickWallpaper(HalFile& dir, const char* const sleepDir, const std:
     }
   }
 
+  if (!chosen.empty()) {
+    return {std::move(chosen), pickedFromIndex, linePosition, lineTotal};
+  }
+
   // Fallback: walk the whole folder with reservoir sampling — keep the k-th valid
   // file with probability 1/k, so every file is equally likely, using O(1) memory
   // and no per-file header read. Only reached when the jump cannot resolve a name.
   uint32_t seen = 0;
   uint32_t scanned = 0;
   const uint32_t scanStartMs = millis();
-  char name[256];  // FAT long-file-name maximum (255 chars + terminator)
+  auto name = makeUniqueNoThrow<char[]>(256);  // FAT long-file-name maximum (255 chars + terminator)
+  if (!name) {
+    LOG_ERR("SLP", "OOM: wallpaper scan name buffer");
+    return {};
+  }
   dir.rewindDirectory();
-  for (auto dirFile = chosen.empty() ? dir.openNextFile() : HalFile(); dirFile; dirFile = dir.openNextFile()) {
+  for (auto dirFile = dir.openNextFile(); dirFile; dirFile = dir.openNextFile()) {
     // A wallpaper folder can hold thousands of files, and this walk runs inline on the
     // loop task while going to sleep. Without a periodic yield the task never returns
     // to the scheduler, the task watchdog has no chance to be fed, and sleep entry can
@@ -217,17 +226,54 @@ WallpaperPick pickWallpaper(HalFile& dir, const char* const sleepDir, const std:
       vTaskDelay(1);
     }
     const bool isDir = dirFile.isDirectory();
-    dirFile.getName(name, sizeof(name));
+    dirFile.getName(name.get(), 256);
     dirFile.close();  // only the name is needed; never open/parse the file here
-    if (isDir || !isWallpaperName(name)) continue;
+    if (isDir || !isWallpaperName(name.get())) continue;
     ++seen;
-    if (random(static_cast<long>(seen)) == 0) chosen = name;
+    if (random(static_cast<long>(seen)) == 0) chosen = name.get();
   }
   if (scanned > 0) {
     LOG_INF("SLP", "fallback scan: %u entries (%u wallpapers) in %ums", scanned, seen,
             static_cast<unsigned>(millis() - scanStartMs));
   }
   return {std::move(chosen), pickedFromIndex, linePosition, lineTotal};
+}
+
+bool pickWallpaperByScan(HalFile& dir, bool (*tryName)(const char* name, void* ctx), void* ctx) {
+  const uint32_t slots = static_cast<uint32_t>(liveSlotCount(dir));
+  if (slots == 0 || !tryName) return false;
+
+  auto name = makeUniqueNoThrow<char[]>(256);
+  if (!name) {
+    LOG_ERR("SLP", "OOM: wallpaper fallback scan buffer");
+    return false;
+  }
+
+  uint32_t scanned = 0;
+  auto walkRange = [&](const size_t fromOffset, const size_t stopOffset) -> bool {
+    if (!dir.seekSet(fromOffset)) return false;
+    while (true) {
+      const size_t entryPos = dir.position();
+      if (stopOffset > 0 && entryPos >= stopOffset) break;
+      auto dirFile = dir.openNextFile();
+      if (!dirFile) break;
+      if ((++scanned & 0x3F) == 0) {
+        resetTaskWatchdogIfSubscribed();
+        vTaskDelay(1);
+      }
+      const bool isDir = dirFile.isDirectory();
+      dirFile.getName(name.get(), 256);
+      dirFile.close();
+      if (isDir || !isWallpaperName(name.get())) continue;
+      if (tryName(name.get(), ctx)) return true;
+    }
+    return false;
+  };
+
+  const size_t startOffset = static_cast<size_t>(random(static_cast<long>(slots))) * DIR_SLOT_BYTES;
+  if (walkRange(startOffset, 0)) return true;
+  if (startOffset > 0 && walkRange(0, startOffset)) return true;
+  return false;
 }
 
 }  // namespace sleep
