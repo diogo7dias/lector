@@ -1,5 +1,6 @@
 add_executable(SleepIndexReconcileTest
   SleepIndexReconcileTest.cpp
+  WakeRebuildLoopTest.cpp
   ${REPO_ROOT}/src/util/FavoriteImageNames.cpp
 )
 

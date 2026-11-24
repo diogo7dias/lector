@@ -36,6 +36,7 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "sleep/SleepPauseToggle.h"
+#include "sleep/SleepWallpaperIndexStore.h"
 #include "util/BookFiling.h"
 #include "util/BookProgressFile.h"
 #include "util/DeferredFavorite.h"
@@ -114,12 +115,16 @@ void EpubReaderActivity::confirmWallpaperDelete() {
           requestUpdate();
           return;
         }
+        // Measured while the file still exists: the delete then costs the index one
+        // hole instead of a folder walk at the next wake.
+        const auto pendingDelete = crosspoint::sleep::windex::planDeletion(lastPath);
         if (!Storage.remove(lastPath.c_str())) {
           GUI.drawPopup(renderer, tr(STR_DELETE_FAILED));
           scheduleGhostCleanup();
           requestUpdate();
           return;
         }
+        crosspoint::sleep::windex::commitDeletion(pendingDelete);
         // Clear references to the deleted wallpaper so no later view reopens it.
         FavoriteImage::removePathReferences(lastPath);
         // Holding a wallpaper that no longer exists would freeze the rotation on

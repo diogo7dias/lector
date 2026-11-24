@@ -11,6 +11,7 @@
 #include "SleepActivity.h"
 #include "SleepFacePaint.h"
 #include "SleepInfoOverlay.h"
+#include "sleep/SleepIndexReconcilePolicy.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WallpaperPick.h"
 #include "util/FavoriteImageNames.h"
@@ -21,13 +22,14 @@
 // directory lookup, 1271 ms measured on a real wallpaper folder) and the open here
 // already answers the same question.
 bool SleepActivity::renderWallpaperFile(const std::string& filename, const uint32_t linePosition,
-                                        const uint32_t lineTotal) const {
+                                        const uint32_t lineTotal, bool* const missing) const {
   LOG_INF("SLP", "Loading wallpaper: %s", filename.c_str());
   const SleepInfoOverlayScope overlayScope(filename, linePosition, lineTotal);
   // Storage.open rather than openFileForRead: the latter calls exists() before
   // open(), which is a second full directory lookup for the same name and measured
   // as half of a 2543 ms wallpaper open. A failed open is reported here instead.
   HalFile file = Storage.open(filename.c_str(), O_RDONLY);
+  if (missing != nullptr) *missing = !file;
   if (!file) {
     LOG_INF("SLP", "wallpaper open failed: %s", filename.c_str());
     return false;
@@ -75,26 +77,34 @@ void SleepActivity::renderCustomSleepScreen() const {
     const bool pickedFromIndex = pick.pickedFromIndex;
     const uint32_t linePosition = pick.linePosition;
     const uint32_t lineTotal = pick.lineTotal;
-    const auto renderName = [&](const std::string& name, const uint32_t pos, const uint32_t total) {
-      return renderWallpaperFile(std::string(sleepDir) + "/" + name, pos, total);
+    const auto renderName = [&](const std::string& name, const uint32_t pos, const uint32_t total,
+                                bool* missing = nullptr) {
+      return renderWallpaperFile(std::string(sleepDir) + "/" + name, pos, total, missing);
     };
 
     std::string triedAlt;
     if (!chosen.empty()) {
-      if (renderName(chosen, linePosition, lineTotal)) {
+      bool missing = false;
+      if (renderName(chosen, linePosition, lineTotal, &missing)) {
         dir.close();
         return;
       }
       // A favorite toggle renames x.bmp <-> x_F.bmp without rewriting the index record.
       // Try the counterpart before declaring the record stale.
       triedAlt = FavoriteImage::favoriteCounterpart(chosen);
-      if (!triedAlt.empty() && triedAlt != chosen && renderName(triedAlt, linePosition, lineTotal)) {
-        dir.close();
-        return;
+      if (!triedAlt.empty() && triedAlt != chosen) {
+        bool altMissing = false;
+        if (renderName(triedAlt, linePosition, lineTotal, &altMissing)) {
+          dir.close();
+          return;
+        }
+        missing = missing && altMissing;
       }
       if (pickedFromIndex) {
-        APP_STATE.sleepIndexNeedsRebuild = true;
-        LOG_INF("SLP", "index record unrenderable, falling back to jump pick");
+        const bool rebuild = sleep_reconcile::renderFailureNeedsRebuild(missing, APP_STATE.sleepIndexDeadSlots);
+        if (rebuild) APP_STATE.sleepIndexNeedsRebuild = true;
+        LOG_INF("SLP", "index record %s, %s", missing ? "missing" : "unreadable",
+                rebuild ? "index rebuild next wake" : "skipped");
       }
       // Retry a few O(log N) jump picks before falling back to a linear scan.
       constexpr int MAX_FALLBACK_JUMPS = 4;
