@@ -109,6 +109,18 @@ inline bool deadSlotsDemandRebuild(const uint32_t recordCount, const uint32_t de
   return deadSlots > std::max(kDeadSlotFloor, recordCount / 4);
 }
 
+// An index pick that failed to render, and its favorite counterpart too: does the
+// index need the rebuild walk at the next wake? Only when the file is gone and no
+// hole is accounted for, which means the card changed behind the index (the #524
+// heal). Holes from on-device deletes and pauses also fail the open, but they are
+// already counted and compacted at the lap's end (noteLapWrapped). A file that is
+// there but will not parse would be indexed again by name and fail again, so it
+// never asks: the cursor has already stepped past it. Flagging either one cost a
+// full folder walk on a later wake and fixed nothing.
+inline bool renderFailureNeedsRebuild(const bool fileMissing, const uint32_t deadSlots) {
+  return fileMissing && deadSlots == 0;
+}
+
 enum class Plan : uint8_t {
   NoChange,           // index trusted as-is, nothing written
   IncrementalAppend,  // hash records, append unknown folder names at EOF

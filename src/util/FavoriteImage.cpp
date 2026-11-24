@@ -6,6 +6,7 @@
 
 #include "CrossPointState.h"
 #include "FavoriteImageNames.h"
+#include "sleep/SleepPauseToggle.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 
 namespace FavoriteImage {
@@ -74,8 +75,11 @@ void removePathReferences(const std::string& path) {
   // accounted for the delete in place (planDeletion + commitDeletion) have
   // already patched the snapshot, so this only marks dirty when the snapshot
   // still counts the file — otherwise every on-device delete would re-arm the
-  // folder walk the in-place patch exists to avoid.
-  if (!crosspoint::sleep::windex::deletionWasAccounted(path)) crosspoint::sleep::windex::markDirty();
+  // folder walk the in-place patch exists to avoid. Only a path the rotation reads
+  // can change the index: a paused file, the root /sleep.bmp or a book cover cannot.
+  if (!crosspoint::sleep::windex::deletionWasAccounted(path) && !crosspoint::sleep::isPaused(path)) {
+    crosspoint::sleep::windex::markDirtyIfSleepPath(path.c_str());
+  }
   if (APP_STATE.lastSleepWallpaperPath == path) APP_STATE.lastSleepWallpaperPath.clear();
 }
 
