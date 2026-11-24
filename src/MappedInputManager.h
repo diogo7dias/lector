@@ -35,6 +35,12 @@ class MappedInputManager {
     releaseGate.tick(buttonMask(&HalGPIO::isPressed), buttonMask(&HalGPIO::wasReleased));
     listScrollPolled_ = false;
     if (buttonMask(&HalGPIO::wasPressed) != 0) key_focus::keyPressedHere() = true;
+    float heldX = 0.0f;
+    float heldY = 0.0f;
+    if (!gpio.isTouchHeldAt(heldX, heldY)) {
+      menuDrag_ = EdgeDrag::Idle;
+      bottomDrag_ = EdgeDrag::Idle;
+    }
   }
   // See components/KeyFocus.h.
   bool showsSelection() const { return key_focus::showsSelection(gpio.hasTouch()); }
@@ -94,8 +100,9 @@ class MappedInputManager {
   bool getTwoFingerTouch(int& x1, int& y1, int& x2, int& y2) const;
   bool wasScreenTouchReleased() const;
   SwipeDir wasSwipe() const;
-  bool wasHomeGesture() const;
-  bool wasBottomEdgeUpSwipe() const;
+  bool wasHomeGesture(bool allowBottomSwipe = true) const;
+  bool wasBottomEdgeUpSwipe(float edgeFrac = list_swipe::HOME_EDGE_FRAC_Y) const;
+  bool wasReaderMenuSwipeUp() const;
   bool wasMenuGesture() const;
   // Reader surfaces use this to keep a page-back swipe from becoming an exit.
   bool wasBackGesture() const;
@@ -218,8 +225,14 @@ class MappedInputManager {
   // is taken on the pass Tracking begins, which is the only way to catch a finger that is
   // already moving: the tap-candidate query (wasScreenTouchDown) is false for anything past
   // tap slop, so a swipe never reports a "down" at all.
-  enum class MenuDrag : uint8_t { Idle, Tracking, Fired };
-  mutable MenuDrag menuDrag_ = MenuDrag::Idle;
+  enum class EdgeDrag : uint8_t { Idle, Tracking, Fired };
+  mutable EdgeDrag menuDrag_ = EdgeDrag::Idle;
+
+  // Bottom-edge pull-up state (see wasBottomEdgeUpSwipe). Mirrors the top-edge drag
+  // tracker so slow deliberate pulls work alongside fast flicks.
+  mutable int bottomDragStartX_ = -1;
+  mutable int bottomDragStartY_ = -1;
+  mutable EdgeDrag bottomDrag_ = EdgeDrag::Idle;
 
   // List scroll drag (see wasListScrollSwipe): the same per-pass tracking, so a slow drag
   // pages a list the way a flick does. One page per contact.

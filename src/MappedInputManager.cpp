@@ -255,27 +255,27 @@ bool MappedInputManager::wasMenuGesture() const {
   int tx = 0;
   int ty = 0;
   if (isScreenTouchHeld(tx, ty)) {
-    if (menuDrag_ == MenuDrag::Idle) {
+    if (menuDrag_ == EdgeDrag::Idle) {
       // First sighting of this contact. Deliberately NOT wasScreenTouchDown(): that asks
       // whether the contact is still a tap candidate, which a finger already sliding down
       // the screen has stopped being, so the drag could never arm from it.
-      menuDrag_ = MenuDrag::Tracking;
+      menuDrag_ = EdgeDrag::Tracking;
       menuDragStartX_ = tx;
       menuDragStartY_ = ty;
     }
     const int travel = ty - menuDragStartY_;
-    if (menuDrag_ == MenuDrag::Tracking && menuDragStartY_ <= topEdgeBottom &&
+    if (menuDrag_ == EdgeDrag::Tracking && menuDragStartY_ <= topEdgeBottom &&
         travel >= static_cast<int>(renderer.getScreenHeight() * MENU_DRAG_TRAVEL_FRAC_Y) &&
         travel > std::abs(tx - menuDragStartX_)) {
-      menuDrag_ = MenuDrag::Fired;
+      menuDrag_ = EdgeDrag::Fired;
       // The rest of the contact belongs to the gesture: without this the finger lifting
       // would tap whatever the panel just drew under it.
       gpio.suppressTouchContact();
       rememberTouchHeldTime();
       return true;
     }
-  } else if (menuDrag_ != MenuDrag::Idle) {
-    menuDrag_ = MenuDrag::Idle;
+  } else if (menuDrag_ != EdgeDrag::Idle) {
+    menuDrag_ = EdgeDrag::Idle;
   }
 
   // Downward swipe starting at the top edge (mirror of the bottom-edge home gesture).
@@ -294,32 +294,51 @@ bool MappedInputManager::wasMenuGesture() const {
   return hit;
 }
 
-bool MappedInputManager::wasBottomEdgeUpSwipe() const {
+bool MappedInputManager::wasBottomEdgeUpSwipe(const float edgeFrac) const {
+  const int height = renderer.getScreenHeight();
+  int tx = 0;
+  int ty = 0;
+  if (isScreenTouchHeld(tx, ty)) {
+    if (bottomDrag_ == EdgeDrag::Idle) {
+      bottomDrag_ = EdgeDrag::Tracking;
+      bottomDragStartX_ = tx;
+      bottomDragStartY_ = ty;
+    }
+    const int minTravel = static_cast<int>(height * MENU_DRAG_TRAVEL_FRAC_Y);
+    if (bottomDrag_ == EdgeDrag::Tracking &&
+        list_swipe::isBottomEdgeUpSwipe(height, bottomDragStartX_, bottomDragStartY_, tx, ty, edgeFrac, minTravel)) {
+      bottomDrag_ = EdgeDrag::Fired;
+      gpio.suppressTouchContact();
+      rememberTouchHeldTime();
+      return true;
+    }
+  } else if (bottomDrag_ != EdgeDrag::Idle) {
+    bottomDrag_ = EdgeDrag::Idle;
+  }
+
   int sx = 0;
   int sy = 0;
   int ex = 0;
   int ey = 0;
-  if (decodeSwipe(sx, sy, ex, ey)) {
-    const int bottomEdgeTop =
-        renderer.getScreenHeight() - static_cast<int>(renderer.getScreenHeight() * list_swipe::HOME_EDGE_FRAC_Y);
-    if (sy >= bottomEdgeTop && ey < sy && std::abs(ey - sy) > std::abs(ex - sx)) {
-      rememberTouchHeldTime();
-      return true;
-    }
+  if (decodeSwipe(sx, sy, ex, ey) && list_swipe::isBottomEdgeUpSwipe(height, sx, sy, ex, ey, edgeFrac)) {
+    rememberTouchHeldTime();
+    return true;
   }
   return false;
 }
 
-bool MappedInputManager::wasHomeGesture() const {
-  // The capacitive Home key where there is one, and the bottom-edge up-swipe on every
-  // touch board, the reader included: one way Home on every screen.
+bool MappedInputManager::wasReaderMenuSwipeUp() const { return wasBottomEdgeUpSwipe(list_swipe::EDGE_BAND_FRAC_Y); }
+
+bool MappedInputManager::wasHomeGesture(const bool allowBottomSwipe) const {
+  // The capacitive Home key goes Home everywhere; outside a book the bottom-edge
+  // up-swipe does too (inside a book that swipe opens the reader menu).
   if (gpio.hasHomeKey()) {
     // See setHomeKeyOverride(): the router holds a tap back while it decides whether a
     // second one is coming, and replays it here when it rules the tap a plain single.
     if (homeKeyInjected) return true;
     if (!homeKeySuppressed && gpio.wasHomeKeyTapped()) return true;
   }
-  return wasBottomEdgeUpSwipe();
+  return allowBottomSwipe && wasBottomEdgeUpSwipe();
 }
 
 int MappedInputManager::sideKeySlot(const uint8_t hardware) {

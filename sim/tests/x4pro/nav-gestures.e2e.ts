@@ -1,10 +1,11 @@
 import { test, expect } from 'e2e';
 
 // Touch navigation on the X4 Pro: a flick over Home pages its books (and paints nothing when
-// they all fit), a swipe up from the bottom edge goes Home from inside a book, and the image
+// they all fit), a swipe up from the bottom edge opens the reader menu inside a book (both a
+// fast flick and a slow pull from the bottom 14%) and goes Home outside a book, and the image
 // viewer pages by the thirds of the screen with its actions behind a centre tap. The images
 // are the card fixture /read/pics/{a,b,c}.bmp: 48 px squares, black centres of 40, 20 and 8 px.
-test('home flick, bottom-edge Home from a book, image viewer taps', async ({ app, screen }) => {
+test('home flick, bottom-edge menu/Home, image viewer taps', async ({ app, screen }) => {
   await app.open('/');
   const activity = screen.getByTestId('activity');
   const frames = screen.getByTestId('frames');
@@ -35,8 +36,8 @@ test('home flick, bottom-edge Home from a book, image viewer taps', async ({ app
   await expect(activity).toHaveText('Home');
   expect(await frames.textContent(), 'nothing to page, nothing painted').toBe(still);
 
-  // Into a book, then out by the bottom edge. The suite shares one card: the book may already
-  // be Home's first row (blank on a fresh card).
+  // Into a book, then open the reader menu via bottom-edge swipe up (flick + slow pull).
+  // The suite shares one card: the book may already be Home's first row (blank on a fresh card).
   const listed = (await ink(0, 230, 480, 60)) > 500;
   if (listed) {
     await tapOnce(240, 259);
@@ -47,25 +48,37 @@ test('home flick, bottom-edge Home from a book, image viewer taps', async ({ app
   }
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
   await settle();
+  const pageInk = await ink(0, 0, 480, 700);
   // A swipe up through the page body is not the gesture: the book stays open.
   await post('/swipe/240/600/240/300');
   await expect(activity).toHaveText('EpubReader');
+  // Bottom-edge flick up inside a book opens the reader menu instead of going Home.
   await post('/swipe/240/795/240/450');
-  await expect(activity).toHaveText('Home', { timeout: 30_000 });
+  await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
+  await settle();
+  await expect.poll(() => ink(0, 0, 480, 700), { timeout: 30_000 }).not.toBe(pageInk);
+  // Back closes the menu back to the book, then a slow drag (>700 ms) from the bottom 14%
+  // also opens the menu (activity only updates on onEnter(), so verify via ink + log).
+  await tapOnce(60, 780);
+  await expect.poll(() => ink(0, 0, 480, 700), { timeout: 30_000 }).toBe(pageInk);
+  const log = async () => (await fetch(`${app.baseUrl}/log`)).text();
+  const menuFrom = (await log()).length;
+  await post('/swipe/240/720/240/450?ms=1200');
+  await expect
+    .poll(async () => (await log()).slice(menuFrom), { timeout: 30_000 })
+    .toContain('Entering activity: EpubReaderMenu');
+  await expect.poll(() => ink(0, 0, 480, 700), { timeout: 30_000 }).not.toBe(pageInk);
   if (!listed) {
-    // Leaving filed the book into /recents. Later files open it from the card root, so
-    // Remove from Recents (in-book menu > Book) files it back, as image-filing does.
-    await tapOnce(240, 259); // the book's row on Home
-    await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
-    await settle();
-    await panel.tap({ position: { x: 240, y: 400 } });
-    await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
-    const log = async () => (await fetch(`${app.baseUrl}/log`)).text();
-    const from = (await log()).length;
+    // Remove from Recents (in-book menu > Book) drops the book from Recents on exit and
+    // leaves it unfiled at the card root, so later files still find /test_jpeg_images.epub.
     await tapOnce(100, 198); // Book
     await tapOnce(100, 318); // Remove from Recents
     await expect(activity).toHaveText('Home', { timeout: 30_000 });
-    await expect.poll(async () => (await log()).slice(from)).toContain('-> /test_jpeg_images.epub');
+    expect(await ink(0, 230, 480, 60), 'removed from Home recents').toBeLessThan(500);
+  } else {
+    // Outside the reader activity (inside the menu), bottom-edge swipe up goes Home.
+    await post('/swipe/240/795/240/450');
+    await expect(activity).toHaveText('Home', { timeout: 30_000 });
   }
 
   // Browse Files > read > pics > a.bmp: each the first row under Search, y 124.
@@ -91,9 +104,9 @@ test('home flick, bottom-edge Home from a book, image viewer taps', async ({ app
   await tapOnce(240, 150);
   await expect.poll(square, { timeout: 30_000 }).toBe(1600);
 
-  // Back on the band, then Home for the next file.
+  // Back on the band, then bottom-edge swipe up from FileBrowser goes Home.
   await tapOnce(60, 780);
   await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
-  await screen.getByRole('button', { name: 'Home' }).click();
+  await post('/swipe/240/795/240/450');
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
 });
