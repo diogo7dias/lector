@@ -92,10 +92,13 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
 }
 
 // Reader-menu gestures are independent of page-turn controls. Turning page
-// controls off must not strand the menu, especially on touch boards.
+// controls off must not strand the menu, especially on touch boards: bottom-edge
+// swipe up always opens the reader menu inside a book, and Show Reader Menu controls
+// whether a centre tap does too.
 inline bool isTouchMenuGesture(const GfxRenderer& renderer, const MappedInputManager& input, bool centreTap = false) {
-  if (!input.hasTouch() || readerMenuMode() == reader_touch::MenuMode::Off) return false;
-  if (input.wasMenuGesture()) return true;
+  if (!input.hasTouch()) return false;
+  if (input.wasReaderMenuSwipeUp()) return true;
+  if (readerMenuMode() == reader_touch::MenuMode::Off) return false;
   if (centreTap) return true;
 
   // With page-turn controls off, detect the centre tap here instead of in

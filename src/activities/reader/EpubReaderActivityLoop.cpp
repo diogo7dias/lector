@@ -148,7 +148,7 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  // Enter reader menu activity on Confirm or a downward swipe from the top edge.
+  // Enter reader menu activity on Confirm, a bottom-edge swipe up, or a centre tap.
   //
   // With no function bound to a long press, Confirm carries exactly one action, so the
   // menu opens the instant the button goes down. With one bound the two cannot be told

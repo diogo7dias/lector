@@ -177,10 +177,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     PAGE_TURN_GESTURE_DISABLED = 4,
     PAGE_TURN_GESTURE_COUNT
   };
-  // How the reader menu opens on a touch board. Swipe Up is only offered where the
-  // Home key is capacitive, since there the bottom edge is otherwise unused.
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
-  // A stored 2 (the old Swipe Up mode) loads as the default, Tap: that swipe is Home now.
+  // Whether a centre tap opens the reader menu on a touch board (Off / Tap; a stored 2
+  // loads as Tap). Bottom-edge swipe up always opens the reader menu inside a book and
+  // goes Home outside a book.
   enum SHOW_READER_MENU { READER_MENU_OFF = 0, READER_MENU_TAP = 1, SHOW_READER_MENU_COUNT };
 
   // How long Power must be held to wake the device from deep sleep. Normal rejects a

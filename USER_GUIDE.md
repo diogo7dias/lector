@@ -54,9 +54,8 @@ direction swaps the two sides. In a right-to-left EPUB (language Hebrew, Arabic 
 the tap sides run the other way. Older settings files carry over: the old Tap, Swipe and
 Inverted Tap become the matching gesture for both directions.
 
-**Show Reader Menu** (Settings > Controls) is **Tap**, the centre tap, or **Off**. Its old
-**Swipe Up** choice is gone, because a swipe up from the bottom edge now goes Home; a device
-set to it opens the menu by the centre tap.
+**Show Reader Menu** (Settings > Controls) turns the centre tap **Tap** or **Off**. Inside a
+book, a swipe up from the bottom edge always opens the reader menu.
 
 ### Tapping, on a device with a touch screen
 
@@ -82,9 +81,10 @@ On every device a list that scrolls shows which screen of it you are on beside t
 as 2/5, and the Settings band says what Confirm does to the row it is on: Open, Change, Turn
 on or Turn off, instead of Toggle.
 
-A swipe up from the bottom edge of the screen goes Home from every screen, a book included;
-the Home key below the screen does the same. A swipe up that starts higher on a list scrolls
-it. On Home a flick up or down over the list pages through the books you are reading.
+A swipe up from the bottom edge opens the reader menu inside a book, and goes Home from
+every other screen; the capacitive Home key below the screen goes Home everywhere. A swipe
+up that starts higher on a list scrolls it. On Home a flick up or down over the list pages
+through the books you are reading.
 
 Page turns by tap while reading are unchanged. Holding a word on the page for half a second looks it up in
 the dictionary; keep the finger down and drag to select a phrase instead (see **Quotes**).
