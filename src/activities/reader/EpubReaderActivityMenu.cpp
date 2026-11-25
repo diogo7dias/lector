@@ -26,7 +26,11 @@ void EpubReaderActivity::openReaderMenu() {
 }
 
 void EpubReaderActivity::reopenReaderMenu(void* self, const int action) {
-  static_cast<EpubReaderActivity*>(self)->openReaderMenuList(static_cast<EpubReaderMenuActivity::MenuAction>(action));
+  auto* reader = static_cast<EpubReaderActivity*>(self);
+  const MenuReturn opener = reader->listMenuOpener;
+  // Armed again for the menu itself, as when it first opened (none from the page).
+  MenuReturn::Scope backToOpener(opener.reopen, opener.ctx, opener.row);
+  reader->openReaderMenuList(static_cast<EpubReaderMenuActivity::MenuAction>(action));
 }
 
 void EpubReaderActivity::openReaderMenuList(const EpubReaderMenuActivity::MenuAction openOn) {
@@ -114,6 +118,7 @@ void EpubReaderActivity::openReaderMenuList(const EpubReaderMenuActivity::MenuAc
                              onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
                            }
                          });
+  listMenuOpener = menuReturn;  // what the menu just took (MenuReturn::take)
 }
 
 bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) const {

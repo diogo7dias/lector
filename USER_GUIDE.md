@@ -40,10 +40,16 @@ Lector uses the buttons the device already has, in the manufacturer's layout by 
 Throughout this guide the side buttons are called **Volume Up** and **Volume Down**, and the
 bottom-edge buttons **Back**, **Confirm**, **Left** and **Right**.
 
-**Back** always returns to the screen you came from: from a screen a menu opened, to that menu
-on the row you chose; from Settings, File Transfer or the file browser, to where you opened
-them. Inside a book, **Back** from the reader menu returns to the page. The Home key and the
-swipe up from the bottom edge go straight Home.
+**Back** returns to the screen you came from. From a screen a menu or pop-up opened, it lands on
+that menu again, on the row you chose; choosing something in that screen (a chapter, a
+bookmark, a Yes) goes on as before. File Transfer opened from Settings comes back to Settings,
+and a file browser or Nearby screen comes back to the screen that opened it. Inside a book,
+**Back** from the reader menu returns to the page. The Home key and the swipe up from the
+bottom edge go straight Home.
+
+A screen that has had Wi-Fi on restarts the reader when you leave it, to give the memory back.
+After File Transfer opened from Settings the restart lands on Settings; after the OPDS browser
+and USB Drive it lands on Home.
 
 The four bottom-edge buttons can be reassigned in **Settings > Controls > Remap Front Buttons**,
 and the side buttons can be swapped or disabled with **Side Button Layout (reader)**.

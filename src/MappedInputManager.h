@@ -110,6 +110,8 @@ class MappedInputManager {
   // A screen read Back this pass, by key, hint tap or edge swipe. ActivityManager asks when
   // a screen closes, to tell Back from any other way out (MenuReturn).
   bool backSeenThisPass() const { return backSeen_; }
+  // A touch control that stands for Back (a status screen's Cancel) says so here.
+  void noteBack() const { backSeen_ = true; }
   // Vertical swipe over the body of a list screen, with the gesture bands excluded.
   // ButtonNavigator turns it into the same movement the nav buttons make.
   list_swipe::Scroll wasListScrollSwipe() const;

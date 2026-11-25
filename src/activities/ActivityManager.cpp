@@ -43,6 +43,7 @@ HomeMenuItem homeRowFor(const std::string& activityName) {
   if (activityName == activity_name::kLibrary) return HomeMenuItem::LIBRARY;
   if (activityName == activity_name::kOpdsBookBrowser) return HomeMenuItem::OPDS_BROWSER;
   if (activityName == activity_name::kCrossPointWebServer) return HomeMenuItem::FILE_TRANSFER;
+  if (activityName == activity_name::kNearbyFileTransfer) return HomeMenuItem::FILE_TRANSFER;
   if (activityName == activity_name::kSettings) return HomeMenuItem::SETTINGS_MENU;
   return HomeMenuItem::NONE;
 }

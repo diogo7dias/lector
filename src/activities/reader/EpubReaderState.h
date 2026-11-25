@@ -217,6 +217,9 @@ struct EpubReaderState {
   // Quick Menu paint over the framebuffer, which still holds the screen that just closed,
   // and a book reopened after KOReader Sync or Nearby has no page yet.
   MenuReturn reopenOnPage;
+  // What opened the list menu (the toolbar's More, the Quick Menu's row, or nothing): a menu
+  // reopened on Back from one of its rows keeps it, so its own Back still returns there.
+  MenuReturn listMenuOpener;
   // A page has been drawn since the last child screen closed over this one.
   std::atomic<bool> pageOnScreen{false};
 

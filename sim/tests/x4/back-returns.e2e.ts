@@ -77,6 +77,21 @@ test('Back from a screen a menu opened lands on that menu, on its row', async ({
   await press('Back');
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
 
+  // Home's Nearby choice > Send a file opens the browser in its place; Back rebuilds the choice.
+  await press('Down', 3); // Nearby Sync, after Library and OPDS Browser
+  await press('Confirm');
+  await expect(activity).toHaveText('NearbyFileTransfer', { timeout: 30_000 });
+  await press('Down', 2); // Send, after the two receives
+  await press('Confirm');
+  await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
+  await press('Back');
+  await expect(activity, 'Back from the browser lands on the Nearby choice').toHaveText('NearbyFileTransfer', {
+    timeout: 30_000,
+  });
+  await press('Back');
+  await expect(activity).toHaveText('Home', { timeout: 30_000 });
+  await press('Up', 3); // Home came back on Nearby Sync; Browse Files is three rows up
+
   // Settings > File Transfer, then Back out of its mode list: Settings, on the File Transfer card.
   await press('Down', 5); // Settings, from Browse Files
   await press('Confirm');
