@@ -216,6 +216,10 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const PopupFn popupFn, vo
   return true;
 }
 
+void Section::clearPopupCallback() {
+  if (build_ && build_->parser) build_->parser->clearPopupCallback();
+}
+
 bool Section::buildSomeMore(const int maxPages) {
   if (!build_ || !build_->parser) {
     LOG_ERR("SCT", "buildSomeMore with no active build");

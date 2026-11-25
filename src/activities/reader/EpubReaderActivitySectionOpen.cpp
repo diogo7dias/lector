@@ -175,22 +175,22 @@ bool EpubReaderActivity::openSectionForRender(const ReaderRenderSpec& renderSpec
         // it. The loan is dropped around any popup so drawing still works.
         releaseGrayscaleStripScratch();
         auto loan = makeUniqueNoThrow<GfxRenderer::FrameBufferLoan>(renderer);
-        {
-          // The popup drops the framebuffer loan before drawing, so both the activity and
-          // the loan travel to the callback as one context.
-          struct PopupContext {
-            EpubReaderActivity* self;
-            std::unique_ptr<GfxRenderer::FrameBufferLoan>* loan;
-          } popupContext{this, &loan};
-          started = section->startBuild(
-              renderSpec,
-              [](void* const ctx) {
-                auto* const popup = static_cast<PopupContext*>(ctx);
-                popup->loan->reset();
-                popup->self->showBuildPopup();
-              },
-              &popupContext);
-        }
+        // The popup drops the framebuffer loan before drawing, so both the activity and
+        // the loan travel to the callback as one context. The parser also fires it from
+        // buildSomeMore() (image fallback extraction), so the context must outlive the
+        // loop below, and it is disarmed before this frame returns.
+        struct PopupContext {
+          EpubReaderActivity* self;
+          std::unique_ptr<GfxRenderer::FrameBufferLoan>* loan;
+        } popupContext{this, &loan};
+        started = section->startBuild(
+            renderSpec,
+            [](void* const ctx) {
+              auto* const popup = static_cast<PopupContext*>(ctx);
+              popup->loan->reset();
+              popup->self->showBuildPopup();
+            },
+            &popupContext);
         if (!started) {
           loan.reset();  // restore before anything draws
           failBuild("Failed to start section build");
@@ -218,6 +218,8 @@ bool EpubReaderActivity::openSectionForRender(const ReaderRenderSpec& renderSpec
           }
         }
         loan.reset();  // hand the framebuffer back before the page is drawn
+        // loop() keeps building this section after popupContext is gone.
+        section->clearPopupCallback();
         buildPopupPending = false;
       }
     }

@@ -264,6 +264,7 @@ add_subdirectory(usb_drive_storage_guard)
 add_subdirectory(bitmap_resample)
 add_subdirectory(jpeg_decode_accuracy)
 add_subdirectory(pinch_font_resize)
+add_subdirectory(chapter_build_safety)
 
 if(LECTOR_FUZZ)
   add_subdirectory(fuzz)

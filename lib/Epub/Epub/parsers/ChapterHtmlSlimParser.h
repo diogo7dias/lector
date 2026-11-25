@@ -376,6 +376,10 @@ class ChapterHtmlSlimParser {
   ParseStatus parseStep();
   bool finishParse();  // flush the trailing page and tear down; returns true
   void abortParse();   // tear down without flushing (error / abandon)
+  void clearPopupCallback() {
+    popupFn = nullptr;
+    popupCtx = nullptr;
+  }
 
   void addLineToPage(std::unique_ptr<TextBlock> line, uint32_t visibleOffset);
   const std::deque<std::pair<uint64_t, uint16_t>>& getAnchors() const { return anchors.placed(); }
