@@ -5,6 +5,7 @@
 #include "activities/Activity.h"
 
 class Bitmap;
+class HalFile;
 class SleepOverlay;
 
 class SleepActivity final : public Activity {
@@ -45,8 +46,13 @@ class SleepActivity final : public Activity {
   // `overlay`, when set, is drawn over the bitmap in every pass (Cover + Transparent).
   void renderBitmapSleepScreen(Bitmap& bitmap, sleep_face::Face face, SleepOverlay* overlay = nullptr) const;
   // `missing`, when given, is set to whether the open failed (the file is not there).
+  // When `dir` and a valid `dirOffset` are provided, tries an O(1) directory-slot seek
+  // verified against `expectedName` (and optional `counterpartName`) before falling back
+  // to a linear path lookup.
   bool renderWallpaperFile(const std::string& filename, uint32_t linePosition, uint32_t lineTotal,
-                           bool* missing = nullptr) const;
+                           bool* missing = nullptr, HalFile* dir = nullptr, uint32_t dirOffset = UINT32_MAX,
+                           const std::string* expectedName = nullptr,
+                           const std::string* counterpartName = nullptr) const;
 
   bool fromTimeout = false;
   // The wallpaper the previous sleep left on the panel. onEnter clears the shared

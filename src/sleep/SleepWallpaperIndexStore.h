@@ -36,6 +36,7 @@
 #include <string>
 #include <string_view>
 
+#include "SleepIndexRecord.h"
 #include "SleepQueuePolicy.h"
 
 class GfxRenderer;
@@ -44,11 +45,19 @@ namespace crosspoint {
 namespace sleep {
 namespace windex {
 
-// One record per wallpaper. 160 covers the long generated filenames in real
-// folders (~105 chars observed); names that do not fit are skipped at build
-// with a log line. Record i lives at offset (i + 1) * kRecordBytes — slot 0 is
-// the header.
-constexpr size_t kRecordBytes = 160;
+// One record per wallpaper: 155-char NUL-terminated basename + 4-byte FAT
+// directory byte offset (see SleepIndexRecord.h). 155 covers the long generated
+// filenames in real folders (~105 chars observed); names that do not fit are
+// skipped at build with a log line. Record i lives at offset (i + 1) * kRecordBytes
+// — slot 0 is the header.
+constexpr size_t kRecordBytes = sleep_index_record::kRecordBytes;
+constexpr size_t kMaxNameBytes = sleep_index_record::kMaxNameBytes;
+constexpr uint32_t kUnknownDirOffset = sleep_index_record::kUnknownDirOffset;
+
+struct Record {
+  std::string name;
+  uint32_t dirOffset = kUnknownDirOffset;
+};
 
 // Folder id persisted in the header and APP_STATE.sleepIndexDirId.
 const char* dirPathForId(uint8_t dirId);
@@ -65,6 +74,12 @@ class Reader {
   bool open();
   size_t recordCount() const { return count; }
   uint8_t dirId() const { return headerDirId; }
+  // True after a failed open() whose file holds an older format: the index must
+  // be rebuilt, since no hooked change will ever mark it stale.
+  bool outdated() const { return olderFormat; }
+  // Basename + stored FAT directory byte offset at `index`. Returns false on a
+  // read error or blank record.
+  bool recordAt(size_t index, Record& out);
   // Basename at `index`, or empty on a read error / blank record.
   std::string nameAt(size_t index);
   // Sequential sweep over every record, `cb(std::string_view name)`. Reads in
@@ -82,9 +97,8 @@ class Reader {
       if (file.read(chunk, want) != want) return false;
       // cppcheck-suppress knownConditionTrueFalse ; batch is at least 1 here
       for (size_t i = 0; i < batch; ++i) {
-        char* record = chunk + i * kRecordBytes;
-        record[kRecordBytes - 1] = '\0';
-        if (record[0] != '\0') cb(std::string_view(record, std::strlen(record)));
+        const std::string_view name = sleep_index_record::decodeName(chunk + i * kRecordBytes);
+        if (!name.empty()) cb(name);
       }
       done += batch;
     }
@@ -99,6 +113,7 @@ class Reader {
   HalFile file;
   size_t count = 0;
   uint8_t headerDirId = 0;
+  bool olderFormat = false;
 };
 
 // Snapshot patch for a wallpaper about to be deleted from (or moved out of) the

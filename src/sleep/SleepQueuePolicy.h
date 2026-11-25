@@ -27,7 +27,9 @@
 // Templated on the accessors (no std::function: this runs on the sleep-entry
 // heap) and free of SD/display dependencies, so it is host-testable with fakes.
 
+#include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 
 #include "SleepRotationPolicy.h"
@@ -36,6 +38,7 @@ namespace sleep_queue {
 
 // Upper bound of dead slots tolerated per pick before declaring the index stale.
 inline constexpr size_t kMaxDeadSlotSkips = 64;
+inline constexpr size_t kNoPhysicalIndex = std::numeric_limits<size_t>::max();
 
 // Persisted in APP_STATE alongside the cursor.
 struct QueueState {
@@ -44,9 +47,10 @@ struct QueueState {
 };
 
 struct Result {
-  std::string basename;       // next live wallpaper; empty when none found
-  bool needsRebuild = false;  // exhausted the skip budget — index is stale
-  bool lapWrapped = false;    // this pick completed a lap (every record shown once)
+  std::string basename;                     // next live wallpaper; empty when none found
+  size_t physicalIndex = kNoPhysicalIndex;  // index record that supplied `basename`
+  bool needsRebuild = false;                // exhausted the skip budget — index is stale
+  bool lapWrapped = false;                  // this pick completed a lap (every record shown once)
 };
 
 // Manual "Shuffle Wallpapers": a fresh lap over everything, fresh queue folded in.
@@ -87,7 +91,10 @@ Result pickNext(QueueState& s, const size_t recordCount, const uint32_t randA, c
     const size_t idx = s.freshNext;
     s.freshNext += 1;  // step past unconditionally (crash-safe re-walk convention)
     --budget;
-    if (tryCandidate(nameAt(idx))) return result;
+    if (tryCandidate(nameAt(idx))) {
+      result.physicalIndex = idx;
+      return result;
+    }
   }
 
   // Lap phase.
@@ -107,7 +114,10 @@ Result pickNext(QueueState& s, const size_t recordCount, const uint32_t randA, c
       s.freshNext = static_cast<uint32_t>(recordCount);  // lap complete → fresh folded into new lap
       result.lapWrapped = true;  // sticky: a wrap consumed while skipping dead slots still counts
     }
-    if (tryCandidate(std::move(name))) return result;
+    if (tryCandidate(std::move(name))) {
+      result.physicalIndex = physical;
+      return result;
+    }
   }
   result.needsRebuild = true;
   return result;
