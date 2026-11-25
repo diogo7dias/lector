@@ -71,9 +71,11 @@ class ButtonNavigator final {
   // no way to stop on a row. One row per repeat, coarsened by holdRepeatStep() once
   // the hold is plainly not a nudge (the numeric settings' ramp), clamped rather than
   // wrapped because a hold that wraps never ends. A swipe arrives through the same
-  // continuous callback and stays a page: a finger that moved one row is useless.
+  // continuous callback and goes to pageBy(+1 or -1) instead: the host moves its window
+  // a whole screen (list_index::paged), since only the host knows its top row.
   // `selected` is read when each callback fires, so it always sees the last move.
-  void onListNav(const int& selected, int count, int pageRows, const std::function<void(int)>& moveTo);
+  void onListNav(const int& selected, int count, const std::function<void(int)>& moveTo,
+                 const std::function<void(int)>& pageBy);
 
   void onNextContinuous(const Callback& callback);
   void onPreviousContinuous(const Callback& callback);
@@ -88,9 +90,6 @@ class ButtonNavigator final {
   // on the first or last row ends the travel. A single press still wraps via
   // nextIndex/previousIndex, which is the behaviour those screens always had.
   [[nodiscard]] static int heldIndex(int currentIndex, int totalItems, int delta);
-
-  [[nodiscard]] static int nextPageIndex(int currentIndex, int totalItems, int itemsPerPage);
-  [[nodiscard]] static int previousPageIndex(int currentIndex, int totalItems, int itemsPerPage);
 
   // Navigation uses the logical NavNext / NavPrevious buttons; MappedInputManager::mapButton resolves
   // them to physical buttons and applies any orientation-based direction swap, so this stays settings-free.

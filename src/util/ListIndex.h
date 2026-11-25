@@ -34,28 +34,23 @@ inline int held(const int currentIndex, const int totalItems, const int delta) {
   return std::clamp(currentIndex + delta, 0, totalItems - 1);
 }
 
-// A swipe travels a page rather than a row. When everything fits on one page
-// there is no page to jump to, so it degrades to the wrapping single step.
-inline int nextPage(const int currentIndex, const int totalItems, const int itemsPerPage) {
-  if (totalItems <= 0 || itemsPerPage <= 0) return 0;
-  if (totalItems <= itemsPerPage) return next(currentIndex, totalItems);
+// Where a swipe leaves a list. The window moves a whole screen: the first row of the
+// next screen becomes the top row. The selection travels with it, so it is still on
+// screen and the next key press steps from there. Clamped at both ends, never wrapped;
+// a list that fits on one screen does not move. Hosts keep their own window, so each
+// applies this to its own top and selection.
+struct Window {
+  int top;
+  int selected;
+};
 
-  const int lastPageIndex = (totalItems - 1) / itemsPerPage;
-  const int currentPageIndex = currentIndex / itemsPerPage;
-
-  if (currentPageIndex < lastPageIndex) return (currentPageIndex + 1) * itemsPerPage;
-  return 0;  // past the last page, back to the top
-}
-
-inline int previousPage(const int currentIndex, const int totalItems, const int itemsPerPage) {
-  if (totalItems <= 0 || itemsPerPage <= 0) return 0;
-  if (totalItems <= itemsPerPage) return previous(currentIndex, totalItems);
-
-  const int lastPageIndex = (totalItems - 1) / itemsPerPage;
-  const int currentPageIndex = currentIndex / itemsPerPage;
-
-  if (currentPageIndex > 0) return (currentPageIndex - 1) * itemsPerPage;
-  return lastPageIndex * itemsPerPage;  // before the first page, round to the last
+inline Window paged(const int top, const int selected, const int totalItems, const int rowsPerScreen,
+                    const int direction) {
+  if (totalItems <= 0 || rowsPerScreen <= 0) return {top, selected};
+  const int lastTop = std::max(0, totalItems - rowsPerScreen);
+  const int nextTop = std::clamp(top + direction * rowsPerScreen, 0, lastTop);
+  const int lastShown = std::min(totalItems, nextTop + rowsPerScreen) - 1;
+  return {nextTop, std::clamp(selected + nextTop - top, nextTop, lastShown)};
 }
 
 }  // namespace list_index

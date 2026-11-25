@@ -103,7 +103,10 @@ struct MappedInputManager {
   int tappedHintHardware() const { return -1; }
   bool isScreenTouchHeld(int&, int&) const { return false; }
   SwipeDir wasSwipe() const { return touch ? swipe : SwipeDir::None; }
+  // A slow drag fires mid-contact, with no SDK flick: wasSwipe() stays None.
+  list_swipe::Scroll drag = list_swipe::Scroll::None;
   list_swipe::Scroll wasListScrollSwipe() const {
+    if (drag != list_swipe::Scroll::None) return drag;
     if (wasSwipe() == SwipeDir::Up) return list_swipe::Scroll::PageDown;
     if (wasSwipe() == SwipeDir::Down) return list_swipe::Scroll::PageUp;
     return list_swipe::Scroll::None;

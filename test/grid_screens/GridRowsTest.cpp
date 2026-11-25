@@ -19,7 +19,8 @@ class Grid : public UiGridActivity {
   // A tap acts at once; a test of the arm turns the confirming tap on for every cell.
   bool confirmTaps = false;
   bool needsConfirmTap(const fui::ActionEvent&) const override { return confirmTaps; }
-  int cellCount() const override { return 3; }
+  int cells = 3;
+  int cellCount() const override { return cells; }
   const char* cellName(int) const override { return "Setting"; }
   const char* cellValue(int) const override { return "Value"; }
   void activateCell(int index) override {
@@ -47,7 +48,8 @@ class List : public UiListActivity {
   using UiListActivity::nav;
   bool confirmTaps = false;
   bool needsConfirmTap(const fui::ActionEvent&) const override { return confirmTaps; }
-  int listCount() const override { return 100; }
+  int rows = 100;
+  int listCount() const override { return rows; }
   void activateIndex(int index) override {
     ++activations;
     activated = index;
@@ -60,7 +62,7 @@ class List : public UiListActivity {
     }
     fui::ListProps props{};
     props.items = rows;
-    props.count = 100;
+    props.count = static_cast<uint16_t>(this->rows);
     props.action = ACTION_ROW;
     syncListViewport(screen, props);
     screen.list(props);
@@ -188,7 +190,7 @@ TEST(ListRows, RoutedSwipePagesAndClearsArmWhileTapsStillActivate) {
   ASSERT_LT(page * 2, list.listCount());
   swipe(list, input, MappedInputManager::SwipeDir::Up);
   EXPECT_EQ(list.nav.top, page);
-  EXPECT_EQ(list.nav.selected, selected);
+  EXPECT_EQ(list.nav.selected, selected + page) << "the selection travels with the window";
   EXPECT_EQ(list.activations, 0);
   EXPECT_FALSE(list.twoTap().armed());
   list.paint();
@@ -203,7 +205,7 @@ TEST(ListRows, RoutedSwipePagesAndClearsArmWhileTapsStillActivate) {
   EXPECT_EQ(list.activated, 0);
 }
 
-TEST(GridRows, RoutedSwipeMovesOneRowAndClearsArmWhileTapsStillActivate) {
+TEST(GridRows, RoutedSwipeClearsArmWhileTapsStillActivate) {
   GfxRenderer renderer;
   MappedInputManager input;
   Grid grid(renderer, input);
@@ -212,8 +214,9 @@ TEST(GridRows, RoutedSwipeMovesOneRowAndClearsArmWhileTapsStillActivate) {
   grid.paint();
   tap(grid, input, 0);
   ASSERT_TRUE(grid.twoTap().armed());
+  // Three cells all fit: there is no page to go to, so the swipe moves nothing.
   swipe(grid, input, MappedInputManager::SwipeDir::Up);
-  EXPECT_EQ(grid.selected(), 1);
+  EXPECT_EQ(grid.selected(), 0);
   EXPECT_EQ(grid.activations, 0);
   EXPECT_FALSE(grid.twoTap().armed());
   swipe(grid, input, MappedInputManager::SwipeDir::Down);
@@ -222,6 +225,21 @@ TEST(GridRows, RoutedSwipeMovesOneRowAndClearsArmWhileTapsStillActivate) {
   EXPECT_EQ(grid.activations, 0);
   tap(grid, input, 0);
   EXPECT_EQ(grid.activations, 1);
+}
+
+TEST(GridRows, ASwipeMovesAWholeScreenOfRows) {
+  GfxRenderer renderer;
+  MappedInputManager input;
+  Grid grid(renderer, input);
+  grid.cells = 60;
+  grid.onEnter();
+  grid.paint();
+  swipe(grid, input, MappedInputManager::SwipeDir::Up);
+  grid.paint();
+  const int afterOne = grid.selected();
+  EXPECT_GT(afterOne, 2) << "a swipe moved one row, not a screen";
+  swipe(grid, input, MappedInputManager::SwipeDir::Down);
+  EXPECT_EQ(grid.selected(), 0);
 }
 
 TEST(GridRows, ArmingDoesNotSelectOrActivateAndSurvivesRepaints) {
@@ -360,4 +378,36 @@ TEST(GridRows, KeysAndEntryStepOverSectionHeadings) {
   EXPECT_EQ(grid.selected(), 1) << "up walks past it too";
   grid.moveSelection(-1, 0);
   EXPECT_EQ(grid.selected(), 1) << "nothing landable above: the cursor stays";
+}
+
+// The device path: a finger dragged over a list fires mid-contact (MappedInputManager
+// tracks it pass by pass), so no SDK flick arrives. Each drag must move the window a
+// whole screen, as a flick does, not one row.
+TEST(ListRows, ASlowDragMovesAWholeScreenAndClampsAtTheEnds) {
+  GfxRenderer renderer;
+  MappedInputManager input;
+  List list(renderer, input);
+  list.onEnter();
+  list.paint();
+  const int page = list.nav.pageRows();
+  ASSERT_GT(page, 1);
+  ASSERT_LE(page * 3, 100);
+  list.rows = page * 3;
+  list.paint();
+  const auto drag = [&](list_swipe::Scroll scroll) {
+    input.drag = scroll;
+    list.loop();
+    input.drag = list_swipe::Scroll::None;
+    list.paint();
+  };
+  for (const int expected : {page, page * 2, page * 2}) {
+    drag(list_swipe::Scroll::PageDown);
+    EXPECT_EQ(list.nav.top, expected);
+    EXPECT_EQ(list.nav.selected, expected) << "the selection travels with the window";
+  }
+  for (const int expected : {page, 0, 0}) {
+    drag(list_swipe::Scroll::PageUp);
+    EXPECT_EQ(list.nav.top, expected);
+    EXPECT_EQ(list.nav.selected, expected);
+  }
 }
