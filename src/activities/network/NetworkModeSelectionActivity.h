@@ -19,9 +19,11 @@ enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT, NEARBY_R
  */
 class NetworkModeSelectionActivity final : public UiListActivity {
  public:
-  explicit NetworkModeSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : UiListActivity("NetworkModeSelection", renderer, mappedInput) {}
+  // openRow: the mode selected on entry (the one a Back from its screen came from).
+  explicit NetworkModeSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, int openRow = 0)
+      : UiListActivity("NetworkModeSelection", renderer, mappedInput), openRow(openRow) {}
 
+  void onEnter() override;
   void onExit() override;
 
   void onModeSelected(NetworkMode mode);
@@ -36,4 +38,5 @@ class NetworkModeSelectionActivity final : public UiListActivity {
 
  private:
   std::vector<freeink::ui::ListItem> rows;
+  int openRow = 0;
 };

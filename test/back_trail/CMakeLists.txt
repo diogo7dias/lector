@@ -1,0 +1,10 @@
+add_executable(BackTrailTest BackTrailTest.cpp)
+
+target_include_directories(BackTrailTest PRIVATE ${REPO_ROOT}/src)
+
+target_link_libraries(BackTrailTest PRIVATE
+  crosspoint_test_common
+  GTest::gtest_main
+)
+
+gtest_discover_tests(BackTrailTest)

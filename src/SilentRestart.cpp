@@ -17,10 +17,10 @@ namespace {
 static RTC_NOINIT_ATTR uint32_t silentRebootMagic;
 static RTC_NOINIT_ATTR uint32_t silentRebootTarget;
 static RTC_NOINIT_ATTR uint32_t silentRebootPayload;
+static RTC_NOINIT_ATTR uint32_t silentRebootTrail;
 constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
-constexpr uint32_t SILENT_REBOOT_TARGET_SETTINGS = 2;
 constexpr uint32_t SILENT_REBOOT_LIGHT_ON = 1U << 0;
 
 // Breadcrumbs for the heap-defrag reboot, in RTC memory because the card is one of the
@@ -88,18 +88,20 @@ bool deepSleepInProgress = false;
 // SETTINGS.frontlightOn is the saved preference, not the live state: a wake with
 // Restore Light on Wake off leaves the light dark while "was on" stays saved. The
 // live state rides across the reboot so the light comes back exactly as it was.
-static void armSilentReboot(const uint32_t target) {
+static void armSilentReboot(const uint32_t target, const uint32_t trail) {
   silentRebootTarget = target;
+  silentRebootTrail = trail;
   silentRebootPayload = Frontlight.isOn() ? SILENT_REBOOT_LIGHT_ON : 0;
   silentRebootMagic = SILENT_REBOOT_MAGIC;
 }
 
-static void silentRestartTo(const uint32_t target) {
+static void silentRestartTo(const uint32_t target, const uint32_t trail = 0) {
   if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
   armRestartRescue();
   markRestartStage(STAGE_ENTERED);
-  armSilentReboot(target);
-  LOG_DBG("MAIN", "Silent restart (target=%lu)", static_cast<unsigned long>(target));
+  armSilentReboot(target, trail);
+  LOG_DBG("MAIN", "Silent restart (target=%lu trail=%08lx)", static_cast<unsigned long>(target),
+          static_cast<unsigned long>(trail));
   // E-ink retains the previous frame until Home's first paint lands (~2-3s).
   // Without an overlay, users don't see the reboot and fire input through to
   // Home. Select on the default selectorIndex=0 then opens the most-recent
@@ -117,7 +119,9 @@ void silentRestart() { silentRestartTo(SILENT_REBOOT_TARGET_HOME); }
 
 void silentRestartToReader() { silentRestartTo(SILENT_REBOOT_TARGET_READER); }
 
-void silentRestartToSettings() { silentRestartTo(SILENT_REBOOT_TARGET_SETTINGS); }
+void silentRestartBack() { silentRestartToTrail(activityManager.backTrail()); }
+
+void silentRestartToTrail(const uint32_t trail) { silentRestartTo(SILENT_REBOOT_TARGET_HOME, trail); }
 
 void teardownWifiAndRestart(void (*restart)()) {
   if (WiFi.getMode() == WIFI_MODE_NULL) return;  // WiFi never came up: nothing to defrag
@@ -134,11 +138,12 @@ RestartBoot takeRestartBoot() {
   // Bound the target range too: RTC_NOINIT memory is uninitialized on cold boot.
   boot.silent = silentRebootMagic == SILENT_REBOOT_MAGIC;
   if (boot.silent && silentRebootTarget == SILENT_REBOOT_TARGET_READER) boot.target = RestartTarget::Reader;
-  if (boot.silent && silentRebootTarget == SILENT_REBOOT_TARGET_SETTINGS) boot.target = RestartTarget::Settings;
+  if (boot.silent && silentRebootTarget == SILENT_REBOOT_TARGET_HOME) boot.backTrail = silentRebootTrail;
   boot.lightOn = boot.silent && (silentRebootPayload & SILENT_REBOOT_LIGHT_ON) != 0;
   silentRebootMagic = 0;
   silentRebootTarget = 0;
   silentRebootPayload = 0;
+  silentRebootTrail = 0;
   if (boot.silent) {
     armRestartRescue();
     restartTrail = RESTART_TRAIL_MAGIC | STAGE_BOOT_SILENT;

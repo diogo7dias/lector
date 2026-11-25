@@ -26,9 +26,8 @@ enum class Target : uint8_t {
   CrashReport,
   // Silent reboot that asked for the reader and has a book to open.
   SilentReader,
-  // Silent reboot out of Settings > Wi-Fi networks: back to Settings.
-  SilentSettings,
-  // Silent reboot, anything else. Deliberately NOT falling through to the sleep-wake
+  // Silent reboot, anything else: where Back would have landed (SilentRestart.h). Deliberately NOT falling through to
+  // the sleep-wake
   // "resume reader" logic below, which fires on a stale openEpubPath + lastSleepFromReader
   // left by a prior session.
   SilentHome,
@@ -125,10 +124,6 @@ inline constexpr WakePlan plan(const WakeInputs& in) {
   }
   if (in.silentReboot && in.silentTarget == RestartTarget::Reader && !in.openEpubPathEmpty) {
     out.target = Target::SilentReader;
-    return out;
-  }
-  if (in.silentReboot && in.silentTarget == RestartTarget::Settings) {
-    out.target = Target::SilentSettings;
     return out;
   }
   if (in.silentReboot) {

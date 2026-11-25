@@ -13,8 +13,12 @@
  */
 class OpdsServerListActivity final : public UiListActivity {
  public:
-  explicit OpdsServerListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool pickerMode = false)
-      : UiListActivity(activity_name::kOpdsServerList, renderer, mappedInput), pickerMode(pickerMode) {}
+  // openRow: the row selected on entry (the server a Back from its browser came from).
+  explicit OpdsServerListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool pickerMode = false,
+                                  int openRow = 0)
+      : UiListActivity(activity_name::kOpdsServerList, renderer, mappedInput),
+        pickerMode(pickerMode),
+        openRow(openRow) {}
 
   void onEnter() override;
   void onExit() override;
@@ -28,6 +32,7 @@ class OpdsServerListActivity final : public UiListActivity {
 
  private:
   bool pickerMode = false;
+  int openRow = 0;
 
   int getItemCount() const;
 

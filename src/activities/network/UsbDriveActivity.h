@@ -28,7 +28,10 @@ class UsbDriveActivity final : public UiStatusActivity {
 
   bool canLeave() const { return phase == Phase::Waiting || phase == Phase::StartFailed; }
   void enterPhase(Phase next);
-  void restartToHome();
+  // Only a reboot remounts the card. The Home gesture and Power land Home; Back, an eject
+  // and the timeouts land where Back goes, the File Transfer mode list on USB Drive.
+  void restartBack();
+  void restartTo(void (*restart)());
 
   Phase phase = Phase::Preparing;
   bool disconnectRequested = false;

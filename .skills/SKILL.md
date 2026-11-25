@@ -432,11 +432,16 @@ Keep it in the shared navigation code, never per screen:
   child closes by Back (the key, a hint tap or the edge swipe) or with a cancelled result; any
   other close (a chapter picked, a Yes) lands where it always did.
 * A screen that replaces its opener to give a radio its RAM opens with
-  `activityManager.replaceFromOpener(...)`, naming the opener, and leaves with `finish()`.
-  The opener is rebuilt in place of Home. A screen that replaces the open book (KOReader
-  Sync, Nearby) leaves by Back with `goBackToReader()`, which brings the book's menu back too.
-* A new screen that cannot follow the rule (a reboot that frees the Wi-Fi heap) is named in its
-  PR as an exception.
+  `activityManager.replaceFromOpener(...)`, naming the opener and the opener's row that opened
+  it, and leaves with `finish()`. The opener is rebuilt in place of Home, on that row. A screen
+  that replaces the open book (KOReader Sync, Nearby) leaves by Back with `goBackToReader()`,
+  which brings the book's menu back too.
+* A screen that reboots on the way out to give the Wi-Fi or USB heap back reboots with
+  `silentRestartBack()` (`src/SilentRestart.h`): the opener chain and the Home row ride the
+  restart in RTC memory (`src/activities/BackTrail.h`), and boot lands where Back would have.
+  Only the Home key and the Home gesture reboot with plain `silentRestart()`.
+* A tile or row that opens a screen over the current one pushes it (`startActivityForResult`),
+  never `replaceActivity()`: a replace throws away the screen Back should land on.
 
 ### UITheme (The GUI Macro)
 * Rule: All UI rendering must go through the GUI macro (UITheme). 

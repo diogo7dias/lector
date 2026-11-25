@@ -29,6 +29,11 @@ constexpr MenuEntry MENU[] = {
 constexpr int MENU_ITEM_COUNT = sizeof(MENU) / sizeof(MENU[0]);
 }  // namespace
 
+void NetworkModeSelectionActivity::onEnter() {
+  UiListActivity::onEnter();
+  if (openRow > 0) moveSelectionTo(std::min(openRow, MENU_ITEM_COUNT - 1));
+}
+
 void NetworkModeSelectionActivity::onExit() {
   UiListActivity::onExit();
   rows.clear();

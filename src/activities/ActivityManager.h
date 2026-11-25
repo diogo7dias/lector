@@ -31,6 +31,9 @@ enum class HomeMenuItem {
   QUICK_PANEL,
 };
 
+// The Home row for the screen being left, so Home opens with that row selected.
+HomeMenuItem homeRowFor(const std::string& activityName);
+
 /**
  * ActivityManager
  *
@@ -136,10 +139,15 @@ class ActivityManager {
     NearbyChoose,              // Home's File Transfer: the Nearby send / receive choice
     FileTransfer,              // the File Transfer mode list
     OpdsServers,               // the OPDS server picker
+    SettingsWifi,              // Settings > System, on Wi-Fi Networks
+    Reader,                    // the book at `path` (APP_STATE.openEpubPath when empty)
   };
-  void replaceFromOpener(std::unique_ptr<Activity>&& newActivity, Opener opener, std::string path = {});
-  // The screen closing now goes back to Settings (the web server reboots there).
-  bool returnsToSettings() const;
+  // `row` is the opener's row that opened the new screen (the server, the mode).
+  void replaceFromOpener(std::unique_ptr<Activity>&& newActivity, Opener opener, std::string path = {}, int row = 0);
+  // Where Back from the screen on top lands, packed for a silent restart (BackTrail.h), and
+  // the boot side that rebuilds it: a radio screen's reboot comes back there, not Home.
+  uint32_t backTrail() const;
+  void followBackTrail(uint32_t trail);
 
   // The same for the screens that replace the open book (KOReader Sync, Nearby): the reader
   // hands over the menu that launched one (MenuReturn::armed(), empty for a bound key), and
@@ -207,6 +215,7 @@ class ActivityManager {
   struct OpenerEntry {
     Opener opener;
     std::string path;
+    int row = 0;
   };
   std::vector<OpenerEntry> openers;
   MenuReturn readerMenu;

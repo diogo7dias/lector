@@ -68,9 +68,10 @@ class SettingsActivity final : public UiGridActivity {
         openHubCell(hubCell),
         openCategory(category),
         openRow(row) {}
-  // The two places a screen that replaced Settings comes back to (ActivityManager::Opener).
+  // The places a screen that replaced Settings comes back to (ActivityManager::Opener).
   static std::unique_ptr<SettingsActivity> onFileTransferCard(GfxRenderer& renderer, MappedInputManager& mappedInput);
   static std::unique_ptr<SettingsActivity> onShareCredentials(GfxRenderer& renderer, MappedInputManager& mappedInput);
+  static std::unique_ptr<SettingsActivity> onWifiNetworks(GfxRenderer& renderer, MappedInputManager& mappedInput);
   void onEnter() override;
   void onExit() override;
 

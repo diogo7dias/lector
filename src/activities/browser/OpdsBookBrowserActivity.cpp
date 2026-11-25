@@ -77,7 +77,7 @@ void OpdsBookBrowserActivity::onExit() {
   entries.clear();
   navigationHistory.clear();
 
-  teardownWifiAndRestart(openDownloadedBook ? silentRestartToReader : silentRestart);
+  teardownWifiAndRestart(openDownloadedBook ? silentRestartToReader : silentRestartBack);
 }
 
 // The error screen's text for a failed fetch; nullptr when the feed arrived, even empty.

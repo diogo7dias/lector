@@ -58,6 +58,7 @@ void OpdsServerListActivity::onEnter() {
   // Reload from disk in case servers were added/removed by a subactivity or the web UI
   OPDS_STORE.loadFromFile();
   UiListActivity::onEnter();
+  if (openRow > 0) moveSelectionTo(std::min(openRow, getItemCount() - 1));
 }
 
 void OpdsServerListActivity::onExit() {
@@ -91,7 +92,7 @@ void OpdsServerListActivity::activateIndex(const int index) {
       if (server) {
         // Replaces the picker (the browser wants the RAM for Wi-Fi); Back rebuilds it.
         activityManager.replaceFromOpener(makeUniqueNoThrow<OpdsBookBrowserActivity>(renderer, mappedInput, *server),
-                                          ActivityManager::Opener::OpdsServers);
+                                          ActivityManager::Opener::OpdsServers, {}, selectedIndex);
       }
     } else {
       auto editor = makeUniqueNoThrow<OpdsSettingsActivity>(renderer, mappedInput, -1);

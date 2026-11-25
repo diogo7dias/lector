@@ -47,7 +47,7 @@ bool UsbDriveActivity::handleCustomInput() {
         break;
       default:
         // Ejected, cable out, or MSC gone: the card is ours again, but only a reboot remounts it.
-        restartToHome();
+        restartBack();
         return true;
     }
   }
@@ -55,12 +55,12 @@ bool UsbDriveActivity::handleCustomInput() {
   const unsigned long elapsed = millis() - phaseStartedAt;
   switch (phase) {
     case Phase::StartFailed:
-      if (elapsed >= START_FAILURE_TIMEOUT_MS) restartToHome();
+      if (elapsed >= START_FAILURE_TIMEOUT_MS) restartBack();
       break;
     case Phase::Waiting:
       if (elapsed >= HOST_WAIT_TIMEOUT_MS) {
         LOG_INF("USB", "No computer connected; leaving USB Drive");
-        restartToHome();
+        restartBack();
       }
       break;
     case Phase::IoError:
@@ -72,7 +72,7 @@ bool UsbDriveActivity::handleCustomInput() {
         LOG_ERR("USB", "USB Drive I/O error; disconnecting the computer");
         if (!Storage.disconnectUsbDriveHost()) LOG_ERR("USB", "USB Drive disconnect request failed");
       } else if (elapsed >= FORCED_DISCONNECT_TIMEOUT_MS) {
-        restartToHome();
+        restartBack();
       }
       return true;
     case Phase::Connected:
@@ -84,7 +84,7 @@ bool UsbDriveActivity::handleCustomInput() {
         suspendedSince = millis() | 1;
       } else if (millis() - suspendedSince >= HOST_SUSPEND_TIMEOUT_MS) {
         LOG_INF("USB", "USB host suspended; leaving USB Drive");
-        restartToHome();
+        restartBack();
         return true;
       }
       break;
@@ -93,14 +93,14 @@ bool UsbDriveActivity::handleCustomInput() {
   }
 
   if (canLeave() && (mappedInput.wasPressed(MappedInputManager::Button::Power) || mappedInput.wasHomeGesture())) {
-    restartToHome();
+    restartTo(silentRestart);
     return true;
   }
   return false;
 }
 
 void UsbDriveActivity::onBackButton() {
-  if (canLeave()) restartToHome();
+  if (canLeave()) restartBack();
 }
 
 UiStatusActivity::StatusView UsbDriveActivity::statusView() const {
@@ -128,13 +128,15 @@ UiStatusActivity::StatusView UsbDriveActivity::statusView() const {
   return view;
 }
 
-void UsbDriveActivity::restartToHome() {
+void UsbDriveActivity::restartBack() { restartTo(silentRestartBack); }
+
+void UsbDriveActivity::restartTo(void (*restart)()) {
   // Grace before teardown: an eject is noticed from the start/stop callback, before
   // TinyUSB has sent the host its status reply for that command.
   delay(20);
   Storage.endUsbDrive();
   handoffUsbOtgToSerialJtag();
-  silentRestart();
+  restart();
 }
 
 #endif  // FREEINK_CAP_USB_MSC
