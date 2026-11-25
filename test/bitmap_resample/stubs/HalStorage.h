@@ -18,6 +18,7 @@ class HalFile {
     const size_t count = std::min(size, data_.size() - std::min(position_, data_.size()));
     std::memcpy(buffer, data_.data() + position_, count);
     position_ += count;
+    bytesRead += count;
     return static_cast<int>(count);
   }
 
@@ -30,6 +31,8 @@ class HalFile {
   bool seekCur(int64_t offset) { return seek(static_cast<size_t>(static_cast<int64_t>(position_) + offset)); }
 
   explicit operator bool() const { return true; }
+
+  size_t bytesRead = 0;  // bulk reads only: what the row decode costs
 
  private:
   std::vector<uint8_t> data_;
