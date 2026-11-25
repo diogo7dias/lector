@@ -325,7 +325,7 @@ inline const char* ttfRejectText(const TtfReject r) {
 // table of the directory inside the file (which is what a truncated download breaks), the tables
 // the rasterizer reads present and big enough for the glyph count the font claims, and metrics a
 // real font could have. Anything past that (the outlines themselves) is bounded inside the
-// rasterizer by scripts/stb_truetype_patches.
+// rasterizer by the fork's bounded reads (freeink-sdk, stb_truetype.h stbtt_BindData).
 inline TtfReject checkTtfFace(const uint8_t* d, const size_t len, TtfMetrics& out) {
   if (d == nullptr || len < 12) return TtfReject::NotSfnt;
   size_t base = 0;

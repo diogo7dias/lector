@@ -561,11 +561,23 @@ touch, `/state`, `/log`, `/ink/x/y/w/h`); the e2e suites (`sim/tests/<board>/`) 
 with exact checks (activity, frame count, panel ink).
 
 ```bash
-./sim/build-qemu.sh                               # once, and after sim/qemu-patches/ change
+./sim/build-qemu.sh                               # once in the main checkout, and after sim/qemu-patches/ change
 pio run -e x4pro && pio run -e default            # the firmware under test
 (cd sim && npm install && npm run test:e2e)       # all boards; or test:e2e:x4pro|x3|x3uc8279|x4
 python3 sim/soak.py x4pro 10 600                  # 10 boots + 600 s idle; exit 1 on hang/reset/crash report
 ```
+
+Where test output goes. The VPS sweep removes a finished worktree only when every file it holds
+is tracked or sits under a build-output name (`.pio`, `build`, `.e2e`, `node_modules`, `.cache`);
+any other file holds the worktree forever.
+
+- e2e results land in `sim/.e2e/<board>/` (`report.json` per board), so boards can run side by
+  side with no `--output`. Never pass `--output` with another name.
+- Worktrees use the main checkout's `sim/.qemu/build` (`sim/lector_sim.py` and `lv` find it);
+  do not run `build-qemu.sh` in a worktree unless the task changes `sim/qemu-patches/`.
+- Save build and test logs under `build/logs/` (`mkdir -p build/logs`), never in the repo root.
+- Builds leave `freeink-sdk` clean: its fixes are commits in the fork, never patches applied to
+  the submodule work tree.
 
 To prove one change by hand mid-task, any agent: `.claude/skills/verify/bin/lv start x4pro`,
 then `lv doctor`, `lv tap|press|swipe|pinch|reboot`, `lv shot <name>`, `lv stop`. Recipes per

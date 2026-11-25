@@ -11,7 +11,22 @@ from qmp import Qmp
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
-QEMU_DIR = os.environ.get("LECTOR_QEMU_DIR", os.path.join(HERE, ".qemu/build"))
+
+
+def _qemu_dir():
+    """LECTOR_QEMU_DIR, else this checkout's build, else the main checkout's: worktrees share one."""
+    if os.environ.get("LECTOR_QEMU_DIR"):
+        return os.environ["LECTOR_QEMU_DIR"]
+    local = os.path.join(HERE, ".qemu/build")
+    if os.path.isdir(local):
+        return local
+    out = subprocess.run(["git", "-C", REPO, "worktree", "list", "--porcelain"],
+                         capture_output=True, text=True).stdout.splitlines()
+    main = out[0].removeprefix("worktree ") if out else REPO
+    return os.path.join(main, "sim/.qemu/build")
+
+
+QEMU_DIR = _qemu_dir()
 # Books the simulated card starts with.
 SD_BOOKS = [os.path.join(REPO, "test/epubs", f) for f in ("test_kerning_ligature.epub", "test_jpeg_images.epub")]
 IDLE_RAW = 4095
