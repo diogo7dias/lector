@@ -88,7 +88,17 @@ void EpubReaderActivity::openQuoteGrab(const int holdX, const int holdY) {
       });
 }
 
-void EpubReaderActivity::openQuickMenu() {
+void EpubReaderActivity::reopenQuickMenu(void* self, const int row) {
+  auto* reader = static_cast<EpubReaderActivity*>(self);
+  // Painted over the page, like the toolbar: wait for the page to be drawn again.
+  if (!reader->pageOnScreen.load(std::memory_order_acquire) || !reader->section) {
+    reader->reopenOnPage = MenuReturn{&EpubReaderActivity::reopenQuickMenu, self, row};
+    return;
+  }
+  reader->openQuickMenu(row);
+}
+
+void EpubReaderActivity::openQuickMenu(const int row) {
   const auto& functions = CrossPointSettings::POPUP_ITEM_FUNCTIONS;
 
   std::vector<std::string> labels;
@@ -116,9 +126,12 @@ void EpubReaderActivity::openQuickMenu() {
 
   if (quickMenuFunctions.empty()) return;
 
-  quickMenu.showWithDisabled(StrId::STR_QUICK_MENU, labels, disabledRows, 0, true, [this](const int index) {
+  quickMenu.showWithDisabled(StrId::STR_QUICK_MENU, labels, disabledRows, row, true, [this](const int index) {
     if (index < 0 || index >= static_cast<int>(quickMenuFunctions.size())) return;
     const uint8_t function = quickMenuFunctions[index];
+    // Rebuilt rather than reshown on Back from the row's screen: availability may have
+    // changed in there, and the pop-up paints over the page (OptionPopup's own reopen does not).
+    MenuReturn::Scope backToQuickMenu(&EpubReaderActivity::reopenQuickMenu, this, index);
     // The pop-up has already closed itself by the time this runs, so the action draws
     // over a page the pop-up no longer owns.
     if (!runBoundMenuFunction(function)) {

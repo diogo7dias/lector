@@ -30,6 +30,7 @@ void Activity::startActivityForResult(std::unique_ptr<Activity>&& activity, Acti
     return;
   }
   this->resultHandler = std::move(resultHandler);
+  menuReturn = MenuReturn::take();
   activityManager.pushActivity(std::move(activity));
 }
 

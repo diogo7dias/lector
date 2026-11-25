@@ -622,8 +622,11 @@ void FileBrowserActivity::loop() {
               showBookInfo(fullPath);
               break;
             case StrId::STR_NEARBY_SEND_FILE:
-              activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
-                  renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, fullPath));
+              // Replaces the browser (the radio wants its RAM); Back rebuilds it on this file.
+              activityManager.replaceFromOpener(
+                  makeUniqueNoThrow<NearbyFileTransferActivity>(renderer, mappedInput,
+                                                                NearbyFileTransferActivity::Mode::Send, fullPath),
+                  ActivityManager::Opener::FileBrowser, fullPath);
               break;
             case StrId::STR_RENAME:
               promptRename(fullPath);
@@ -768,7 +771,8 @@ void FileBrowserActivity::loop() {
         setResult(std::move(res));
         finish();
       } else {
-        onGoHome();
+        // Back where the browser was opened: Home, or Home's File Transfer choice.
+        finish();
       }
     }
   }

@@ -11,6 +11,7 @@
 #include "ActivityResult.h"
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
+#include "MenuReturn.h"
 #include "RenderLock.h"
 #include "util/ScreenshotInfo.h"
 
@@ -24,6 +25,8 @@ class Activity {
 
   ActivityResultHandler resultHandler;
   ActivityResult result;
+  // The menu Back from the child on top returns to, when a menu row opened it (MenuReturn.h).
+  MenuReturn menuReturn;
 
  public:
   explicit Activity(std::string name, GfxRenderer& renderer, MappedInputManager& mappedInput)

@@ -129,7 +129,7 @@ class NearbyFileTransferActivity final : public UiStatusActivity {
   void closeFiles();
   void finishWithError(const char* message);
   /** Leaves the screen, back to the book when it was opened from one. */
-  void leave();
+  void leave(bool back = false);
 
   /** What the file on its way over is called on screen: a family, or a filename. */
   std::string sendLabel() const;

@@ -238,7 +238,10 @@ bool NearbyPositionSyncActivity::handleCustomInput() {
   return false;
 }
 
-void NearbyPositionSyncActivity::onBackButton() { returnToReader(); }
+void NearbyPositionSyncActivity::onBackButton() {
+  link.end();
+  activityManager.goBackToReader(epubPath);  // the reader menu that opened this, when one did
+}
 
 // Confirm dismisses a failure; successful sync returns automatically.
 void NearbyPositionSyncActivity::onConfirmButton() {

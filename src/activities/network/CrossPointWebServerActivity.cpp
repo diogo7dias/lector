@@ -7,6 +7,7 @@
 #include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <I18n.h>
+#include <Memory.h>
 #include <WiFi.h>
 
 #include <cstddef>
@@ -83,7 +84,7 @@ void CrossPointWebServerActivity::onEnter() {
   startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
                          [this](const ActivityResult& result) {
                            if (result.isCancelled) {
-                             onGoHome();
+                             finish();  // back to the screen File Transfer was opened from
                            } else {
                              onNetworkModeSelected(std::get<NetworkModeResult>(result.data).mode);
                            }
@@ -107,7 +108,8 @@ void CrossPointWebServerActivity::onExit() {
       WiFi.disconnect(false);
     }
     delay(30);
-    silentRestart();
+    // The reboot lands where Back would have: Settings when it opened this screen.
+    activityManager.returnsToSettings() ? silentRestartToSettings() : silentRestart();
   }
 
   LOG_DBG("WEBACT", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
@@ -128,8 +130,9 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
   if (mode == NetworkMode::NEARBY_READER) {
     // Nothing here applies: no WiFi, no web server, no DNS. Hand straight over
     // to the reader-to-reader screen, which owns the radio for its lifetime.
-    activityManager.replaceActivity(
-        std::make_unique<NearbyFileTransferActivity>(renderer, mappedInput, NearbyFileTransferActivity::Mode::Receive));
+    activityManager.replaceFromOpener(
+        makeUniqueNoThrow<NearbyFileTransferActivity>(renderer, mappedInput, NearbyFileTransferActivity::Mode::Receive),
+        ActivityManager::Opener::FileTransfer);
     return;
   }
 
@@ -151,7 +154,7 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
           startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
                                  [this](const ActivityResult& result) {
                                    if (result.isCancelled) {
-                                     onGoHome();
+                                     finish();  // back to the screen File Transfer was opened from
                                    } else {
                                      onNetworkModeSelected(std::get<NetworkModeResult>(result.data).mode);
                                    }
@@ -200,7 +203,7 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
     startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
                            [this](const ActivityResult& result) {
                              if (result.isCancelled) {
-                               onGoHome();
+                               finish();  // back to the screen File Transfer was opened from
                              } else {
                                onNetworkModeSelected(std::get<NetworkModeResult>(result.data).mode);
                              }
@@ -304,7 +307,8 @@ void CrossPointWebServerActivity::startWebServer() {
 
 void CrossPointWebServerActivity::closeTransfer(const char* cause) {
   LOG_INF("WEBACT", "Closing the transfer screen: %s", cause);
-  onGoHome();
+  // Back where it was opened: Home, or Settings (ActivityManager::Opener).
+  finish();
 }
 
 bool CrossPointWebServerActivity::handleCustomInput() {
@@ -319,7 +323,7 @@ bool CrossPointWebServerActivity::handleCustomInput() {
       if (millis() - lastWifiCheck > 2000) {  // Check every 2 seconds
         lastWifiCheck = millis();
         const wl_status_t wifiStatus = WiFi.status();
-        // Driver auto-reconnect handles retries; abandon (via onGoHome) only
+        // Driver auto-reconnect handles retries; abandon (via closeTransfer) only
         // after WIFI_ABANDON_MS, otherwise the activity freezes on a blip.
         bool repaint = false;
         if (wifiStatus != WL_CONNECTED) {

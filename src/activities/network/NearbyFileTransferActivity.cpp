@@ -18,6 +18,7 @@
 #include "SdCardFontSystem.h"
 #include "WifiCredentialStore.h"
 #include "activities/ActivityManager.h"
+#include "activities/home/FileBrowserActivity.h"
 #include "activities/reader/NearbyPositionReceiveActivity.h"
 #include "util/BookCacheUtils.h"
 #include "util/BookFilingNames.h"
@@ -65,9 +66,10 @@ std::string NearbyFileTransferActivity::sendLabel() const {
   return family.empty() ? sourceName : family;
 }
 
-void NearbyFileTransferActivity::leave() {
+void NearbyFileTransferActivity::leave(const bool back) {
   if (!returnToReaderPath.empty()) {
-    activityManager.goToReader(returnToReaderPath);
+    // Back returns to the reader menu that sent the book, when one did.
+    back ? activityManager.goBackToReader(returnToReaderPath) : activityManager.goToReader(returnToReaderPath);
     return;
   }
   activityManager.popActivity();
@@ -908,12 +910,14 @@ void NearbyFileTransferActivity::onChoiceActivated(const int index) {
         LOG_ERR(LOG_TAG, "OOM: position receiver");
         return;
       }
-      activityManager.replaceActivity(std::move(receive));
+      activityManager.replaceFromOpener(std::move(receive), ActivityManager::Opener::NearbyChoose);
     } else if (index == 1) {
-      activityManager.replaceActivity(
-          std::make_unique<NearbyFileTransferActivity>(renderer, mappedInput, Mode::Receive));
+      activityManager.replaceFromOpener(
+          makeUniqueNoThrow<NearbyFileTransferActivity>(renderer, mappedInput, Mode::Receive),
+          ActivityManager::Opener::NearbyChoose);
     } else if (index == 2) {
-      activityManager.goToFileBrowser();
+      activityManager.replaceFromOpener(makeUniqueNoThrow<FileBrowserActivity>(renderer, mappedInput, std::string()),
+                                        ActivityManager::Opener::NearbyChoose);
     }
     return;
   }
@@ -943,7 +947,7 @@ void NearbyFileTransferActivity::onBackButton() {
     session.cancel(millis());
     runSessionActions();
   }
-  leave();
+  leave(/*back=*/true);
 }
 
 // Confirm dismisses startup failures and a completed file whose progress could not be saved.

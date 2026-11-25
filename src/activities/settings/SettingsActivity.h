@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -11,6 +12,9 @@ class SettingsActivity final : public UiGridActivity {
   // group headings. System's rare rows sit one level down, in Maintenance.
   enum class Mode : uint8_t { Hub, Category };
   Mode mode = Mode::Hub;
+  int openHubCell = 0;
+  int openCategory = -1;
+  SettingAction openRow = SettingAction::None;
   int selectedCategory = 0;
   int settingsCount = 0;
 
@@ -56,8 +60,17 @@ class SettingsActivity final : public UiGridActivity {
   std::string hubSummary(int index) const;
 
  public:
-  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : UiGridActivity(activity_name::kSettings, renderer, mappedInput) {}
+  // Opens on the hub's first card. A screen that replaced Settings comes back to the place it
+  // was opened from: a hub card (File Transfer), or a row inside a category.
+  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, int hubCell = 0, int category = -1,
+                            SettingAction row = SettingAction::None)
+      : UiGridActivity(activity_name::kSettings, renderer, mappedInput),
+        openHubCell(hubCell),
+        openCategory(category),
+        openRow(row) {}
+  // The two places a screen that replaced Settings comes back to (ActivityManager::Opener).
+  static std::unique_ptr<SettingsActivity> onFileTransferCard(GfxRenderer& renderer, MappedInputManager& mappedInput);
+  static std::unique_ptr<SettingsActivity> onShareCredentials(GfxRenderer& renderer, MappedInputManager& mappedInput);
   void onEnter() override;
   void onExit() override;
 

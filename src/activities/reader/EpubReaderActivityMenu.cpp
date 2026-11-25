@@ -25,7 +25,11 @@ void EpubReaderActivity::openReaderMenu() {
   openReaderMenuList();
 }
 
-void EpubReaderActivity::openReaderMenuList() {
+void EpubReaderActivity::reopenReaderMenu(void* self, const int action) {
+  static_cast<EpubReaderActivity*>(self)->openReaderMenuList(static_cast<EpubReaderMenuActivity::MenuAction>(action));
+}
+
+void EpubReaderActivity::openReaderMenuList(const EpubReaderMenuActivity::MenuAction openOn) {
   // Child screens (chapter list, settings) release the section; until the next render
   // rebuilds it, the menu shows the cached position, the same one bookPercent() uses.
   const int currentPage = (section ? section->currentPage : nextPageNumber) + 1;
@@ -79,6 +83,7 @@ void EpubReaderActivity::openReaderMenuList() {
   menuContext.hasQuotes = hasQuotes;
   menuContext.hasReturn = !returnHistory.empty();
   menuContext.hasForward = !returnHistory.forwardEmpty();
+  menuContext.openOn = openOn;
   startActivityForResult(std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, menuContext),
                          [this](const ActivityResult& result) {
                            // Always apply orientation / paragraph-number / paperback changes even if cancelled
@@ -104,6 +109,8 @@ void EpubReaderActivity::openReaderMenuList() {
                              return;
                            }
                            if (!result.isCancelled) {
+                             // A screen this row opens returns to the menu, on this row, on Back.
+                             MenuReturn::Scope backToMenu(&EpubReaderActivity::reopenReaderMenu, this, menu.action);
                              onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
                            }
                          });

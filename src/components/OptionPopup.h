@@ -4,10 +4,12 @@
 #include <algorithm>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
+#include "activities/MenuReturn.h"
 #include "components/OptionPopupGeometry.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -57,6 +59,7 @@ class OptionPopup {
 
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
     if (phase != Phase::Open) return swallowClosingRelease(input);
+    if (std::exchange(popupPaintOwed, false)) requestUpdate();  // see reopen()
 
     // The keys walk off the end of a page by themselves; a touch reader flicks to the next.
     const auto scroll = input.wasListScrollSwipe();
@@ -93,7 +96,7 @@ class OptionPopup {
           if (isDisabled(i)) return true;
           selectedIndex = i;
           phase = Phase::Closed;
-          if (onSelectCallback) onSelectCallback(selectedIndex);
+          choose();
           requestUpdate();
           return true;
         }
@@ -119,7 +122,7 @@ class OptionPopup {
         return true;
       }
       closeOnPress(requestUpdate);
-      if (onSelectCallback) onSelectCallback(selectedIndex);
+      choose();
       return true;
     } else if (input.wasPressed(MappedInputManager::Button::Back)) {
       closeOnPress(requestUpdate);
@@ -130,6 +133,10 @@ class OptionPopup {
 
   bool processRender(GfxRenderer& renderer, const MappedInputManager& input) const {
     if (phase != Phase::Open) return false;
+    if (std::exchange(hostPaintOwed, false)) {
+      popupPaintOwed = true;
+      return false;  // the host paints its own screen this time
+    }
     const auto popupLabels = input.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, popupLabels.btn1, popupLabels.btn2, popupLabels.btn3, popupLabels.btn4);
     render(renderer);
@@ -158,7 +165,25 @@ class OptionPopup {
     selectedIndex = count > 0 ? std::clamp(currentIndex, 0, count - 1) : 0;
     onSelectCallback = std::move(onSelect);
     layoutValid = false;
+    hostPaintOwed = false;
+    popupPaintOwed = false;
     phase = Phase::Open;
+  }
+
+  // Runs the chosen row. A screen the row opens comes back here on Back: the pop-up keeps
+  // its rows, callback and selection after closing, so reopening is only showing it again.
+  void choose() {
+    if (!onSelectCallback) return;
+    MenuReturn::Scope backHere(&OptionPopup::reopen, this, selectedIndex);
+    onSelectCallback(selectedIndex);
+  }
+  static void reopen(void* self, int) {
+    auto* popup = static_cast<OptionPopup*>(self);
+    popup->layoutValid = false;
+    popup->phase = Phase::Open;
+    // The framebuffer still holds the screen that closed, and hosts paint the pop-up over
+    // what is there. The next render paints the host instead; the one after, the pop-up.
+    popup->hostPaintOwed = true;
   }
 
   // The selection decides the page, so the tap targets go with it.
@@ -245,6 +270,12 @@ class OptionPopup {
   bool leftAligned = false;
   int selectedIndex = 0;
   std::function<void(int)> onSelectCallback;
+  // reopen(): the host's own paint is owed before the pop-up's (render task), then the
+  // pop-up's own paint is asked for from the loop. ponytail: plain flags, one set and the
+  // other cleared by each task; a lost race only delays the pop-up to the next repaint.
+  // Not atomics: releaseStorage() swaps the pop-up.
+  mutable bool hostPaintOwed = false;
+  mutable bool popupPaintOwed = false;
   mutable Layout layout;
   mutable bool layoutValid = false;
 };

@@ -132,7 +132,13 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // Opens the reader menu for the current position (short-press Confirm): the toolbar when
   // Reader Menu Style says so and a page is up, else the tabbed list.
   void openReaderMenu();
-  void openReaderMenuList();
+  // openOn: the row to land on, when Back from a row's screen brings the menu back.
+  void openReaderMenuList(
+      EpubReaderMenuActivity::MenuAction openOn = EpubReaderMenuActivity::MenuAction::SECTION_HEADER);
+  // MenuReturn reopens: the list menu on a row, the toolbar on a tile.
+  static void reopenReaderMenu(void* self, int action);
+  static void reopenToolbar(void* self, int tool);
+  static void reopenQuickMenu(void* self, int row);
   // The toolbar sheet (EpubReaderActivityToolbar.cpp).
   bool openToolbar();
   void closeToolbar(bool repaint);
@@ -158,7 +164,7 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   bool boundMenuFunctionAvailable(uint8_t function) const;
   // Opens the Quick Menu over the current page, listing the actions ticked into
   // SETTINGS.popupItems. No-op when nothing is ticked.
-  void openQuickMenu();
+  void openQuickMenu(int row = 0);
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
   // because no KOReader credentials are stored.
   // autoMode: Auto Sync's pull on open (saved networks only, no prompts).
@@ -265,7 +271,10 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // entry points the pop-up and the long-press bindings already use.
   bool runBoundAction(const uint8_t function) override { return runBoundMenuFunction(function); }
   bool appliesNightMode() const override { return true; }
-  void onRevealed() override { scheduleGhostCleanup(); }
+  void onRevealed() override {
+    pageOnScreen.store(false, std::memory_order_release);
+    scheduleGhostCleanup();
+  }
   bool handleForcedRefresh() override {
     {
       RenderLock lock(*this);

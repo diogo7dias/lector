@@ -418,9 +418,13 @@ bool BmpViewerActivity::handleActionMenu() {
       case MenuAction::Favorite:
         doToggleFavorite();
         break;
-      case MenuAction::Delete:
+      case MenuAction::Delete: {
+        // No on the question brings this menu back over the image (MenuReturn).
+        MenuReturn::Scope backToMenu([](void* self, int) { static_cast<BmpViewerActivity*>(self)->openActionMenu(); },
+                                     this, 0);
         promptDelete();
         break;
+      }
       case MenuAction::Pause:
         doTogglePause();
         break;

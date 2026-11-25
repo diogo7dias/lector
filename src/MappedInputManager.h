@@ -34,6 +34,7 @@ class MappedInputManager {
     // pass's edges to decide whether the release it is waiting for has gone by.
     releaseGate.tick(buttonMask(&HalGPIO::isPressed), buttonMask(&HalGPIO::wasReleased));
     listScrollPolled_ = false;
+    backSeen_ = false;
     if (buttonMask(&HalGPIO::wasPressed) != 0) key_focus::keyPressedHere() = true;
     float heldX = 0.0f;
     float heldY = 0.0f;
@@ -106,6 +107,9 @@ class MappedInputManager {
   bool wasMenuGesture() const;
   // Reader surfaces use this to keep a page-back swipe from becoming an exit.
   bool wasBackGesture() const;
+  // A screen read Back this pass, by key, hint tap or edge swipe. ActivityManager asks when
+  // a screen closes, to tell Back from any other way out (MenuReturn).
+  bool backSeenThisPass() const { return backSeen_; }
   // Vertical swipe over the body of a list screen, with the gesture bands excluded.
   // ButtonNavigator turns it into the same movement the nav buttons make.
   list_swipe::Scroll wasListScrollSwipe() const;
@@ -243,6 +247,8 @@ class MappedInputManager {
   // fires, so the pass's answer is latched for every later ask.
   mutable bool listScrollPolled_ = false;
   mutable list_swipe::Scroll listScrollThisPass_ = list_swipe::Scroll::None;
+  // Some query this pass answered yes to a Back press or release (backSeenThisPass).
+  mutable bool backSeen_ = false;
 
   bool powerReleaseSuppressed = false;
   bool powerReleaseInjected = false;
