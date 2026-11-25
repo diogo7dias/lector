@@ -274,12 +274,14 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
         // The touch band tiles the full width, so neighbouring slots share an edge and
         // a per-slot drawRect() painted that edge twice: the dividers between the
         // buttons came out twice as wide as the line along the top. Draw the outline by
-        // hand and let each slot own only its right-hand divider; the leftmost slot draws
-        // the outer left edge, and the rightmost one's divider is the outer right edge.
+        // hand and let each slot own its right-hand divider; a slot also draws its own
+        // left edge whenever it is slot 0 or the slot to its left is unlabelled.
         renderer.fillRect(slot.x, slot.y, slot.width, kLine);                        // top
         renderer.fillRect(slot.x, slot.y + slot.height - kLine, slot.width, kLine);  // bottom
         renderer.fillRect(slot.x + slot.width - kLine, slot.y, kLine, slot.height);  // divider / right edge
-        if (i == 0) renderer.fillRect(slot.x, slot.y, kLine, slot.height);           // outer left edge
+        if (hint_band::drawsLeftEdge(i, painted.labelled)) {
+          renderer.fillRect(slot.x, slot.y, kLine, slot.height);  // outer left edge / edge after gap
+        }
       } else {
         renderer.drawRect(slot.x, slot.y, slot.width, slot.height, kLine, true);
       }

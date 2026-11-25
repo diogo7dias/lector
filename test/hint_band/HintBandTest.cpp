@@ -96,4 +96,28 @@ TEST(HintBandTap, ABoardWithoutTouchAnswersToNoTapAtAll) {
   EXPECT_EQ(hint_band::tappedSlot(band, first.x + 4, first.y + 4, labelled), -1);
 }
 
+TEST(HintBandBorder, SlotDrawsLeftEdgeAtStartOrAfterEmptySlot) {
+  const bool allFull[hint_band::kSlotCount] = {true, true, true, true};
+  EXPECT_TRUE(hint_band::drawsLeftEdge(0, allFull));
+  EXPECT_FALSE(hint_band::drawsLeftEdge(1, allFull));
+  EXPECT_FALSE(hint_band::drawsLeftEdge(2, allFull));
+  EXPECT_FALSE(hint_band::drawsLeftEdge(3, allFull));
+
+  // Scrolling list on touch at rest: Back, empty confirm, Page Up, Page Down.
+  const bool scrollingTouch[hint_band::kSlotCount] = {true, false, true, true};
+  EXPECT_TRUE(hint_band::drawsLeftEdge(0, scrollingTouch));
+  EXPECT_TRUE(hint_band::drawsLeftEdge(2, scrollingTouch));
+  EXPECT_FALSE(hint_band::drawsLeftEdge(3, scrollingTouch));
+
+  // Empty Home on touch: empty, empty, Up, Down.
+  const bool emptyHome[hint_band::kSlotCount] = {false, false, true, true};
+  EXPECT_TRUE(hint_band::drawsLeftEdge(2, emptyHome));
+  EXPECT_FALSE(hint_band::drawsLeftEdge(3, emptyHome));
+
+  // Dictionary definition page 1: Back, empty, empty, Next.
+  const bool dictPage1[hint_band::kSlotCount] = {true, false, false, true};
+  EXPECT_TRUE(hint_band::drawsLeftEdge(0, dictPage1));
+  EXPECT_TRUE(hint_band::drawsLeftEdge(3, dictPage1));
+}
+
 }  // namespace
