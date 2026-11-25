@@ -414,7 +414,6 @@ void setup() {
     APP_STATE.readingBadgesSeeded = true;
     APP_STATE.saveToFile();
   }
-  I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   OPDS_STORE.loadFromFile();
   // Adds the shipped library entry on a card that has never seen it, so it is there
   // to fill credentials into rather than typed out on a five-button keyboard.

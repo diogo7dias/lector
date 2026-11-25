@@ -23,7 +23,6 @@ enum class SettingAction {
   CheckForUpdates,
   InstallOtherFirmware,
   SdFirmwareUpdate,
-  Language,
   DownloadFonts,
   InstalledFonts,
   TextSettings,

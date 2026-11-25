@@ -114,27 +114,13 @@ const fui::KeyboardLayout URL_LAYOUT{URL_ROWS, 5};
 const fui::KeyboardLayout URL_SHIFT_LAYOUT{URL_SHIFT_ROWS, 5};
 const fui::KeyboardLayout URL_SNIPPET_LAYOUT{URL_SNIP_ROWS, 4};
 
-fui::KeyboardLayoutId layoutForLanguage(const Language language) {
-  switch (language) {
-    case Language::FR:
-      return fui::KeyboardLayoutId::AzertyFr;
-    case Language::DE:
-      return fui::KeyboardLayoutId::QwertzDe;
-    case Language::ES:
-      return fui::KeyboardLayoutId::SpanishEs;
-    default:
-      return fui::KeyboardLayoutId::QwertyEn;
-  }
-}
-
 }  // namespace
 
 void KeyboardEntryActivity::onEnter() {
   Activity::onEnter();
   cursorPos = text.length();
-  // URL layers are EN-arranged app tables; everything else follows the UI
-  // language.
-  layoutId = inputType == InputType::Url ? fui::KeyboardLayoutId::QwertyEn : layoutForLanguage(I18N.getLanguage());
+  // English UI only, so every field types on QWERTY (the URL layers are EN-arranged too).
+  layoutId = fui::KeyboardLayoutId::QwertyEn;
   shifted = false;
   keyLayer = KeyLayer::Letters;
   focus = Focus::Keys;
