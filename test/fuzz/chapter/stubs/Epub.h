@@ -8,7 +8,16 @@
 
 class Epub {
  public:
+  static inline void (*midStream)() = nullptr;
   bool readItemContentsToStream(const std::string& href, Print& out, size_t, bool = false) {
+    // "cut.jpg" stands for a stream cut part way (a reset, a pulled card): some bytes land,
+    // midStream sees the card as the cut would leave it, then the stream stops.
+    if (href.size() >= 7 && href.compare(href.size() - 7, 7, "cut.jpg") == 0) {
+      const uint8_t zeros[100] = {};
+      out.write(zeros, sizeof(zeros));
+      if (midStream) midStream();
+      return false;
+    }
     if (href.size() < 4 || href.compare(href.size() - 4, 4, ".png") != 0) return false;
     const uint32_t w = 1 + (href.size() * 97) % 2400;
     const uint32_t h = 1 + (href.size() * 61) % 3200;

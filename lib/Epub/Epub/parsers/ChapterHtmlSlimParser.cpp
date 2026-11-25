@@ -25,6 +25,7 @@
 #include "Epub.h"
 #include "Epub/Page.h"
 #include "Epub/VisibleTextUtils.h"
+#include "Epub/WholeFileWrite.h"
 #include "Epub/converters/ImageDecoderFactory.h"
 #include "Epub/converters/ImageDimsProbe.h"
 #include "Epub/converters/ImageToFramebufferDecoder.h"
@@ -1661,16 +1662,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   self->imagePopupFired = true;
                   self->popupFn(self->popupCtx);
                 }
-                HalFile cachedImageFile;
-                bool extractSuccess = false;
-                if (Storage.openFileForWrite("EHP", cachedImagePath, cachedImageFile)) {
-                  {
-                    // Same 32 KB inflate window as the probe; the popup is already up.
-                    GfxRenderer::FrameBufferLoan extractLoan(self->renderer);
-                    extractSuccess = self->epub->readItemContentsToStream(resolvedPath, cachedImageFile, 4096);
-                  }
-                  cachedImageFile.flush();
-                  cachedImageFile.close();
+                bool extractSuccess;
+                {
+                  // Same 32 KB inflate window as the probe; the popup is already up.
+                  GfxRenderer::FrameBufferLoan extractLoan(self->renderer);
+                  extractSuccess = writeWholeFile("EHP", cachedImagePath, [&](HalFile& out) {
+                    return self->epub->readItemContentsToStream(resolvedPath, out, 4096);
+                  });
                 }
                 if (extractSuccess) {
                   // Retry to absorb SD-card sync latency on slow cards, and to close
