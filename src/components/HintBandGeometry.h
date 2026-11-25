@@ -65,6 +65,13 @@ inline int tappedSlot(const Band& band, const int x, const int y, const bool lab
   return index;
 }
 
+// On a touch band, neighbouring labelled slots share one divider drawn by the left slot's
+// right edge. A slot whose left neighbour is empty (or absent, for slot 0) has no shared
+// divider to lean on, so it must draw its own left border.
+inline constexpr bool drawsLeftEdge(const int index, const bool labelled[kSlotCount]) {
+  return index == 0 || (index > 0 && index < kSlotCount && !labelled[index - 1]);
+}
+
 // What drawButtonHints() last painted. The band is drawn by the theme and tapped through
 // MappedInputManager, which never sees the labels, so the two meet here: one frame's worth
 // of "these slots exist and are pressable". Overwritten on every paint.
