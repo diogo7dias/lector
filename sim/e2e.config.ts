@@ -10,6 +10,9 @@ export default {
   // The UC8279 X3 runs the X3 suite.
   tests: `tests/${board === 'x3uc8279' ? 'x3' : board}/**/*.e2e.ts`,
   workers: 1,
+  // One folder per board, so boards can run side by side. Keep results under .e2e: the VPS
+  // sweep treats .e2e as build output, and any other name holds the worktree forever.
+  output: `.e2e/${board}`,
   timeout: 240_000,
   targets: [{
     engine: web({ viewport: { width: 520, height: 1100 } }),
