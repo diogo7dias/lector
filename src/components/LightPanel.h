@@ -291,9 +291,15 @@ class LightPanel {
     } else {
       renderer.drawRect(rect.x, y, rect.width, rect.height, light_panel::kRule, true);
     }
-    const int textWidth = renderer.getTextWidth(banner::FONT_ID, label);
+    // A label wider than the box (German "Bildschirm regenerieren", French "Reprendre la lecture")
+    // ran past both sides of the frame. It ends in an ellipsis instead: two lines of the UI
+    // face (24 px of ink each, descender included) do not fit the 45 px box without one
+    // line's descender crossing the bottom rule.
+    constexpr int kLabelPad = 4;
+    const std::string shown = renderer.truncatedText(banner::FONT_ID, label, rect.width - 2 * kLabelPad);
+    const int textWidth = renderer.getTextWidth(banner::FONT_ID, shown.c_str());
     const int textY = y + (rect.height - renderer.getLineHeight(banner::FONT_ID)) / 2;
-    renderer.drawText(banner::FONT_ID, rect.x + (rect.width - textWidth) / 2, textY, label, !selected);
+    renderer.drawText(banner::FONT_ID, rect.x + (rect.width - textWidth) / 2, textY, shown.c_str(), !selected);
   }
 
   // Icon, track, number, then the two steppers. The row is named by its icon rather than
