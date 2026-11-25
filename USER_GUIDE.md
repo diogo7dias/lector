@@ -83,8 +83,11 @@ on or Turn off, instead of Toggle.
 
 A swipe up from the bottom edge opens the reader menu inside a book, and goes Home from
 every other screen; the capacitive Home key below the screen goes Home everywhere. A swipe
-up that starts higher on a list scrolls it. On Home a flick up or down over the list pages
-through the books you are reading.
+up that starts higher on a list scrolls it a whole screen at a time: the first row below the
+screen becomes the top row, and a swipe down goes back a screen. A quick flick and a slow
+drag both move one screen per swipe, and the list stops at its first and last screens. A
+list that fits on one screen does not move. The side keys still move one row per press. On
+Home a flick up or down over the list pages through the books you are reading.
 
 Page turns by tap while reading are unchanged. Holding a word on the page for half a second looks it up in
 the dictionary; keep the finger down and drag to select a phrase instead (see **Quotes**).

@@ -15,6 +15,7 @@
 #include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
+#include "util/ListIndex.h"
 #include "util/QrUtils.h"
 
 namespace fui = freeink::ui;
@@ -213,10 +214,24 @@ bool UiStatusActivity::moveChoice(const int delta) {
 bool UiStatusActivity::navigateList() {
   if (listCount_ <= 0) return false;
   bool moved = false;
-  listButtons_.onListNav(listNav_.selected, listCount_, listNav_.pageRows(), [&](const int index) {
-    setListSelection(index);
-    moved = true;
-  });
+  listButtons_.onListNav(
+      listNav_.selected, listCount_,
+      [&](const int index) {
+        setListSelection(index);
+        moved = true;
+      },
+      [&](const int direction) {
+        // Same lock as UiListActivity::scrollPage: the render task writes top mid-build.
+        {
+          RenderLock lock(*this);
+          const auto window =
+              list_index::paged(listNav_.top, listNav_.selected, listCount_, listNav_.pageRows(), direction);
+          moved = window.top != listNav_.top;
+          listNav_.top = window.top;
+          listNav_.selected = window.selected;
+        }
+        if (moved) requestUpdate();
+      });
   return moved;
 }
 

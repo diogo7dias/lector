@@ -7,6 +7,7 @@
 #include "components/SettingsGrid.h"
 #include "util/ButtonNavigator.h"
 #include "util/HoldRepeat.h"
+#include "util/ListIndex.h"
 
 namespace {
 using Button = MappedInputManager::Button;
@@ -136,7 +137,15 @@ TEST(RowNavigation, AHoldRampsToCoarseStepsAndStopsAtTheEnd) {
 TEST(RowNavigation, SwipeStillMovesAPage) {
   Navigation n;
   n.input.scroll = list_swipe::Scroll::PageDown;
-  n.nav.onNextContinuous([&] { n.selected = ButtonNavigator::nextPageIndex(n.selected, 40, 10); });
+  int top = 10;
+  n.nav.onListNav(
+      n.selected, n.count, [&](int index) { n.selected = index; },
+      [&](int direction) {
+        const auto window = list_index::paged(top, n.selected, n.count, 10, direction);
+        top = window.top;
+        n.selected = window.selected;
+      });
+  EXPECT_EQ(top, 20);
   EXPECT_EQ(n.selected, 20);
 }
 

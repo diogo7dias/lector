@@ -17,17 +17,17 @@ void ButtonNavigator::onPrevious(const Callback& callback) {
   onPreviousContinuous(callback);
 }
 
-void ButtonNavigator::onListNav(const int& selected, const int count, const int pageRows,
-                                const std::function<void(int)>& moveTo) {
+void ButtonNavigator::onListNav(const int& selected, const int count, const std::function<void(int)>& moveTo,
+                                const std::function<void(int)>& pageBy) {
   onNextRelease([&] { moveTo(nextIndex(selected, count)); });
   onPreviousRelease([&] { moveTo(previousIndex(selected, count)); });
   onNextContinuous([&] {
-    moveTo(swipeDrivenPass() ? nextPageIndex(selected, count, pageRows)
-                             : heldIndex(selected, count, holdRepeatStep(repeats())));
+    if (swipeDrivenPass()) return pageBy(1);
+    moveTo(heldIndex(selected, count, holdRepeatStep(repeats())));
   });
   onPreviousContinuous([&] {
-    moveTo(swipeDrivenPass() ? previousPageIndex(selected, count, pageRows)
-                             : heldIndex(selected, count, -holdRepeatStep(repeats())));
+    if (swipeDrivenPass()) return pageBy(-1);
+    moveTo(heldIndex(selected, count, -holdRepeatStep(repeats())));
   });
 }
 
@@ -151,11 +151,3 @@ int ButtonNavigator::heldIndex(const int currentIndex, const int totalItems, con
 }
 
 bool ButtonNavigator::swipeDrivenPass() { return swipeMatches(getNextButtons()) || swipeMatches(getPreviousButtons()); }
-
-int ButtonNavigator::nextPageIndex(const int currentIndex, const int totalItems, const int itemsPerPage) {
-  return list_index::nextPage(currentIndex, totalItems, itemsPerPage);
-}
-
-int ButtonNavigator::previousPageIndex(const int currentIndex, const int totalItems, const int itemsPerPage) {
-  return list_index::previousPage(currentIndex, totalItems, itemsPerPage);
-}
