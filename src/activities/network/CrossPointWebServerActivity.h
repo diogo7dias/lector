@@ -75,6 +75,8 @@ class CrossPointWebServerActivity final : public UiStatusActivity {
       : UiStatusActivity(activity_name::kCrossPointWebServer, renderer, mappedInput), modeRow(modeRow) {}
   void onEnter() override;
   void onExit() override;
+  // Rebuilt on its mode after a restart from a screen over it (Calibre).
+  bool restartStep(uint8_t& opener, int& row) const override;
   bool skipLoopDelay() override { return webServer && webServer->recentlyActive(); }
   bool preventAutoSleep() override { return webServer && webServer->recentlyActive(); }
 

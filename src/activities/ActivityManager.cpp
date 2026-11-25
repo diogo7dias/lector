@@ -457,8 +457,7 @@ void ActivityManager::goToReader(std::string path, const bool allowFastInitialRe
     } else if (launcher == activity_name::kLibrary) {
       APP_STATE.readerOrigin = CrossPointState::ReaderOrigin::Library;
     } else if (!isReaderActivity() && launcher != activity_name::kBoot && launcher != activity_name::kSleep &&
-               launcher != activity_name::kKOReaderSync && launcher != activity_name::kNearbyFileTransfer &&
-               launcher != activity_name::kSettings) {
+               launcher != activity_name::kKOReaderSync && launcher != activity_name::kNearbyFileTransfer) {
       APP_STATE.readerOrigin = CrossPointState::ReaderOrigin::Home;
     }
   }
@@ -647,8 +646,9 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
       // A bound key in a book: a C3 cannot keep the reader under Settings, so Settings takes
       // its place and Back opens the book again.
       if (isReaderActivity()) {
-        replaceFromOpener(makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput), Opener::Reader,
-                          APP_STATE.openEpubPath);
+        // No path: the reader files the book into /recents as it closes, so the reopen reads
+        // APP_STATE.openEpubPath, which the filing repoints.
+        replaceFromOpener(makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput), Opener::Reader);
         return true;
       }
       currentActivity->startActivityForResult(makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput),

@@ -44,15 +44,21 @@ TEST(BackTrail, DeepChainKeepsTheLastThree) {
   EXPECT_EQ(trail.steps[2].opener, 4);
 }
 
-TEST(BackTrail, RowClampsToFifteen) {
-  const Step chain[] = {{5, 40}};
-  EXPECT_EQ(unpack(pack(chain, 1, 0), kMaxOpener, kMaxHomeRow).steps[0].row, 15);
+// Settings packs its card, category and row into the step: (category + 1) << 8 | row.
+TEST(BackTrail, ASettingsRowSurvives) {
+  const Step chain[] = {{6, (4 << 8) | 26}};
+  EXPECT_EQ(unpack(pack(chain, 1, 6), kMaxOpener, kMaxHomeRow).steps[0].row, (4 << 8) | 26);
+}
+
+TEST(BackTrail, RowClampsToTwelveBits) {
+  const Step chain[] = {{5, 0xFFFF}};
+  EXPECT_EQ(unpack(pack(chain, 1, 0), kMaxOpener, kMaxHomeRow).steps[0].row, 0x0FFF);
 }
 
 // RTC memory holds garbage on a cold boot; the magic word guards it, but a stray word still
 // names nothing past the enums.
 TEST(BackTrail, StrayWordNamesNothingPastTheEnums) {
-  const auto trail = unpack(0xFFFFFFFFu, kMaxOpener, kMaxHomeRow);
+  const auto trail = unpack(~0ULL, kMaxOpener, kMaxHomeRow);
   EXPECT_EQ(trail.count, 0);
   EXPECT_EQ(trail.homeRow, 0);
 }

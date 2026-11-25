@@ -115,6 +115,12 @@ void CrossPointWebServerActivity::onExit() {
   LOG_DBG("WEBACT", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
 }
 
+bool CrossPointWebServerActivity::restartStep(uint8_t& opener, int& row) const {
+  opener = static_cast<uint8_t>(ActivityManager::Opener::FileTransfer);
+  row = static_cast<int>(networkMode);
+  return true;
+}
+
 void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) {
   const char* modeName = "Join Network";
   if (mode == NetworkMode::CONNECT_CALIBRE) {

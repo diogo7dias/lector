@@ -659,6 +659,11 @@ void setup() {
       break;
     case wake_sequence::Target::SilentReader:
       enterReader(APP_STATE.openEpubPath, /*withWakeFlags=*/false);
+      // Back out of KOReader Sync: the menu that launched it comes back over the page. Set after
+      // goToReader(), which forgets it; the book screen itself enters on the next loop pass.
+      if (restartBoot.readerMenu) {
+        activityManager.rememberReaderMenu(MenuReturn{restartBoot.readerMenu, nullptr, restartBoot.readerMenuRow});
+      }
       break;
     case wake_sequence::Target::SilentHome:
       // target == home (or reader with no open book): land on home — don't fall

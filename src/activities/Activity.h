@@ -1,7 +1,9 @@
 #pragma once
+
 #include <Logging.h>
 
 #include <cassert>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -64,6 +66,9 @@ class Activity {
   // A child screen is about to open over this one: drop deferrable work that holds memory.
   // Runs with the RenderLock held.
   virtual void onCovered() {}
+  // A screen a silent restart can rebuild, as the place Back returns to: its
+  // ActivityManager::Opener and the row it is on (ActivityManager::backTrail()).
+  virtual bool restartStep(uint8_t& /*opener*/, int& /*row*/) const { return false; }
 
   // Turn the screen. False means this screen does not own an orientation, and the host
   // persists the setting instead: only the readers lay out against it, so everywhere else

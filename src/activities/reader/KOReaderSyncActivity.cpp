@@ -84,7 +84,10 @@ void KOReaderSyncActivity::applyRemoteProgress(int spineIndex, int page) {
   requestUpdate(true);
 }
 
-void KOReaderSyncActivity::returnToReader() { activityManager.goToReader(epubPath); }
+void KOReaderSyncActivity::returnToReader() {
+  leavingToBook = true;
+  activityManager.goToReader(epubPath);
+}
 
 bool KOReaderSyncActivity::smartSyncEnabled() const {
   return autoMode || KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART;
@@ -104,7 +107,7 @@ void KOReaderSyncActivity::completeAlreadySynced() {
 void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   if (!success) {
     LOG_DBG("KOSync", "WiFi connection failed, exiting");
-    activityManager.goBackToReader(epubPath);
+    onBackButton();
     return;
   }
 
@@ -419,7 +422,7 @@ void KOReaderSyncActivity::onEnter() {
 void KOReaderSyncActivity::onExit() {
   Activity::onExit();
 
-  if (wifiActivated) teardownWifiAndRestart(silentRestartToReader);
+  if (wifiActivated) teardownWifiAndRestart(leavingToBook ? silentRestartToReader : silentRestartBack);
 }
 
 void KOReaderSyncActivity::prepareComparison() {
@@ -510,7 +513,10 @@ bool KOReaderSyncActivity::handleCustomInput() {
 }
 
 // Back (and a Wi-Fi pick given up) returns to the reader menu that opened this, when one did.
-void KOReaderSyncActivity::onBackButton() { activityManager.goBackToReader(epubPath); }
+void KOReaderSyncActivity::onBackButton() {
+  leavingToBook = true;
+  activityManager.goBackToReader(epubPath);
+}
 
 void KOReaderSyncActivity::onConfirmButton() {
   if (state == NO_REMOTE_PROGRESS) {

@@ -71,7 +71,10 @@ class SettingsActivity final : public UiGridActivity {
   // The places a screen that replaced Settings comes back to (ActivityManager::Opener).
   static std::unique_ptr<SettingsActivity> onFileTransferCard(GfxRenderer& renderer, MappedInputManager& mappedInput);
   static std::unique_ptr<SettingsActivity> onShareCredentials(GfxRenderer& renderer, MappedInputManager& mappedInput);
-  static std::unique_ptr<SettingsActivity> onWifiNetworks(GfxRenderer& renderer, MappedInputManager& mappedInput);
+  // Rebuilt after a silent restart on the row restartStep() saved.
+  static std::unique_ptr<SettingsActivity> fromRestartRow(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                                          int row);
+  bool restartStep(uint8_t& opener, int& row) const override;
   void onEnter() override;
   void onExit() override;
 

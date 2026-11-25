@@ -37,20 +37,37 @@ void ActivityManager::replaceFromOpener(std::unique_ptr<Activity>&& newActivity,
   queueReplace(std::move(newActivity));
 }
 
-uint32_t ActivityManager::backTrail() const {
+uint64_t ActivityManager::backTrail(const bool withTop) const {
+  // A screen replacing this one (Home, a book): not a Back, so plain Home, as before.
+  if (pendingAction == PendingAction::Replace) return 0;
+  // Oldest first: the openers were replaced before anything now on the stack was pushed.
   back_trail::Step steps[back_trail::kMaxOpeners];
-  const int count = static_cast<int>(std::min<size_t>(openers.size(), back_trail::kMaxOpeners));
-  for (int i = 0; i < count; ++i) {
-    const OpenerEntry& entry = openers[openers.size() - count + i];
-    steps[i] = {static_cast<uint8_t>(entry.opener), static_cast<uint8_t>(std::max(entry.row, 0))};
+  int count = 0;
+  const auto add = [&](const uint8_t opener, const int row) {
+    if (count == back_trail::kMaxOpeners) std::move(steps + 1, steps + count--, steps);
+    steps[count++] = {opener, static_cast<uint16_t>(std::max(row, 0))};
+  };
+  for (const OpenerEntry& entry : openers) add(static_cast<uint8_t>(entry.opener), entry.row);
+  // The Home row for when the chain runs out: the first screen over Home that names one.
+  HomeMenuItem home = HomeMenuItem::NONE;
+  const auto visit = [&](const Activity& screen) {
+    uint8_t opener = 0;
+    int row = 0;
+    if (screen.restartStep(opener, row)) add(opener, row);
+    if (home == HomeMenuItem::NONE) home = homeRowFor(screen.name);
+  };
+  for (const auto& screen : stackActivities) visit(*screen);
+  if (currentActivity) {
+    if (withTop) {
+      visit(*currentActivity);
+    } else if (home == HomeMenuItem::NONE) {
+      home = homeRowFor(currentActivity->name);
+    }
   }
-  const HomeMenuItem home = currentActivity ? homeRowFor(currentActivity->name) : HomeMenuItem::NONE;
   return back_trail::pack(steps, count, static_cast<uint8_t>(home));
 }
 
-// The browser's folder does not fit the word: it comes back on the card's root. No restart
-// screen has the browser in its chain today (only Nearby, which never reboots).
-void ActivityManager::followBackTrail(const uint32_t word) {
+void ActivityManager::followBackTrail(const uint64_t word) {
   const back_trail::Trail trail =
       back_trail::unpack(word, static_cast<uint8_t>(Opener::Reader), static_cast<uint8_t>(HomeMenuItem::QUICK_PANEL));
   openers.clear();
@@ -70,6 +87,7 @@ bool ActivityManager::reopenOpener() {
   if (openers.empty()) return false;
   OpenerEntry entry = std::move(openers.back());
   openers.pop_back();
+  LOG_INF("ACT", "Rebuilding opener %d on row %d", static_cast<int>(entry.opener), entry.row);
   std::unique_ptr<Activity> screen;
   switch (entry.opener) {
     case Opener::SettingsFileTransfer:
@@ -78,8 +96,8 @@ bool ActivityManager::reopenOpener() {
     case Opener::SettingsShareCredentials:
       screen = SettingsActivity::onShareCredentials(renderer, mappedInput);
       break;
-    case Opener::SettingsWifi:
-      screen = SettingsActivity::onWifiNetworks(renderer, mappedInput);
+    case Opener::Settings:
+      screen = SettingsActivity::fromRestartRow(renderer, mappedInput, entry.row);
       break;
     case Opener::FileBrowser:
       screen = makeUniqueNoThrow<FileBrowserActivity>(renderer, mappedInput, std::move(entry.path));

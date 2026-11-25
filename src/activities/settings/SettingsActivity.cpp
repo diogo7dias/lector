@@ -32,7 +32,6 @@
 #include "TextSettingsActivity.h"
 #include "TimezonePickerActivity.h"
 #include "WifiCredentialStore.h"
-#include "activities/BackTrail.h"
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/network/NearbyFileTransferActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -404,9 +403,26 @@ std::unique_ptr<SettingsActivity> SettingsActivity::onShareCredentials(GfxRender
   return makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, kSystem, kSystem, SettingAction::ShareCredentials);
 }
 
-std::unique_ptr<SettingsActivity> SettingsActivity::onWifiNetworks(GfxRenderer& renderer,
-                                                                   MappedInputManager& mappedInput) {
-  return makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, kSystem, kSystem, SettingAction::Network);
+// A restart step (ActivityManager::backTrail): (category + 1) << 8, then the row's action in a
+// category or the card on the hub.
+bool SettingsActivity::restartStep(uint8_t& opener, int& row) const {
+  opener = static_cast<uint8_t>(ActivityManager::Opener::Settings);
+  const int index = selected();
+  if (mode == Mode::Hub || index < 0 || index >= settingsCount) {
+    row = mode == Mode::Hub ? index : (selectedCategory + 1) << 8;
+    return true;
+  }
+  row = (selectedCategory + 1) << 8 | (static_cast<int>(settings[index].action) & 0xFF);
+  return true;
+}
+
+std::unique_ptr<SettingsActivity> SettingsActivity::fromRestartRow(GfxRenderer& renderer,
+                                                                   MappedInputManager& mappedInput, const int row) {
+  const int category = (row >> 8) - 1;
+  if (category < 0 || category > kMaintenance)
+    return makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, row & 0xFF);
+  return makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, category == kMaintenance ? kSystem : category,
+                                             category, static_cast<SettingAction>(row & 0xFF));
 }
 
 void SettingsActivity::onEnter() {
@@ -727,10 +743,7 @@ void SettingsActivity::toggleCurrentSetting() {
               // brings the driver up, so release its heap here. Runs from the loop
               // task with no lock held; the restart popup paints to the panel.
               RenderLock lock;
-              teardownWifiAndRestart(+[] {
-                const back_trail::Step wifiRow{static_cast<uint8_t>(ActivityManager::Opener::SettingsWifi), 0};
-                silentRestartToTrail(back_trail::pack(&wifiRow, 1, 0));
-              });
+              teardownWifiAndRestart(+[] { silentRestartToTrail(activityManager.backTrail(/*withTop=*/true)); });
             });
         break;
       case SettingAction::ShuffleWallpapers: {

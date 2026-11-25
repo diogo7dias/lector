@@ -155,6 +155,10 @@ test('Back from the Quick Panel Settings button lands on the panel again', async
   );
   await press('Back');
   await since(from, '[PANEL] Close');
-
-  // Home, on its Settings row, is where the next file starts.
+  // Home answers again, still on its Settings row.
+  from = (await log()).length;
+  await press('Confirm');
+  await since(from, 'Entering activity: Settings');
+  await press('Back');
+  await expect(activity).toHaveText('Home', { timeout: 30_000 });
 });
