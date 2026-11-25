@@ -1008,10 +1008,10 @@ bool ChapterHtmlSlimParser::measureTableColumns(HalFile& file, TableColumnMeasur
 
   size_t scanned = 0;
   while (scanned < MAX_SCAN_BYTES) {
-    const size_t count = file.read(buffer, sizeof(buffer));
-    if (count == 0) return false;
+    const int count = file.read(buffer, sizeof(buffer));
+    if (count <= 0) return false;
     scanned += count;
-    for (size_t i = 0; i < count; ++i) {
+    for (int i = 0; i < count; ++i) {
       const char c = buffer[i];
       if (inTag) {
         if (quote) {
@@ -2881,9 +2881,8 @@ ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
     carryLen_ = 0;
   }
 
-  const size_t read = parseFile_.read(chars + len, PARSE_BUFFER_SIZE - len);
-
-  if (read == 0 && parseFile_.available() > 0) {
+  const int read = parseFile_.read(chars + len, PARSE_BUFFER_SIZE - len);
+  if (read < 0 || (!read && parseFile_.available() > 0)) {
     LOG_ERR("EHP", "File read error");
     return ParseStatus::Error;
   }
