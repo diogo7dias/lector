@@ -292,24 +292,14 @@ class LightPanel {
       renderer.drawRect(rect.x, y, rect.width, rect.height, light_panel::kRule, true);
     }
     // A label wider than the box (German "Bildschirm regenerieren", French "Reprendre la lecture")
-    // ran past both sides of the frame. It wraps to a second line instead, the pair
-    // centred on the glyph height; a third line's worth ends in an ellipsis.
+    // ran past both sides of the frame. It ends in an ellipsis instead: two lines of the UI
+    // face (24 px of ink each, descender included) do not fit the 45 px box without one
+    // line's descender crossing the bottom rule.
     constexpr int kLabelPad = 4;
-    const auto lines = renderer.wrappedText(banner::FONT_ID, label, rect.width - 2 * kLabelPad, 2);
-    if (lines.size() < 2) {
-      if (lines.empty()) return;
-      const int textWidth = renderer.getTextWidth(banner::FONT_ID, lines[0].c_str());
-      const int textY = y + (rect.height - renderer.getLineHeight(banner::FONT_ID)) / 2;
-      renderer.drawText(banner::FONT_ID, rect.x + (rect.width - textWidth) / 2, textY, lines[0].c_str(), !selected);
-      return;
-    }
-    const int rowHeight = renderer.getTextHeight(banner::FONT_ID);
-    int lineY = y + (rect.height - 2 * rowHeight) / 2;
-    for (const auto& line : lines) {
-      const int lineWidth = renderer.getTextWidth(banner::FONT_ID, line.c_str());
-      renderer.drawText(banner::FONT_ID, rect.x + (rect.width - lineWidth) / 2, lineY, line.c_str(), !selected);
-      lineY += rowHeight;
-    }
+    const std::string shown = renderer.truncatedText(banner::FONT_ID, label, rect.width - 2 * kLabelPad);
+    const int textWidth = renderer.getTextWidth(banner::FONT_ID, shown.c_str());
+    const int textY = y + (rect.height - renderer.getLineHeight(banner::FONT_ID)) / 2;
+    renderer.drawText(banner::FONT_ID, rect.x + (rect.width - textWidth) / 2, textY, shown.c_str(), !selected);
   }
 
   // Icon, track, number, then the two steppers. The row is named by its icon rather than
