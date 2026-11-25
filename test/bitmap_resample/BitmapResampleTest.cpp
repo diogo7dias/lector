@@ -116,3 +116,55 @@ TEST(BitmapResample, FlatGrayStaysFlatOnAverage) {
     for (int x = 0; x < bmp.getWidth(); x++) ASSERT_EQ(level(r, x), 3);
   }
 }
+
+// A grey sleep face draws the picture three times. With the row cache the second and
+// third passes replay the first: the same rows, and not one more byte read from the file.
+TEST(BitmapRowCache, ReplaysTheFirstPassWithoutReadingTheFile) {
+  const auto gray = [](int x, int y) { return static_cast<uint8_t>((x * 5 + y * 11) & 0xFF); };
+  HalFile plainFile(makeBmp24(241, 300, gray));
+  Bitmap plain(plainFile, true);
+  ASSERT_EQ(plain.parseHeaders(), BmpReaderError::Ok);
+  const auto expected = readAll(plain);
+
+  HalFile file(makeBmp24(241, 300, gray));
+  Bitmap bmp(file, true);
+  ASSERT_EQ(bmp.parseHeaders(), BmpReaderError::Ok);
+  ASSERT_TRUE(bmp.cacheRows());
+  EXPECT_EQ(readAll(bmp), expected);
+  const size_t afterFirst = file.bytesRead;
+  for (int pass = 0; pass < 2; pass++) {
+    ASSERT_EQ(bmp.rewindToData(), BmpReaderError::Ok);
+    EXPECT_EQ(readAll(bmp), expected) << "pass " << pass;
+  }
+  EXPECT_EQ(file.bytesRead, afterFirst);
+}
+
+// A first pass that stopped early (a top-down image taller than the screen) leaves the
+// cache short; the rewind then decodes from the file exactly as without a cache.
+TEST(BitmapRowCache, ShortFirstPassDecodesAgain) {
+  const auto gray = [](int x, int y) { return static_cast<uint8_t>((x * 3 + y * 7) & 0xFF); };
+  HalFile plainFile(makeBmp24(120, 90, gray));
+  Bitmap plain(plainFile, true);
+  ASSERT_EQ(plain.parseHeaders(), BmpReaderError::Ok);
+  const auto expected = readAll(plain);
+
+  HalFile file(makeBmp24(120, 90, gray));
+  Bitmap bmp(file, true);
+  ASSERT_EQ(bmp.parseHeaders(), BmpReaderError::Ok);
+  ASSERT_TRUE(bmp.cacheRows());
+  std::vector<uint8_t> packed((bmp.getWidth() + 3) / 4), row(bmp.getRowBytes());
+  for (int y = 0; y < 40; y++) ASSERT_EQ(bmp.readNextRow(packed.data(), row.data()), BmpReaderError::Ok);
+  ASSERT_EQ(bmp.rewindToData(), BmpReaderError::Ok);
+  const size_t before = file.bytesRead;
+  EXPECT_EQ(readAll(bmp), expected);
+  EXPECT_GT(file.bytesRead, before);
+}
+
+TEST(BitmapRowCache, RefusedOnceRowsWereRead) {
+  HalFile file(makeBmp24(16, 16, [](int, int) { return 128; }));
+  Bitmap bmp(file, true);
+  ASSERT_EQ(bmp.parseHeaders(), BmpReaderError::Ok);
+  std::vector<uint8_t> packed(4), row(bmp.getRowBytes());
+  ASSERT_EQ(bmp.readNextRow(packed.data(), row.data()), BmpReaderError::Ok);
+  EXPECT_FALSE(bmp.cacheRows());
+}

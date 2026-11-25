@@ -242,6 +242,15 @@ void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Fa
   const bool hasGreyscale = (bitmap.hasGreyscale() || overlay) && display.profile().panelHasGray &&
                             SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
 
+  // The face's whole panel recipe in one value: which waveform the base runs at, how many
+  // submissions this costs, whether the two grayscale planes follow. Replaces the literal
+  // that used to sit in each branch below. sourceHasGrayscale is what the image offers AND
+  // the cover filter allows, which is the same question hasGreyscale answered before.
+  const sleep_face::PaintPlan plan = sleep_face::planFor(face, hasGreyscale, display.profile());
+  // The planes draw the picture twice more; on the X4 Pro the rows decoded for the base
+  // are kept in PSRAM and replayed. Elsewhere, or out of PSRAM, each pass decodes again.
+  if (plan.grayscalePlanes) bitmap.cacheRows();
+
   renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
 
   if (SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
@@ -258,12 +267,6 @@ void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Fa
   // panel. The gap between "decode" and "face" is the wallpaper's own refresh cost.
   SleepTiming::mark("decode");
 
-  // The face's whole panel recipe in one value: which waveform the base runs at, how many
-  // submissions this costs, whether the two grayscale planes follow. Replaces the literal
-  // that used to sit in each branch below. sourceHasGrayscale is what the image offers AND
-  // the cover filter allows, which is the same question hasGreyscale answered before.
-  const sleep_face::PaintPlan plan = sleep_face::planFor(face, hasGreyscale, display.profile());
-
   if (plan.grayscalePlanes) {
     // OEM grayscale pipeline base. Must stay HALF: the gray nudge LUT is
     // calibrated against the pixel state the single-pass HALF waveform leaves
@@ -273,13 +276,15 @@ void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Fa
     // Settled for the X4 Pro on hardware: FULL collapsed the wallpaper's mid tones to a
     // single grey, so every device takes HALF (sleepGrayscaleBaseRefresh).
     renderer.displayGrayscaleBase(plan.base);
+    SleepTiming::mark("base");
   } else {
     renderer.displayBuffer(plan.base);
   }
 
   if (plan.grayscalePlanes) {
-    // The rewind is a file seek on the bitmap; it used to run before the plane's clear and
-    // mode switch, which touch only the framebuffer, so the order between them is moot.
+    // The rewind is a file seek on the bitmap (a cache replay when cacheRows held); it used
+    // to run before the plane's clear and mode switch, which touch only the framebuffer, so
+    // the order between them is moot.
     sleep_face::paintGrayscalePlanes(
         renderer,
         [&] {
@@ -288,7 +293,7 @@ void SleepActivity::renderBitmapSleepScreen(Bitmap& bitmap, const sleep_face::Fa
           drawSleepInfoOverlay(renderer);
           return !overlay || overlay->draw(renderer);
         },
-        [](GfxRenderer::RenderMode) {});
+        [](GfxRenderer::RenderMode) { SleepTiming::mark("plane"); });
   }
 }
 

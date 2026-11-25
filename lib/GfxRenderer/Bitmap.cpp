@@ -7,6 +7,10 @@
 #include <cstdlib>
 #include <cstring>
 
+#if defined(BOARD_HAS_PSRAM) && defined(ARDUINO)
+#include <esp_heap_caps.h>
+#endif
+
 // ============================================================================
 // IMAGE PROCESSING OPTIONS
 // ============================================================================
@@ -393,9 +397,38 @@ bool Bitmap::analyzeAdaptiveToneMapping() {
 }
 
 // packed 2bpp output, 0 = black, 1 = dark gray, 2 = light gray, 3 = white
+bool Bitmap::cacheRows() {
+#if (defined(BOARD_HAS_PSRAM) && defined(ARDUINO)) || defined(BITMAP_ROW_CACHE_HOST)
+  // A screen-sized 2-bit picture is 96 KB; anything far past that is not a sleep face.
+  constexpr size_t kMaxBytes = 1u << 20;
+  const size_t bytes = static_cast<size_t>((outputWidth + 3) / 4) * static_cast<size_t>(outputHeight);
+  if (outputRowsRead != 0 || bytes == 0 || bytes > kMaxBytes) return false;
+#if defined(ARDUINO)
+  rowCache.reset(static_cast<uint8_t*>(heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)));
+#else
+  rowCache.reset(static_cast<uint8_t*>(malloc(bytes)));
+#endif
+  if (!rowCache) {
+    LOG_ERR("BMP", "No PSRAM for the row cache (%u bytes), decoding each pass", static_cast<unsigned>(bytes));
+    return false;
+  }
+  cachedRows = 0;
+  replaying = false;
+  return true;
+#else
+  return false;
+#endif
+}
+
 BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
   // Note: rowBuffer should be pre-allocated by the caller to size 'rowBytes'
   if (outputRowsRead >= outputHeight) return BmpReaderError::ShortReadRow;
+  const size_t outBytes = static_cast<size_t>((outputWidth + 3) / 4);
+  if (replaying) {
+    std::memcpy(data, rowCache.get() + static_cast<size_t>(outputRowsRead) * outBytes, outBytes);
+    ++outputRowsRead;
+    return BmpReaderError::Ok;
+  }
   if (resampleSums) {
     const BmpReaderError result = readAveragedRow(rowBuffer);
     if (result != BmpReaderError::Ok) return result;
@@ -441,10 +474,23 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
   // Flush remaining bits if width is not a multiple of 4
   if (bitShift != 6) *outPtr = currentOutByte;
 
+  // Rows append in order only, so a pass that restarted mid-way never overwrites them.
+  if (rowCache && outputRowsRead - 1 == cachedRows) {
+    std::memcpy(rowCache.get() + static_cast<size_t>(cachedRows) * outBytes, data, outBytes);
+    ++cachedRows;
+  }
   return BmpReaderError::Ok;
 }
 
 BmpReaderError Bitmap::rewindToData() const {
+  // A complete first pass is in the cache: replay it, no file read, no dithering. A pass
+  // that stopped early (a top-down image taller than the screen) re-decodes as before.
+  if (rowCache && cachedRows == outputHeight) {
+    replaying = true;
+    outputRowsRead = 0;
+    return BmpReaderError::Ok;
+  }
+  replaying = false;
   if (!file.seek(bfOffBits)) {
     return BmpReaderError::SeekPixelDataFailed;
   }

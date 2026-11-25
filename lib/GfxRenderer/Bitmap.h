@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 
 #include "BitmapHelpers.h"
@@ -44,6 +45,11 @@ class Bitmap {
   // pixels aliases the dot pattern into seams and loses thin lines. False (size
   // unchanged) when it does not apply or the resampler cannot be allocated.
   bool ditherToFit(int maxWidth, int maxHeight);
+  // X4 Pro only (PSRAM): keep every decoded row of the first full pass so rewindToData()
+  // replays them instead of reading and dithering the file again; a grey sleep face draws
+  // the same picture three times. Call after parseHeaders()/ditherToFit() and before the
+  // first row. False, and the file path stays as it is, without PSRAM or on OOM.
+  bool cacheRows();
   // The size rows come out at: the source size unless ditherToFit changed it.
   int getWidth() const { return outputWidth; }
   int getHeight() const { return outputHeight; }
@@ -86,4 +92,11 @@ class Bitmap {
   std::unique_ptr<uint32_t[]> resampleSums;
   mutable int sourceRowsRead = 0;
   mutable int outputRowsRead = 0;
+
+  struct FreeBytes {
+    void operator()(uint8_t* p) const { free(p); }  // heap_caps_free is free() on ESP-IDF
+  };
+  std::unique_ptr<uint8_t[], FreeBytes> rowCache;
+  mutable int cachedRows = 0;
+  mutable bool replaying = false;
 };

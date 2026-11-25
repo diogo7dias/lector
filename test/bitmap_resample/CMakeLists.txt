@@ -14,4 +14,7 @@ target_link_libraries(BitmapResampleTest PRIVATE
   GTest::gtest_main
 )
 
+# The row cache is X4 Pro only (PSRAM); on the host it allocates with malloc.
+target_compile_definitions(BitmapResampleTest PRIVATE BITMAP_ROW_CACHE_HOST=1)
+
 gtest_discover_tests(BitmapResampleTest)
