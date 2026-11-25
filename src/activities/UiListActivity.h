@@ -117,7 +117,7 @@ class UiListActivity : public Activity, protected UiAppHost {
   // and which page is showing (beside the battery, unless the screen put a count there).
   ListChrome paintedChrome() const;
   mutable char pageText[12] = {};
-  // Moves the viewport one page (direction -1 or 1); the selection stays put.
+  // Moves the viewport one page (direction -1 or 1) and carries the selection with it.
   void scrollPage(int direction);
 
   const bool wantsTouchLongPress;

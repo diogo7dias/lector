@@ -34,6 +34,7 @@
 #include "util/DeferredFavorite.h"
 #include "util/FavoriteImageNames.h"
 #include "util/HoldRepeat.h"
+#include "util/ListIndex.h"
 #include "util/TaskWatchdog.h"
 
 namespace {
@@ -805,21 +806,28 @@ void FileBrowserActivity::loop() {
 
   // Rows per repeat with the shared ramp, clamped at the ends — the library is
   // the longest list on the device and a page-per-repeat hold was unaimable. A
-  // swipe arrives through the same callback and stays a page.
-  buttonNavigator.onNextContinuous([this, listSize, pageItems, followSelection] {
-    selectorIndex = ButtonNavigator::swipeDrivenPass()
-                        ? ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems)
-                        : ButtonNavigator::heldIndex(static_cast<int>(selectorIndex), listSize,
-                                                     holdRepeatStep(buttonNavigator.repeats()));
+  // swipe arrives through the same callback and moves the window a whole screen.
+  const auto pageBy = [this, listSize, pageItems](const int direction) {
+    const auto window =
+        list_index::paged(firstVisibleIdx, static_cast<int>(selectorIndex), listSize, pageItems, direction);
+    if (window.top == firstVisibleIdx) return;
+    scrollOffset = window.top;
+    selectorIndex = window.selected;
+    requestUpdate();
+  };
+
+  buttonNavigator.onNextContinuous([this, listSize, followSelection, pageBy] {
+    if (ButtonNavigator::swipeDrivenPass()) return pageBy(1);
+    selectorIndex = ButtonNavigator::heldIndex(static_cast<int>(selectorIndex), listSize,
+                                               holdRepeatStep(buttonNavigator.repeats()));
     followSelection();
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousContinuous([this, listSize, pageItems, followSelection] {
-    selectorIndex = ButtonNavigator::swipeDrivenPass()
-                        ? ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems)
-                        : ButtonNavigator::heldIndex(static_cast<int>(selectorIndex), listSize,
-                                                     -holdRepeatStep(buttonNavigator.repeats()));
+  buttonNavigator.onPreviousContinuous([this, listSize, followSelection, pageBy] {
+    if (ButtonNavigator::swipeDrivenPass()) return pageBy(-1);
+    selectorIndex = ButtonNavigator::heldIndex(static_cast<int>(selectorIndex), listSize,
+                                               -holdRepeatStep(buttonNavigator.repeats()));
     followSelection();
     requestUpdate();
   });

@@ -10,6 +10,7 @@
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "fontIds.h"
+#include "util/ListIndex.h"
 
 namespace fui = freeink::ui;
 
@@ -110,7 +111,10 @@ void UiListActivity::scrollPage(const int direction) {
     // Same nav-vs-render race as moveSelectionTo: the render task writes
     // pageRows/top mid-build, so read and mutate under one lock.
     RenderLock lock(*this);
-    moved = nav.scrollBy(direction * nav.pageRows(), listCount());
+    const auto window = list_index::paged(nav.top, nav.selected, listCount(), nav.pageRows(), direction);
+    moved = window.top != nav.top;
+    nav.top = window.top;
+    nav.selected = window.selected;
   }
   if (moved) requestUpdate();
 }
@@ -118,11 +122,12 @@ void UiListActivity::scrollPage(const int direction) {
 void UiListActivity::loop() {
   if (handleCustomInput() || handleButtons() || routeListTouch()) return;
 
-  // Swipes scroll the viewport; the selection stays put (it may scroll
-  // off-screen) and button navigation pulls the view back to it.
-  const auto swipe = mappedInput.wasSwipe();
-  if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
-    scrollPage(swipe == MappedInputManager::SwipeDir::Up ? 1 : -1);
+  // A swipe moves the window a whole screen and carries the selection along. Caught
+  // here, before navigateButtons(), so a flick and a slow drag take the same path on
+  // every list, including the screens that override navigateButtons().
+  const auto scroll = mappedInput.wasListScrollSwipe();
+  if (scroll != list_swipe::Scroll::None) {
+    scrollPage(scroll == list_swipe::Scroll::PageDown ? 1 : -1);
     return;
   }
   // The touch band's page pair (ListChrome.cpp) scrolls the way a swipe does. Left and
@@ -141,7 +146,9 @@ void UiListActivity::loop() {
 
 void UiListActivity::navigateButtons() {
   auto& n = nav;
-  buttonNavigator.onListNav(n.selected, listCount(), n.pageRows(), [this](const int index) { moveSelectionTo(index); });
+  buttonNavigator.onListNav(
+      n.selected, listCount(), [this](const int index) { moveSelectionTo(index); },
+      [this](const int direction) { scrollPage(direction); });
 }
 
 void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, const bool hasSubtitle) {

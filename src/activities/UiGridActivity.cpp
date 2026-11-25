@@ -138,8 +138,10 @@ void UiGridActivity::setSelected(const int index) {
 void UiGridActivity::pageBy(const int direction) {
   const int count = cellCount();
   if (count == 0) return;
+  // A grid that fits on one screen has no page to go to: nothing moves, nothing is painted.
   if (!usesWrappedRows()) {
-    moveSelection(direction * gridLayout().visibleRows, 0);
+    const settings_grid::Layout layout = gridLayout();
+    if (layout.totalRows > layout.visibleRows) moveSelection(direction * layout.visibleRows, 0);
     return;
   }
   {
@@ -148,6 +150,7 @@ void UiGridActivity::pageBy(const int direction) {
     // there and stays full at the end of the list. Up: the window starts a page back.
     RenderLock lock(*this);
     const wrapped_list::Window win = keysOnlyWindow();
+    if (win.first == 0 && win.count >= count) return;
     const int step = std::max(1, win.count);
     if (direction > 0) {
       selected_ = std::min(count - 1, win.first + step * 2 - 1);
@@ -378,13 +381,13 @@ void UiGridActivity::loop() {
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenLeft}, [this] { moveSelection(0, -1); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenRight}, [this] { moveSelection(0, 1); });
 
-  // A swipe scrolls the grid by a row.
+  // A swipe moves a whole screen of rows, like the band's page pair.
   switch (mappedInput.wasListScrollSwipe()) {
     case list_swipe::Scroll::PageDown:
-      moveSelection(1, 0);
+      pageBy(1);
       break;
     case list_swipe::Scroll::PageUp:
-      moveSelection(-1, 0);
+      pageBy(-1);
       break;
     default:
       break;
