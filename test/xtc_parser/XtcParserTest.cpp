@@ -4,6 +4,7 @@
 
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <vector>
 
 using namespace xtc;
@@ -122,6 +123,52 @@ TEST(XtcParser, TruncatedFirstPageKeepsContainerDepth) {
   EXPECT_EQ(parser.getBitDepth(), 1);
   uint8_t buffer[64]{};
   EXPECT_EQ(parser.loadPage(0, buffer, sizeof(buffer)), 0u);
+}
+
+// A 2-bit book whose pages are w x h, payload sized the way loadPage reads it.
+std::vector<uint8_t> buildTwoBitBook(uint16_t w, uint16_t h) {
+  auto bytes = buildBook(XTCH_MAGIC, XTH_MAGIC);
+  const uint32_t packed = ((static_cast<uint32_t>(w) * h + 7) / 8) * 2;
+  const size_t pageAt = sizeof(XtcHeader) + sizeof(PageTableEntry);
+  bytes.resize(pageAt + sizeof(XtgPageHeader) + packed, kFill);
+  firstEntry(bytes)->width = w;
+  firstEntry(bytes)->height = h;
+  firstEntry(bytes)->dataSize = static_cast<uint32_t>(sizeof(XtgPageHeader) + packed);
+  auto* page = reinterpret_cast<XtgPageHeader*>(bytes.data() + pageAt);
+  page->width = w;
+  page->height = h;
+  page->dataSize = packed;
+  return bytes;
+}
+
+// XtcReaderActivity::renderPage and Xtc::generateCoverBmp size the page buffer as two packed
+// planes but index it by padded columns ((h + 7) / 8 bytes each). That only fits when the
+// height is a multiple of 8, so any other height must be refused when the book opens.
+TEST(XtcParser, TwoBitPageReadStaysInsideItsBuffer) {
+  for (const uint16_t h : {8, 16, 12, 799}) {
+    Storage.setFile(kPath, buildTwoBitBook(kSide, h));
+    XtcParser parser;
+    const XtcError err = parser.open(kPath);
+    if (h % 8 != 0) {
+      EXPECT_EQ(err, XtcError::CORRUPTED_HEADER) << "height " << h;
+    }
+    if (err != XtcError::OK) continue;
+    const uint16_t w = parser.getWidth();
+    const uint16_t ph = parser.getHeight();
+    const size_t planeSize = (static_cast<size_t>(w) * ph + 7) / 8;
+    auto buffer = std::make_unique<uint8_t[]>(planeSize * 2);
+    ASSERT_EQ(parser.loadPage(0, buffer.get(), planeSize * 2), planeSize * 2) << "height " << h;
+    const size_t colBytes = (ph + 7) / 8;
+    unsigned ink = 0;
+    for (uint16_t y = 0; y < ph; y++) {
+      for (uint16_t x = 0; x < w; x++) {
+        const size_t byteOffset = static_cast<size_t>(w - 1 - x) * colBytes + y / 8;
+        ink += (buffer[byteOffset] >> (7 - y % 8)) & 1;
+        ink += (buffer[planeSize + byteOffset] >> (7 - y % 8)) & 1;
+      }
+    }
+    EXPECT_GT(ink, 0u) << "height " << h;
+  }
 }
 
 }  // namespace
