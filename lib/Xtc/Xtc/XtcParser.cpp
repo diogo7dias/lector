@@ -235,6 +235,12 @@ XtcError XtcParser::readFirstPageInfo() {
       m_bitDepth = pageDepth;
     }
   }
+  // 2-bit pages are read through padded columns ((height + 7) / 8 bytes each) out of a
+  // buffer sized for packed planes, so any other height would read past the buffer.
+  if (m_bitDepth == 2 && m_defaultHeight % 8 != 0) {
+    LOG_ERR("XTC", "2-bit page height %u is not a multiple of 8", m_defaultHeight);
+    return XtcError::CORRUPTED_HEADER;
+  }
   return XtcError::OK;
 }
 
