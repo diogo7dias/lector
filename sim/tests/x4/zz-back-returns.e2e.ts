@@ -6,6 +6,8 @@ import { test, expect } from 'e2e';
 //
 // A screen that pops back logs no "Entering", so the activity label keeps the closed
 // screen's name: a label that changes to the menu or to Settings is the screen that came back.
+// Named to run after z-library.e2e.ts: opening a book files it into /recents, which moves the
+// root's books for every file after it. Starts where z-library leaves Home, on its Library row.
 test('Back from a screen a menu opened lands on that menu, on its row', async ({ app, screen }) => {
   await app.open('/');
   const activity = screen.getByTestId('activity');
@@ -20,10 +22,12 @@ test('Back from a screen a menu opened lands on that menu, on its row', async ({
   const log = async () => (await (await fetch(`${app.baseUrl}/log`)).text()) as string;
   const countOf = (text: string, needle: string) => text.split(needle).length - 1;
 
-  // Home is on Browse Files, as the file before this one leaves it.
+  // By now every book sits in /recents, so the Library opens one: its first book.
+  const opened = (await log()).length;
   await press('Confirm');
-  await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
-  await press('Up'); // the last book in the card's root
+  await expect(activity).toHaveText('Library', { timeout: 30_000 });
+  await expect.poll(async () => (await log()).slice(opened).includes('] row 0: '), { timeout: 60_000 }).toBe(true);
+  await press('Down'); // past the Search all books row
   await press('Confirm');
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
 
@@ -71,14 +75,14 @@ test('Back from a screen a menu opened lands on that menu, on its row', async ({
     menusBefore,
   );
 
-  // The book's Back returns where it was opened, the browser, and the browser's Back goes Home.
+  // The book's Back returns where it was opened, the Library, and the Library's Back goes Home.
   await press('Back');
-  await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
+  await expect(activity).toHaveText('Library', { timeout: 30_000 });
   await press('Back');
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
 
   // Home's Nearby choice > Send a file opens the browser in its place; Back rebuilds the choice.
-  await press('Down', 3); // Nearby Sync, after Library and OPDS Browser
+  await press('Down', 2); // Nearby Sync, after OPDS Browser
   await press('Confirm');
   await expect(activity).toHaveText('NearbyFileTransfer', { timeout: 30_000 });
   await press('Down', 2); // Send, after the two receives
@@ -90,10 +94,9 @@ test('Back from a screen a menu opened lands on that menu, on its row', async ({
   });
   await press('Back');
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
-  await press('Up', 3); // Home came back on Nearby Sync; Browse Files is three rows up
 
   // Settings > File Transfer, then Back out of its mode list: Settings, on the File Transfer card.
-  await press('Down', 5); // Settings, from Browse Files
+  await press('Down', 2); // Settings: Home came back on Nearby Sync, Quick Panel sits between
   await press('Confirm');
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
   await press('Down', 4); // File Transfer, the fifth card
@@ -107,5 +110,4 @@ test('Back from a screen a menu opened lands on that menu, on its row', async ({
   await expect(activity).toHaveText('Settings', { timeout: 60_000 });
   await press('Back');
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
-  await press('Up', 5); // back onto Browse Files for the next file
 });
