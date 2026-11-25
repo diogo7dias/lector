@@ -23,6 +23,12 @@ void Activity::onGoHome(HomeMenuItem item) { activityManager.goHome(item); }
 void Activity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
 
 void Activity::startActivityForResult(std::unique_ptr<Activity>&& activity, ActivityResultHandler resultHandler) {
+  // A null child (makeUniqueNoThrow out of memory) would leave ActivityManager::loop()
+  // spinning on a Push with nothing to push.
+  if (!activity) {
+    LOG_ERR("ACT", "OOM: no activity to open from %s", name.c_str());
+    return;
+  }
   this->resultHandler = std::move(resultHandler);
   activityManager.pushActivity(std::move(activity));
 }
