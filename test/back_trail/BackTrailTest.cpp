@@ -7,7 +7,7 @@ using back_trail::Step;
 using back_trail::unpack;
 
 namespace {
-constexpr uint8_t kMaxOpener = 7;   // ActivityManager::Opener::Reader
+constexpr uint8_t kMaxOpener = 8;   // ActivityManager::Opener::KOReaderSettings
 constexpr uint8_t kMaxHomeRow = 7;  // HomeMenuItem::QUICK_PANEL
 }  // namespace
 
@@ -63,7 +63,7 @@ TEST(BackTrail, StrayWordNamesNothingPastTheEnums) {
   EXPECT_EQ(trail.homeRow, 0);
 }
 
-// The last opener (the book under Settings) must still fit its nibble.
+// The last opener (KOReader Settings) must still fit its nibble.
 TEST(BackTrail, HighestOpenerFitsItsNibble) {
   const Step chain[] = {{kMaxOpener, 0}, {0, 0}};
   const auto trail = unpack(pack(chain, 2, 0), kMaxOpener, kMaxHomeRow);

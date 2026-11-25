@@ -8,6 +8,7 @@
 #include "home/FileBrowserActivity.h"
 #include "network/CrossPointWebServerActivity.h"
 #include "network/NearbyFileTransferActivity.h"
+#include "settings/KOReaderSettingsActivity.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
 
@@ -68,8 +69,8 @@ uint64_t ActivityManager::backTrail(const bool withTop) const {
 }
 
 void ActivityManager::followBackTrail(const uint64_t word) {
-  const back_trail::Trail trail =
-      back_trail::unpack(word, static_cast<uint8_t>(Opener::Reader), static_cast<uint8_t>(HomeMenuItem::QUICK_PANEL));
+  const back_trail::Trail trail = back_trail::unpack(word, static_cast<uint8_t>(Opener::KOReaderSettings),
+                                                     static_cast<uint8_t>(HomeMenuItem::QUICK_PANEL));
   openers.clear();
   for (int i = 0; i < trail.count; ++i) {
     openers.push_back(OpenerEntry{static_cast<Opener>(trail.steps[i].opener), {}, trail.steps[i].row});
@@ -118,6 +119,9 @@ bool ActivityManager::reopenOpener() {
     }
     case Opener::OpdsServers:
       screen = makeUniqueNoThrow<OpdsServerListActivity>(renderer, mappedInput, true, entry.row);
+      break;
+    case Opener::KOReaderSettings:
+      screen = makeUniqueNoThrow<KOReaderSettingsActivity>(renderer, mappedInput, entry.row);
       break;
   }
   if (!screen) {

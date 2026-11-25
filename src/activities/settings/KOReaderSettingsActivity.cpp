@@ -3,11 +3,13 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
 #include <cstring>
 
 #include "KOReaderAuthActivity.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
+#include "activities/ActivityManager.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -20,6 +22,17 @@ const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME,          StrId::STR_PA
                                      StrId::STR_DOCUMENT_MATCHING, StrId::STR_SEND_METADATA, StrId::STR_SYNC_BEHAVIOR,
                                      StrId::STR_AUTO_SYNC,         StrId::STR_SIGN_UP,       StrId::STR_AUTHENTICATE};
 }  // namespace
+
+void KOReaderSettingsActivity::onEnter() {
+  UiListActivity::onEnter();
+  if (openRow > 0) moveSelectionTo(std::min(openRow, MENU_ITEMS - 1));
+}
+
+bool KOReaderSettingsActivity::restartStep(uint8_t& opener, int& row) const {
+  opener = static_cast<uint8_t>(ActivityManager::Opener::KOReaderSettings);
+  row = nav.selected;
+  return true;
+}
 
 void KOReaderSettingsActivity::onExit() {
   UiListActivity::onExit();
