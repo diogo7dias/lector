@@ -129,8 +129,8 @@ bool Txt::generateCoverBmp() const {
     uint8_t buffer[1024];
     success = true;
     while (success && src.available()) {
-      const size_t bytesRead = src.read(buffer, sizeof(buffer));
-      success = dst.write(buffer, bytesRead) == bytesRead;
+      const int bytesRead = src.read(buffer, sizeof(buffer));
+      success = bytesRead > 0 && dst.write(buffer, bytesRead) == static_cast<size_t>(bytesRead);
     }
     dst.close();
   } else {
@@ -189,6 +189,5 @@ bool Txt::readContent(uint8_t* buffer, size_t offset, size_t length) const {
     return false;
   }
 
-  size_t bytesRead = file.read(buffer, length);
-  return bytesRead > 0;
+  return file.read(buffer, length) > 0;
 }
