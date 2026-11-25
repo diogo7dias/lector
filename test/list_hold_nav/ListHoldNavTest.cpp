@@ -79,36 +79,57 @@ TEST(ListHoldNav, ASingleRowListStaysOnItsOnlyRow) {
   EXPECT_EQ(heldIndex(0, 1, -5), 0);
 }
 
-// --- page travel, now that it can be called directly ------------------------
+// --- page travel -------------------------------------------------------------
 //
-// A swipe pages; these rules were unreachable from the host before list_index,
-// so nothing covered them.
+// A swipe moves the window a whole screen and carries the selection with it.
 
-TEST(ListHoldNav, ASwipeMovesAWholePageAndLandsOnItsFirstRow) {
-  EXPECT_EQ(list_index::nextPage(0, 500, 10), 10);
-  EXPECT_EQ(list_index::nextPage(7, 500, 10), 10) << "a page jump lands on a page boundary, not current+page";
-  EXPECT_EQ(list_index::previousPage(25, 500, 10), 10);
+TEST(ListHoldNav, ASwipeMovesTheWindowAWholeScreen) {
+  // 500 rows, 10 on screen: the first row of the next screen becomes the top row.
+  const auto down = list_index::paged(0, 0, 500, 10, 1);
+  EXPECT_EQ(down.top, 10);
+  EXPECT_EQ(down.selected, 10);
+  // From a window the keys left mid-page, it still moves exactly one screen.
+  const auto offPage = list_index::paged(3, 7, 500, 10, 1);
+  EXPECT_EQ(offPage.top, 13);
+  EXPECT_EQ(offPage.selected, 17) << "the selection keeps its place on screen";
+  const auto up = list_index::paged(25, 30, 500, 10, -1);
+  EXPECT_EQ(up.top, 15);
+  EXPECT_EQ(up.selected, 20);
 }
 
-TEST(ListHoldNav, PagingPastTheEndWrapsToTheStartAndBack) {
-  // 500 rows, 10 per page: the last page starts at 490.
-  EXPECT_EQ(list_index::nextPage(495, 500, 10), 0);
-  EXPECT_EQ(list_index::previousPage(3, 500, 10), 490);
+TEST(ListHoldNav, PagingClampsAtBothEndsAndNeverWraps) {
+  const auto end = list_index::paged(490, 495, 500, 10, 1);
+  EXPECT_EQ(end.top, 490);
+  EXPECT_EQ(end.selected, 495);
+  const auto nearEnd = list_index::paged(485, 485, 500, 10, 1);
+  EXPECT_EQ(nearEnd.top, 490) << "the last screen stays full";
+  const auto start = list_index::paged(0, 3, 500, 10, -1);
+  EXPECT_EQ(start.top, 0);
+  EXPECT_EQ(start.selected, 3);
 }
 
-TEST(ListHoldNav, AListThatFitsOnOnePageStepsInsteadOfPaging) {
-  // No page to jump to, so it degrades to the wrapping single step.
-  EXPECT_EQ(list_index::nextPage(0, 5, 10), 1);
-  EXPECT_EQ(list_index::nextPage(4, 5, 10), 0);
-  EXPECT_EQ(list_index::previousPage(0, 5, 10), 4);
+TEST(ListHoldNav, ASelectionOffScreenIsBroughtIntoTheNewWindow) {
+  const auto below = list_index::paged(0, 40, 500, 10, 1);
+  EXPECT_EQ(below.top, 10);
+  EXPECT_EQ(below.selected, 19);
+}
+
+TEST(ListHoldNav, AListThatFitsOnOneScreenDoesNotMove) {
+  for (const int direction : {1, -1}) {
+    const auto fits = list_index::paged(0, 4, 5, 10, direction);
+    EXPECT_EQ(fits.top, 0);
+    EXPECT_EQ(fits.selected, 4);
+  }
 }
 
 TEST(ListHoldNav, PagingAnEmptyOrUnmeasuredListIsNeverIndexed) {
-  EXPECT_EQ(list_index::nextPage(0, 0, 10), 0);
-  EXPECT_EQ(list_index::previousPage(0, 0, 10), 0);
+  const auto empty = list_index::paged(0, 0, 0, 10, 1);
+  EXPECT_EQ(empty.top, 0);
+  EXPECT_EQ(empty.selected, 0);
   // pageRows() can be 0 before the first render measures the viewport.
-  EXPECT_EQ(list_index::nextPage(3, 500, 0), 0);
-  EXPECT_EQ(list_index::previousPage(3, 500, 0), 0);
+  const auto unmeasured = list_index::paged(0, 3, 500, 0, 1);
+  EXPECT_EQ(unmeasured.top, 0);
+  EXPECT_EQ(unmeasured.selected, 3);
 }
 
 // --- the rate itself --------------------------------------------------------
@@ -184,6 +205,6 @@ TEST(ListHoldNav, ASwipeStillTravelsAPage) {
     const std::string source = readSource(path);
     EXPECT_TRUE(contains(source, "swipeDrivenPass()"))
         << path << " gives a swipe the hold's row step instead of a page";
-    EXPECT_TRUE(contains(source, "PageIndex")) << path << " has no page jump left for a swipe to use";
+    EXPECT_TRUE(contains(source, "pageBy(")) << path << " has no page jump left for a swipe to use";
   }
 }

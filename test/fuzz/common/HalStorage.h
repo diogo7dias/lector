@@ -20,6 +20,8 @@ class HalFile : public Print {
   HalFile& operator=(HalFile&&) = default;
 
   static inline size_t readChunk = SIZE_MAX;
+  // Reads left before every read() fails with -1 like SdFat on an I/O error; < 0 never fails.
+  static inline int readsBeforeError = -1;
 
   void open(std::shared_ptr<std::string> d) {
     data = std::move(d);
@@ -46,7 +48,8 @@ class HalFile : public Print {
   bool seekSet(size_t p) { return seek(p); }
   bool seekCur(int64_t off) { return seek(static_cast<size_t>(static_cast<int64_t>(pos) + off)); }
   int read(void* buf, size_t count) {
-    if (!data) return -1;
+    if (!data || readsBeforeError == 0) return -1;
+    if (readsBeforeError > 0) --readsBeforeError;
     const size_t n = std::min({count, data->size() - pos, readChunk});
     memcpy(buf, data->data() + pos, n);
     pos += n;
