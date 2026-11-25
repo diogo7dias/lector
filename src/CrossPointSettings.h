@@ -732,8 +732,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Image rendering mode in EPUB reader (IMAGE_RENDERING)
   uint8_t imageRendering = IMAGES_DISPLAY;
-  // Language setting (Language enum index, default 0 = EN)
-  uint8_t language = 0;
 
   // Frontlight (X4 Pro and other boards the SDK reports a frontlight for). The
   // rows are filtered out of Settings on a board without one, but the values

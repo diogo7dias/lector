@@ -18,6 +18,3 @@
 #include <builtinFonts/chareink_16_bolditalic.h>
 #include <builtinFonts/chareink_16_italic.h>
 #include <builtinFonts/chareink_16_regular.h>
-#include <builtinFonts/ubuntu_10_regular.h>
-#include <builtinFonts/ubuntu_12_regular.h>
-#include <builtinFonts/ubuntu_14_regular.h>
