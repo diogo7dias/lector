@@ -291,7 +291,7 @@ class LightPanel {
     } else {
       renderer.drawRect(rect.x, y, rect.width, rect.height, light_panel::kRule, true);
     }
-    // A label wider than the box ("Send to Nearby Reader", most German and Romance ones)
+    // A label wider than the box (German "Bildschirm regenerieren", French "Reprendre la lecture")
     // ran past both sides of the frame. It wraps to a second line instead, the pair
     // centred on the glyph height; a third line's worth ends in an ellipsis.
     constexpr int kLabelPad = 4;
