@@ -345,6 +345,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
     pageRendered.store(true, std::memory_order_release);
+    pageOnScreen.store(true, std::memory_order_release);
     pageLoanCount = renderer.frameBufferLoanCount();  // after any loan taken by this render's build
   }
   // Observe every render so unchanged pages can still reach the time limit.

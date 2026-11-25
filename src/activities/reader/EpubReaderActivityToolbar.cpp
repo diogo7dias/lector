@@ -2,6 +2,7 @@
 #include <Memory.h>
 
 #include <cstdio>
+#include <utility>
 
 #include "CrossPointSettings.h"
 #include "EpubReaderActivity.h"
@@ -92,9 +93,22 @@ void EpubReaderActivity::toolbarGotoSpine(const int spine) {
   requestUpdate();  // the new chapter's page, then the sheet over it
 }
 
+void EpubReaderActivity::reopenToolbar(void* self, const int tool) {
+  auto* reader = static_cast<EpubReaderActivity*>(self);
+  // The sheet paints over the page, so it waits for the page to be drawn again.
+  if (!reader->pageOnScreen.load(std::memory_order_acquire) || !reader->section) {
+    reader->reopenOnPage = MenuReturn{&EpubReaderActivity::reopenToolbar, self, tool};
+    return;
+  }
+  // Buttons land on the tile that was left; touch boards show no cursor, as on any open.
+  if (reader->openToolbar() && !reader->mappedInput.hasTouch()) reader->toolbarFocus = tool;
+}
+
 void EpubReaderActivity::runToolbarTool(const int tool) {
-  // Each tile leaves for a screen of its own; that screen repaints the page when it closes.
+  // Each tile leaves for a screen of its own; that screen repaints the page when it closes,
+  // and Back from it brings the sheet back on this tile.
   closeToolbar(false);
+  MenuReturn::Scope backToToolbar(&EpubReaderActivity::reopenToolbar, this, tool);
   switch (tool) {
     case reader_toolbar::Contents:
       openChapterSelection();
@@ -109,6 +123,10 @@ void EpubReaderActivity::runToolbarTool(const int tool) {
 }
 
 bool EpubReaderActivity::handleToolbarInput() {
+  if (reopenOnPage && section && pageOnScreen.load(std::memory_order_acquire)) {
+    std::exchange(reopenOnPage, MenuReturn{}).run();
+    return true;
+  }
   if (!toolbarOpen || !toolbarUi) return false;
   using Button = MappedInputManager::Button;
   const auto routed = toolbarUi->route(mappedInput);

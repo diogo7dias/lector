@@ -1,7 +1,8 @@
 import { test, expect } from 'e2e';
 
 // Hold Confirm on a book, pick Book Info (the first row for an EPUB), see its cover and a
-// page of text, and come back to the list. Leaves the device on Home for the next file.
+// page of text, and come back to the file actions that opened it. Leaves the device on Home
+// for the next file.
 test('File actions opens Book Info for an EPUB and returns to the list', async ({ app, screen }) => {
   await app.open('/');
   const activity = screen.getByTestId('activity');
@@ -31,11 +32,22 @@ test('File actions opens Book Info for an EPUB and returns to the list', async (
   expect(cover.ink, 'the cover is drawn above the text').toBeGreaterThan(cover.area / 2);
 
   // A popped screen logs no "Entering", so the activity label keeps the old name: the
-  // log says when Book Info handed the screen back to the list.
+  // log says when Book Info handed the screen back.
+  const log = async () => (await (await fetch(`${app.baseUrl}/log`)).text()) as string;
+  const exits = async () => (await log()).split('Exiting activity: DictionaryDefinition').length - 1;
   await press('Back');
+  await expect.poll(exits).toBe(1);
+  // Back lands on the file actions pop-up that opened Book Info, on that row: Confirm opens
+  // it again. Then Back closes the pop-up onto the list, and the list's Back goes Home.
+  const entered = (await log()).split('Entering activity: DictionaryDefinition').length - 1;
+  await press('Confirm');
   await expect
-    .poll(async () => (await (await fetch(`${app.baseUrl}/log`)).text()).includes('Exiting activity: DictionaryDefinition'))
-    .toBe(true);
+    .poll(async () => (await log()).split('Entering activity: DictionaryDefinition').length - 1, { timeout: 60_000 })
+    .toBe(entered + 1);
+  await press('Back');
+  await expect.poll(exits).toBe(2);
+  await press('Back'); // the pop-up
+  await expect(activity).not.toHaveText('Home');
   await press('Back');
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
 });

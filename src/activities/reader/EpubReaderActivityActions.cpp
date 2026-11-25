@@ -252,6 +252,7 @@ void EpubReaderActivity::launchNearbyBookSend() {
   // Release Epub and Section before the radio comes up, as the sync paths do.
   releaseBookForHandoff();
 
+  activityManager.rememberReaderMenu(MenuReturn::armed());  // Back reopens the menu that sent it
   activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
       renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, savedEpubPath, savedEpubPath));
 }
@@ -277,6 +278,7 @@ void EpubReaderActivity::launchNearbyPositionSync() {
   // than the TLS handshake KOSync makes room for, but it still needs room.
   releaseBookForHandoff();
 
+  activityManager.rememberReaderMenu(MenuReturn::armed());  // Back reopens the menu that sent it
   activityManager.replaceActivity(
       std::make_unique<NearbyPositionSyncActivity>(renderer, mappedInput, savedEpubPath, currentSpineIndex, currentPage,
                                                    totalPages, std::move(localKoPos), paragraphIndex));
@@ -307,6 +309,7 @@ bool EpubReaderActivity::launchKOReaderSync(const bool autoMode) {
   releaseBookForHandoff();
   LOG_DBG("KOSync", "Epub released (heap after: %u)", (unsigned)ESP.getFreeHeap());
 
+  activityManager.rememberReaderMenu(MenuReturn::armed());  // Back reopens the menu that sent it
   activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
       renderer, mappedInput, savedEpubPath, localPos, std::move(localKoPos), std::move(localChapterName), autoMode));
   return true;  // acted: launched the sync activity

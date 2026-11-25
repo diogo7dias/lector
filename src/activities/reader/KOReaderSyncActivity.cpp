@@ -104,7 +104,7 @@ void KOReaderSyncActivity::completeAlreadySynced() {
 void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   if (!success) {
     LOG_DBG("KOSync", "WiFi connection failed, exiting");
-    returnToReader();
+    activityManager.goBackToReader(epubPath);
     return;
   }
 
@@ -509,7 +509,8 @@ bool KOReaderSyncActivity::handleCustomInput() {
   return state == WIFI_SELECTION || state == SYNCING || state == UPLOADING;
 }
 
-void KOReaderSyncActivity::onBackButton() { returnToReader(); }
+// Back (and a Wi-Fi pick given up) returns to the reader menu that opened this, when one did.
+void KOReaderSyncActivity::onBackButton() { activityManager.goBackToReader(epubPath); }
 
 void KOReaderSyncActivity::onConfirmButton() {
   if (state == NO_REMOTE_PROGRESS) {

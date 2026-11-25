@@ -66,10 +66,9 @@ test('the toolbar menu scrubs, opens a tile and closes', async ({ app, screen })
   await panel.tap({ position: { x: 60, y: 780 } }); // Back
   await expect(busy).toHaveText('no', { timeout: 60_000 });
 
-  // The reader is back with no sheet: the page centre opens it again, and a tap above the sheet
-  // closes it, the page whole again.
-  await tapOnce(240, 400);
-  await expect.poll(band, { timeout: 30_000 }).toBeLessThan(withoutSheet / 2);
+  // Back lands on the sheet again, over the page; a tap above the sheet closes it, the page
+  // whole again.
+  await expect.poll(band, { timeout: 60_000 }).toBeLessThan(withoutSheet / 2);
   await tapOnce(240, 300);
   await expect.poll(band, { timeout: 60_000 }).toBeGreaterThan(withoutSheet / 2);
 

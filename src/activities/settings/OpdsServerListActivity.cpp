@@ -89,7 +89,9 @@ void OpdsServerListActivity::activateIndex(const int index) {
     if (selectedIndex < serverCount) {
       const auto* server = OPDS_STORE.getServer(static_cast<size_t>(selectedIndex));
       if (server) {
-        activityManager.replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, *server));
+        // Replaces the picker (the browser wants the RAM for Wi-Fi); Back rebuilds it.
+        activityManager.replaceFromOpener(makeUniqueNoThrow<OpdsBookBrowserActivity>(renderer, mappedInput, *server),
+                                          ActivityManager::Opener::OpdsServers);
       }
     } else {
       auto editor = makeUniqueNoThrow<OpdsSettingsActivity>(renderer, mappedInput, -1);

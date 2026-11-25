@@ -32,6 +32,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
       selectedPaperbackStatus(context.paperbackStatus),
       selectedStatusBar(context.statusBar),
       selectedProgressBar(context.progressBar),
+      openOn(context.openOn),
       currentPage(context.currentPage),
       totalPages(context.totalPages),
       bookProgressPercent(context.bookProgressPercent) {}
@@ -272,6 +273,14 @@ void EpubReaderMenuActivity::onEnter() {
       while (first < static_cast<int>(items.size()) && !items[first].isHeader) ++first;
     }
     nav.reset(first < static_cast<int>(items.size()) ? sections.visibleIndex(rows.data(), items.size(), first) : 0);
+    // Back from a row's screen: that row, inside its open tab. A row gone since (the last
+    // bookmark deleted) leaves the usual landing.
+    for (int i = 0; openOn != MenuAction::SECTION_HEADER && i < static_cast<int>(items.size()); ++i) {
+      if (items[i].isHeader || items[i].action != openOn) continue;
+      sections.expandedHeader = sections.headerFor(rows.data(), i);
+      nav.reset(sections.visibleIndex(rows.data(), static_cast<int>(items.size()), i));
+      break;
+    }
   }
   requestUpdate();
 }
@@ -281,9 +290,9 @@ void EpubReaderMenuActivity::onExit() {
   rows.clear();
 }
 
-void EpubReaderMenuActivity::closeCancelled() {
+void EpubReaderMenuActivity::closeCancelled(const bool cancelled) {
   ActivityResult result;
-  result.isCancelled = true;
+  result.isCancelled = cancelled;
   result.data = resultFor(-1);
   setResult(std::move(result));
   finish();
@@ -298,8 +307,9 @@ bool EpubReaderMenuActivity::handleCustomInput() {
   // which this activity does not have, so the hold only reports itself and closes; the
   // reader runs the function when it takes the result back.
   //
-  // Reported as CANCELLED on purpose: no row was chosen. The reader applies the live
-  // toggles either way and skips the row action, which is exactly right here.
+  // No row was chosen, and the reader runs the hold before any row action, applying the
+  // live toggles either way. Not reported as cancelled: that would read as Back, and bring
+  // back whatever this menu was opened from (MenuReturn).
   //
   // Closing on the press (not the release) is what keeps the tap path untouched: the row
   // still activates on release, and the release that follows this hold lands in the
@@ -315,7 +325,7 @@ bool EpubReaderMenuActivity::handleCustomInput() {
     if (confirmHoldStart != 0 && mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
       if (millis() - confirmHoldStart >= ReaderUtils::BOOKMARK_HOLD_MS) {
         firedHoldFunction = SETTINGS.menuHoldFunction;
-        closeCancelled();
+        closeCancelled(false);
         return true;
       }
     } else if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {

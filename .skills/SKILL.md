@@ -415,6 +415,29 @@ Constraint: Physical button positions are fixed on hardware, but their logical f
 
 **Rule**: Always use `MappedInputManager::Button::*` enums, never raw `HalGPIO::BTN_*` indices (except in ButtonRemapActivity).
 
+### Back returns to the previous screen
+
+Diogo's rule, firmware-wide: Back from screen B, opened from screen A, lands on A, with A's
+selection and scroll where A already keeps them. Back from the top-level reader menu returns to
+the page; Back from Home stays as it is. The capacitive Home key and the bottom-edge Home swipe
+still go Home, and one tap still opens.
+
+Keep it in the shared navigation code, never per screen:
+
+* A screen pushed with `startActivityForResult` gets this from the activity stack: close it with
+  `finish()`, never `onGoHome()`.
+* A menu that closes before its row's screen opens (the reader menus, the toolbar, every
+  `OptionPopup`) runs the row inside a `MenuReturn::Scope` (`src/activities/MenuReturn.h`).
+  `OptionPopup` does this by itself. ActivityManager reopens the menu on that row when the
+  child closes by Back (the key, a hint tap or the edge swipe) or with a cancelled result; any
+  other close (a chapter picked, a Yes) lands where it always did.
+* A screen that replaces its opener to give a radio its RAM opens with
+  `activityManager.replaceFromOpener(...)`, naming the opener, and leaves with `finish()`.
+  The opener is rebuilt in place of Home. A screen that replaces the open book (KOReader
+  Sync, Nearby) leaves by Back with `goBackToReader()`, which brings the book's menu back too.
+* A new screen that cannot follow the rule (a reboot that frees the Wi-Fi heap) is named in its
+  PR as an exception.
+
 ### UITheme (The GUI Macro)
 * Rule: All UI rendering must go through the GUI macro (UITheme). 
 * Do not hardcode fonts, colors, or positioning. This ensures orientation-aware layout consistency.

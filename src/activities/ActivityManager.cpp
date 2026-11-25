@@ -43,6 +43,7 @@ HomeMenuItem homeRowFor(const std::string& activityName) {
   if (activityName == activity_name::kLibrary) return HomeMenuItem::LIBRARY;
   if (activityName == activity_name::kOpdsBookBrowser) return HomeMenuItem::OPDS_BROWSER;
   if (activityName == activity_name::kCrossPointWebServer) return HomeMenuItem::FILE_TRANSFER;
+  if (activityName == activity_name::kNearbyFileTransfer) return HomeMenuItem::FILE_TRANSFER;
   if (activityName == activity_name::kSettings) return HomeMenuItem::SETTINGS_MENU;
   return HomeMenuItem::NONE;
 }
@@ -102,7 +103,11 @@ std::string ActivityManager::randomBookPath() {
 void ActivityManager::setSleepAction(std::function<void()> onSleep) {
   onSleep_ = std::move(onSleep);
   lightPanel.setHost([this](light_panel::Context& context) { buildLightPanelContext(context); },
-                     [this](const uint8_t function) { return runBoundAction(function); },
+                     [this](const uint8_t function) {
+                       // A screen the tile opens comes back to the panel on Back.
+                       MenuReturn::Scope backToPanel(&ActivityManager::reopenLightPanel, this, 0);
+                       return runBoundAction(function);
+                     },
                      [this](const int delta) { return stepLightPanelAux(delta); });
 }
 
@@ -230,6 +235,15 @@ void ActivityManager::loop() {
     return;
   }
 
+  // Back from a screen a panel tile opened: the panel again, once the screen under it has
+  // been drawn (the panel paints over the framebuffer, which still held the closed screen).
+  if (lightPanelReopen && pendingAction == PendingAction::None && renderPassCompleted >= lightPanelReopenAfter) {
+    lightPanelReopen = false;
+    lightPanel.show();
+    requestUpdate(/*immediate=*/true);
+    return;
+  }
+
   if (currentActivity) {
     // Home from anywhere, handled once here rather than in every activity: the
     // capacitive Home key goes Home everywhere, and outside a book the bottom-edge
@@ -303,16 +317,21 @@ void ActivityManager::loop() {
       pendingAction = PendingAction::None;
 
       if (stackActivities.empty()) {
-        LOG_DBG("ACT", "No more activities on stack, going home");
         lock.unlock();  // goHome may acquire its own lock
-        goHome(homeRow);
-        continue;  // Will launch goHome immediately
+        // A screen that replaced its opener goes back there; anything else lands Home.
+        if (!reopenOpener()) {
+          LOG_DBG("ACT", "No more activities on stack, going home");
+          goHome(homeRow);
+        }
+        continue;  // Will launch the next screen immediately
 
       } else {
         currentActivity = std::move(stackActivities.back());
         stackActivities.pop_back();
         LOG_DBG("ACT", "Popped from activity stack, new size = %zu", stackActivities.size());
         currentActivity->onRevealed();
+        // Taken before the handler: a screen the handler opens arms its own.
+        const MenuReturn backToMenu = std::exchange(currentActivity->menuReturn, MenuReturn{});
         if (currentActivity->resultHandler) {
           LOG_DBG("ACT", "Handling result for popped activity");
 
@@ -321,6 +340,13 @@ void ActivityManager::loop() {
           currentActivity->resultHandler = nullptr;
           lock.unlock();  // Handler may acquire its own lock
           handler(pendingResult);
+        }
+        // Back from a screen a menu row opened lands on that menu again, on that row. Any
+        // other close (a chapter picked, a Yes) stays where the handler left it, and so does
+        // one whose handler already moved on.
+        if (backToMenu && pendingAction == PendingAction::None && (pendingResult.isCancelled || poppedByBack)) {
+          lock.unlock();
+          backToMenu.run();
         }
 
         // Request an update to ensure the popped activity gets re-rendered
@@ -383,6 +409,21 @@ void ActivityManager::exitActivity(const RenderLock& lock) {
 }
 
 void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
+  openers.clear();
+  queueReplace(std::move(newActivity));
+}
+
+void ActivityManager::reopenLightPanel(void* self, int) {
+  auto* manager = static_cast<ActivityManager*>(self);
+  manager->lightPanelReopen = true;
+  // The pass that paints the revealed screen: the next one, or the one after when the render
+  // task is still busy with an old frame (as requestUpdateAndWait() counts).
+  const bool busy = xSemaphoreGetMutexHolder(manager->renderingMutex) == manager->renderTaskHandle;
+  manager->lightPanelReopenAfter = manager->renderPassCompleted + (busy ? 2 : 1);
+}
+
+void ActivityManager::queueReplace(std::unique_ptr<Activity>&& newActivity) {
+  lightPanelReopen = false;  // a new screen: nothing to come back to
   // Note: no lock here, this is usually called by loop() and we may run into deadlock
   if (currentActivity) {
     // Defer launch if we're currently in an activity, to avoid deleting the current activity
@@ -398,10 +439,6 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
 
 bool ActivityManager::requiresExclusiveStorageLoop() const {
   return currentActivity && currentActivity->requiresExclusiveStorageLoop();
-}
-
-void ActivityManager::goToFileTransfer() {
-  replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput));
 }
 
 void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }
@@ -436,6 +473,7 @@ void ActivityManager::goToReader(std::string path, const bool allowFastInitialRe
       APP_STATE.readerOrigin = CrossPointState::ReaderOrigin::Home;
     }
   }
+  readerMenu = MenuReturn{};
   replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh,
                                                    firstTurnCleans, sortesMode));
 }
@@ -473,6 +511,7 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
 }
 
 void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
+  readerMenu = MenuReturn{};
   if (initialMenuItem == HomeMenuItem::NONE && currentActivity) initialMenuItem = homeRowFor(currentActivity->name);
   replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem));
 }
@@ -495,6 +534,9 @@ void ActivityManager::popActivity() {
     pendingActivity.reset();
   }
   pendingAction = PendingAction::Pop;
+  // Screens close on the press or the release of Back, and some report Back as a plain
+  // close, so the key itself is what says this was Back.
+  poppedByBack = mappedInput.backSeenThisPass();
 }
 
 bool ActivityManager::preventAutoSleep() const { return currentActivity && currentActivity->preventAutoSleep(); }

@@ -89,6 +89,9 @@ class EpubReaderMenuActivity final : public UiListActivity {
     bool hasReturn = false;
     bool hasForward = false;
     bool hasPageList = false;
+    // The row to open on: the one whose screen just closed by Back. SECTION_HEADER opens
+    // on the usual tab.
+    MenuAction openOn = MenuAction::SECTION_HEADER;
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const Context& context);
@@ -152,7 +155,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
   // Refresh borrowed labels/values in the storage reserved on entry.
   void updateRows();
   void focusRow(int index);
-  void closeCancelled();
+  // Back: cancelled. A Confirm hold closes too, reported as no row chosen but not as Back.
+  void closeCancelled(bool cancelled = true);
   // The block's strings, held so the ListChrome can borrow them. Mutable because
   // chrome() is const: rebuilding the block changes nothing about the screen.
   mutable std::vector<std::string> headerBlock;
@@ -188,6 +192,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
   // (1) when no hold fired — 0 would mean KOSync.
   uint8_t firedHoldFunction = CrossPointSettings::LP_MENU_DISABLED;
   unsigned long confirmHoldStart = 0;
+  MenuAction openOn = MenuAction::SECTION_HEADER;
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
   const std::vector<StrId> paragraphNumLabels = {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER};

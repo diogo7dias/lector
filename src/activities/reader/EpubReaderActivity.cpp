@@ -61,6 +61,13 @@ using bookfiling::ROOT_FOLDER;
 
 void EpubReaderActivity::onEnter() {
   Activity::onEnter();
+  // Back from KOReader Sync or Nearby, launched from a reader menu: that menu comes back once
+  // the page is up. Only this reader's own reopens, which take the new reader as their ctx.
+  if (const MenuReturn menu = activityManager.takeReaderMenu(); menu.reopen == &EpubReaderActivity::reopenReaderMenu ||
+                                                                menu.reopen == &EpubReaderActivity::reopenToolbar ||
+                                                                menu.reopen == &EpubReaderActivity::reopenQuickMenu) {
+    reopenOnPage = MenuReturn{menu.reopen, this, menu.row};
+  }
   // Opening a book is seconds of card work already, so it is a good moment to let any
   // queued favorite renames run alongside it rather than have them wait for the lock.
   // The other drains are this activity's onExit, home, and sleep entry.

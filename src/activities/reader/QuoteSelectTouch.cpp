@@ -87,7 +87,7 @@ bool QuoteSelectActivity::handleTouch() {
       setResult(std::move(noDictionary));
       finish();
     } else {
-      lookUpSelection();
+      lookUpSelection(/*fromHold=*/true);
     }
     return true;
   }
@@ -112,8 +112,9 @@ bool QuoteSelectActivity::handleTouch() {
 }
 
 // Looks the selection up as one phrase: Dictionary::lookup trims the edge punctuation the
-// joined quote keeps. A definition read returns to the reader, like a held word always has.
-void QuoteSelectActivity::lookUpSelection() {
+// joined quote keeps. Leaving the definition returns to the screen the user saw open it: this
+// picker after its Look Up key, the page after a held word (the picker was never shown).
+void QuoteSelectActivity::lookUpSelection(const bool fromHold) {
   const std::string phrase = selectedText();
   if (phrase.empty()) return;
 
@@ -136,7 +137,7 @@ void QuoteSelectActivity::lookUpSelection() {
     startActivityForResult(
         std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
                                                        std::move(definition), dict->definitionsAreHtml()),
-        [this](const ActivityResult&) { finish(); });
+        [this, fromHold](const ActivityResult&) { fromHold ? finish() : requestUpdate(); });
     return;
   }
   popupMsg = message.id;

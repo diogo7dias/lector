@@ -81,7 +81,8 @@ test('the toolbar menu opens, steps a chapter and closes by the buttons', async 
   await expect.poll(band, { timeout: 60_000 }).toBeGreaterThan(withoutSheet / 2);
 });
 
-// Confirm on the marked tile (Contents) opens the chapter list; Back returns to the page. Then
+// Confirm on the marked tile (Contents) opens the chapter list; Back returns to the sheet, and
+// Back again to the page. Then
 // leaves the book and puts the list style back, so the device is on Home for the next file.
 test('the toolbar menu opens a tile by Confirm, and the list style comes back', async ({ app, screen }) => {
   await app.open('/');
@@ -95,6 +96,9 @@ test('the toolbar menu opens a tile by Confirm, and the list style comes back', 
       await expect(busy).toHaveText('no', { timeout: 60_000 });
     }
   };
+  const band = async () =>
+    (await (await fetch(`${app.baseUrl}/ink/0/600/528/190`)).json()).ink as number;
+  const withoutSheet = await band();
   await press('Confirm'); // the sheet, the Contents tile marked
   await press('Confirm');
   await expect(activity).toHaveText('EpubReaderChapterSelection', { timeout: 30_000 });
@@ -102,6 +106,10 @@ test('the toolbar menu opens a tile by Confirm, and the list style comes back', 
   await expect
     .poll(async () => (await (await fetch(`${app.baseUrl}/log`)).text()).includes('Exiting activity: EpubReaderChapterSelection'))
     .toBe(true);
+  // Back from the tile's screen brings the sheet back over the page; Back closes it.
+  await expect.poll(band, { timeout: 60_000 }).toBeLessThan(withoutSheet / 2);
+  await press('Back');
+  await expect.poll(band, { timeout: 60_000 }).toBeGreaterThan(withoutSheet / 2);
 
   await homeOnSettings(activity, press);
   await press('Confirm');

@@ -32,6 +32,7 @@
 #include "TextSettingsActivity.h"
 #include "TimezonePickerActivity.h"
 #include "WifiCredentialStore.h"
+#include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/network/NearbyFileTransferActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/settings/SettingsListNav.h"
@@ -392,6 +393,16 @@ void SettingsActivity::rebuildSettingsList() {
               });
 }
 
+std::unique_ptr<SettingsActivity> SettingsActivity::onFileTransferCard(GfxRenderer& renderer,
+                                                                       MappedInputManager& mappedInput) {
+  return makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, kFileTransfer);
+}
+
+std::unique_ptr<SettingsActivity> SettingsActivity::onShareCredentials(GfxRenderer& renderer,
+                                                                       MappedInputManager& mappedInput) {
+  return makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, kSystem, kSystem, SettingAction::ShareCredentials);
+}
+
 void SettingsActivity::onEnter() {
   UiGridActivity::onEnter();
 
@@ -406,7 +417,14 @@ void SettingsActivity::onEnter() {
   // the group headings live inside them.
   mode = Mode::Hub;
   selectedCategory = 0;
-  setSelected(0);
+  setSelected(openHubCell);
+  if (openCategory >= 0) {
+    mode = Mode::Category;
+    selectCategory(openCategory);
+    for (int i = 0; i < settingsCount; ++i) {
+      if (settings[i].action == openRow) setSelected(i);
+    }
+  }
 
   requestUpdate();
 }
@@ -462,7 +480,9 @@ void SettingsActivity::activateCell(const int index) {
   if (mode == Mode::Hub) {
     // File Transfer is a hub destination, not a category of persisted settings.
     if (index == kFileTransfer) {
-      activityManager.goToFileTransfer();
+      // Replaces this screen (the web server wants its RAM); Back rebuilds it on this card.
+      auto transfer = makeUniqueNoThrow<CrossPointWebServerActivity>(renderer, mappedInput);
+      activityManager.replaceFromOpener(std::move(transfer), ActivityManager::Opener::SettingsFileTransfer);
       return;
     }
     // A new screen: its first row shares this cell's action and value, so it would
@@ -840,8 +860,9 @@ void SettingsActivity::shareCredentials() {
 
   // The Nearby screen owns the radio for its lifetime and removes the bundle in its
   // onExit, so nothing here waits around holding passwords on the card.
-  activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
-      renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, path));
+  activityManager.replaceFromOpener(makeUniqueNoThrow<NearbyFileTransferActivity>(
+                                        renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, path),
+                                    ActivityManager::Opener::SettingsShareCredentials);
 }
 
 void SettingsActivity::openSleepTimeoutPicker() {

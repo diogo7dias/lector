@@ -319,7 +319,8 @@ UiStatusActivity::StatusView NearbyPositionReceiveActivity::statusView() const {
   return view;
 }
 
-void NearbyPositionReceiveActivity::onBackButton() { activityManager.goHome(); }
+// Back where it was opened: Home's File Transfer choice (ActivityManager::Opener).
+void NearbyPositionReceiveActivity::onBackButton() { finish(); }
 void NearbyPositionReceiveActivity::onConfirmButton() {
   if (state != State::Searching && state != State::Matching && state != State::Waiting) onBackButton();
 }

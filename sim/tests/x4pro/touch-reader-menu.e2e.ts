@@ -82,3 +82,49 @@ test('night mode, frontlight and go home from the in-book menu', async ({ app, s
   await tapOnce(100, 543);
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
 });
+
+// Back from a screen a reader menu row opened lands on the menu again, by a tap on the Back
+// hint: Reader Settings (Text Settings) and Customise Status Bar. A screen that comes back is
+// entered again, so the label turns back to the menu; a pop to the page would keep the old name.
+test('Back from a reader menu row lands on the menu', async ({ app, screen }) => {
+  await app.open('/');
+  const activity = screen.getByTestId('activity');
+  const busy = screen.getByTestId('busy');
+  await expect(activity).toHaveText('Home', { timeout: 120_000 });
+  const panel = screen.getByRole('img', { name: 'Device screen' });
+  const tapOnce = async (x: number, y: number) => {
+    await panel.tap({ position: { x, y } });
+    await expect(busy).toHaveText('no', { timeout: 30_000 });
+  };
+  const ink = async (x: number, y: number, w: number, h: number) =>
+    (await (await fetch(`${app.baseUrl}/ink/${x}/${y}/${w}/${h}`)).json()).ink;
+
+  if ((await ink(0, 200, 480, 60)) > 500) {
+    await tapOnce(240, 259); // the book's row on Home
+  } else {
+    await tapOnce(240, 517); // Browse Files
+    await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
+    await tapOnce(150, 279); // test_kerning_ligature.epub
+  }
+  await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
+  await expect(busy).toHaveText('no', { timeout: 30_000 });
+
+  await tapOnce(240, 400);
+  await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
+  await tapOnce(100, 143); // Look
+  // Its rows from the top: Reader Settings (y 183), Status Bar, Customise Status Bar (y 263).
+  for (const [y, name] of [
+    [183, 'TextSettings'],
+    [263, 'StatusBarSettings'],
+  ] as const) {
+    await tapOnce(100, y);
+    await expect(activity).toHaveText(name, { timeout: 30_000 });
+    await tapOnce(60, 780); // Back
+    await expect(activity, `Back from ${name} lands on the reader menu`).toHaveText('EpubReaderMenu', {
+      timeout: 30_000,
+    });
+  }
+
+  await screen.getByRole('button', { name: 'Home' }).click();
+  await expect(activity).toHaveText('Home', { timeout: 30_000 });
+});

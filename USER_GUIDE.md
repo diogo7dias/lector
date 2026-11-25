@@ -40,6 +40,17 @@ Lector uses the buttons the device already has, in the manufacturer's layout by 
 Throughout this guide the side buttons are called **Volume Up** and **Volume Down**, and the
 bottom-edge buttons **Back**, **Confirm**, **Left** and **Right**.
 
+**Back** returns to the screen you came from. From a screen a menu or pop-up opened, it lands on
+that menu again, on the row you chose; choosing something in that screen (a chapter, a
+bookmark, a Yes) goes on as before. File Transfer opened from Settings comes back to Settings,
+and a file browser or Nearby screen comes back to the screen that opened it. Inside a book,
+**Back** from the reader menu returns to the page. The Home key and the swipe up from the
+bottom edge go straight Home.
+
+A screen that has had Wi-Fi on restarts the reader when you leave it, to give the memory back.
+After File Transfer opened from Settings the restart lands on Settings; after the OPDS browser
+and USB Drive it lands on Home.
+
 The four bottom-edge buttons can be reassigned in **Settings > Controls > Remap Front Buttons**,
 and the side buttons can be swapped or disabled with **Side Button Layout (reader)**.
 
@@ -504,7 +515,9 @@ This tab appears only when the last sleep screen was a wallpaper that is still o
 - **Delete Book Cache** — clear this book's layout cache; it is rebuilt on the next open.
 - **Go Home** — leave the book for Home. Your place is kept.
 
-Press **Back** to close the menu.
+Press **Back** to close the menu. **Back** from a screen a row opened (Text Settings, Customise
+Status Bar, the chapter list, Bookmarks, Sync Progress and the rest) comes back to this menu, on
+that row; choosing something in that screen (a chapter, a bookmark) goes to the page.
 
 ### Toolbar style
 
@@ -521,7 +534,8 @@ It holds:
 
 Tap a tile to open it, or tap the page above the sheet to close it. On a reader with buttons,
 **Left** and **Right** move between the tiles, **Confirm** opens the marked one, **Up** and
-**Down** step a chapter, and **Back** closes. **Menu Hold** does nothing while the toolbar is up.
+**Down** step a chapter, and **Back** closes. **Menu Hold** does nothing while the toolbar is up. **Back** from the
+screen a tile opened brings the toolbar back.
 
 ---
 

@@ -13,6 +13,7 @@
 
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
+#include "MenuReturn.h"
 #include "components/LightPanel.h"
 #include "util/ScreenshotInfo.h"
 
@@ -72,6 +73,12 @@ class ActivityManager {
   std::unique_ptr<Activity> pendingActivity;
   enum class PendingAction { None, Push, Pop, Replace };
   PendingAction pendingAction = PendingAction::None;
+  // The queued pop was asked for on a pass that read Back (MenuReturn).
+  bool poppedByBack = false;
+  // MenuReturn for the light panel's tiles: reopen it after render pass lightPanelReopenAfter.
+  static void reopenLightPanel(void* self, int);
+  bool lightPanelReopen = false;
+  uint32_t lightPanelReopenAfter = 0;
 
   // Task to render and display the activity
   TaskHandle_t renderTaskHandle = nullptr;
@@ -118,8 +125,31 @@ class ActivityManager {
   // Will replace currentActivity and drop all activities on stack
   void replaceActivity(std::unique_ptr<Activity>&& newActivity);
 
+  // The screens a replace destroyed but Back must come back to (ActivityOpeners.cpp). A few
+  // screens replace the one they were opened from instead of covering it, to give a radio
+  // its RAM. They name that opener here, and when they close with nothing under them the
+  // opener is rebuilt in place of Home. Home, and any plain replace, forgets them all.
+  enum class Opener : uint8_t {
+    SettingsFileTransfer,      // the Settings hub, on its File Transfer card
+    SettingsShareCredentials,  // Settings > System, on Share Credentials
+    FileBrowser,               // the browser, on `path`
+    NearbyChoose,              // Home's File Transfer: the Nearby send / receive choice
+    FileTransfer,              // the File Transfer mode list
+    OpdsServers,               // the OPDS server picker
+  };
+  void replaceFromOpener(std::unique_ptr<Activity>&& newActivity, Opener opener, std::string path = {});
+  // The screen closing now goes back to Settings (the web server reboots there).
+  bool returnsToSettings() const;
+
+  // The same for the screens that replace the open book (KOReader Sync, Nearby): the reader
+  // hands over the menu that launched one (MenuReturn::armed(), empty for a bound key), and
+  // Back from that screen reopens the book and then that menu, on its row. The reopen's ctx
+  // is stale by then; the new reader passes itself.
+  void rememberReaderMenu(const MenuReturn& menu) { readerMenu = menu; }
+  MenuReturn takeReaderMenu() { return std::exchange(readerMenu, MenuReturn{}); }
+  void goBackToReader(std::string path);
+
   // goTo... functions are convenient wrapper for replaceActivity()
-  void goToFileTransfer();
   void goToSettings();
   void goToFileBrowser(std::string path = {});
   void goToBrowser();
@@ -171,6 +201,19 @@ class ActivityManager {
   // Trigger a render and block until it completes.
   // Must NOT be called from the render task or while holding a RenderLock.
   void requestUpdateAndWait();
+
+ private:
+  // Declared after Opener, which they name.
+  struct OpenerEntry {
+    Opener opener;
+    std::string path;
+  };
+  std::vector<OpenerEntry> openers;
+  MenuReturn readerMenu;
+  // replaceActivity() without forgetting the openers.
+  void queueReplace(std::unique_ptr<Activity>&& newActivity);
+  // Rebuilds the last opener in place of the screen that just closed. False when none.
+  bool reopenOpener();
 };
 
 extern ActivityManager activityManager;  // singleton, to be defined in main.cpp

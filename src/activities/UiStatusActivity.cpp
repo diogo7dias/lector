@@ -44,7 +44,9 @@ void UiStatusActivity::acceptTrampoline(const fui::ActionEvent&, void* user) {
 }
 
 void UiStatusActivity::cancelTrampoline(const fui::ActionEvent&, void* user) {
-  static_cast<UiStatusActivity*>(user)->onBackButton();
+  auto* self = static_cast<UiStatusActivity*>(user);
+  self->mappedInput.noteBack();  // a tapped Cancel is Back, as the key is (MenuReturn)
+  self->onBackButton();
 }
 
 void UiStatusActivity::choiceTrampoline(const fui::ActionEvent& event, void* user) {
