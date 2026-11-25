@@ -291,9 +291,25 @@ class LightPanel {
     } else {
       renderer.drawRect(rect.x, y, rect.width, rect.height, light_panel::kRule, true);
     }
-    const int textWidth = renderer.getTextWidth(banner::FONT_ID, label);
-    const int textY = y + (rect.height - renderer.getLineHeight(banner::FONT_ID)) / 2;
-    renderer.drawText(banner::FONT_ID, rect.x + (rect.width - textWidth) / 2, textY, label, !selected);
+    // A label wider than the box ("Send to Nearby Reader", most German and Romance ones)
+    // ran past both sides of the frame. It wraps to a second line instead, the pair
+    // centred on the glyph height; a third line's worth ends in an ellipsis.
+    constexpr int kLabelPad = 4;
+    const auto lines = renderer.wrappedText(banner::FONT_ID, label, rect.width - 2 * kLabelPad, 2);
+    if (lines.size() < 2) {
+      if (lines.empty()) return;
+      const int textWidth = renderer.getTextWidth(banner::FONT_ID, lines[0].c_str());
+      const int textY = y + (rect.height - renderer.getLineHeight(banner::FONT_ID)) / 2;
+      renderer.drawText(banner::FONT_ID, rect.x + (rect.width - textWidth) / 2, textY, lines[0].c_str(), !selected);
+      return;
+    }
+    const int rowHeight = renderer.getTextHeight(banner::FONT_ID);
+    int lineY = y + (rect.height - 2 * rowHeight) / 2;
+    for (const auto& line : lines) {
+      const int lineWidth = renderer.getTextWidth(banner::FONT_ID, line.c_str());
+      renderer.drawText(banner::FONT_ID, rect.x + (rect.width - lineWidth) / 2, lineY, line.c_str(), !selected);
+      lineY += rowHeight;
+    }
   }
 
   // Icon, track, number, then the two steppers. The row is named by its icon rather than
