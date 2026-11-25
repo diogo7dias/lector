@@ -33,7 +33,10 @@ constexpr char kIndexTmpPath[] = "/.crosspoint/sleep_index.tmp";
 // from. Anything else (missing file, wrong magic, future version) reads as "no
 // index" and forces a rebuild — corruption can never limp along.
 constexpr char kMagic[4] = {'L', 'W', 'X', '1'};
-constexpr uint8_t kVersion = 1;
+// v2 stores each entry's FAT directory byte offset in bytes 156..159 of the
+// 160-byte record (see SleepIndexRecord.h), triggering a one-shot rebuild on
+// upgrade from v1.
+constexpr uint8_t kVersion = 2;
 constexpr size_t kWdtInterval = 50;
 
 struct Header {
@@ -58,11 +61,11 @@ bool readHeader(HalFile& file, Header& out) {
   return out.version == kVersion;
 }
 
-// Append `name` as one fixed-size NUL-padded record. Returns false on SD error.
-bool writeRecord(HalFile& out, const char* name, const size_t len) {
+// Append `name` + its FAT directory byte offset as one fixed-size record.
+// Returns false on SD error.
+bool writeRecord(HalFile& out, const char* name, const size_t len, const uint32_t dirOffset) {
   char record[kRecordBytes];
-  std::memset(record, 0, sizeof(record));
-  std::memcpy(record, name, len);
+  sleep_index_record::encode(record, name, len, dirOffset);
   return out.write(record, sizeof(record)) == sizeof(record);
 }
 
@@ -116,15 +119,20 @@ bool walkFolder(const char* dirPath, uint32_t& count, uint32_t& fingerprint, Pro
 
   char name[256];  // FAT long-file-name maximum
   size_t iter = 0;
-  for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
+  for (;;) {
+    // Capture the directory byte position BEFORE openNextFile() advances it so
+    // lock-time opening can seek straight to this slot in O(1).
+    const uint32_t entryOffset = static_cast<uint32_t>(dir.position());
+    auto file = dir.openNextFile();
+    if (!file) break;
     if (!file.isDirectory()) {
       file.getName(name, sizeof(name));
       const size_t len = std::strlen(name);
-      if (len > 0 && len < kRecordBytes && isWallpaperName(std::string_view(name, len))) {
+      if (len > 0 && len <= kMaxNameBytes && isWallpaperName(std::string_view(name, len))) {
         fingerprint += folderEntryHash(file, name, len);
         ++count;
-        perEntry(file, name, len);
-      } else if (len >= kRecordBytes) {
+        perEntry(file, name, len, entryOffset);
+      } else if (len > kMaxNameBytes) {
         LOG_ERR("WIDX", "Name too long for index (%u), skipped", static_cast<unsigned>(len));
       }
     }
@@ -208,12 +216,13 @@ bool buildBlocking(const uint8_t dirId, ProgressPopup* progress) {
   uint32_t count = 0;
   uint32_t fingerprint = 0;
   bool failed = false;
-  const bool opened =
-      walkFolder(dirPathForId(dirId), count, fingerprint, progress, [&](HalFile&, const char* name, const size_t len) {
-        if (failed) return;
-        if (count > sleep_reconcile::kMaxEntries) return;  // count already incremented for this entry
-        if (!writeRecord(tmp, name, len)) failed = true;
-      });
+  const bool opened = walkFolder(dirPathForId(dirId), count, fingerprint, progress,
+                                 [&](HalFile&, const char* name, const size_t len, const uint32_t entryOffset) {
+                                   if (failed) return;
+                                   if (count > sleep_reconcile::kMaxEntries)
+                                     return;  // count already incremented for this entry
+                                   if (!writeRecord(tmp, name, len, entryOffset)) failed = true;
+                                 });
   tmp.flush();
   tmp.close();
   if (failed) {
@@ -258,10 +267,12 @@ bool Reader::open() {
   // reassigning an open HalFile is undefined (see DESTRUCTOR_CLOSES_FILE).
   if (file) file.close();
   count = 0;
+  olderFormat = false;
   if (!Storage.exists(kIndexPath)) return false;
   if (!Storage.openFileForRead("WIDX", kIndexPath, file)) return false;
   Header header{};
   if (!readHeader(file, header)) {
+    olderFormat = std::memcmp(header.magic, kMagic, sizeof(kMagic)) == 0 && header.version < kVersion;
     file.close();
     LOG_ERR("WIDX", "Bad index header, ignoring index");
     return false;
@@ -273,15 +284,25 @@ bool Reader::open() {
   return true;
 }
 
-std::string Reader::nameAt(const size_t index) {
-  if (!file || index >= count) return {};
+bool Reader::recordAt(const size_t index, Record& out) {
+  out.name.clear();
+  out.dirOffset = kUnknownDirOffset;
+  if (!file || index >= count) return false;
   char record[kRecordBytes];
   if (!file.seek((index + 1) * kRecordBytes) || file.read(record, sizeof(record)) != static_cast<int>(sizeof(record))) {
-    return {};
+    return false;
   }
-  record[kRecordBytes - 1] = '\0';
-  if (record[0] == '\0') return {};
-  return std::string(record);
+  const std::string_view name = sleep_index_record::decodeName(record);
+  if (name.empty()) return false;
+  out.name.assign(name.data(), name.size());
+  out.dirOffset = sleep_index_record::decodeDirOffset(record);
+  return true;
+}
+
+std::string Reader::nameAt(const size_t index) {
+  Record rec;
+  if (!recordAt(index, rec)) return {};
+  return std::move(rec.name);
 }
 
 namespace {
@@ -293,7 +314,7 @@ std::string indexedNameIn(const std::string& path, const uint8_t dirId) {
   if (path.size() <= prefix.size() || path.compare(0, prefix.size(), prefix) != 0) return {};
   const std::string name = path.substr(prefix.size());
   if (name.find('/') != std::string::npos) return {};  // deeper path, different folder
-  if (name.size() >= kRecordBytes || !isWallpaperName(name)) return {};
+  if (name.size() > kMaxNameBytes || !isWallpaperName(name)) return {};
   return name;
 }
 
@@ -413,7 +434,7 @@ void noteCreated(const std::string& path) {
   HalFile idx = Storage.open(kIndexPath, O_RDWR);
   if (idx) {
     if (idx.seek((static_cast<size_t>(recordCount) + 1) * kRecordBytes) &&
-        writeRecord(idx, name.c_str(), name.size())) {
+        writeRecord(idx, name.c_str(), name.size(), kUnknownDirOffset)) {
       idx.flush();
       appended = true;
     }
@@ -472,7 +493,7 @@ void noteFavoriteRename(const std::string& oldPath, const std::string& newPath) 
   // Both sides must be entries the walk would have counted, or the delta would
   // describe a fingerprint the folder never had.
   if (!isWallpaperName(oldName) || !isWallpaperName(newName)) return;
-  if (oldName.size() >= kRecordBytes || newName.size() >= kRecordBytes) return;
+  if (oldName.size() > kMaxNameBytes || newName.size() > kMaxNameBytes) return;
 
   HalFile file;
   if (!Storage.openFileForRead("WIDX", newPath.c_str(), file)) return;
@@ -592,7 +613,7 @@ void reconcileAtColdBoot(GfxRenderer& renderer) {
     HalFile idx = Storage.open(kIndexPath, O_RDWR);
     if (!appendFailed && idx && idx.seek((static_cast<size_t>(recordCount) + 1) * kRecordBytes)) {
       walkFolder(dirPathForId(dirId), liveCount, fingerprint, &progress,
-                 [&](HalFile&, const char* name, const size_t len) {
+                 [&](HalFile&, const char* name, const size_t len, const uint32_t entryOffset) {
                    if (appendFailed) return;
                    const std::string_view nameView(name, len);
                    if (known.contains(sleep_reconcile::nameHash(nameView))) return;
@@ -600,7 +621,7 @@ void reconcileAtColdBoot(GfxRenderer& renderer) {
                    if (!alt.empty() && known.contains(sleep_reconcile::nameHash(alt))) return;
                    if (recordCount + appends >= sleep_reconcile::kMaxEntries) return;
                    progress.show();  // first real append: now it is indexing
-                   if (!writeRecord(idx, name, len)) appendFailed = true;
+                   if (!writeRecord(idx, name, len, entryOffset)) appendFailed = true;
                    ++appends;
                  });
       idx.flush();

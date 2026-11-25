@@ -65,7 +65,8 @@ bool landsOnEntryStart(HalFile& dir, const size_t offset, const char* name) {
 
 // Random wallpaper name, or empty when the jump could not resolve one (caller falls
 // back to the full walk). `dir` is left at an arbitrary position.
-std::string pickWallpaperByJump(HalFile& dir) {
+std::string pickWallpaperByJump(HalFile& dir, uint32_t* const dirOffsetOut) {
+  if (dirOffsetOut != nullptr) *dirOffsetOut = sleep_index_record::kUnknownDirOffset;
   const uint32_t slots = static_cast<uint32_t>(liveSlotCount(dir));
   if (slots == 0) return {};
 
@@ -82,6 +83,7 @@ std::string pickWallpaperByJump(HalFile& dir) {
     // dead and non-wallpaper slots ahead of it.
     if (isDir || !isWallpaperName(name)) continue;
     if (!landsOnEntryStart(dir, start, name)) continue;
+    if (dirOffsetOut != nullptr) *dirOffsetOut = static_cast<uint32_t>(start);
     return std::string(name);
   }
   return {};
@@ -118,6 +120,7 @@ WallpaperPick pickWallpaper(HalFile& dir, const char* const sleepDir, const std:
   // bottom-right badge. 0/0 = unknown (jump pick, pause hold), badge hidden.
   uint32_t linePosition = 0;
   uint32_t lineTotal = 0;
+  uint32_t dirOffset = sleep_index_record::kUnknownDirOffset;
   if (chosen.empty() && !APP_STATE.sleepIndexNeedsRebuild) {
     namespace windex = crosspoint::sleep::windex;
     const uint32_t indexStartMs = millis();
@@ -127,7 +130,15 @@ WallpaperPick pickWallpaper(HalFile& dir, const char* const sleepDir, const std:
       auto queueState = windex::loadQueueState();
       SleepTiming::mark("idxstate");
       const std::string prefix = std::string(sleepDir) + "/";
-      const auto nameAt = [&](const size_t i) { return reader.nameAt(i); };
+      size_t lastReadIdx = sleep_queue::kNoPhysicalIndex;
+      uint32_t lastReadOffset = sleep_index_record::kUnknownDirOffset;
+      const auto nameAt = [&](const size_t i) -> std::string {
+        windex::Record rec;
+        if (!reader.recordAt(i, rec)) return {};
+        lastReadIdx = i;
+        lastReadOffset = rec.dirOffset;
+        return std::move(rec.name);
+      };
       // No probe: one Storage.exists() by name measured 1271 ms on a real wallpaper
       // folder, because a FAT lookup walks the directory. The open in renderChosen()
       // (renderCustomSleepScreen) answers the same question for free, and a record that
@@ -165,6 +176,14 @@ WallpaperPick pickWallpaper(HalFile& dir, const char* const sleepDir, const std:
       } else if (!result.basename.empty()) {
         chosen = std::move(result.basename);
         pickedFromIndex = true;
+        if (result.physicalIndex != sleep_queue::kNoPhysicalIndex) {
+          if (result.physicalIndex == lastReadIdx) {
+            dirOffset = lastReadOffset;
+          } else {
+            windex::Record rec;
+            if (reader.recordAt(result.physicalIndex, rec)) dirOffset = rec.dirOffset;
+          }
+        }
         // Served-this-loop count, from the post-advance state: cursor.position
         // lap picks plus the drained part of the fresh region (fresh records
         // start at seededCount). 0 only right after a wrap, which means the
@@ -174,12 +193,17 @@ WallpaperPick pickWallpaper(HalFile& dir, const char* const sleepDir, const std:
         linePosition = served == 0 || served > lineTotal ? lineTotal : served;
         LOG_INF("SLP", "index pick in %ums", static_cast<unsigned>(millis() - indexStartMs));
       }
+    } else if (reader.outdated()) {
+      // A firmware update changed the record format. Nothing else marks the index
+      // stale on a deep-sleep wake, so ask the next wake to rebuild it once.
+      APP_STATE.sleepIndexNeedsRebuild = true;
+      LOG_INF("SLP", "index format outdated, rebuild on next wake");
     }
   }
 
   // Fast path: seek straight to a random directory slot (see pickWallpaperByJump).
   const uint32_t pickStartMs = millis();
-  if (chosen.empty()) chosen = pickWallpaperByJump(dir);
+  if (chosen.empty()) chosen = pickWallpaperByJump(dir, &dirOffset);
   if (!chosen.empty() && !heldByPause && !pickedFromIndex) {
     LOG_INF("SLP", "jump pick in %ums", static_cast<unsigned>(millis() - pickStartMs));
   }
@@ -194,14 +218,16 @@ WallpaperPick pickWallpaper(HalFile& dir, const char* const sleepDir, const std:
   if (!heldByPause && !pickedFromIndex && !chosen.empty() && !previousWallpaper.empty()) {
     const std::string prefix = std::string(sleepDir) + "/";
     for (int retry = 0; retry < 2 && prefix + chosen == previousWallpaper; retry++) {
-      const std::string again = pickWallpaperByJump(dir);
+      uint32_t retryOffset = sleep_index_record::kUnknownDirOffset;
+      const std::string again = pickWallpaperByJump(dir, &retryOffset);
       if (again.empty()) break;  // jump gave up; keep what we have
       chosen = again;
+      dirOffset = retryOffset;
     }
   }
 
   if (!chosen.empty()) {
-    return {std::move(chosen), pickedFromIndex, linePosition, lineTotal};
+    return {std::move(chosen), pickedFromIndex, linePosition, lineTotal, dirOffset};
   }
 
   // Fallback: walk the whole folder with reservoir sampling — keep the k-th valid
@@ -216,7 +242,10 @@ WallpaperPick pickWallpaper(HalFile& dir, const char* const sleepDir, const std:
     return {};
   }
   dir.rewindDirectory();
-  for (auto dirFile = dir.openNextFile(); dirFile; dirFile = dir.openNextFile()) {
+  for (;;) {
+    const uint32_t entryOffset = static_cast<uint32_t>(dir.position());
+    auto dirFile = dir.openNextFile();
+    if (!dirFile) break;
     // A wallpaper folder can hold thousands of files, and this walk runs inline on the
     // loop task while going to sleep. Without a periodic yield the task never returns
     // to the scheduler, the task watchdog has no chance to be fed, and sleep entry can
@@ -230,16 +259,19 @@ WallpaperPick pickWallpaper(HalFile& dir, const char* const sleepDir, const std:
     dirFile.close();  // only the name is needed; never open/parse the file here
     if (isDir || !isWallpaperName(name.get())) continue;
     ++seen;
-    if (random(static_cast<long>(seen)) == 0) chosen = name.get();
+    if (random(static_cast<long>(seen)) == 0) {
+      chosen = name.get();
+      dirOffset = entryOffset;
+    }
   }
   if (scanned > 0) {
     LOG_INF("SLP", "fallback scan: %u entries (%u wallpapers) in %ums", scanned, seen,
             static_cast<unsigned>(millis() - scanStartMs));
   }
-  return {std::move(chosen), pickedFromIndex, linePosition, lineTotal};
+  return {std::move(chosen), pickedFromIndex, linePosition, lineTotal, dirOffset};
 }
 
-bool pickWallpaperByScan(HalFile& dir, bool (*tryName)(const char* name, void* ctx), void* ctx) {
+bool pickWallpaperByScan(HalFile& dir, bool (*tryName)(const char* name, uint32_t dirOffset, void* ctx), void* ctx) {
   const uint32_t slots = static_cast<uint32_t>(liveSlotCount(dir));
   if (slots == 0 || !tryName) return false;
 
@@ -257,6 +289,7 @@ bool pickWallpaperByScan(HalFile& dir, bool (*tryName)(const char* name, void* c
       if (stopOffset > 0 && entryPos >= stopOffset) break;
       auto dirFile = dir.openNextFile();
       if (!dirFile) break;
+      const size_t nextPos = dir.position();
       if ((++scanned & 0x3F) == 0) {
         resetTaskWatchdogIfSubscribed();
         vTaskDelay(1);
@@ -265,7 +298,9 @@ bool pickWallpaperByScan(HalFile& dir, bool (*tryName)(const char* name, void* c
       dirFile.getName(name.get(), 256);
       dirFile.close();
       if (isDir || !isWallpaperName(name.get())) continue;
-      if (tryName(name.get(), ctx)) return true;
+      if (tryName(name.get(), static_cast<uint32_t>(entryPos), ctx)) return true;
+      // Restore directory cursor in case tryName sought `dir` for its O(1) open.
+      if (!dir.seekSet(nextPos)) break;
     }
     return false;
   };

@@ -279,5 +279,17 @@ TEST(SleepQueuePolicy, FreshPickDoesNotReportALapWrap) {
 
   const Result r = fake.pick(s);
   EXPECT_EQ(r.basename, "fresh.bmp");
+  EXPECT_EQ(r.physicalIndex, 3u);
   EXPECT_FALSE(r.lapWrapped);
+}
+
+TEST(SleepQueuePolicy, ReportsPhysicalIndexForEveryLapPick) {
+  auto fake = makeFake(12);
+  auto s = seeded(fake);
+  for (size_t i = 0; i < fake.records.size(); ++i) {
+    const Result r = fake.pick(s);
+    ASSERT_FALSE(r.basename.empty());
+    ASSERT_LT(r.physicalIndex, fake.records.size());
+    EXPECT_EQ(fake.records[r.physicalIndex], r.basename);
+  }
 }
