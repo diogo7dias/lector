@@ -3,7 +3,7 @@
 // Included ahead of stb_truetype.h in the TTF build (lib/EpdFont/TtfFontImpl.cpp, and the host fuzz
 // target test/fuzz/ttf). stb_truetype says on its first lines that it must not be used on untrusted
 // font files, and these fonts come off the SD card or the network, so the build narrows what a
-// hostile file can do (the rest is the patch set in scripts/stb_truetype_patches):
+// hostile file can do (the rest is stbtt_BindData in the fork's stb_truetype.h):
 //   - wrapping signed arithmetic: stb adds and subtracts offsets taken from the file, and with
 //     overflow undefined the compiler may delete the range checks that follow;
 //   - scratch allocations go through lectorStbMalloc, which refuses a request no real glyph needs.

@@ -118,9 +118,8 @@ int BaseTheme::batteryClusterWidth(const GfxRenderer& renderer) {
 
 int BaseTheme::batteryIconTop(const GfxRenderer& renderer, const Rect& rect, const int fontId) {
   // Centre the icon in the line box of the text drawn at rect.y. Expressed from the
-  // font's own metrics rather than a fixed offset so the Ubuntu family (bound for
-  // Arabic/Hebrew, taller than Cozette) lands right too. For the default Cozette 12
-  // this evaluates to the +6 the code used before.
+  // font's own metrics rather than a fixed offset, so any UI font lands right. For
+  // Cozette 12 this evaluates to the +6 the code used before.
   return rect.y + std::max(0, (renderer.getLineHeight(fontId) - rect.height) / 2);
 }
 
@@ -1262,7 +1261,7 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
 //
 // So the fix is to pull the text left by that bearing: the ink then starts one gap in
 // from the chip edge and ends one gap before the far edge. Read from the font rather
-// than hardcoded, since the UI font is rebound per language.
+// than hardcoded, so a different UI font needs no change here.
 void badgeChipMetrics(const GfxRenderer& renderer, const char* text, int* chipW, int* textDx) {
   constexpr int kGap = 4;  // blank between the chip edge and the bracket, both sides
   const int inkW = renderer.getTextWidth(UI_10_FONT_ID, text);

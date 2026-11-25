@@ -16,9 +16,6 @@
 #include "builtinFonts/chareink_14_bolditalic.h"
 #include "builtinFonts/chareink_14_italic.h"
 #include "builtinFonts/chareink_14_regular.h"
-#include "builtinFonts/ubuntu_10_regular.h"
-#include "builtinFonts/ubuntu_12_regular.h"
-#include "builtinFonts/ubuntu_14_regular.h"
 
 namespace {
 
@@ -73,9 +70,6 @@ const Pinned kBuiltIns[] = {
     {"chareink_14_bold", &chareink_14_bold, 2988454756u},
     {"chareink_14_italic", &chareink_14_italic, 882595177u},
     {"chareink_14_bolditalic", &chareink_14_bolditalic, 3994623942u},
-    {"ubuntu_10_regular", &ubuntu_10_regular, 3107621458u},
-    {"ubuntu_12_regular", &ubuntu_12_regular, 1324157453u},
-    {"ubuntu_14_regular", &ubuntu_14_regular, 646111492u},
 };
 
 TEST(KernSparse, BuiltInTablesExpandToTheOriginalDenseMatrices) {

@@ -22,7 +22,7 @@ std::string pair(const StrId formatId, const std::string& value) {
 std::string joined(const std::string& first, const std::string& second) {
   if (first.empty()) return second;
   if (second.empty()) return first;
-  return first + " \xC2\xB7 " + second;  // U+00B7 middle dot, in Cozette and Ubuntu
+  return first + " \xC2\xB7 " + second;  // U+00B7 middle dot, in Cozette
 }
 
 }  // namespace
@@ -57,9 +57,7 @@ std::string SettingsActivity::hubSummary(const int index) const {
                                    valueOf(controlsSettings, &CrossPointSettings::longPressMenuFunction)));
     }
     case 3:
-      return joined(
-          pair(StrId::STR_SUMMARY_AUTO_SLEEP, valueOf(systemSettings, &CrossPointSettings::sleepTimeoutMinutes)),
-          I18N.getLanguageName(I18N.getLanguage()));
+      return pair(StrId::STR_SUMMARY_AUTO_SLEEP, valueOf(systemSettings, &CrossPointSettings::sleepTimeoutMinutes));
     default:
       return tr(STR_SUMMARY_FILE_TRANSFER);
   }

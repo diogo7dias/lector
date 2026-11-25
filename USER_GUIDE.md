@@ -1,4 +1,4 @@
-<!-- lector-version: 0.62.0 -->
+<!-- lector-version: 0.63.0 -->
 
 # Lector User Guide
 
@@ -1377,10 +1377,9 @@ Session**, **Pages to Paragraph**. Alongside them:
 
 **Device**
 
-- **Language** — 31 languages: English, Spanish, French, German, Czech, Portuguese (Portugal
-  and Brazil), Russian, Swedish, Romanian, Catalan, Ukrainian, Belarusian, Italian, Polish,
-  Finnish, Danish, Dutch, Turkish, Kazakh, Hungarian, Lithuanian, Slovenian, Valencian,
-  Hebrew, Slovak, Vietnamese, Norwegian, Arabic, Bosnian and Indonesian.
+The menus are in English only; there is no Language row. Books in any language still open and
+render as before, right-to-left ones included, and the on-screen keyboard is QWERTY.
+
 - **Time Zone** — a list of 104 zones, west to east, each with its standard offset: cities
   and regions that keep their own summer time (London, Berlin, New York, Sydney and so on), then
   places that do not, then a plain **UTC-12:00** to **UTC+14:00** at the end for anywhere the list

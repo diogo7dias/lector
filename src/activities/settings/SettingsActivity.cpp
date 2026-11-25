@@ -18,7 +18,6 @@
 #include "FontDownloadActivity.h"
 #include "InstalledFontsActivity.h"
 #include "KOReaderSettingsActivity.h"
-#include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
 #include "OpdsServerStore.h"
@@ -311,7 +310,6 @@ void SettingsActivity::rebuildSettingsList() {
   // there is no update.
   maintenanceSettings.push_back(
       SettingInfo::Action(StrId::STR_INSTALL_OTHER_FIRMWARE, SettingAction::InstallOtherFirmware));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
   if (halClock.isAvailable()) {
     systemSettings.push_back(SettingInfo::Action(StrId::STR_TIMEZONE, SettingAction::TimeZone));
   }
@@ -391,8 +389,7 @@ void SettingsActivity::rebuildSettingsList() {
                    {StrId::STR_DEVICE_NAME, StrId::STR_WIFI_NETWORKS, StrId::STR_KOREADER_SYNC, StrId::STR_OPDS_SERVERS,
                     StrId::STR_SHARE_CREDENTIALS}},
                   {StrId::STR_GRP_DEVICE,
-                   {StrId::STR_LANGUAGE, StrId::STR_TIMEZONE, StrId::STR_CLOCK_DST, StrId::STR_WAKE_ON_USB_PLUG_IN,
-                    StrId::STR_MAINTENANCE}},
+                   {StrId::STR_TIMEZONE, StrId::STR_CLOCK_DST, StrId::STR_WAKE_ON_USB_PLUG_IN, StrId::STR_MAINTENANCE}},
               });
 }
 
@@ -779,17 +776,6 @@ void SettingsActivity::toggleCurrentSetting() {
                                    nullptr),
                                [this](const ActivityResult&) {
                                  // TextSettingsActivity saves on each change; no save needed here.
-                                 rebuildSettingsList();
-                                 restoreCursorAfterRebuild();
-                               });
-        break;
-      case SettingAction::Language:
-        // Row labels are translated once in rebuildRowItems() and don't
-        // re-run on Pop (see ActivityManager::loop()), so a language switch
-        // needs an explicit rebuild here rather than the generic resultHandler.
-        startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput),
-                               [this](const ActivityResult&) {
-                                 SETTINGS.saveToFile();
                                  rebuildSettingsList();
                                  restoreCursorAfterRebuild();
                                });

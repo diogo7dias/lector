@@ -58,6 +58,7 @@ E-reader firmware for the Xteink X3, X4 and X4 Pro.
 
 - Tilt page turn (the gyro) is gone entirely.
 - The Recent Books screen is gone; the home list replaces it.
+- The menus are English only for now; the other 30 UI languages are gone. Books in any language still render.
 
 ---
 
