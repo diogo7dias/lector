@@ -5,6 +5,7 @@
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <I18n.h>
+#include <Memory.h>
 #include <esp_random.h>
 
 #include <algorithm>
@@ -35,19 +36,6 @@
 #include "util/BookOrderLabel.h"
 #include "util/FullScreenMessageActivity.h"
 #include "util/OrientationCycle.h"
-
-namespace {
-// The Home row for the screen being left, so Home opens with that row selected.
-HomeMenuItem homeRowFor(const std::string& activityName) {
-  if (activityName == activity_name::kFileBrowser) return HomeMenuItem::FILE_BROWSER;
-  if (activityName == activity_name::kLibrary) return HomeMenuItem::LIBRARY;
-  if (activityName == activity_name::kOpdsBookBrowser) return HomeMenuItem::OPDS_BROWSER;
-  if (activityName == activity_name::kCrossPointWebServer) return HomeMenuItem::FILE_TRANSFER;
-  if (activityName == activity_name::kNearbyFileTransfer) return HomeMenuItem::FILE_TRANSFER;
-  if (activityName == activity_name::kSettings) return HomeMenuItem::SETTINGS_MENU;
-  return HomeMenuItem::NONE;
-}
-}  // namespace
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
 
@@ -648,8 +636,23 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
       return true;
     case CrossPointSettings::LP_MENU_SETTINGS:
       // The screen itself, not Home with the Settings row picked: goHome only moves the
-      // selection, which left the button looking like it had done nothing.
-      goToSettings();
+      // selection, which left the button looking like it had done nothing. Over the screen
+      // the panel opened on, so Back lands there and brings the panel back (the panel runs
+      // its tiles in a MenuReturn::Scope).
+      if (!currentActivity || currentActivity->name == activity_name::kSettings) {
+        goToSettings();
+        return true;
+      }
+      // A bound key in a book: a C3 cannot keep the reader under Settings, so Settings takes
+      // its place and Back opens the book again.
+      if (isReaderActivity()) {
+        // No path: the reader files the book into /recents as it closes, so the reopen reads
+        // APP_STATE.openEpubPath, which the filing repoints.
+        replaceFromOpener(makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput), Opener::Reader);
+        return true;
+      }
+      currentActivity->startActivityForResult(makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput),
+                                              [](const ActivityResult&) {});
       return true;
     case CrossPointSettings::LP_MENU_LIGHT_PANEL:
       // The key that opened it puts it away again, as a second swipe does.

@@ -8,6 +8,8 @@
 #include <esp_attr.h>
 #include <esp_timer.h>
 
+#include <algorithm>
+
 #include "CrossPointState.h"
 #include "activities/Activity.h"
 #include "components/UITheme.h"
@@ -17,10 +19,14 @@ namespace {
 static RTC_NOINIT_ATTR uint32_t silentRebootMagic;
 static RTC_NOINIT_ATTR uint32_t silentRebootTarget;
 static RTC_NOINIT_ATTR uint32_t silentRebootPayload;
+// Home: where Back lands (BackTrail.h), in two words. Reader: the low word is the row of the
+// reader menu to reopen and silentRebootMenu its MenuReturn::reopen.
+static RTC_NOINIT_ATTR uint32_t silentRebootTrailLow;
+static RTC_NOINIT_ATTR uint32_t silentRebootTrailHigh;
+static RTC_NOINIT_ATTR uintptr_t silentRebootMenu;
 constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
-constexpr uint32_t SILENT_REBOOT_TARGET_SETTINGS = 2;
 constexpr uint32_t SILENT_REBOOT_LIGHT_ON = 1U << 0;
 
 // Breadcrumbs for the heap-defrag reboot, in RTC memory because the card is one of the
@@ -88,18 +94,21 @@ bool deepSleepInProgress = false;
 // SETTINGS.frontlightOn is the saved preference, not the live state: a wake with
 // Restore Light on Wake off leaves the light dark while "was on" stays saved. The
 // live state rides across the reboot so the light comes back exactly as it was.
-static void armSilentReboot(const uint32_t target) {
+static void armSilentReboot(const uint32_t target, const uint64_t trail) {
   silentRebootTarget = target;
+  silentRebootTrailLow = static_cast<uint32_t>(trail);
+  silentRebootTrailHigh = static_cast<uint32_t>(trail >> 32);
   silentRebootPayload = Frontlight.isOn() ? SILENT_REBOOT_LIGHT_ON : 0;
   silentRebootMagic = SILENT_REBOOT_MAGIC;
 }
 
-static void silentRestartTo(const uint32_t target) {
+static void silentRestartTo(const uint32_t target, const uint64_t trail = 0) {
   if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
   armRestartRescue();
   markRestartStage(STAGE_ENTERED);
-  armSilentReboot(target);
-  LOG_DBG("MAIN", "Silent restart (target=%lu)", static_cast<unsigned long>(target));
+  armSilentReboot(target, trail);
+  LOG_INF("MAIN", "Silent restart (target=%lu trail=%016llx)", static_cast<unsigned long>(target),
+          static_cast<unsigned long long>(trail));
   // E-ink retains the previous frame until Home's first paint lands (~2-3s).
   // Without an overlay, users don't see the reboot and fire input through to
   // Home. Select on the default selectorIndex=0 then opens the most-recent
@@ -115,9 +124,17 @@ static void silentRestartTo(const uint32_t target) {
 
 void silentRestart() { silentRestartTo(SILENT_REBOOT_TARGET_HOME); }
 
-void silentRestartToReader() { silentRestartTo(SILENT_REBOOT_TARGET_READER); }
+// The reader menu that launched the screen leaving (KOReader Sync) rides the reboot as its
+// reopen and row; the new reader accepts only its own reopens (EpubReaderActivity::onEnter).
+void silentRestartToReader() {
+  const MenuReturn menu = activityManager.takeReaderMenu();
+  silentRebootMenu = reinterpret_cast<uintptr_t>(menu.reopen);
+  silentRestartTo(SILENT_REBOOT_TARGET_READER, static_cast<uint32_t>(std::max(menu.row, 0)));
+}
 
-void silentRestartToSettings() { silentRestartTo(SILENT_REBOOT_TARGET_SETTINGS); }
+void silentRestartBack() { silentRestartToTrail(activityManager.backTrail()); }
+
+void silentRestartToTrail(const uint64_t trail) { silentRestartTo(SILENT_REBOOT_TARGET_HOME, trail); }
 
 void teardownWifiAndRestart(void (*restart)()) {
   if (WiFi.getMode() == WIFI_MODE_NULL) return;  // WiFi never came up: nothing to defrag
@@ -134,11 +151,19 @@ RestartBoot takeRestartBoot() {
   // Bound the target range too: RTC_NOINIT memory is uninitialized on cold boot.
   boot.silent = silentRebootMagic == SILENT_REBOOT_MAGIC;
   if (boot.silent && silentRebootTarget == SILENT_REBOOT_TARGET_READER) boot.target = RestartTarget::Reader;
-  if (boot.silent && silentRebootTarget == SILENT_REBOOT_TARGET_SETTINGS) boot.target = RestartTarget::Settings;
+  const uint64_t trail = static_cast<uint64_t>(silentRebootTrailHigh) << 32 | silentRebootTrailLow;
+  if (boot.silent && silentRebootTarget == SILENT_REBOOT_TARGET_HOME) boot.backTrail = trail;
+  if (boot.silent && boot.target == RestartTarget::Reader) {
+    boot.readerMenu = reinterpret_cast<void (*)(void*, int)>(silentRebootMenu);
+    boot.readerMenuRow = static_cast<int>(silentRebootTrailLow);
+  }
   boot.lightOn = boot.silent && (silentRebootPayload & SILENT_REBOOT_LIGHT_ON) != 0;
   silentRebootMagic = 0;
   silentRebootTarget = 0;
   silentRebootPayload = 0;
+  silentRebootTrailLow = 0;
+  silentRebootTrailHigh = 0;
+  silentRebootMenu = 0;
   if (boot.silent) {
     armRestartRescue();
     restartTrail = RESTART_TRAIL_MAGIC | STAGE_BOOT_SILENT;

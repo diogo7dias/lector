@@ -81,7 +81,7 @@ void CrossPointWebServerActivity::onEnter() {
 
   // Launch network mode selection subactivity
   LOG_DBG("WEBACT", "Launching NetworkModeSelectionActivity...");
-  startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
+  startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput, modeRow),
                          [this](const ActivityResult& result) {
                            if (result.isCancelled) {
                              finish();  // back to the screen File Transfer was opened from
@@ -108,11 +108,17 @@ void CrossPointWebServerActivity::onExit() {
       WiFi.disconnect(false);
     }
     delay(30);
-    // The reboot lands where Back would have: Settings when it opened this screen.
-    activityManager.returnsToSettings() ? silentRestartToSettings() : silentRestart();
+    // The reboot lands where Back would have: the Settings card or Home row that opened it.
+    silentRestartBack();
   }
 
   LOG_DBG("WEBACT", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
+}
+
+bool CrossPointWebServerActivity::restartStep(uint8_t& opener, int& row) const {
+  opener = static_cast<uint8_t>(ActivityManager::Opener::FileTransfer);
+  row = static_cast<int>(networkMode);
+  return true;
 }
 
 void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) {
@@ -132,16 +138,17 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
     // to the reader-to-reader screen, which owns the radio for its lifetime.
     activityManager.replaceFromOpener(
         makeUniqueNoThrow<NearbyFileTransferActivity>(renderer, mappedInput, NearbyFileTransferActivity::Mode::Receive),
-        ActivityManager::Opener::FileTransfer);
+        ActivityManager::Opener::FileTransfer, {}, static_cast<int>(mode));
     return;
   }
 
 #if FREEINK_CAP_USB_MSC
   if (mode == NetworkMode::USB_DRIVE) {
     // A cancelled Join Network leaves the radio on, and onExit() would then reboot
-    // instead of opening USB Drive. USB Drive ends in a reboot anyway.
+    // instead of opening USB Drive. USB Drive ends in a reboot, which comes back here.
     WiFi.mode(WIFI_OFF);
-    activityManager.replaceActivity(std::make_unique<UsbDriveActivity>(renderer, mappedInput));
+    activityManager.replaceFromOpener(makeUniqueNoThrow<UsbDriveActivity>(renderer, mappedInput),
+                                      ActivityManager::Opener::FileTransfer, {}, static_cast<int>(mode));
     return;
   }
 #endif

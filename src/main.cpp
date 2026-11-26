@@ -659,15 +659,18 @@ void setup() {
       break;
     case wake_sequence::Target::SilentReader:
       enterReader(APP_STATE.openEpubPath, /*withWakeFlags=*/false);
-      break;
-    case wake_sequence::Target::SilentSettings:
-      activityManager.goToSettings();
+      // Back out of KOReader Sync: the menu that launched it comes back over the page. Set after
+      // goToReader(), which forgets it; the book screen itself enters on the next loop pass.
+      if (restartBoot.readerMenu) {
+        activityManager.rememberReaderMenu(MenuReturn{restartBoot.readerMenu, nullptr, restartBoot.readerMenuRow});
+      }
       break;
     case wake_sequence::Target::SilentHome:
       // target == home (or reader with no open book): land on home — don't fall
       // through to the sleep-wake "resume reader" logic, which fires on stale
-      // openEpubPath + lastSleepFromReader from a prior session.
-      activityManager.goHome();
+      // openEpubPath + lastSleepFromReader from a prior session. A radio screen's reboot
+      // lands where its Back would have (silentRestartBack()); a plain one, Home.
+      activityManager.followBackTrail(restartBoot.backTrail);
       break;
     case wake_sequence::Target::BootBookReader:
       // "Open Book on Boot" jumps straight into a book instead of home: the last-read

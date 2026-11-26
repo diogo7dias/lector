@@ -33,6 +33,7 @@ class CrossPointWebServerActivity final : public UiStatusActivity {
   // Network mode
   NetworkMode networkMode = NetworkMode::JOIN_NETWORK;
   bool isApMode = false;
+  int modeRow = 0;  // the mode list's row on entry
 
   // Web server - owned by this activity
   std::unique_ptr<CrossPointWebServer> webServer;
@@ -69,10 +70,13 @@ class CrossPointWebServerActivity final : public UiStatusActivity {
   void closeTransfer(const char* cause);
 
  public:
-  explicit CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : UiStatusActivity(activity_name::kCrossPointWebServer, renderer, mappedInput) {}
+  // modeRow: the mode list's row on entry (the mode a Back from its screen came from).
+  explicit CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, int modeRow = 0)
+      : UiStatusActivity(activity_name::kCrossPointWebServer, renderer, mappedInput), modeRow(modeRow) {}
   void onEnter() override;
   void onExit() override;
+  // Rebuilt on its mode after a restart from a screen over it (Calibre).
+  bool restartStep(uint8_t& opener, int& row) const override;
   bool skipLoopDelay() override { return webServer && webServer->recentlyActive(); }
   bool preventAutoSleep() override { return webServer && webServer->recentlyActive(); }
 

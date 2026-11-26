@@ -11,10 +11,14 @@
  */
 class KOReaderSettingsActivity final : public UiListActivity {
  public:
-  explicit KOReaderSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : UiListActivity("KOReaderSettings", renderer, mappedInput) {}
+  // openRow: the row selected on entry (the one a reboot from its screen came from).
+  explicit KOReaderSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, int openRow = 0)
+      : UiListActivity("KOReaderSettings", renderer, mappedInput), openRow(openRow) {}
 
+  void onEnter() override;
   void onExit() override;
+  // KOReader Auth reboots after Wi-Fi: the boot rebuilds this list on the row that opened it.
+  bool restartStep(uint8_t& opener, int& row) const override;
 
  protected:
   int listCount() const override;
@@ -29,4 +33,5 @@ class KOReaderSettingsActivity final : public UiListActivity {
   // Row values own their strings; the ListItems borrow them.
   std::vector<std::string> values;
   std::vector<freeink::ui::ListItem> rows;
+  int openRow = 0;
 };

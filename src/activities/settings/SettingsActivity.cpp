@@ -403,6 +403,28 @@ std::unique_ptr<SettingsActivity> SettingsActivity::onShareCredentials(GfxRender
   return makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, kSystem, kSystem, SettingAction::ShareCredentials);
 }
 
+// A restart step (ActivityManager::backTrail): (category + 1) << 8, then the row's action in a
+// category or the card on the hub.
+bool SettingsActivity::restartStep(uint8_t& opener, int& row) const {
+  opener = static_cast<uint8_t>(ActivityManager::Opener::Settings);
+  const int index = selected();
+  if (mode == Mode::Hub || index < 0 || index >= settingsCount) {
+    row = mode == Mode::Hub ? index : (selectedCategory + 1) << 8;
+    return true;
+  }
+  row = (selectedCategory + 1) << 8 | (static_cast<int>(settings[index].action) & 0xFF);
+  return true;
+}
+
+std::unique_ptr<SettingsActivity> SettingsActivity::fromRestartRow(GfxRenderer& renderer,
+                                                                   MappedInputManager& mappedInput, const int row) {
+  const int category = (row >> 8) - 1;
+  if (category < 0 || category > kMaintenance)
+    return makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, row & 0xFF);
+  return makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, category == kMaintenance ? kSystem : category,
+                                             category, static_cast<SettingAction>(row & 0xFF));
+}
+
 void SettingsActivity::onEnter() {
   UiGridActivity::onEnter();
 
@@ -513,7 +535,7 @@ void SettingsActivity::onBackButton() {
     setSelected(selectedCategory);
     return;
   }
-  onGoHome();
+  finish();  // back to the screen under it, or Home on the Settings row
 }
 
 // What Confirm does to this row, for the band: a switch says which way it goes, a choice
@@ -713,16 +735,16 @@ void SettingsActivity::toggleCurrentSetting() {
         shareCredentials();
         break;
       case SettingAction::Network:
-        startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false),
-                               [](const ActivityResult&) {
-                                 SETTINGS.saveToFile();
-                                 // Every other WiFi screen hands the radio to a session whose onExit()
-                                 // tears it down. This one only saves credentials, yet the scan alone
-                                 // brings the driver up, so release its heap here. Runs from the loop
-                                 // task with no lock held; the restart popup paints to the panel.
-                                 RenderLock lock;
-                                 teardownWifiAndRestart(silentRestartToSettings);
-                               });
+        startActivityForResult(
+            std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false), [](const ActivityResult&) {
+              SETTINGS.saveToFile();
+              // Every other WiFi screen hands the radio to a session whose onExit()
+              // tears it down. This one only saves credentials, yet the scan alone
+              // brings the driver up, so release its heap here. Runs from the loop
+              // task with no lock held; the restart popup paints to the panel.
+              RenderLock lock;
+              teardownWifiAndRestart(+[] { silentRestartToTrail(activityManager.backTrail(/*withTop=*/true)); });
+            });
         break;
       case SettingAction::ShuffleWallpapers: {
         // Inline, no sub-activity: the reshuffle is a reseed of the rotation

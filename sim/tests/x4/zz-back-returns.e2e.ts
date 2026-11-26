@@ -111,3 +111,54 @@ test('Back from a screen a menu opened lands on that menu, on its row', async ({
   await press('Back');
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
 });
+
+// The Quick Panel's Settings button opens Settings over the screen the panel was on, so Back
+// brings that screen and the panel back. Starts where the test above leaves Home, on its
+// Settings row. (The File Transfer modes and OPDS need a radio, which panics QEMU.)
+test('Back from the Quick Panel Settings button lands on the panel again', async ({
+  app,
+  screen,
+}) => {
+  await app.open('/');
+  const activity = screen.getByTestId('activity');
+  const busy = screen.getByTestId('busy');
+  await expect(activity).toHaveText('Home', { timeout: 60_000 });
+  const press = async (name: string, times = 1) => {
+    for (let i = 0; i < times; i++) {
+      await screen.getByRole('button', { name }).click();
+      await expect(busy).toHaveText('no', { timeout: 60_000 });
+    }
+  };
+  const log = async () => (await (await fetch(`${app.baseUrl}/log`)).text()) as string;
+  const since = async (from: number, needle: string) =>
+    expect.poll(async () => (await log()).slice(from).includes(needle), { timeout: 30_000 }).toBe(true);
+
+  // Out of a book the grid is Refresh, Rotate / Continue Reading, Random Book / Search, Settings.
+  let from = (await log()).length;
+  const opened = await fetch(`${app.baseUrl}/double/power`, { method: 'POST' });
+  expect(opened.ok).toBe(true);
+  await expect(busy).toHaveText('no', { timeout: 60_000 });
+  await since(from, '[PANEL] Open (6 actions)');
+  await press('Down', 3);
+  await press('Right'); // Settings
+  from = (await log()).length;
+  await press('Confirm');
+  await expect(activity).toHaveText('Settings', { timeout: 30_000 });
+  expect((await log()).slice(from), 'Settings covers Home, it does not replace it').toContain('Pushed to activity stack');
+
+  from = (await log()).length;
+  await press('Back');
+  await since(from, 'Exiting activity: Settings');
+  await since(from, '[PANEL] Open');
+  expect((await log()).slice(from), 'Home came back from the stack, not rebuilt').not.toContain(
+    'Entering activity: Home',
+  );
+  await press('Back');
+  await since(from, '[PANEL] Close');
+  // Home answers again, still on its Settings row.
+  from = (await log()).length;
+  await press('Confirm');
+  await since(from, 'Entering activity: Settings');
+  await press('Back');
+  await expect(activity).toHaveText('Home', { timeout: 30_000 });
+});

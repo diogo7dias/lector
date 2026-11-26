@@ -24,7 +24,6 @@ using wake_sequence::WakeInputs;
 //   if      (recoveryFirmwareMode)                          -> firmware picker  [waits]
 //   else if (rebootedFromPanic)                             -> crash report     [waits]
 //   else if (silent && targetReader && !openEpubPath.empty) -> goToReader
-//   else if (silent && targetSettings)                      -> goSettings
 //   else if (silent)                                        -> goHome
 //   else if (bookOnBoot || openEmpty || !fromReader || backHeld || crashed) {
 //              if (backHeld || crashed) bootBookPath.clear();
@@ -45,8 +44,6 @@ Reference referenceChain(const WakeInputs& in) {
   if (in.panic) return {Target::CrashReport, true, false, false, false};
   if (in.silentReboot && in.silentTarget == RestartTarget::Reader && !in.openEpubPathEmpty)
     return {Target::SilentReader, false, false, false, false};
-  if (in.silentReboot && in.silentTarget == RestartTarget::Settings)
-    return {Target::SilentSettings, false, false, false, false};
   if (in.silentReboot) return {Target::SilentHome, false, false, false, false};
   if (in.bookOnBoot || in.openEpubPathEmpty || !in.lastSleepFromReader || in.backHeld || in.readerCrashed) {
     bool bootBookPicked = in.bootBookPicked;
@@ -64,7 +61,7 @@ TEST(WakeSequenceEquivalence, PlanMatchesTheOriginalChainForEveryInputCombinatio
   // which is one value rather than two flags.
   int checked = 0;
   for (int bits = 0; bits < (1 << 8); ++bits) {
-    for (const RestartTarget target : {RestartTarget::Home, RestartTarget::Reader, RestartTarget::Settings}) {
+    for (const RestartTarget target : {RestartTarget::Home, RestartTarget::Reader}) {
       WakeInputs in;
       in.recoveryFirmwareMode = bits & (1 << 0);
       in.panic = bits & (1 << 1);
@@ -90,5 +87,5 @@ TEST(WakeSequenceEquivalence, PlanMatchesTheOriginalChainForEveryInputCombinatio
       }
     }
   }
-  EXPECT_EQ(checked, 3 * 2 * (1 << 8));
+  EXPECT_EQ(checked, 2 * 2 * (1 << 8));
 }

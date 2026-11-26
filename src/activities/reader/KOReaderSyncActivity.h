@@ -95,6 +95,7 @@ class KOReaderSyncActivity final : public UiStatusActivity {
   // WiFi.getMode() because performUpload() calls esp_wifi_stop() on the way out,
   // which makes WiFi.getMode() return WIFI_MODE_NULL.
   bool wifiActivated = false;
+  bool leavingToBook = false;  // the way out reopens the book, not Home (onExit's restart)
 
   // True once a remote position replaced the local one, so the result screen
   // names which of the two outcomes happened.

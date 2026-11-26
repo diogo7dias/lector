@@ -43,13 +43,14 @@ bottom-edge buttons **Back**, **Confirm**, **Left** and **Right**.
 **Back** returns to the screen you came from. From a screen a menu or pop-up opened, it lands on
 that menu again, on the row you chose; choosing something in that screen (a chapter, a
 bookmark, a Yes) goes on as before. File Transfer opened from Settings comes back to Settings,
-and a file browser or Nearby screen comes back to the screen that opened it. Inside a book,
+and a file browser, Nearby, OPDS or USB Drive screen comes back to the screen that opened it,
+on the row you chose. Settings opened from the quick panel comes back to the quick panel. Inside a book,
 **Back** from the reader menu returns to the page. The Home key and the swipe up from the
 bottom edge go straight Home.
 
 A screen that has had Wi-Fi on restarts the reader when you leave it, to give the memory back.
-After File Transfer opened from Settings the restart lands on Settings; after the OPDS browser
-and USB Drive it lands on Home.
+The restart lands where **Back** would have: the Settings card or Home row, the OPDS server or
+the File Transfer mode you came from. The Home key and the Home gesture still land on Home.
 
 The four bottom-edge buttons can be reassigned in **Settings > Controls > Remap Front Buttons**,
 and the side buttons can be swapped or disabled with **Side Button Layout (reader)**.
@@ -699,7 +700,7 @@ no network. The X3 and X4 do not have this mode.
 3. Copy books, fonts or wallpapers onto the disk as you would with any USB stick.
 4. Eject the disk on the computer (**Eject** in Finder, Explorer or the Linux file manager,
    or `eject /dev/sdX` in a terminal; a plain `umount` is not enough) and wait for it to
-   disappear. The reader then restarts to Home with the new files in place.
+   disappear. The reader then restarts back to the File Transfer list with the new files in place.
 
 Unplugging the cable also ends the mode, but eject first: a cable pulled while the computer is
 still writing can leave a half-copied file or a damaged card, exactly as with any USB stick.
@@ -707,7 +708,9 @@ still writing can leave a half-copied file or a damaged card, exactly as with an
 While the computer holds the card the reader does nothing else with it: no sleep, no
 screenshots, no other screens, and the buttons are inactive. Before a computer connects,
 **Back**, **Power** or the Home gesture leaves the mode, and it gives up by itself after five
-minutes. Leaving always restarts the reader, which is how it takes the card back.
+minutes. Leaving always restarts the reader, which is how it takes the card back. **Power** and
+the Home gesture restart to Home; **Back**, an eject and the time-outs restart to the File
+Transfer list.
 
 ### Calibre wireless transfers
 
