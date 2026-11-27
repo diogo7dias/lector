@@ -207,13 +207,15 @@ void NearbyFileTransferActivity::onExit() {
   if (session.shouldDiscardPartialFile()) discardPartialFile();
   if (group.expectsMore()) discardPartialFamily();
   closeFiles();
-  // A credential bundle holds passwords in the clear; sent or not, it leaves the
-  // card with this screen. The receiver deletes its copy on import.
+  // A credential bundle holds passwords in the clear; sent, received or cut short, it
+  // leaves the card with this screen.
   if (mode == Mode::Send) {
     for (const auto& path : sourcePaths) {
       if (credential_bundle::isBundleFilename(path)) Storage.remove(path.c_str());
     }
   }
+  Storage.remove(credential_bundle::STAGING_PATH);
+  Storage.remove(FsHelpers::partialPathFor(credential_bundle::STAGING_PATH).c_str());
   Activity::onExit();
 }
 
@@ -555,7 +557,15 @@ void NearbyFileTransferActivity::acceptIncomingOffer() {
   }
 
   std::string resolved;
-  if (check.safeFolder.empty()) {
+  const bool bundle = check.safeFolder.empty() && credential_bundle::isBundleFilename(check.safeName);
+  if (bundle) {
+    // Passwords in the clear land where the web file manager never serves them, under
+    // one fixed name boot clears. FAT rename never overwrites, so a stale copy goes first.
+    if (Storage.ensureDirectoryExists("/.crosspoint")) {
+      resolved = credential_bundle::STAGING_PATH;
+      Storage.remove(resolved.c_str());
+    }
+  } else if (check.safeFolder.empty()) {
     resolved = resolveDestination(
         DESTINATION_FOLDER, check.safeName, [](const std::string& path) { return Storage.exists(path.c_str()); },
         [](const std::string_view name, const std::string_view folder, const int index) {
@@ -572,7 +582,7 @@ void NearbyFileTransferActivity::acceptIncomingOffer() {
   // A font face is never resumed. A family is wiped whole when its batch does not
   // finish, so there is no prefix left to pick up, and a face is small enough
   // that resending one costs less than reading it back to rebuild a checksum.
-  const bool allowResume = check.safeFolder.empty();
+  const bool allowResume = check.safeFolder.empty() && !bundle;
   uint64_t resumeOffset = 0;
   bool opened = !resolved.empty() && openIncomingFile(resolved, allowResume, resumeOffset);
   // The offset settles before the accept goes out, because the accept is what

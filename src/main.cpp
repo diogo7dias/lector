@@ -3,6 +3,7 @@
 #include <Epub.h>
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
@@ -22,6 +23,7 @@
 #include <esp_timer.h>
 
 #include <cstring>
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -54,6 +56,7 @@
 #include "util/ButtonNavigator.h"
 #include "util/ButtonReplay.h"
 #include "util/ButtonRouter.h"
+#include "util/CredentialBundle.h"
 #include "util/DoubleClickDetector.h"
 #include "util/LowBatteryPolicy.h"
 #include "util/ScreenshotUtil.h"
@@ -400,6 +403,16 @@ void setup() {
     static constexpr const char* kLectorFolders[] = {"/read", "/recents", "/sleep", "/sleep pause"};
     for (const char* folder : kLectorFolders) {
       Storage.ensureDirectoryExists(folder);
+    }
+  }
+
+  // A credential bundle left by a power cut or a crash mid-share still holds every
+  // WiFi and OPDS password in the clear. No screen is open yet, so none is in use.
+  for (const char* bundle : {credential_bundle::STAGING_PATH, credential_bundle::LEGACY_PATH}) {
+    for (const std::string& path : {std::string(bundle), FsHelpers::partialPathFor(bundle)}) {
+      if (Storage.exists(path.c_str()) && Storage.remove(path.c_str())) {
+        LOG_INF("MAIN", "Removed stale credential bundle %s", path.c_str());
+      }
     }
   }
 
