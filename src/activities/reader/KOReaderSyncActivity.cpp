@@ -371,8 +371,8 @@ void KOReaderSyncActivity::performUpload() {
 
   // Drop the radio while user reads the result; full teardown happens at silent reboot.
   // WiFi.mode, not esp_wifi_stop: the power manager's Wi-Fi lock reads WiFi.getMode(), so a
-  // raw stop kept the CPU pinned and light sleep vetoed on the result screen. onExit's reboot
-  // keys off wifiActivated, not the mode, so it still runs.
+  // raw stop kept the CPU pinned and light sleep vetoed on the result screen. onExit passes
+  // wifiActivated, so it still reboots.
   WiFi.mode(WIFI_OFF);
 
   if (result != KOReaderSyncClient::OK) {
@@ -422,7 +422,7 @@ void KOReaderSyncActivity::onEnter() {
 void KOReaderSyncActivity::onExit() {
   Activity::onExit();
 
-  if (wifiActivated) teardownWifiAndRestart(leavingToBook ? silentRestartToReader : silentRestartBack);
+  if (wifiActivated) teardownWifiAndRestart(leavingToBook ? silentRestartToReader : silentRestartBack, true);
 }
 
 void KOReaderSyncActivity::prepareComparison() {

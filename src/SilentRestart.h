@@ -13,9 +13,13 @@ void silentRestartToReader();  // currently-open EPUB (APP_STATE.openEpubPath)
 void silentRestartBack();
 void silentRestartToTrail(uint64_t trail);  // a trail of the caller's own (BackTrail.h)
 
-// A WiFi activity's way out: when the radio is on, drop the station (radio kept
-// up), let the disconnect settle, then restart (by default where Back lands). No-op with WiFi off.
-void teardownWifiAndRestart(void (*restart)() = silentRestartBack);
+// Whether a WiFi screen's way out reboots to give the heap back. Switching the radio off
+// does not undo the fragmentation, so a screen that knows it used WiFi says so.
+inline bool wifiRestartNeeded(const bool radioOn, const bool wifiUsed) { return radioOn || wifiUsed; }
+
+// A WiFi activity's way out: drop the station (radio kept up), let the disconnect settle,
+// then restart (by default where Back lands). No-op with WiFi off, unless wifiUsed.
+void teardownWifiAndRestart(void (*restart)() = silentRestartBack, bool wifiUsed = false);
 
 // enterDeepSleep() calls this once it commits to sleeping: deep sleep resets the chip
 // anyway, so a WiFi screen's silentRestart() in onExit() must not reboot first.

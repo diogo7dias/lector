@@ -136,10 +136,13 @@ void silentRestartBack() { silentRestartToTrail(activityManager.backTrail()); }
 
 void silentRestartToTrail(const uint64_t trail) { silentRestartTo(SILENT_REBOOT_TARGET_HOME, trail); }
 
-void teardownWifiAndRestart(void (*restart)()) {
-  if (WiFi.getMode() == WIFI_MODE_NULL) return;  // WiFi never came up: nothing to defrag
-  WiFi.disconnect(false);
-  delay(30);
+void teardownWifiAndRestart(void (*restart)(), const bool wifiUsed) {
+  const bool radioOn = WiFi.getMode() != WIFI_MODE_NULL;
+  if (!wifiRestartNeeded(radioOn, wifiUsed)) return;  // WiFi never came up: nothing to defrag
+  if (radioOn) {
+    WiFi.disconnect(false);
+    delay(30);
+  }
   restart();
 }
 
