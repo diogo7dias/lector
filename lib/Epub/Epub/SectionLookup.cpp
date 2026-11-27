@@ -82,6 +82,31 @@ int Section::getTocIndexForPage(const int page) const {
   return selected;
 }
 
+void Section::findAnchors(AnchorQuery* queries, const size_t count) const {
+  // First match wins, the build's anchors before the file's, as in findAnchor.
+  const auto fill = [&](const uint64_t key, const uint16_t anchorPage) {
+    for (size_t i = 0; i < count; ++i) {
+      if (queries[i].page == ANCHOR_UNRESOLVED && queries[i].hash == key) queries[i].page = anchorPage;
+    }
+  };
+  if (build_ && build_->parser) {
+    for (const auto& [key, anchorPage] : build_->parser->getAnchors()) fill(key, anchorPage);
+  }
+  HalFile f;
+  uint16_t entries = 0;
+  if (!openAnchorMap(f, entries)) return;
+  serialization::BufferedFileReader reader(f, 512);
+  for (uint16_t i = 0; i < entries; ++i) {
+    uint64_t key;
+    uint16_t anchorPage;
+    if (reader.read(&key, sizeof(key)) != sizeof(key) ||
+        reader.read(&anchorPage, sizeof(anchorPage)) != sizeof(anchorPage)) {
+      return;
+    }
+    fill(key, anchorPage);
+  }
+}
+
 std::optional<uint16_t> Section::getPageForParagraphIndex(const uint16_t pIndex) const {
   HalFile f;
   if (!Storage.openFileForRead("SCT", filePath, f)) {
