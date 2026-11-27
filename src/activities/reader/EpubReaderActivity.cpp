@@ -378,7 +378,6 @@ bool EpubReaderActivity::lightPanelStepAux(const int delta) {
   // to Settings > Reader.
   prefsCustom_ = true;
   writeReaderOverride(prefs_);
-  sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontPointSize);
   reloadForReaderPrefsChange();
   requestUpdate();
   return true;

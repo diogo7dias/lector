@@ -53,6 +53,12 @@ void EpubReaderActivity::reloadForReaderPrefsChange() {
   // so the next render rebuilds it with the new ReaderPrefs (CrossPoint's section
   // cache re-keys on the changed spec automatically — no cache machinery of ours).
   RenderLock lock(*this);
+  // An SD family keeps exactly one size resident and the id resolver returns whichever that
+  // is, so prefs_'s size is made resident before the relayout (a no-op when it already is).
+  // Under the same lock as the section drop: ensureLoadedFor() deletes the resident font
+  // before loading the next, and the render task lays out and draws with it. Done unlocked,
+  // a size change made while a render was running freed the font under it.
+  sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontPointSize);
   dropSectionForRelayout();
   // The loader skips a book's stylesheet when its look had both embedded switches off,
   // so a book that has just turned one on may have no CSS cache to lay out with.
@@ -187,10 +193,6 @@ void EpubReaderActivity::resetReaderPrefsToGlobal() {
   // fromGlobal() is the true global snapshot.
   prefs_ = ReaderPrefs::fromGlobal();
   prefsCustom_ = false;
-  // An SD family keeps exactly one size resident and the id resolver returns whichever that
-  // is, whatever size is asked for, so the global size has to be made resident before the
-  // relayout below -- otherwise the page keeps rendering at the size the override asked for.
-  sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontPointSize);
   reloadForReaderPrefsChange();
   requestUpdate();
 }
@@ -288,9 +290,6 @@ ReaderPrefs EpubReaderActivity::applyReaderPrefsFrom(const ReaderPrefs& incoming
   writeReaderOverride(prefs_);
   // Orientation is deliberately NOT part of ReaderPrefs here: rotating is a device
   // choice, not a book's look, so adopting a look never spins the screen.
-  // The font LOAD is the authority, not resolveFontId: an SD family keeps exactly one
-  // size resident, so the adopted size must be made resident before laying out with it.
-  sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontPointSize);
   reloadForReaderPrefsChange();
   requestUpdate();
   return next;
