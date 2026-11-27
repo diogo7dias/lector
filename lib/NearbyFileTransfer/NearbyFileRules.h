@@ -65,6 +65,12 @@ struct OfferCheck {
  * (.epub, .txt, .md, .xtc, .xtch) and sleep or cover images (.pxc, .png, .bmp).
  * Anything else is refused by name, before any bytes are accepted.
  */
+/**
+ * Largest credential bundle (.cpcred) offer accepted. The receiver reads one whole into
+ * RAM; a real bundle (16 WiFi networks, 16 OPDS servers at most) is a few KB.
+ */
+constexpr uint64_t MAX_CREDENTIAL_BUNDLE_BYTES = 16 * 1024;
+
 bool isAcceptedFilename(std::string_view name);
 
 /**

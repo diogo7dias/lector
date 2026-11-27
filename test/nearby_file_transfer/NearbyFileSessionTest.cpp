@@ -585,3 +585,22 @@ TEST(NearbyFileSession, AStrayOfferWhilePromptingLeavesTheRealSenderInPlace) {
   EXPECT_EQ(session.offeredName(), "Book.epub");
   EXPECT_EQ(session.offeredSize(), 4096u);
 }
+
+// ADVERTISE frames are unauthenticated: anyone in radio range can send one from any
+// MAC. The list a sender picks from must stay small however many arrive, or the heap
+// runs out and the -fno-exceptions allocation aborts.
+TEST(NearbyFileSession, ThePeerListStaysBoundedAgainstSpoofedReaders) {
+  uint32_t now = 1000;
+  TransferSession session;
+  session.beginSend("Book.epub", 4096, now);
+  drain(session, now);
+
+  for (uint32_t i = 0; i < 2000; ++i) {
+    TransferEvent advertise =
+        event(TransferEventKind::ADVERTISE, {0x02, 0x00, static_cast<uint8_t>(i >> 24), static_cast<uint8_t>(i >> 16),
+                                             static_cast<uint8_t>(i >> 8), static_cast<uint8_t>(i)});
+    advertise.deviceName = "Spoofed";
+    session.onEvent(advertise, now + i);
+  }
+  EXPECT_EQ(session.peerCount(), MAX_PEERS);
+}
