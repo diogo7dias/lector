@@ -42,6 +42,19 @@ TEST(FirmwareVersionParse, RejectsAVersionWithNoThreeNumberRun) {
   EXPECT_FALSE(firmware_version::parse(nullptr, &v));
 }
 
+// What the old sscanf("%d.%d.%d") accepted, pinned so the parser can change: trailing text
+// after the third number, and no match for a two-number run or an empty field.
+TEST(FirmwareVersionParse, ReadsTheRunTheWaySscanfDid) {
+  firmware_version::Semver v;
+  ASSERT_TRUE(firmware_version::parse("v10.20.30.40x", &v));
+  EXPECT_EQ(v.major, 10);
+  EXPECT_EQ(v.minor, 20);
+  EXPECT_EQ(v.patch, 30);
+  EXPECT_FALSE(firmware_version::parse("lector 1.2", &v));
+  EXPECT_FALSE(firmware_version::parse("1..2.3", &v));
+  EXPECT_FALSE(firmware_version::parse("1.2.", &v));
+}
+
 TEST(FirmwareVersionIsNewer, ComparesEachFieldInTurn) {
   EXPECT_TRUE(firmware_version::isNewer("lector-0.24.2", "lector 0.24.1"));
   EXPECT_TRUE(firmware_version::isNewer("lector-0.25.0", "lector 0.24.9"));

@@ -28,3 +28,19 @@ TEST(BookOrbitMissingFile, DueEverySixHoursOrWhenWifiIsUp) {
   EXPECT_TRUE(due(false, t + CHECK_EVERY_S, t));
   EXPECT_TRUE(due(false, t - 10, t));  // clock went back
 }
+
+// What the old sscanf("%d %lld\n%n") accepted, pinned so the parser can change: any run of
+// whitespace between and after the two numbers, signs, and a URL right after the stamp.
+TEST(BookOrbitMissingFile, ReadsTheNumbersTheWaySscanfDid) {
+  const Saved spaced = parse("  +4 \t 17 \r\n\n https://h\r\n");
+  EXPECT_EQ(spaced.count, 4);
+  EXPECT_EQ(spaced.checkedAt, 17LL);
+  EXPECT_EQ(spaced.feedUrl, "https://h");
+  const Saved split = parse("4\n-17\nhttps://h");
+  EXPECT_EQ(split.count, 4);
+  EXPECT_EQ(split.checkedAt, -17LL);
+  EXPECT_EQ(split.feedUrl, "https://h");
+  EXPECT_EQ(parse("4 17https://h").feedUrl, "https://h");
+  EXPECT_EQ(parse("4 9999999999\nhttps://h").checkedAt, 9999999999LL);
+  EXPECT_TRUE(parse("4 x\nhttps://h").feedUrl.empty());
+}
