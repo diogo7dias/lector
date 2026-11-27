@@ -65,6 +65,7 @@ BmpReaderError Bitmap::parseHeaders() {
 
   width = static_cast<int32_t>(readLE32(file));
   const auto rawHeight = static_cast<int32_t>(readLE32(file));
+  if (rawHeight == INT32_MIN) return BmpReaderError::BadDimensions;  // no positive counterpart to flip to
   topDown = rawHeight < 0;
   height = topDown ? -rawHeight : rawHeight;
 
