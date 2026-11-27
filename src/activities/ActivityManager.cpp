@@ -243,6 +243,20 @@ void ActivityManager::loop() {
     // handleInput() consumes the pass on every pass, so a deferred request would never
     // be flushed at all: the panel opened, reported present=1, and was never drawn.
     if (lightPanel.isActive()) {
+      // The Home key goes Home over the panel too: the panel eats every pass below, so it is
+      // asked here. Key only, no bottom swipe: that edge is the panel's own touch area.
+      if (mappedInput.wasHomeGesture(/*allowBottomSwipe=*/false)) {
+        if (currentActivity->isHomeActivity()) {
+          lightPanel.close([this] {
+            currentActivity->onRevealed();
+            requestUpdate(/*immediate=*/true);
+          });
+        } else {
+          lightPanel.close([] {});  // Home paints next; repainting the screen left is a wasted refresh
+          goHome();
+        }
+        return;
+      }
       // close() clears isActive() before this runs: the page under the band gets a clean paint.
       if (lightPanel.handleInput(mappedInput, [this] {
             if (!lightPanel.isActive()) currentActivity->onRevealed();
