@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 // Version strings this firmware has to compare, and where they come from:
@@ -26,6 +26,16 @@ struct Semver {
 // Parses the first "N.N.N" run in the string. Returns false when there is none, which is
 // the honest answer for a tag like "lector.exp.7" that carries no three-part number: the
 // caller must not treat an unparsable version as older or newer, only as unknown.
+// One number at p, read as sscanf's %d would (strtol: sscanf links newlib's float-capable
+// scanf, about 15 KB of flash). Advances p past it; false when no digits are there.
+inline bool readField(const char*& p, int* out) {
+  char* end = nullptr;
+  *out = static_cast<int>(strtol(p, &end, 10));
+  if (end == p) return false;
+  p = end;
+  return true;
+}
+
 inline bool parse(const char* text, Semver* out) {
   if (text == nullptr || out == nullptr) return false;
   for (const char* p = text; *p != '\0'; p++) {
@@ -38,7 +48,8 @@ inline bool parse(const char* text, Semver* out) {
       if (prev == '.') continue;
     }
     Semver v;
-    if (sscanf(p, "%d.%d.%d", &v.major, &v.minor, &v.patch) == 3) {
+    const char* q = p;
+    if (readField(q, &v.major) && *q++ == '.' && readField(q, &v.minor) && *q++ == '.' && readField(q, &v.patch)) {
       *out = v;
       return true;
     }
