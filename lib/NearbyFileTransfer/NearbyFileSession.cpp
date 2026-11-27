@@ -52,6 +52,7 @@ void TransferSession::rememberPeer(const TransferEvent& incoming) {
   for (const DiscoveredPeer& peer : peers_) {
     if (peer.mac == incoming.sourceMac) return;
   }
+  if (peers_.size() >= MAX_PEERS) return;
   peers_.push_back(DiscoveredPeer{incoming.sourceMac, incoming.deviceName});
 }
 

@@ -234,7 +234,8 @@ void NearbyFileTransferActivity::importCredentialBundle() {
   std::string json;
   {
     HalFile file;
-    if (Storage.openFileForRead(LOG_TAG, path, file)) {
+    // The offer check caps a bundle's size; this is the read it protects.
+    if (Storage.openFileForRead(LOG_TAG, path, file) && file.fileSize() <= MAX_CREDENTIAL_BUNDLE_BYTES) {
       json.reserve(static_cast<size_t>(file.fileSize()));
       char buffer[256];
       while (file.available()) {
@@ -346,8 +347,8 @@ bool NearbyFileTransferActivity::resumeIncomingFrom(const uint64_t resumeOffset)
     return false;
   }
 
-  // Reading back several megabytes takes seconds, so the loop feeds the watchdog
-  // and lets the busy banner say what is happening, as every other long scan does.
+  // Reading back several megabytes takes seconds, so the loop lets the busy banner
+  // say what is happening.
   const bool resumed =
       session.resumeFrom(resumeOffset, [this, &buffer](const uint64_t offset, const uint16_t length) -> const uint8_t* {
         if ((offset & 0xFFFF) == 0) busy::tick();

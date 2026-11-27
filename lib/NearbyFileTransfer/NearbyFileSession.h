@@ -32,6 +32,10 @@ constexpr uint32_t CHUNK_RETRY_INTERVAL_MS = 600;
 /** How long the other reader may go silent before the transfer is abandoned. */
 constexpr uint32_t PEER_SILENCE_TIMEOUT_MS = 12000;
 
+/** Readers a sender lists to pick from. ADVERTISE frames are unauthenticated, so the
+ *  list is bounded; a room with more readers than this is not a case worth RAM. */
+constexpr size_t MAX_PEERS = 16;
+
 enum class TransferState : uint8_t {
   DISCOVERING,   // Sender: looking for readers
   PEERS_FOUND,   // Sender: at least one reader answered, waiting on a choice

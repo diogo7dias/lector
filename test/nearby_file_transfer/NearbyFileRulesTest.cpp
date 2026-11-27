@@ -164,3 +164,14 @@ TEST(NearbyFileRules, LeavesABookOfferUnchangedWhenNoFolderIsNamed) {
   EXPECT_TRUE(check.accepted);
   EXPECT_TRUE(check.safeFolder.empty());
 }
+
+// The receiver reads a credential bundle whole into RAM to import it, so an offer
+// bigger than any real bundle is refused before a byte lands.
+TEST(NearbyFileRules, RefusesACredentialBundleTooBigToRead) {
+  EXPECT_TRUE(checkOffer("credentials.cpcred", 2048, UINT64_MAX).accepted);
+  const OfferCheck huge = checkOffer("credentials.cpcred", MAX_CREDENTIAL_BUNDLE_BYTES + 1, UINT64_MAX);
+  EXPECT_FALSE(huge.accepted);
+  EXPECT_EQ(huge.rejection, RejectReason::TOO_LARGE);
+  // Books are not held to it.
+  EXPECT_TRUE(checkOffer("Book.epub", MAX_CREDENTIAL_BUNDLE_BYTES + 1, UINT64_MAX).accepted);
+}

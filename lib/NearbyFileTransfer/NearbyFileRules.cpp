@@ -182,7 +182,8 @@ OfferCheck checkOffer(const std::string_view offeredName, const uint64_t sizeByt
     check.rejection = RejectReason::UNSUPPORTED_TYPE;
     return check;
   }
-  if (!fitsOnCard(sizeBytes, freeBytes)) {
+  const bool bundle = toLower(check.safeName).ends_with(".cpcred");
+  if (!fitsOnCard(sizeBytes, freeBytes) || (bundle && sizeBytes > MAX_CREDENTIAL_BUNDLE_BYTES)) {
     check.rejection = RejectReason::TOO_LARGE;
     return check;
   }
