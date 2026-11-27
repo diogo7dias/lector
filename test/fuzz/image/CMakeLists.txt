@@ -58,7 +58,7 @@ target_compile_definitions(fuzz_image PRIVATE __LINUX__ PNG_MAX_BUFFERED_PIXELS=
   LECTOR_DEVICE_REGISTER_WIDTH ALLOWS_UNALIGNED MAX_WIDTH=3072)
 target_compile_options(fuzz_image PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions -fno-rtti>)
 
-# The decoders define ALLOWS_UNALIGNED for x86-64 (and for ESP32 Arduino in JPEGDEC) and load
+# The decoders define ALLOWS_UNALIGNED for x86-64 (and here by the flag above) and load
 # words from byte offsets on purpose; only that check is off, and only in their own units.
 set_source_files_properties(
   ${pngdec_SOURCE_DIR}/src/PNGdec.cpp ${pngdec_SOURCE_DIR}/src/inflate.c ${pngdec_SOURCE_DIR}/src/inffast.c
