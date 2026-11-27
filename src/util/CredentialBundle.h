@@ -26,6 +26,14 @@ constexpr const char* FILE_EXTENSION = ".cpcred";
 constexpr const char* FILE_NAME = "credentials.cpcred";
 
 /**
+ * Where both readers hold the bundle while it is on the card: inside the store
+ * folder, where the web file manager and WebDAV never serve it. Older firmware
+ * used LEGACY_PATH at the card root; boot removes whatever either left behind.
+ */
+constexpr const char* STAGING_PATH = "/.crosspoint/credentials.cpcred";
+constexpr const char* LEGACY_PATH = "/credentials.cpcred";
+
+/**
  * Format version. A reader refuses a bundle it does not know how to read rather
  * than guessing at the fields.
  */

@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "network/ProtectedPaths.h"
+#include "util/CredentialBundle.h"
 
 using protected_paths::isProtectedFile;
 using protected_paths::isProtectedName;
@@ -56,4 +57,14 @@ TEST(ProtectedPaths, ListedNamesAreNotReadAsAliases) {
   EXPECT_TRUE(isProtectedName("XTCache"));
   EXPECT_FALSE(isProtectedName("IMG~1.JPG"));
   EXPECT_FALSE(isProtectedName("a.epub"));
+}
+
+// The bundle holds every WiFi and OPDS password in the clear. Whatever is left of it
+// after a power cut or an OOM must not be reachable from the web file manager or
+// WebDAV, hidden files shown or not.
+TEST(ProtectedPaths, TheCredentialBundleIsProtected) {
+  const std::string staged = credential_bundle::STAGING_PATH;
+  EXPECT_TRUE(isProtectedPath(staged));
+  EXPECT_TRUE(isProtectedFile(staged));
+  EXPECT_TRUE(isProtectedFile(FsHelpers::partialPathFor(staged)));
 }

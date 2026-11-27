@@ -865,8 +865,18 @@ void SettingsActivity::shareCredentials() {
     return;
   }
 
+  // The Nearby screen owns the radio for its lifetime and removes the bundle in its
+  // onExit. It is built first: with no screen to remove it, the bundle is never written.
+  const std::string path = credential_bundle::STAGING_PATH;
+  auto nearby = makeUniqueNoThrow<NearbyFileTransferActivity>(renderer, mappedInput,
+                                                              NearbyFileTransferActivity::Mode::Send, path);
+  if (!nearby) {
+    LOG_ERR("SET", "OOM: no Nearby screen to share credentials");
+    return;
+  }
+
   const std::string json = credential_bundle::serialize(bundle);
-  const std::string path = std::string("/") + credential_bundle::FILE_NAME;
+  Storage.ensureDirectoryExists("/.crosspoint");
   Storage.remove(path.c_str());
   {
     HalFile file;
@@ -880,11 +890,7 @@ void SettingsActivity::shareCredentials() {
     file.close();
   }
 
-  // The Nearby screen owns the radio for its lifetime and removes the bundle in its
-  // onExit, so nothing here waits around holding passwords on the card.
-  activityManager.replaceFromOpener(makeUniqueNoThrow<NearbyFileTransferActivity>(
-                                        renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, path),
-                                    ActivityManager::Opener::SettingsShareCredentials);
+  activityManager.replaceFromOpener(std::move(nearby), ActivityManager::Opener::SettingsShareCredentials);
 }
 
 void SettingsActivity::openSleepTimeoutPicker() {
