@@ -218,14 +218,10 @@ void HomeActivity::loop() {
         }
         break;
       case CrossPointSettings::HOME_BACK_SORTES:
+        // onEnter already drew a random finished book, and nothing on Home changes the
+        // card, so a second walk of the whole library would only draw again.
         if (sortesResult == sortes::ScanResult::Found) {
-          BusyBanner banner(renderer, tr(STR_SORTES));
-          sortesResult = sortes::findBook(sortesBook, esp_random);
-          if (sortesResult == sortes::ScanResult::Found) {
-            activityManager.goToReader(sortesBook, false, false, true);
-          } else {
-            requestUpdate();
-          }
+          activityManager.goToReader(sortesBook, false, false, true);
           return;
         }
         break;
