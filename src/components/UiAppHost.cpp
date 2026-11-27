@@ -74,6 +74,17 @@ void UiAppHost::noteArmed(const fui::ActionEvent& event) {
 void UiAppHost::clearTwoTap() {
   if (!twoTapGate.armed()) return;
   twoTapGate.clear();
+  dropActiveElement();
+}
+
+void UiAppHost::endSwallowedPress() {
+  if (!pressOpen) return;
+  pressOpen = false;
+  twoTapGate.clear();
+  dropActiveElement();
+}
+
+void UiAppHost::dropActiveElement() {
   // The highlight IS the SDK's active element, so dropping the arm has to drop
   // that too. An off-target release clears it and dispatches nothing.
   fui::InputSnapshot off{};
@@ -96,6 +107,11 @@ UiAppHost::TouchRoute UiAppHost::routeTouch(const MappedInputManager& input, con
   // arm left behind would be a second, stale highlight on another row.
   if (input.wasAnyPressed() || input.tappedHintHardware() >= 0) clearTwoTap();
   result.snap = touchSnapshotFrom(input, withLongPress);
+  // A gesture that claims a contact (a list scroll, the panel pull) swallows the rest of
+  // it, so its release never comes here and the row it landed on kept its pressed outline.
+  int heldX = 0;
+  int heldY = 0;
+  if (!result.snap.touchReleased && !input.isScreenTouchHeld(heldX, heldY)) endSwallowedPress();
   if (!result.snap.touchPressed && !result.snap.touchReleased && !(routeHeld && result.snap.touchHeld)) {
     return result;
   }
@@ -110,7 +126,9 @@ UiAppHost::TouchRoute UiAppHost::routeTouch(const MappedInputManager& input, con
   } else {
     result.event = app.route(result.snap);
   }
+  if (result.snap.touchPressed) pressOpen = true;
   if (!result.snap.touchReleased) return result;
+  pressOpen = false;
   if (armedThisPass) {
     // Routing a release clears the SDK's active element, which is what paints
     // the armed control outlined, so re-take it at the point the tap landed. A

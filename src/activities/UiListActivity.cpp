@@ -127,6 +127,7 @@ void UiListActivity::loop() {
   // every list, including the screens that override navigateButtons().
   const auto scroll = mappedInput.wasListScrollSwipe();
   if (scroll != list_swipe::Scroll::None) {
+    endSwallowedPress();  // before the scroll paints, so the new screen has no outline
     scrollPage(scroll == list_swipe::Scroll::PageDown ? 1 : -1);
     return;
   }

@@ -382,7 +382,9 @@ void UiGridActivity::loop() {
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenRight}, [this] { moveSelection(0, 1); });
 
   // A swipe moves a whole screen of rows, like the band's page pair.
-  switch (mappedInput.wasListScrollSwipe()) {
+  const auto scroll = mappedInput.wasListScrollSwipe();
+  if (scroll != list_swipe::Scroll::None) endSwallowedPress();  // before the page paints
+  switch (scroll) {
     case list_swipe::Scroll::PageDown:
       pageBy(1);
       break;
