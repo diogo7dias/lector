@@ -120,6 +120,9 @@ class UiAppHost {
   // Drops the arm and the highlight it paints. Every lifetime rule routes here:
   // leaving the screen, a scroll, a physical key, a tap on empty space.
   void clearTwoTap();
+  // Ends a press whose release will never be routed: a gesture claimed the contact and the
+  // input layer swallows its lift. Drops the pressed highlight (and any arm) it left behind.
+  void endSwallowedPress();
   two_tap::Gate& twoTap() { return twoTapGate; }
   // Run when a first tap arms a control rather than running it, so a screen can
   // move its own selection onto the armed control. Without it the side keys and
@@ -146,4 +149,7 @@ class UiAppHost {
   // Set by noteArmed() for the pass routeTouch() is in, so it knows to repaint
   // the highlight rather than treat the tap as an action.
   bool armedThisPass = false;
+  // A press was routed and its release has not been yet.
+  bool pressOpen = false;
+  void dropActiveElement();
 };
