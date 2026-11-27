@@ -1,5 +1,6 @@
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
+#include <Epub/parsers/ArxHash.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -228,24 +229,37 @@ const char* EpubReaderActivity::printedPageLabel() const {
     printedMarksBuilding_ = section->isBuilding();
     printedMarks_.clear();
     printedMarks_.reserve(32);
+    // The anchors resolve in one pass after the walk, not one section-file scan per mark.
+    std::vector<Section::AnchorQuery> queries;
+    queries.reserve(32);
     struct Ctx {
       const EpubReaderActivity& self;
-    } ctx{*this};
+      std::vector<Section::AnchorQuery>& queries;
+    } ctx{*this, queries};
     epub->forEachPrintedPage(
         [](void* c, const std::string_view label, const char* href) {
-          const auto& self = static_cast<Ctx*>(c)->self;
+          auto& ctx = *static_cast<Ctx*>(c);
           if (label.size() >= sizeof(PrintedMark::label)) return true;
-          if (self.epub->resolveHrefToSpineIndex(href) != self.currentSpineIndex) return true;
+          if (ctx.self.epub->resolveHrefToSpineIndex(href) != ctx.self.currentSpineIndex) return true;
           const char* hash = strchr(href, '#');
-          std::optional<uint16_t> page = 0;
-          if (hash && hash[1] != '\0') page = self.section->findAnchor(hash + 1);
-          if (!page) return true;
-          PrintedMark mark{*page, {}};
+          // No fragment: the mark is the top of the file.
+          Section::AnchorQuery query{0, 0};
+          if (hash && hash[1] != '\0') query = {arxHash64(hash + 1), Section::ANCHOR_UNRESOLVED};
+          PrintedMark mark{0, {}};
           memcpy(mark.label, label.data(), label.size());
-          self.printedMarks_.push_back(mark);
+          ctx.self.printedMarks_.push_back(mark);
+          ctx.queries.push_back(query);
           return true;
         },
         &ctx);
+    section->findAnchors(queries.data(), queries.size());
+    size_t kept = 0;
+    for (size_t i = 0; i < printedMarks_.size(); ++i) {
+      if (queries[i].page == Section::ANCHOR_UNRESOLVED) continue;
+      printedMarks_[kept] = printedMarks_[i];
+      printedMarks_[kept++].page = queries[i].page;
+    }
+    printedMarks_.resize(kept);
   }
   // The last marker on or before this page: the printed page this one belongs to.
   const char* label = nullptr;

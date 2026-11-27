@@ -169,6 +169,16 @@ class Section {
   // (covers finalized sections and partials from a previous session).
   std::optional<uint16_t> findAnchor(const std::string& anchor) const;
 
+  // findAnchor for many anchors at once: one buffered pass over the anchor map instead of
+  // a file open and an unbuffered scan per anchor. Fills only the queries still at
+  // ANCHOR_UNRESOLVED; ones it cannot find stay there.
+  static constexpr uint16_t ANCHOR_UNRESOLVED = 0xFFFF;
+  struct AnchorQuery {
+    uint64_t hash;
+    uint16_t page;
+  };
+  void findAnchors(AnchorQuery* queries, size_t count) const;
+
   // True if this spine's unzipped HTML is already cached, so a build won't pay the (multi-second on a
   // giant spine) zip inflation. Lets the reader skip the indexing popup on a fast reopen/rebuild.
   bool hasHtmlCache() const;
