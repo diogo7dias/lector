@@ -23,9 +23,6 @@ struct Semver {
   int patch = 0;
 };
 
-// Parses the first "N.N.N" run in the string. Returns false when there is none, which is
-// the honest answer for a tag like "lector.exp.7" that carries no three-part number: the
-// caller must not treat an unparsable version as older or newer, only as unknown.
 // One number at p, read as sscanf's %d would (strtol: sscanf links newlib's float-capable
 // scanf, about 15 KB of flash). Advances p past it; false when no digits are there.
 inline bool readField(const char*& p, int* out) {
@@ -36,6 +33,9 @@ inline bool readField(const char*& p, int* out) {
   return true;
 }
 
+// Parses the first "N.N.N" run in the string. Returns false when there is none, which is
+// the honest answer for a tag like "lector.exp.7" that carries no three-part number: the
+// caller must not treat an unparsable version as older or newer, only as unknown.
 inline bool parse(const char* text, Semver* out) {
   if (text == nullptr || out == nullptr) return false;
   for (const char* p = text; *p != '\0'; p++) {
