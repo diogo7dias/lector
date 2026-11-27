@@ -45,7 +45,8 @@ test('Home key closes the light panel and goes Home', async ({ app, screen }) =>
   await homeFromPanel('Settings');
 
   // The suite shares one card: the book may already be Home's first row (blank on a fresh card).
-  if ((await ink(0, 230, 480, 60)) > 500) {
+  const listed = (await ink(0, 230, 480, 60)) > 500;
+  if (listed) {
     await tapOnce(240, 259);
   } else {
     await tapOnce(240, 517); // Browse Files
@@ -55,6 +56,21 @@ test('Home key closes the light panel and goes Home', async ({ app, screen }) =>
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
   await settle();
   await homeFromPanel('EpubReader');
+
+  if (!listed) {
+    // Opening it filed the book into Recents. Back in, then the in-book menu's Book >
+    // Remove from Recents leaves it unfiled at the card root, where later files look for it.
+    await tapOnce(240, 259);
+    await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
+    await settle();
+    expect((await fetch(`${app.baseUrl}/swipe/240/795/240/450`, { method: 'POST' })).ok).toBe(true);
+    await settle();
+    await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
+    await tapOnce(100, 198); // Book
+    await tapOnce(100, 318); // Remove from Recents
+    await expect(activity).toHaveText('Home', { timeout: 30_000 });
+    expect(await ink(0, 230, 480, 60), 'removed from Home recents').toBeLessThan(500);
+  }
 
   expect(await log()).not.toMatch(/Guru Meditation|abort\(\)|Backtrace/);
 });
