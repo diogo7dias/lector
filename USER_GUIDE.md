@@ -1139,7 +1139,8 @@ belongs to, so the rows here appear in the same order as on the device.
 
 The quick panel is a band over the top of the screen. Open it by swiping down from the top
 edge, or with a button bound to **Quick Panel** (on the X3 and X4, a double click of **Power**
-out of the box); the same gesture, **Back** or **Confirm** on a row put it away. It holds a
+out of the box); the same gesture, **Back** or **Confirm** on a row put it away, and the
+X4 Pro's Home key closes it and goes Home. It holds a
 grid of actions for where you are (Refresh, Rotate, Continue Reading, Random Book, Search and
 Settings outside a book), a size or sort row, and the battery and free space. **Volume Up** and
 **Volume Down** move the cursor down the rows and on through the grid, **Left** and **Right**
