@@ -70,3 +70,21 @@ TEST(SectionCacheValidity, OldHeadersRejectedBeforeSpecReadAndNewHeadersRoundTri
     }
   }
 }
+
+// A finalized header cut short (a card that lost the tail of the file) is corrupt, not a
+// 0-page chapter: every cut must be rejected and the file cleared.
+TEST(SectionCacheValidity, TruncatedHeaderIsClearedNotServed) {
+  ReaderRenderSpec spec;
+  spec.fontId = 42;
+  Section writer;
+  writer.writeSectionFileHeader(spec);
+  writer.file.bytes[0] = SECTION_FILE_VERSION;
+  for (size_t cut = 1; cut < HEADER_SIZE; cut++) {
+    Storage.bytes.assign(writer.file.bytes.begin(), writer.file.bytes.begin() + cut);
+    Section reader;
+    reader.pageCount = 7;
+    EXPECT_FALSE(reader.loadSectionFile(spec)) << cut << " bytes";
+    EXPECT_TRUE(reader.cleared) << cut << " bytes";
+    EXPECT_FALSE(reader.file.opened) << cut << " bytes";
+  }
+}
