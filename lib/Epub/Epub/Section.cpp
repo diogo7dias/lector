@@ -104,20 +104,15 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
 }
 
 // The render-spec block of a section header, in file order (writeSectionFileHeader).
-static void readSpecFields(HalFile& f, ReaderRenderSpec& out) {
-  serialization::readPod(f, out.fontId);
-  serialization::readPod(f, out.lineCompression);
-  serialization::readPod(f, out.extraParagraphSpacing);
-  serialization::readPod(f, out.wordSpacing);
-  serialization::readPod(f, out.paragraphAlignment);
-  serialization::readPod(f, out.viewportWidth);
-  serialization::readPod(f, out.viewportHeight);
-  serialization::readPod(f, out.embeddedStyle);
-  serialization::readPod(f, out.imageRendering);
-  serialization::readPod(f, out.focusReadingEnabled);
-  serialization::readPod(f, out.guideDotsMode);
-  serialization::readPod(f, out.paragraphIndentSpaces);
-  serialization::readPod(f, out.characterSpacing);
+// False when the card could not supply every field.
+static bool readSpecFields(HalFile& f, ReaderRenderSpec& out) {
+  return serialization::readPod(f, out.fontId) && serialization::readPod(f, out.lineCompression) &&
+         serialization::readPod(f, out.extraParagraphSpacing) && serialization::readPod(f, out.wordSpacing) &&
+         serialization::readPod(f, out.paragraphAlignment) && serialization::readPod(f, out.viewportWidth) &&
+         serialization::readPod(f, out.viewportHeight) && serialization::readPod(f, out.embeddedStyle) &&
+         serialization::readPod(f, out.imageRendering) && serialization::readPod(f, out.focusReadingEnabled) &&
+         serialization::readPod(f, out.guideDotsMode) && serialization::readPod(f, out.paragraphIndentSpaces) &&
+         serialization::readPod(f, out.characterSpacing);
 }
 
 bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
@@ -136,8 +131,14 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
       return false;
     }
 
+    // A header cut short is a corrupt file, never a 0-page chapter.
     ReaderRenderSpec cached;
-    readSpecFields(file, cached);
+    if (file.size() < HEADER_SIZE || !readSpecFields(file, cached)) {
+      file.close();
+      LOG_ERR("SCT", "Deserialization failed: truncated header");
+      clearCache();
+      return false;
+    }
 
     if (!sectionCacheMatches(spec, cached)) {
       file.close();
@@ -149,7 +150,12 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     }
   }
 
-  serialization::readPod(file, pageCount);
+  if (!serialization::readPod(file, pageCount)) {
+    file.close();
+    LOG_ERR("SCT", "Deserialization failed: unreadable page count");
+    clearCache();
+    return false;
+  }
 
   if (filePartial) {
     // A partial's pageCount is the watermark of a suspended build. Read the watermark
@@ -224,8 +230,7 @@ bool Section::swapInPreviousLayout(const ReaderRenderSpec& spec, const bool curr
     HalFile prev;
     if (Storage.openFileForRead("SCT", prevPath, prev) && readKnownVersion(prev, nullptr)) {
       ReaderRenderSpec cached;
-      readSpecFields(prev, cached);
-      prevMatches = sectionCacheMatches(spec, cached);
+      prevMatches = prev.size() >= HEADER_SIZE && readSpecFields(prev, cached) && sectionCacheMatches(spec, cached);
     }
   }
 
