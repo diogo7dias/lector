@@ -52,6 +52,10 @@ def patch_decoders(env):
                     % lib_dir
                 )
                 raise SystemExit(1)
+            if not all(_is_applied_or_appliable(lib_dir, p) for p in patches):
+                # A patch changed since this checkout was patched: start again from the pin.
+                subprocess.run(["git", "checkout", "--", "."], cwd=lib_dir, check=True)
+                print("Reset %s to its pin: a patch changed" % lib)
             for patch in patches:
                 _apply_one(lib, lib_dir, patch)
 
@@ -95,6 +99,12 @@ def _apply_one(lib, lib_dir, patch_path):
         raise SystemExit(1)
     subprocess.run(["git", "apply", patch_path], cwd=lib_dir, check=True)
     print("Applied %s patch: %s" % (lib, name))
+
+
+def _is_applied_or_appliable(lib_dir, patch_path):
+    return _git_apply_succeeds(lib_dir, patch_path, reverse=True) or _git_apply_succeeds(
+        lib_dir, patch_path, reverse=False
+    )
 
 
 def _git_apply_succeeds(lib_dir, patch_path, *, reverse):
