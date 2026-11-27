@@ -172,3 +172,18 @@ TEST(XtcParser, TwoBitPageReadStaysInsideItsBuffer) {
 }
 
 }  // namespace
+
+// A 0-wide or 0-high page passes the 2-bit height check (0 % 8 == 0), then sizes a 0-byte
+// page buffer and a 0x0 cover. The book must be refused when it opens.
+TEST(XtcParser, ZeroSizedPagesAreRefused) {
+  for (const auto& [container, page] : {std::pair{XTC_MAGIC, XTG_MAGIC}, std::pair{XTCH_MAGIC, XTH_MAGIC}}) {
+    for (const auto& [w, h] : {std::pair<uint16_t, uint16_t>{0, 0}, {0, kSide}, {kSide, 0}}) {
+      auto bytes = buildBook(container, page);
+      firstEntry(bytes)->width = w;
+      firstEntry(bytes)->height = h;
+      Storage.setFile(kPath, bytes);
+      XtcParser parser;
+      EXPECT_EQ(parser.open(kPath), XtcError::CORRUPTED_HEADER) << w << "x" << h;
+    }
+  }
+}

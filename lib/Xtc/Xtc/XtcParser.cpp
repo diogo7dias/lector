@@ -222,6 +222,11 @@ XtcError XtcParser::readFirstPageInfo() {
 
   m_defaultWidth = entry.width;
   m_defaultHeight = entry.height;
+  // A 0-wide or 0-high page would size a 0-byte page buffer and a 0x0 cover.
+  if (m_defaultWidth == 0 || m_defaultHeight == 0) {
+    LOG_ERR("XTC", "Page size %ux%u is empty", m_defaultWidth, m_defaultHeight);
+    return XtcError::CORRUPTED_HEADER;
+  }
 
   LOG_DBG("XTC", "Page table validated: %u pages, default %dx%d", m_header.pageCount, m_defaultWidth, m_defaultHeight);
   // The pages decide the bit depth: some converters write a 1-bit container

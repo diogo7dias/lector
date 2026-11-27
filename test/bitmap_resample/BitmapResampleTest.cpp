@@ -168,3 +168,13 @@ TEST(BitmapRowCache, RefusedOnceRowsWereRead) {
   ASSERT_EQ(bmp.readNextRow(packed.data(), row.data()), BmpReaderError::Ok);
   EXPECT_FALSE(bmp.cacheRows());
 }
+
+// A height of INT32_MIN has no positive counterpart: negating it to flip a top-down image
+// overflowed (undefined behaviour), so the header must be refused before that.
+TEST(BitmapResample, Int32MinHeightIsRefused) {
+  auto bytes = makeBmp24(16, 1, [](int, int) { return 0; });
+  put32(bytes, 22, 0x80000000u);
+  HalFile file(bytes);
+  Bitmap bmp(file);
+  EXPECT_EQ(bmp.parseHeaders(), BmpReaderError::BadDimensions);
+}
