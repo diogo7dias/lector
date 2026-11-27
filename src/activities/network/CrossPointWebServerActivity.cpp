@@ -136,6 +136,9 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
   if (mode == NetworkMode::NEARBY_READER) {
     // Nothing here applies: no WiFi, no web server, no DNS. Hand straight over
     // to the reader-to-reader screen, which owns the radio for its lifetime.
+    // A cancelled Join Network leaves the radio on: onExit() would then reboot
+    // instead, and Nearby refuses a radio that is not off.
+    WiFi.mode(WIFI_OFF);
     activityManager.replaceFromOpener(
         makeUniqueNoThrow<NearbyFileTransferActivity>(renderer, mappedInput, NearbyFileTransferActivity::Mode::Receive),
         ActivityManager::Opener::FileTransfer, {}, static_cast<int>(mode));
