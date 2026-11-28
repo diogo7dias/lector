@@ -84,6 +84,9 @@ class ParsedText {
   // Set once a soft-flush pass (includeLastLine=false) has emitted lines, so later passes
   // over the same paragraph do not indent a mid-paragraph line as a first line.
   bool paragraphContinues = false;
+  // While a line is being handed to the line sink: how many lines of the paragraph follow
+  // it, or -1 when the rest of the paragraph is not laid out yet.
+  int linesAfterCurrent = -1;
   std::vector<std::string> reorderedWordsScratch;
   std::vector<EpdFontFamily::Style> reorderedStylesScratch;
   std::vector<uint16_t> reorderedWidthsScratch;
@@ -176,6 +179,7 @@ class ParsedText {
   // A heading is a chapter title, not paragraph 1, so it must not consume a paragraph number.
   void setHeading(const bool heading) { isHeading = heading; }
   bool getIsHeading() const { return isHeading; }
+  int linesAfterCurrentLine() const { return linesAfterCurrent; }
   // Slot for words at an absolute size (or monospace); reuses a matching slot, or the nearest once all are taken.
   uint8_t sizeSlotFor(float scale, bool monospace = false);
   uint8_t sizeSlotsInUse() const { return sizeSlotCount; }

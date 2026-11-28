@@ -37,6 +37,7 @@ TEST(SectionCacheValidity, EveryLayoutFieldInvalidatesIndependently) {
   CHECK_FIELD(guideDotsMode, GUIDE_DOTS_HIDDEN);
   CHECK_FIELD(paragraphIndentSpaces, 3);
   CHECK_FIELD(characterSpacing, -1);
+  CHECK_FIELD(keepHeadingsWithText, true);
 #undef CHECK_FIELD
 }
 
