@@ -1271,6 +1271,9 @@ The other numbers in Settings, such as Time to Sleep, open their own slider scre
 
 By default pages end full: no line moves to the next page to keep a paragraph's first or last line
 or a heading from sitting alone at a page edge. Page breaks the book asks for still apply. Tables size each column to its content.
+A table too wide for the page sets its cell text one size smaller, a cell that spans columns
+stays in the grid, and a header row gets a heavier rule under it. A table keeps its grid up to
+4 columns (6 on the X4 Pro); wider ones list their cells one under another.
 Small pictures in the text (icons, symbols drawn as images, up to two lines tall) stay inside
 the line; larger ones get their own centred block, and a small picture alone in its paragraph
 is centred.
