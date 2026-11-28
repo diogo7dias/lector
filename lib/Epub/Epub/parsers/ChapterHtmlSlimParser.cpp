@@ -3015,8 +3015,9 @@ int ChapterHtmlSlimParser::prepareBlockFont(ParsedText& text, const float scale)
   const int layoutFontId = fontIdForScale(scale);
   for (uint8_t slot = 1; slot < text.sizeSlotsInUse(); ++slot) {
     const float slotScale = text.sizeSlotScale(slot);
-    const int slotFont = text.sizeSlotIsMonospace(slot) ? fontIdForMonospace(slotScale) : fontIdForScale(slotScale);
-    text.setSizeSlotFontId(slot, slotFont);
+    // No monospace font installed: the span still keeps its own size, in the body font.
+    const int mono = text.sizeSlotIsMonospace(slot) ? fontIdForMonospace(slotScale) : 0;
+    text.setSizeSlotFontId(slot, mono != 0 ? mono : fontIdForScale(slotScale));
   }
   blockStyle.fontId = layoutFontId == fontId ? 0 : layoutFontId;
   return layoutFontId;

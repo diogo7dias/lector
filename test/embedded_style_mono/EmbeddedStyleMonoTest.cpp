@@ -184,6 +184,18 @@ TEST(MonospaceCodeTags, FallsBackCleanlyWhenMonospaceFontMissing) {
   }
 }
 
+// A book that sizes its code spans keeps that size when no monospace font is installed:
+// the fallback is the body font at the span's own scale, not at the block's.
+TEST(MonospaceCodeTags, MissingMonospaceFontKeepsTheSpansOwnSize) {
+  const std::string html = "<p>plain <code style=\"font-size: 1.5em\">bigcode</code></p>";
+  const auto out = layOut(html, "", EMBEDDED_STYLE_FULL, 0);
+  const WordInfo* plain = findWord(out, "plain");
+  const WordInfo* code = findWord(out, "bigcode");
+  ASSERT_TRUE(plain && code);
+  EXPECT_EQ(plain->fontId, SECTION_FONT_ID);
+  EXPECT_EQ(code->fontId, SECTION_FONT_ID + 1);  // the stub's 1.5x variant of the body font
+}
+
 TEST(EmbeddedStyleMode, TextOnlyKeepsWeightAndHidesDisplayNoneWhileDroppingBoxesAndSizes) {
   const std::string css =
       ".styled { font-weight: bold; font-style: italic; font-size: 1.5em; margin-left: 30px; "
