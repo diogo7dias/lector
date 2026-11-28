@@ -9,6 +9,7 @@
 #include <cassert>
 
 #include "BatteryPercentPoll.h"
+#include "BusyWaitPowerPolicy.h"
 #include "HalGPIO.h"
 #include "PowerClockPolicy.h"
 
@@ -19,7 +20,7 @@ extern HalPowerManager powerManager;  // Singleton
 // automatic light sleep. Deep sleep is the only sleep the chip takes.
 class HalPowerManager {
   int normalFreq = 0;  // MHz
-  bool isLowPower = false;
+  busy_wait_power::State powerState;
   bool bbpllDisabled = false;
   unsigned long storageWokeAtMs = 0;  // last time a card access had to restore full speed
 
@@ -66,6 +67,12 @@ class HalPowerManager {
 
   // Control CPU frequency for power saving
   void setPowerSaving(bool enabled);
+
+  // Drop the CPU clock while a panel BUSY wait sleeps on its completion ISR,
+  // even when ActivityManager::renderTaskLoop holds a NormalSpeed Lock, and
+  // restore full speed before post-BUSY SPI work resumes.
+  void beginBusyWait();
+  void endBusyWait();
 
   // Called with the storage mutex held, before the card is touched. The S3's SD host
   // must not run a transfer on the crystal clock (ESP-IDF's own driver holds an APB lock
