@@ -142,6 +142,7 @@ class ActivityManager {
     Settings,                  // Settings on the card, category and row in `row` (restartStep)
     Reader,                    // the book at `path` (APP_STATE.openEpubPath when empty)
     KOReaderSettings,          // Settings > KOReader Sync, on `row` (restartStep)
+    SettingsReadingThemes,     // Settings > Reader, on Reading Themes
   };
   // `row` is the opener's row that opened the new screen (the server, the mode).
   void replaceFromOpener(std::unique_ptr<Activity>&& newActivity, Opener opener, std::string path = {}, int row = 0);

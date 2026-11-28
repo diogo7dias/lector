@@ -41,6 +41,11 @@ class ReaderPresetStore : public PersistableStore<ReaderPresetStore> {
   static const char* getFilePath() { return "/.crosspoint/reader_presets.json"; }
   void toJson(JsonDocument& doc) const;
   bool fromJson(JsonVariantConst doc);
+  // Validates that `doc` holds a presets array, replaces the store and persists.
+  bool importFromJson(JsonVariantConst doc);
+  // Merges incoming presets (used by Nearby transfer) up to MAX_PRESETS without wiping
+  // existing themes; returns the number added, or -1 if `doc` is not a valid preset document.
+  int mergeFromJson(JsonVariantConst doc);
 
   const std::vector<ReaderPreset>& getPresets() const { return presets; }
   const ReaderPreset* get(size_t index) const;

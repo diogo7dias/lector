@@ -323,6 +323,7 @@
 
   <div id="wifi-container"></div>
   <div id="opds-container"></div>
+  <div id="presets-container"></div>
 
   <div class="card">
     <p style="text-align: center; color: var(--muted); margin: 0;">
@@ -819,6 +820,86 @@
     }
   }
 
+  let readingPresets = [];
+
+  function renderPresetsSection() {
+    const container = document.getElementById('presets-container');
+    if (!container) return;
+    let listHtml = '';
+    if (readingPresets.length === 0) {
+      listHtml = '<p style="color:var(--muted);margin:0 0 12px;">No saved reading themes yet.</p>';
+    } else {
+      listHtml = '<ul style="margin:0 0 12px;padding-left:20px;">' +
+        readingPresets.map(function(p) { return '<li>' + escapeHtml(p.name || 'Unnamed') + '</li>'; }).join('') +
+        '</ul>';
+    }
+    container.innerHTML =
+      '<div class="card">' +
+      '<h2>Reading Themes</h2>' +
+      listHtml +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">' +
+      '<button class="btn-add" onclick="exportPresets()">Export JSON</button>' +
+      '<input type="file" id="presets-file" accept=".json,application/json" style="max-width:220px;">' +
+      '<button class="btn-add" onclick="importPresets()">Import JSON</button>' +
+      '</div></div>';
+  }
+
+  async function loadPresets() {
+    try {
+      const resp = await fetch('/api/presets');
+      if (!resp.ok) throw new Error('Failed to load presets');
+      const data = await resp.json();
+      readingPresets = Array.isArray(data.presets) ? data.presets : [];
+      renderPresetsSection();
+    } catch (e) {
+      console.error('Presets load error:', e);
+    }
+  }
+
+  async function exportPresets() {
+    try {
+      const resp = await fetch('/api/presets');
+      if (!resp.ok) throw new Error('Failed to export presets');
+      const text = await resp.text();
+      const blob = new Blob([text], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'lector-themes.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showMessage('Reading themes exported', false);
+    } catch (e) {
+      showMessage('Error: ' + e.message, true);
+    }
+  }
+
+  async function importPresets() {
+    const input = document.getElementById('presets-file');
+    if (!input || !input.files || input.files.length === 0) {
+      showMessage('Choose a JSON file to import first', true);
+      return;
+    }
+    try {
+      const text = await input.files[0].text();
+      JSON.parse(text);
+      const resp = await fetch('/api/presets', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: text
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      const res = await resp.json();
+      showMessage('Imported ' + (res.count || 0) + ' reading themes', false);
+      input.value = '';
+      await loadPresets();
+    } catch (e) {
+      showMessage('Error: ' + e.message, true);
+    }
+  }
+
   // Sequential, not concurrent: the device's web server handles one client
   // connection at a time, and three simultaneous fetches on page load can
   // stall long enough inside a single response to trip the firmware watchdog.
@@ -826,6 +907,7 @@
     await loadSettings();
     await loadWifiNetworks();
     await loadOpdsServers();
+    await loadPresets();
   })();
 </script>
 </body>

@@ -315,19 +315,27 @@ void EpubReaderActivity::openStealLook() {
 }
 
 void EpubReaderActivity::openReadingThemes() {
-  // The themes screen edits the store itself; only "Apply" comes back, as the index
-  // of the theme to adopt. Cancelling, renaming or deleting changes nothing here.
+  // The themes screen edits the store itself; "Apply" returns the index to adopt for this
+  // book alone (without mutating global defaults), and "Send Themes via Nearby" asks the
+  // reader to release the book first so ESP-NOW has room.
   startActivityForResult(makeUniqueNoThrow<ReaderPresetsActivity>(renderer, mappedInput, prefs_),
                          [this](const ActivityResult& res) {
                            const auto* pr = res.isCancelled ? nullptr : std::get_if<PresetResult>(&res.data);
-                           const ReaderPreset* preset = pr ? READER_PRESETS.get(pr->index) : nullptr;
+                           if (!pr) {
+                             requestUpdate();
+                             return;
+                           }
+                           if (pr->sendNearby) {
+                             launchNearbyThemesSend();
+                             return;
+                           }
+                           const ReaderPreset* preset = READER_PRESETS.get(pr->index);
                            if (!preset) {
                              requestUpdate();
                              return;
                            }
                            ReaderPrefs stored = preset->prefs;
                            reader_preset_migration::keepStatusBarWhenAbsent(preset->carriesStatusBar, prefs_, stored);
-                           if (!sortesMode) setGlobalBarLayout(statusBarOf(stored));
                            const ReaderPrefs adopted = applyReaderPrefsFrom(stored);
                            // A theme naming an SD font that has left the card comes back
                            // corrected. Write the correction to the card so the theme is

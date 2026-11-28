@@ -1,22 +1,30 @@
 #include "ReaderPresetsActivity.h"
 
+#include <ArduinoJson.h>
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "ReaderPresetMigration.h"
 #include "ReaderPresetNames.h"
 #include "ReaderPresetStore.h"
+#include "SdCardFontSystem.h"
+#include "activities/ActivityManager.h"
 #include "activities/ActivityResult.h"
+#include "activities/network/NearbyFileTransferActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/PresetBundle.h"
 
 namespace fui = freeink::ui;
 
@@ -24,9 +32,17 @@ size_t ReaderPresetsActivity::presetCount() const { return READER_PRESETS.getCou
 
 bool ReaderPresetsActivity::hasSaveRow() const { return !READER_PRESETS.isFull(); }
 
-int ReaderPresetsActivity::rowCount() const { return static_cast<int>(presetCount()) + (hasSaveRow() ? 1 : 0); }
+bool ReaderPresetsActivity::hasSendRow() const { return presetCount() > 0; }
+
+int ReaderPresetsActivity::rowCount() const {
+  return static_cast<int>(presetCount()) + (hasSaveRow() ? 1 : 0) + (hasSendRow() ? 1 : 0);
+}
 
 bool ReaderPresetsActivity::isSaveRow(const size_t index) const { return hasSaveRow() && index == presetCount(); }
+
+bool ReaderPresetsActivity::isSendRow(const size_t index) const {
+  return hasSendRow() && index == presetCount() + (hasSaveRow() ? 1 : 0);
+}
 
 int ReaderPresetsActivity::matchingPresetIndex() const {
   const auto& presets = READER_PRESETS.getPresets();
@@ -61,31 +77,114 @@ const char* ReaderPresetsActivity::headerTitle() const { return tr(STR_READING_T
 
 // ── Actions ─────────────────────────────────────────────────────────────────
 
+void ReaderPresetsActivity::applyAsGlobalDefault(const size_t index) {
+  const ReaderPreset* preset = READER_PRESETS.get(index);
+  if (!preset) return;
+  ReaderPrefs adopted = preset->prefs;
+  if (adopted.sdFontFamilyName[0] != '\0') {
+    const auto& families = sdFontSystem.registry().getFamilies();
+    const bool installed = std::any_of(families.begin(), families.end(), [&](const SdCardFontFamilyInfo& fam) {
+      return fam.name == adopted.sdFontFamilyName;
+    });
+    if (!installed) {
+      LOG_ERR("PRE", "Preset names missing SD font '%s' — falling back to built-in", adopted.sdFontFamilyName);
+      std::memset(adopted.sdFontFamilyName, 0, sizeof(adopted.sdFontFamilyName));
+      adopted.fontFamily = CrossPointSettings::CHAREINK;
+      READER_PRESETS.overwrite(index, adopted);
+    }
+  }
+  SETTINGS.applyGlobalPreset(adopted, preset->carriesStatusBar);
+  if (!inBook_) currentPrefs = ReaderPrefs::fromGlobal();
+  GUI.drawPopup(renderer, tr(STR_APPLIED_AS_DEFAULT));
+  requestUpdate();
+}
+
+void ReaderPresetsActivity::startSendNearby() {
+  if (presetCount() == 0) return;
+  if (inBook_) {
+    // Let EpubReaderActivity release the open book before bringing up ESP-NOW.
+    setResult(PresetResult{0, /*sendNearby=*/true});
+    finish();
+    return;
+  }
+  const std::string path = preset_bundle::STAGING_PATH;
+  auto nearby = makeUniqueNoThrow<NearbyFileTransferActivity>(renderer, mappedInput,
+                                                              NearbyFileTransferActivity::Mode::Send, path);
+  if (!nearby) {
+    LOG_ERR("PRE", "OOM: NearbyFileTransferActivity for themes");
+    return;
+  }
+  JsonDocument doc;
+  READER_PRESETS.toJson(doc);
+  std::string json;
+  serializeJson(doc, json);
+  Storage.ensureDirectoryExists("/.crosspoint");
+  Storage.remove(path.c_str());
+  {
+    HalFile file;
+    if (!Storage.openFileForWrite("PRE", path, file) || !file.isOpen() ||
+        file.write(reinterpret_cast<const uint8_t*>(json.data()), json.size()) != json.size()) {
+      LOG_ERR("PRE", "Could not write themes bundle");
+      file.close();
+      Storage.remove(path.c_str());
+      return;
+    }
+    file.close();
+  }
+  activityManager.replaceFromOpener(std::move(nearby), ActivityManager::Opener::SettingsReadingThemes);
+}
+
 void ReaderPresetsActivity::openPresetActions(const size_t index) {
   const ReaderPreset* preset = READER_PRESETS.get(index);
   if (!preset) return;
   // Title by value: the popup keeps its own copy, and the store can change underneath.
   const std::string name = preset->name;
-  const char* const options[] = {tr(STR_APPLY), tr(STR_RENAME), tr(STR_OVERWRITE_WITH_CURRENT), tr(STR_DELETE)};
-  optionPopup.show(name.c_str(), options, 4, 0, [this, index](const int choice) {
-    switch (choice) {
-      case 0:
-        // Only the reader can re-lay out the book, so this is the one action that leaves.
-        setResult(PresetResult{index});
-        finish();
-        break;
-      case 1:
-        startRename(index);
-        break;
-      case 2:
-        if (!READER_PRESETS.overwrite(index, currentPrefs)) LOG_ERR("PRE", "Could not overwrite reading theme");
-        requestUpdate();
-        break;
-      default:
-        confirmDelete(index);
-        break;
-    }
-  });
+  if (inBook_) {
+    const char* const options[] = {tr(STR_APPLY), tr(STR_SET_AS_GLOBAL_DEFAULT), tr(STR_RENAME),
+                                   tr(STR_OVERWRITE_WITH_CURRENT), tr(STR_DELETE)};
+    optionPopup.show(name.c_str(), options, 5, 0, [this, index](const int choice) {
+      switch (choice) {
+        case 0:
+          // Only the reader can re-lay out the book, so this is the one action that leaves.
+          setResult(PresetResult{index, false});
+          finish();
+          break;
+        case 1:
+          applyAsGlobalDefault(index);
+          break;
+        case 2:
+          startRename(index);
+          break;
+        case 3:
+          if (!READER_PRESETS.overwrite(index, currentPrefs)) LOG_ERR("PRE", "Could not overwrite reading theme");
+          requestUpdate();
+          break;
+        default:
+          confirmDelete(index);
+          break;
+      }
+    });
+  } else {
+    const char* const options[] = {tr(STR_SET_AS_GLOBAL_DEFAULT), tr(STR_RENAME), tr(STR_OVERWRITE_WITH_CURRENT),
+                                   tr(STR_DELETE)};
+    optionPopup.show(name.c_str(), options, 4, 0, [this, index](const int choice) {
+      switch (choice) {
+        case 0:
+          applyAsGlobalDefault(index);
+          break;
+        case 1:
+          startRename(index);
+          break;
+        case 2:
+          if (!READER_PRESETS.overwrite(index, currentPrefs)) LOG_ERR("PRE", "Could not overwrite reading theme");
+          requestUpdate();
+          break;
+        default:
+          confirmDelete(index);
+          break;
+      }
+    });
+  }
   requestUpdate();
 }
 
@@ -154,6 +253,10 @@ void ReaderPresetsActivity::activateIndex(const int index) {
     startSaveCurrent();
     return;
   }
+  if (isSendRow(row)) {
+    startSendNearby();
+    return;
+  }
   if (row >= presetCount()) return;
   openPresetActions(row);
 }
@@ -196,7 +299,14 @@ void ReaderPresetsActivity::buildScreen(UiScreen& screen) {
   labels.assign(static_cast<size_t>(count), std::string());
   rows.assign(static_cast<size_t>(count), fui::ListItem{});
   for (int i = 0; i < count; ++i) {
-    labels[i] = isSaveRow(static_cast<size_t>(i)) ? std::string(tr(STR_SAVE_CURRENT_LOOK)) : presets[i].name;
+    const size_t row = static_cast<size_t>(i);
+    if (isSaveRow(row)) {
+      labels[i] = std::string(tr(STR_SAVE_CURRENT_LOOK));
+    } else if (isSendRow(row)) {
+      labels[i] = std::string(tr(STR_SEND_THEMES_NEARBY));
+    } else {
+      labels[i] = presets[i].name;
+    }
     rows[i].label = labels[i].c_str();
     // The book's own settings are marked in the value column rather than in the name,
     // so the name stays what the user typed and the mark moves as the book changes.

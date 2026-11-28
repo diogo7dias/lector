@@ -41,6 +41,7 @@
 #include "util/BookProgressFile.h"
 #include "util/DeferredFavorite.h"
 #include "util/FavoriteImage.h"
+#include "util/PresetBundle.h"
 #include "util/SortesSelection.h"
 
 void EpubReaderActivity::toggleWallpaperFavorite() {
@@ -255,6 +256,43 @@ void EpubReaderActivity::launchNearbyBookSend() {
   activityManager.rememberReaderMenu(MenuReturn::armed());  // Back reopens the menu that sent it
   activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
       renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, savedEpubPath, savedEpubPath));
+}
+
+void EpubReaderActivity::launchNearbyThemesSend() {
+  if (READER_PRESETS.getCount() == 0) {
+    requestUpdate();
+    return;
+  }
+  const int currentPage = section ? section->currentPage : nextPageNumber;
+  const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
+  const std::string savedEpubPath = epub->getPath();
+
+  if (!saveProgressForHandoff("NBFT", currentPage, totalPages)) return;
+
+  const std::string bundlePath = preset_bundle::STAGING_PATH;
+  JsonDocument doc;
+  READER_PRESETS.toJson(doc);
+  std::string json;
+  serializeJson(doc, json);
+  Storage.ensureDirectoryExists("/.crosspoint");
+  Storage.remove(bundlePath.c_str());
+  {
+    HalFile file;
+    if (!Storage.openFileForWrite("NBFT", bundlePath, file) || !file.isOpen() ||
+        file.write(reinterpret_cast<const uint8_t*>(json.data()), json.size()) != json.size()) {
+      LOG_ERR("NBFT", "Could not write themes bundle");
+      file.close();
+      Storage.remove(bundlePath.c_str());
+      requestUpdate();
+      return;
+    }
+    file.close();
+  }
+
+  releaseBookForHandoff();
+  activityManager.rememberReaderMenu(MenuReturn::armed());
+  activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
+      renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, bundlePath, savedEpubPath));
 }
 
 void EpubReaderActivity::launchNearbyPositionSync() {

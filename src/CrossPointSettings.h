@@ -872,6 +872,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Writes the Text Settings rows of a look onto the global reader fields. The in-book
   // toggles and the status bar block are per-book and are never pushed from here.
   void applyReaderPrefs(const ReaderPrefs& p);
+  // Applies a saved Reading Theme as the global default for future books (screen look,
+  // in-book defaults, SD font family, and status bar when carried by the theme).
+  void applyGlobalPreset(const ReaderPrefs& p, bool carriesStatusBar);
 
   // Shadows PersistableStore::saveToFile to re-assert the margin link mode first.
   bool saveToFile() const;

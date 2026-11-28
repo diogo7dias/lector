@@ -16,8 +16,9 @@
 // of the chosen theme), because only the reader can re-lay out the book. Back cancels.
 class ReaderPresetsActivity final : public UiListActivity {
  public:
-  ReaderPresetsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const ReaderPrefs& currentPrefs)
-      : UiListActivity("ReaderPresets", renderer, mappedInput), currentPrefs(currentPrefs) {}
+  ReaderPresetsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const ReaderPrefs& currentPrefs,
+                        bool inBook = true)
+      : UiListActivity("ReaderPresets", renderer, mappedInput), currentPrefs(currentPrefs), inBook_(inBook) {}
 
   void onExit() override;
 
@@ -34,22 +35,27 @@ class ReaderPresetsActivity final : public UiListActivity {
   bool drawOverlay() override;
 
  private:
-  // This book's settings as they are right now: what "Save current look" stores, what
-  // "Overwrite with current" writes, and what the Current mark is compared against.
+  // This book's settings (or global defaults when opened from Settings > Reader): what
+  // "Save current look" stores, what "Overwrite with current" writes, and what the Current
+  // mark is compared against.
   ReaderPrefs currentPrefs;
+  bool inBook_ = true;
 
   OptionPopup optionPopup;
 
-  // Rows are the saved themes, then "Save current look..." — which is absent once the
-  // store is full, since there is nothing to save into.
+  // Rows: saved themes, optional "Save current look...", optional "Send Themes via Nearby".
   size_t presetCount() const;
   bool hasSaveRow() const;
+  bool hasSendRow() const;
   int rowCount() const;
   bool isSaveRow(size_t index) const;
-  // Index of the theme whose settings equal this book's, or -1 when none does.
+  bool isSendRow(size_t index) const;
+  // Index of the theme whose settings equal currentPrefs, or -1 when none does.
   int matchingPresetIndex() const;
 
   void openPresetActions(size_t index);
+  void applyAsGlobalDefault(size_t index);
+  void startSendNearby();
   void startSaveCurrent();
   void startRename(size_t index);
   void confirmDelete(size_t index);

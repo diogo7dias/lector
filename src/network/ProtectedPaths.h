@@ -16,7 +16,8 @@ inline constexpr const char* STORE_FOLDER = "/.crosspoint";
 // make the device trust another server. Prefix match, so temp and backup siblings are covered too.
 inline constexpr const char* PROTECTED_FILES[] = {"/.crosspoint/wifi.json",         "/.crosspoint/opds.json",
                                                   "/.crosspoint/opds_tokens.json",  "/.crosspoint/koreader.json",
-                                                  "/.crosspoint/trusted_certs.txt", "/.crosspoint/credentials.cpcred"};
+                                                  "/.crosspoint/trusted_certs.txt", "/.crosspoint/credentials.cpcred",
+                                                  "/.crosspoint/themes.cpthemes"};
 
 // SdFat also opens a name by its generated 8.3 alias (".crosspoint" is CROSSP~1), and an
 // alias cannot be mapped back to its long name.

@@ -92,6 +92,7 @@ struct FilePathResult {
 // disagree if the screen edited it on the way out.
 struct PresetResult {
   size_t index = 0;
+  bool sendNearby = false;
 };
 
 using ResultVariant =

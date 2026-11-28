@@ -68,3 +68,9 @@ TEST(ProtectedPaths, TheCredentialBundleIsProtected) {
   EXPECT_TRUE(isProtectedFile(staged));
   EXPECT_TRUE(isProtectedFile(FsHelpers::partialPathFor(staged)));
 }
+
+TEST(ProtectedPaths, ThePresetBundleIsProtected) {
+  EXPECT_TRUE(isProtectedPath("/.crosspoint/themes.cpthemes"));
+  EXPECT_TRUE(isProtectedFile("/.crosspoint/themes.cpthemes"));
+  EXPECT_TRUE(isProtectedFile(FsHelpers::partialPathFor("/.crosspoint/themes.cpthemes")));
+}

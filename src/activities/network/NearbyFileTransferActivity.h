@@ -125,6 +125,7 @@ class NearbyFileTransferActivity final : public UiStatusActivity {
    * holds passwords in the clear and has no reason to stay on the card.
    */
   void importCredentialBundle();
+  void importPresetBundle();
   bool restoreBookPosition();
   void closeFiles();
   void finishWithError(const char* message);

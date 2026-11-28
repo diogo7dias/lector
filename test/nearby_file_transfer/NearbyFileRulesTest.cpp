@@ -175,3 +175,10 @@ TEST(NearbyFileRules, RefusesACredentialBundleTooBigToRead) {
   // Books are not held to it.
   EXPECT_TRUE(checkOffer("Book.epub", MAX_CREDENTIAL_BUNDLE_BYTES + 1, UINT64_MAX).accepted);
 }
+
+TEST(NearbyFileRules, AcceptsAndCapsPresetBundles) {
+  EXPECT_TRUE(checkOffer("themes.cpthemes", 2048, UINT64_MAX).accepted);
+  const OfferCheck huge = checkOffer("themes.cpthemes", MAX_PRESET_BUNDLE_BYTES + 1, UINT64_MAX);
+  EXPECT_FALSE(huge.accepted);
+  EXPECT_EQ(huge.rejection, RejectReason::TOO_LARGE);
+}

@@ -179,6 +179,8 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   void launchNearbyPositionSync();
   // Sends this book's own file to another reader over ESP-NOW.
   void launchNearbyBookSend();
+  // Sends the saved Reading Themes bundle to another reader over ESP-NOW.
+  void launchNearbyThemesSend();
   void applyOrientation(uint8_t orientation);
   // Per-book reader settings (#9).
   std::string readerOverridePath() const;
