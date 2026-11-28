@@ -1148,13 +1148,18 @@ step a row or move along the grid, and **Confirm** runs the highlighted button.
 
 **Frontlight** (boards with a frontlight)
 
-The frontlight has no rows in Settings. The quick panel adds its rows on these boards: on or
-off, brightness and warmth. **Toggle Frontlight**, a
-button action, flips it without opening the panel. The other frontlight options live on the web
-settings page only: **Max Brightness** (the top of the panel's brightness track, 10 to 100,
-default 30; a brightness above it is brought down), **Restore on Wake** (on by default), and **Light Schedule**
-(at each wake inside the set hours the light comes on by itself) with its **Light On From** and
-**Light On Until** times (20:00 and 07:00 by default, in quarter-hour steps).
+The quick panel holds on/off, brightness, and warmth, and **Toggle Frontlight** flips the light
+from a button without opening the panel. Day reading and **Night mode** each remember their own
+brightness and warmth pair. On the X4 Pro (warm/cold LEDs with clock):
+
+- **Settings > Display > Frontlight** exposes **Light Schedule** (off by default), **Light On
+  From** (default 20:00), and **Light On Until** (default 07:00) directly on the device in
+  quarter-hour steps. When enabled, warmth interpolates toward warm amber across the sunset window
+  lazily on page turns, with no background wakeups.
+- **Candle Fade** in the Quick Panel gradually dims brightness to zero while warming the light
+  over 25 minutes; tapping it again or moving a slider cancels the fade.
+- **Max Brightness** (10 to 100, default 30) and **Restore on Wake** (on by default) remain on the
+  web settings page.
 
 In a book the quick panel also has **Align Left** and **Justify**, which set the book's paragraph
 alignment (for that EPUB alone; in a TXT book, for every TXT book), and **Paragraph Spacing**,

@@ -28,6 +28,7 @@ inline bool allowedOutsideBook(const uint8_t function) {
     case LP_MENU_QUICK_LOCK:
     case LP_MENU_TOGGLE_FRONTLIGHT:
     case LP_MENU_CONFIRM:
+    case LP_MENU_CANDLE_FADE:
       return true;
     default:
       return false;

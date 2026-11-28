@@ -41,6 +41,7 @@
 #include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "frontlight/ApplyFrontlightSetting.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "util/CredentialBundle.h"
 #include "util/ReleaseStorage.h"
@@ -126,6 +127,11 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) const
   }
   if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     char valueBuffer[32];
+    if (setting.minutesPerStep > 0) {
+      const unsigned int mins = static_cast<unsigned int>(SETTINGS.*(setting.valuePtr)) * setting.minutesPerStep;
+      snprintf(valueBuffer, sizeof(valueBuffer), "%02u:%02u", (mins / 60U) % 24U, mins % 60U);
+      return valueBuffer;
+    }
     if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
       if (SETTINGS.sleepTimeoutMinutes >= CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES) return tr(STR_SLEEP_NEVER);
       snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT),
@@ -324,18 +330,21 @@ void SettingsActivity::rebuildSettingsList() {
   // The screen itself leads, then the two sleep-screen groups, which are set up once and
   // revisited only when the wallpapers change. The frontlight has no rows here: the light
   // panel owns on/off, brightness and warmth, and the rest is on the web settings page.
-  applyGroups(displaySettings,
-              {
-                  {StrId::STR_GRP_SCREEN,
-                   {StrId::STR_REFRESH_FREQ, StrId::STR_CHAPTER_START_REFRESH, StrId::STR_CHAPTER_WIPE,
-                    StrId::STR_SUNLIGHT_FADING_FIX, StrId::STR_HIDE_BATTERY, StrId::STR_SCREEN_CALIBRATION}},
-                  {StrId::STR_GRP_SLEEP_SCREEN,
-                   {StrId::STR_SLEEP_SCREEN, StrId::STR_QUICK_RESUME_TIMEOUT, StrId::STR_FAST_UNLOCK}},
-                  {StrId::STR_GRP_WALLPAPER,
-                   {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER, StrId::STR_SHOW_SLEEP_IMAGE_FILENAME,
-                    StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, StrId::STR_SHUFFLE_WALLPAPERS}},
-                  {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
-              });
+  applyGroups(
+      displaySettings,
+      {
+          {StrId::STR_GRP_SCREEN,
+           {StrId::STR_REFRESH_FREQ, StrId::STR_CHAPTER_START_REFRESH, StrId::STR_CHAPTER_WIPE,
+            StrId::STR_SUNLIGHT_FADING_FIX, StrId::STR_HIDE_BATTERY, StrId::STR_SCREEN_CALIBRATION}},
+          {StrId::STR_GRP_SLEEP_SCREEN,
+           {StrId::STR_SLEEP_SCREEN, StrId::STR_QUICK_RESUME_TIMEOUT, StrId::STR_FAST_UNLOCK}},
+          {StrId::STR_GRP_WALLPAPER,
+           {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER, StrId::STR_SHOW_SLEEP_IMAGE_FILENAME,
+            StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, StrId::STR_SHUFFLE_WALLPAPERS}},
+          {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
+          {StrId::STR_GRP_FRONTLIGHT,
+           {StrId::STR_FRONTLIGHT_SCHEDULE, StrId::STR_FRONTLIGHT_SCHEDULE_ON, StrId::STR_FRONTLIGHT_SCHEDULE_OFF}},
+      });
 
   applyGroups(
       readerSettings,
@@ -578,6 +587,7 @@ void SettingsActivity::toggleCurrentSetting() {
     // Toggle the boolean value using the member pointer
     const bool currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = !currentValue;
+    applyFrontlightSetting(setting.valuePtr);
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (setting.enumValues.size() > 2) {
@@ -646,11 +656,11 @@ void SettingsActivity::toggleCurrentSetting() {
     // buttons carry the setting's own step (five, where it has one) so a wide range is
     // still crossed in a few presses.
     const auto valuePtr = setting.valuePtr;
-    constexpr int minLargeStep = 5;
+    const int largeStep = setting.minutesPerStep > 0 ? 4 : std::max(5, static_cast<int>(setting.valueRange.step));
     auto dialog = makeUniqueNoThrow<IntervalSelectionActivity>(
         renderer, mappedInput, "SettingValue", setting.nameId, setting.shownValue(SETTINGS.*(setting.valuePtr)),
         setting.shownValue(setting.valueRange.min), setting.shownValue(setting.valueRange.max), /*smallStep=*/1,
-        std::max(minLargeStep, static_cast<int>(setting.valueRange.step)));
+        largeStep, StrId::STR_NONE_OPT, false, false, StrId::STR_NONE_OPT, setting.minutesPerStep);
     if (!dialog) {
       LOG_ERR("SET", "OOM: IntervalSelectionActivity");
       return;
@@ -659,7 +669,10 @@ void SettingsActivity::toggleCurrentSetting() {
     startActivityForResult(std::move(dialog), [this, valuePtr, offset](const ActivityResult& result) {
       if (!result.isCancelled) {
         const auto* chosen = std::get_if<IntervalResult>(&result.data);
-        if (chosen != nullptr) SETTINGS.*valuePtr = static_cast<uint8_t>(chosen->value - offset);
+        if (chosen != nullptr) {
+          SETTINGS.*valuePtr = static_cast<uint8_t>(chosen->value - offset);
+          applyFrontlightSetting(valuePtr);
+        }
         // One write when the dialog closes, not one per step: the value moved
         // through every number between the two ends on the way here.
         SETTINGS.saveToFile();

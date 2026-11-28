@@ -20,7 +20,7 @@ class IntervalSelectionActivity final : public UiStatusActivity {
                                      StrId titleId, int initialValue, int minValue, int maxValue, int smallStep,
                                      int largeStep, StrId valueFormatId = StrId::STR_NONE_OPT,
                                      bool readerActivity = false, bool ignoreInitialConfirmRelease = false,
-                                     StrId maxBoundaryLabelId = StrId::STR_NONE_OPT)
+                                     StrId maxBoundaryLabelId = StrId::STR_NONE_OPT, uint8_t minutesPerStep = 0)
       : UiStatusActivity(activityName, renderer, mappedInput),
         titleId(titleId),
         valueFormatId(valueFormatId),
@@ -30,6 +30,7 @@ class IntervalSelectionActivity final : public UiStatusActivity {
         maxValue(maxValue),
         smallStep(smallStep),
         largeStep(largeStep),
+        minutesPerStep(minutesPerStep),
         readerActivity(readerActivity),
         ignoreConfirmRelease(ignoreInitialConfirmRelease) {}
 
@@ -53,6 +54,7 @@ class IntervalSelectionActivity final : public UiStatusActivity {
   int maxValue;
   int smallStep;
   int largeStep;
+  uint8_t minutesPerStep;
   bool readerActivity;
   bool ignoreConfirmRelease;
   ButtonNavigator buttonNavigator;

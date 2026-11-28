@@ -465,6 +465,7 @@ void EpubReaderMenuActivity::activateIndex(const int visibleIndex) {
   // change is under the menu, and the value in the row says what happened.
   if (selectedAction == MenuAction::NIGHT_MODE) {
     SETTINGS.screenInverted = SETTINGS.screenInverted ? 0 : 1;
+    applyFrontlightSetting(&CrossPointSettings::screenInverted);
     SETTINGS.saveToFile();
     requestUpdate();
     return;

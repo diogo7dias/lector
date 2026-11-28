@@ -439,15 +439,19 @@ void setup() {
   // A clock that does not answer leaves the schedule out rather than guessing.
   bool scheduledOn = false;
   uint16_t nowMinutes = 0;
+  uint8_t bootWarmth = SETTINGS.activeFrontlightWarmth();
   if (SETTINGS.frontlightScheduleEnabled != 0 &&
       halClock.localMinutes(nowMinutes, SETTINGS.clockTimezone, SETTINGS.clockDst)) {
-    scheduledOn =
-        frontlight::insideSchedule(SETTINGS.frontlightScheduleOn * frontlight::SCHEDULE_STEP_MINUTES,
-                                   SETTINGS.frontlightScheduleOff * frontlight::SCHEDULE_STEP_MINUTES, nowMinutes);
+    const int onMin = SETTINGS.frontlightScheduleOn * frontlight::SCHEDULE_STEP_MINUTES;
+    const int offMin = SETTINGS.frontlightScheduleOff * frontlight::SCHEDULE_STEP_MINUTES;
+    scheduledOn = frontlight::insideSchedule(onMin, offMin, nowMinutes);
+    if (Frontlight.hasColorTemperature()) {
+      bootWarmth = frontlight::scheduledWarmth(onMin, offMin, nowMinutes, bootWarmth);
+    }
     LOG_INF("MAIN", "Light schedule: %02d:%02d local, %s", nowMinutes / 60, nowMinutes % 60,
             scheduledOn ? "inside" : "outside");
   }
-  Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth,
+  Frontlight.begin(SETTINGS.activeFrontlightBrightness(), bootWarmth,
                    frontlight::restoreLightOnAtBoot({SETTINGS.frontlightOn != 0, SETTINGS.frontlightRestoreOnWake != 0,
                                                      isSilentReboot, restartBoot.lightOn, scheduledOn}));
 
