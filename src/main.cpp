@@ -1129,6 +1129,24 @@ void loop() {
     if (idleMs >= HalPowerManager::IDLE_POWER_SAVING_MS) {
       // If we've been inactive for a while, increase the delay to save power
       powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
+#if LECTOR_IDLE_LIGHT_SLEEP
+      // Opt-in (see HalPowerManager.h): one light-sleep slice, cut short at the next idle
+      // deadline. A slice that ran has waited already; a declined one polls as before.
+      uint32_t maxSliceMs = idle_sleep::SLICE_TOUCH_ASLEEP_MS;
+      const auto clampDeadline = [&](const unsigned long deadlineMs) {
+        if (deadlineMs > 0 && idleMs < deadlineMs) {
+          const unsigned long remaining = deadlineMs - idleMs;
+          if (remaining < maxSliceMs) maxSliceMs = static_cast<uint32_t>(remaining);
+        }
+      };
+      clampDeadline(HalPowerManager::IDLE_PANEL_POWER_OFF_MS);
+      clampDeadline(touchSleepMs);
+      clampDeadline(sleepTimeoutMs);
+      float touchX = 0.0f;
+      float touchY = 0.0f;
+      const bool touchHeld = gpio.isTouchHeldAt(touchX, touchY);
+      if (powerManager.idleLightSleepSlice(/*renderIdle=*/true, touchHeld, gpio.isTouchAsleep(), maxSliceMs)) return;
+#endif
       // Sleep in short slices and wake the poll as soon as a button contact closes.
       // InputManager commits a press only when two consecutive polls agree, so a
       // press shorter than one 50 ms sleep could land in a single sample and be lost.

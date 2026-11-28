@@ -11,18 +11,33 @@
 #include "BatteryPercentPoll.h"
 #include "BusyWaitPowerPolicy.h"
 #include "HalGPIO.h"
+#include "IdleSleepPolicy.h"
 #include "PowerClockPolicy.h"
+
+// Idle light sleep on the X4 Pro (ESP32-S3): off unless a build passes
+// -DLECTOR_IDLE_LIGHT_SLEEP=1. Since 0.46 the firmware does what CrossPoint does and only
+// drops the clock; the sim cannot show what light sleep costs on a device (missed wakes,
+// frontlight, USB), so it stays an experiment until a device has passed it.
+#ifndef LECTOR_IDLE_LIGHT_SLEEP
+#define LECTOR_IDLE_LIGHT_SLEEP 0
+#endif
 
 class HalPowerManager;
 extern HalPowerManager powerManager;  // Singleton
 
 // CrossPoint's power manager: drop the CPU clock after a stretch without input, no
-// automatic light sleep. Deep sleep is the only sleep the chip takes.
+// automatic light sleep. Deep sleep is the only sleep the chip takes, unless the build
+// opts in to LECTOR_IDLE_LIGHT_SLEEP.
 class HalPowerManager {
   int normalFreq = 0;  // MHz
   busy_wait_power::State powerState;
   bool bbpllDisabled = false;
   unsigned long storageWokeAtMs = 0;  // last time a card access had to restore full speed
+#if LECTOR_IDLE_LIGHT_SLEEP
+  uint32_t lightSleepSlices = 0;
+  uint64_t lightSleepTotalUs = 0;
+  uint32_t lightSleepGpioWakes = 0;
+#endif
 
   mutable BatteryPercentPoll _batteryPoll;
 
@@ -73,6 +88,13 @@ class HalPowerManager {
   // restore full speed before post-BUSY SPI work resumes.
   void beginBusyWait();
   void endBusyWait();
+
+  // Opt-in (LECTOR_IDLE_LIGHT_SLEEP, off by default; a stub that returns false otherwise).
+  // Enter one short esp_light_sleep_start() slice on X4 Pro when every guard
+  // holds (Wi-Fi off, USB unplugged, USB Serial/JTAG idle, render idle, no
+  // power lock, no input/touch held, SD idle, GPIO wakes armed). Returns true
+  // if light sleep ran, false to fall back to timed idle polling.
+  bool idleLightSleepSlice(bool renderIdle, bool touchHeld, bool touchAsleep, uint32_t maxSliceMs);
 
   // Called with the storage mutex held, before the card is touched. The S3's SD host
   // must not run a transfer on the crystal clock (ESP-IDF's own driver holds an APB lock
