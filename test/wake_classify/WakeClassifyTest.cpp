@@ -82,3 +82,27 @@ TEST(WakeClassify, PlugInWake) {
   EXPECT_FALSE(isPlugInWake(true, false, false));  // ghost edge, no cable
   EXPECT_FALSE(isPlugInWake(false, false, true));  // setting off
 }
+
+TEST(WakeClassify, EarlyWakeSleepsBeforeStorageOnUsbColdBootAndBounces) {
+  using wake_classify::decideEarlyWake;
+  using wake_classify::EarlyWakeAction;
+
+  // USB cold boot always sleeps immediately before mounting SD or lighting frontlight.
+  EXPECT_EQ(decideEarlyWake(WakeupReason::AfterUSBPower, false, true, true, false, false), EarlyWakeAction::SleepNow);
+  EXPECT_EQ(decideEarlyWake(WakeupReason::AfterUSBPower, true, false, false, true, true), EarlyWakeAction::SleepNow);
+
+  // Flash / Other / held PowerButton proceed.
+  EXPECT_EQ(decideEarlyWake(WakeupReason::AfterFlash, false, true, true, false, false), EarlyWakeAction::Proceed);
+  EXPECT_EQ(decideEarlyWake(WakeupReason::Other, false, false, false, false, false), EarlyWakeAction::Proceed);
+  EXPECT_EQ(decideEarlyWake(WakeupReason::PowerButton, true, false, false, false, false), EarlyWakeAction::Proceed);
+
+  // PowerButton bounce without active charge wake sleeps immediately.
+  EXPECT_EQ(decideEarlyWake(WakeupReason::PowerButton, false, false, false, false, false), EarlyWakeAction::SleepNow);
+  EXPECT_EQ(decideEarlyWake(WakeupReason::PowerButton, false, true, false, true, true), EarlyWakeAction::SleepNow);
+
+  // Charging bounce consults RTC cache when available; defers to SD config only when uncached.
+  EXPECT_EQ(decideEarlyWake(WakeupReason::PowerButton, false, true, true, true, false), EarlyWakeAction::SleepNow);
+  EXPECT_EQ(decideEarlyWake(WakeupReason::PowerButton, false, true, true, true, true), EarlyWakeAction::Proceed);
+  EXPECT_EQ(decideEarlyWake(WakeupReason::PowerButton, false, true, true, false, false),
+            EarlyWakeAction::CheckAfterConfig);
+}

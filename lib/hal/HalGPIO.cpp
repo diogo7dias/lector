@@ -121,14 +121,17 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
 RTC_DATA_ATTR bool rtcControllerValid = false;
 RTC_DATA_ATTR uint8_t rtcController = 0;
 RTC_DATA_ATTR uint8_t rtcControllerVariant = 0;
+bool displayBusProbed = false;
 
 void resolveDisplayController() {
   if (rtcControllerValid && esp_reset_reason() == ESP_RST_DEEPSLEEP) {
     BoardConfig::ACTIVE.displayController = static_cast<BoardConfig::DisplayController>(rtcController);
     BoardConfig::ACTIVE.displayControllerVariant = rtcControllerVariant;
+    displayBusProbed = false;
     return;
   }
   freeink::applyXteinkDisplayController();
+  displayBusProbed = true;
   rtcController = static_cast<uint8_t>(BoardConfig::ACTIVE.displayController);
   rtcControllerVariant = BoardConfig::ACTIVE.displayControllerVariant;
   rtcControllerValid = true;
@@ -352,3 +355,5 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
   facts.coldBootImpliesPowerButton = coldBootImpliesPowerButton();
   return wake_classify::classify(facts);
 }
+
+bool HalGPIO::wasDisplayProbed() const { return displayBusProbed; }

@@ -165,3 +165,40 @@ TEST(ReaderReturnHistory, ReturnWithoutAnOriginLeavesNothingToRedo) {
   history.finishReturn(true);
   EXPECT_TRUE(history.forwardEmpty());
 }
+
+TEST(ReaderReturnHistory, SerializesAndRestoresWrappedRingOldestToNewest) {
+  ReaderReturnHistory history;
+  for (int32_t i = 0; i < 11; ++i) history.recordJump({i, static_cast<uint32_t>(i * 1000 + 7)});
+  uint8_t buf[ReaderReturnHistory::MAX_SERIALIZED_BYTES] = {};
+  const size_t written = history.serialize(buf, sizeof(buf));
+  ASSERT_EQ(written, 1u + 8u * 8u);
+
+  ReaderReturnHistory restored;
+  ASSERT_TRUE(restored.deserialize(buf, written, 20));
+  EXPECT_EQ(restored.count(), 8);
+  for (int32_t i = 10; i >= 3; --i) {
+    expectReturn(restored, i, static_cast<uint32_t>(i * 1000 + 7));
+    restored.finishReturn(true);
+  }
+  EXPECT_TRUE(restored.empty());
+}
+
+TEST(ReaderReturnHistory, RejectsEmptyMalformedOrOutOfRangeSerializedData) {
+  ReaderReturnHistory history;
+  uint8_t buf[ReaderReturnHistory::MAX_SERIALIZED_BYTES] = {};
+  EXPECT_EQ(history.serialize(buf, sizeof(buf)), 0u);
+
+  history.recordJump({2, 42});
+  const size_t written = history.serialize(buf, sizeof(buf));
+  ASSERT_EQ(written, 9u);
+  EXPECT_EQ(history.serialize(buf, 8), 0u);
+
+  ReaderReturnHistory target;
+  EXPECT_FALSE(target.deserialize(buf, written - 1, 10));  // truncated
+  EXPECT_FALSE(target.deserialize(buf, written, 2));       // spine 2 >= spineCount 2
+  buf[0] = 0;
+  EXPECT_FALSE(target.deserialize(buf, 1, 10));  // count 0
+  buf[0] = 9;
+  EXPECT_FALSE(target.deserialize(buf, 1, 10));  // count > CAPACITY
+  EXPECT_TRUE(target.empty());
+}

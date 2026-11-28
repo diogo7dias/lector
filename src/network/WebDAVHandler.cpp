@@ -53,6 +53,7 @@ bool WebDAVHandler::canRaw(WebServer& server, const String& uri) {
 void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
   (void)uri;
   if (raw.status == RAW_START) {
+    owner.noteActivity();  // a PUT body arrives before the middleware runs
     _putPath = getRequestPath(server);
     if (isProtectedPath(_putPath) || owner.conflictsWithActiveFetch(_putPath)) {
       _putOk = false;

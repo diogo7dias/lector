@@ -449,6 +449,15 @@ TEST(WifiSessionHidden, JoinsAHiddenNetworkTheReaderNamed) {
   ASSERT_EQ(actions.size(), 1u);
   EXPECT_EQ(actions[0].kind, wifi_session::ActionKind::ASK_FOR_PASSWORD);
   EXPECT_EQ(actions[0].ssid, "backroom");
+
+  session.onPasswordEntered(4000);
+  drain(session, 4000);
+  session.onJoinSucceeded(5000);
+  session.answerSavePrompt(true, 6000);
+  const std::vector<wifi_session::Action> saved = drain(session, 6000);
+  ASSERT_EQ(saved.size(), 2u);
+  EXPECT_EQ(saved[0].kind, wifi_session::ActionKind::SAVE_CREDENTIAL);
+  EXPECT_TRUE(saved[0].hidden);
 }
 
 TEST(WifiSessionHidden, UsesTheStoredPasswordForAKnownHiddenNetwork) {

@@ -1,5 +1,6 @@
 #include <HalDisplay.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 
 #if FREEINK_DEVICE_X4PRO
 #include <BoardConfig.h>
@@ -26,6 +27,7 @@ void HalDisplay::begin(bool seamless, const wake_classify::WakeupReason wakeupRe
   }
 
   einkDisplay.begin();
+  einkDisplay.setBusyWaitHooks([]() { powerManager.beginBusyWait(); }, []() { powerManager.endBusyWait(); });
 
   if (seamless) {
     // Defuse the SDK's X3 _x3InitialFullSyncsRemaining counter (no-op on X4)

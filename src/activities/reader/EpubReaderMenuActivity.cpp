@@ -78,7 +78,6 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
   const bool wallpaperPausable = context.wallpaperPausable;
   const bool hasQuotes = context.hasQuotes;
   const bool hasReturn = context.hasReturn;
-  const bool hasPageList = context.hasPageList;
   const bool hasForward = context.hasForward;
   // Reserve every tab this menu can ever have, so no push_back below can reallocate.
   // That matters: page() hands back a reference INTO the vector, and a reallocation
@@ -130,10 +129,9 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
   {
     auto& items = page(Tab::Navigate, StrId::STR_SEC_NAVIGATE);
     std::vector<MenuItem> position{{MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER},
-                                   {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT}};
-    position.reserve(6);  // chapter, percentage, optional page, Return, Forward and paragraph
-    // Only books that carry the printed edition's page numbers can jump to one.
-    if (hasPageList) position.insert(position.begin() + 2, {MenuAction::GO_TO_PAGE, StrId::STR_GO_TO_PAGE});
+                                   {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT},
+                                   {MenuAction::GO_TO_PAGE, StrId::STR_GO_TO_PAGE}};
+    position.reserve(6);  // chapter, percentage, page, Return, Forward and paragraph
     if (hasReturn) position.push_back({MenuAction::RETURN, StrId::STR_RETURN});
     if (hasForward) position.push_back({MenuAction::FORWARD, StrId::STR_FORWARD});
     // Jump to a paragraph number — only meaningful when this book shows paragraph
@@ -241,7 +239,11 @@ void EpubReaderMenuActivity::focusRow(const int index) {
     const int selected = sections.focus(rows.data(), static_cast<int>(rows.size()), index);
     if (selected < 0) return;
     // Published touch indexes belong to the old layout until renderUi() rebuilds it.
-    if (previousHeader != sections.expandedHeader) closeRouting();
+    // Section layout shifts cover large bands of text; run a HALF cleanup to prevent ghosts.
+    if (previousHeader != sections.expandedHeader) {
+      closeRouting();
+      requestCleanPaint();
+    }
     nav.selected = selected;
     nav.drawnRows = 0;  // the old viewport may contain rows that just disappeared
     nav.follow(listCount());
@@ -272,7 +274,13 @@ void EpubReaderMenuActivity::onEnter() {
       first = 0;
       while (first < static_cast<int>(items.size()) && !items[first].isHeader) ++first;
     }
-    nav.reset(first < static_cast<int>(items.size()) ? sections.visibleIndex(rows.data(), items.size(), first) : 0);
+    if (first < static_cast<int>(items.size())) {
+      sections.expandedHeader = first;
+      landingHeader = first;
+      nav.reset(sections.visibleIndex(rows.data(), items.size(), first));
+    } else {
+      nav.reset(0);
+    }
     // Back from a row's screen: that row, inside its open tab. A row gone since (the last
     // bookmark deleted) leaves the usual landing.
     for (int i = 0; openOn != MenuAction::SECTION_HEADER && i < static_cast<int>(items.size()); ++i) {
@@ -336,14 +344,17 @@ bool EpubReaderMenuActivity::handleCustomInput() {
 }
 
 bool EpubReaderMenuActivity::handleButtons() {
-  // Back first collapses to the open header; a second Back leaves the menu.
+  // Back first collapses to the open header; a second Back leaves the menu. The landing tab
+  // is open without the reader asking, so Back from it leaves at once: one Back from the
+  // menu as it opened still returns to the page.
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    int header;
-    {
+    int header = -1;
+    if (sections.expandedHeader != landingHeader) {
       RenderLock lock(*this);
       header = sections.collapse(rows.data(), static_cast<int>(rows.size()));
       if (header >= 0) {
         closeRouting();
+        requestCleanPaint();
         nav.selected = header;
         nav.drawnRows = 0;
         nav.follow(listCount());

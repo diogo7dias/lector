@@ -83,12 +83,24 @@ enum class BootResume : uint8_t {
 static std::string pickRandomRecentBookPath();
 static std::string pickBootBookPath();
 
+// Cached across deep sleep so early bounce/USB checks know Wake on USB Plug-In
+// without mounting the SD card.
+static RTC_DATA_ATTR bool rtcWakeOnUsbPlugInValid = false;
+static RTC_DATA_ATTR bool rtcWakeOnUsbPlugIn = false;
+
 // Boot-time "not a real wake" exits: nothing was painted or changed, so none of
 // enterDeepSleep()'s state save or sleep face applies.
-[[noreturn]] static void sleepAgain() {
+[[noreturn]] static void sleepAgain(const HalGPIO::WakeupReason wakeupReason, const bool chargeWakeEnabled) {
+  Frontlight.setOn(false);
+  if (gpio.wasDisplayProbed()) {
+    // Cold-boot display-bus probe pulsed EPD RST and woke the controller;
+    // send its deep-sleep command before putting the SoC back to sleep.
+    display.begin(/*seamless=*/true, wakeupReason);
+    display.deepSleep();
+  }
   logFlush();
   Storage.prepareForDeepSleep();
-  powerManager.setChargeWake(SETTINGS.wakeOnUsbPlugIn != 0);
+  powerManager.setChargeWake(chargeWakeEnabled);
   powerManager.startDeepSleep();
 }
 
@@ -174,7 +186,9 @@ static void finishDeepSleep(const unsigned long sleepT0, const unsigned long sle
   // chip, so anything still buffered here is lost.
   logFlush();
 
-  powerManager.setChargeWake(SETTINGS.wakeOnUsbPlugIn != 0);
+  rtcWakeOnUsbPlugIn = SETTINGS.wakeOnUsbPlugIn != 0;
+  rtcWakeOnUsbPlugInValid = true;
+  powerManager.setChargeWake(rtcWakeOnUsbPlugIn);
   powerManager.startDeepSleep();
 }
 
@@ -346,20 +360,50 @@ void setup() {
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
+  // Reject AfterUSBPower and power-button bounces before mounting the SD card
+  // or initializing the frontlight, keeping false wakes short and dark.
+  const auto wakeupReason = gpio.getWakeupReason();
+  // INF, and on every boot: a device that sleeps and is woken straight back up by its own
+  // USB power prints nothing else, so without this line the cycle can only be inferred
+  // from the gaps in a capture. See the AfterUSBPower branch below.
+  static constexpr const char* kWakeReasonNames[] = {"PowerButton", "AfterFlash", "AfterUSBPower", "Other"};
+  LOG_INF("SLP", "Wake reason %s", kWakeReasonNames[static_cast<int>(wakeupReason)]);
+
+  bool deferPlugInWakeCheck = false;
+  if (wakeupReason == HalGPIO::WakeupReason::AfterUSBPower) {
+    LOG_INF("SLP", "USB power cold boot, back to sleep");
+    sleepAgain(wakeupReason, rtcWakeOnUsbPlugInValid && rtcWakeOnUsbPlugIn);
+  }
+  if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
+    LOG_DBG("MAIN", "Verifying the power button is still held");
+    const bool powerHeld = gpio.verifyPowerButtonWakeup();
+    const bool supportsCharge = HalPowerManager::supportsChargeWake();
+    const bool charging = supportsCharge && HalPowerManager::isCharging();
+    const auto action = wake_classify::decideEarlyWake(wakeupReason, powerHeld, supportsCharge, charging,
+                                                       rtcWakeOnUsbPlugInValid, rtcWakeOnUsbPlugIn);
+    if (action == wake_classify::EarlyWakeAction::SleepNow) {
+      LOG_INF("SLP", "Wake press not held through debounce, back to sleep");
+      sleepAgain(wakeupReason, rtcWakeOnUsbPlugInValid && rtcWakeOnUsbPlugIn);
+    } else if (action == wake_classify::EarlyWakeAction::CheckAfterConfig) {
+      deferPlugInWakeCheck = true;
+    } else if (powerHeld) {
+      wakePowerReleasePending = true;
+    } else {
+      LOG_INF("SLP", "USB plug-in wake");
+    }
+  }
+
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
   bool sdRecoveryChord = false;
   if (!Storage.begin()) {
     LOG_ERR("MAIN", "SD card initialization failed");
-    // Classified here because the panel comes up before the main classification below.
-    // That one still reads afresh: the retry loop can hold the boot for minutes first.
-    const auto earlyWakeupReason = gpio.getWakeupReason();
-    setupDisplayAndFonts(isSilentReboot, earlyWakeupReason);
+    setupDisplayAndFonts(isSilentReboot, wakeupReason);
     // The firmware picker lives on the SD card, so a card that will not mount
     // used to end the boot right here -- on a device whose USB flashing the
     // vendor locked, that is the last way off this firmware gone. When the
     // recovery chord is held, keep asking for the card instead of giving up.
-    sdRecoveryChord = earlyWakeupReason == HalGPIO::WakeupReason::PowerButton && recoveryChordHeld(inputStartedMs);
+    sdRecoveryChord = wakeupReason == HalGPIO::WakeupReason::PowerButton && recoveryChordHeld(inputStartedMs);
     if (!sdRecoveryChord) {
       activityManager.goToFullScreenMessage(tr(STR_SD_CARD_ERROR), EpdFontFamily::REGULAR);
       return;
@@ -417,6 +461,18 @@ void setup() {
   }
 
   SETTINGS.loadFromFile();
+  rtcWakeOnUsbPlugIn = SETTINGS.wakeOnUsbPlugIn != 0;
+  rtcWakeOnUsbPlugInValid = true;
+  if (deferPlugInWakeCheck) {
+    // First boot without an RTC cache while charging: finish checking Wake on USB Plug-In
+    // now that SETTINGS is loaded, still before Frontlight.begin().
+    const bool plugInWakeOn = rtcWakeOnUsbPlugIn && HalPowerManager::supportsChargeWake();
+    if (!wake_classify::isPlugInWake(plugInWakeOn, false, plugInWakeOn && HalPowerManager::isCharging())) {
+      LOG_INF("SLP", "Wake press not held through debounce, back to sleep");
+      sleepAgain(wakeupReason, rtcWakeOnUsbPlugIn);
+    }
+    LOG_INF("SLP", "USB plug-in wake");
+  }
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
   // One-time upgrade: books read before the reading badges existed have a percentage in
@@ -450,39 +506,6 @@ void setup() {
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth,
                    frontlight::restoreLightOnAtBoot({SETTINGS.frontlightOn != 0, SETTINGS.frontlightRestoreOnWake != 0,
                                                      isSilentReboot, restartBoot.lightOn, scheduledOn}));
-
-  const auto wakeupReason = gpio.getWakeupReason();
-  // INF, and on every boot: a device that sleeps and is woken straight back up by its own
-  // USB power prints nothing else, so without this line the cycle can only be inferred
-  // from the gaps in a capture. See the AfterUSBPower branch below.
-  static constexpr const char* kWakeReasonNames[] = {"PowerButton", "AfterFlash", "AfterUSBPower", "Other"};
-  LOG_INF("SLP", "Wake reason %s", kWakeReasonNames[static_cast<int>(wakeupReason)]);
-  switch (wakeupReason) {
-    case HalGPIO::WakeupReason::PowerButton:
-      LOG_DBG("MAIN", "Verifying the power button is still held");
-      if (!gpio.verifyPowerButtonWakeup()) {
-        // No press, but the charger line is charging: the Wake on USB Plug-In wake. Boot on as for a
-        // button wake (same painted sleep face), minus the held-button bookkeeping.
-        const bool plugInWakeOn = SETTINGS.wakeOnUsbPlugIn != 0 && HalPowerManager::supportsChargeWake();
-        if (!wake_classify::isPlugInWake(plugInWakeOn, false, plugInWakeOn && HalPowerManager::isCharging())) {
-          LOG_INF("SLP", "Wake press not held through debounce, back to sleep");
-          sleepAgain();
-        }
-        LOG_INF("SLP", "USB plug-in wake");
-        break;
-      }
-      wakePowerReleasePending = true;
-      break;
-    case HalGPIO::WakeupReason::AfterUSBPower:
-      // If USB power caused a cold boot, go back to sleep
-      LOG_INF("SLP", "USB power cold boot, back to sleep");
-      sleepAgain();
-    case HalGPIO::WakeupReason::AfterFlash:
-      // After flashing, just proceed to boot
-    case HalGPIO::WakeupReason::Other:
-    default:
-      break;
-  }
 
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
@@ -750,6 +773,7 @@ static void checkLowBatteryWarning() {
   inputs.alreadyWarned = APP_STATE.lowBatteryWarned;
   inputs.usbConnected = gpio.isUsbConnectedCached();
   inputs.screenAllowed = activityManager.isReaderActivity() || activityManager.isHomeActivity();
+  inputs.calmMode = SETTINGS.calmMode != 0;
 
   switch (low_battery::resolve(inputs)) {
     case low_battery::Action::ClearLatch:

@@ -15,8 +15,9 @@ constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
 // Increment when cache format changes (4: form-feed page breaks, 5: UTF-16 refused,
-// 6: Windows-1252 files decoded, so their pages wrap at different points)
-constexpr uint8_t CACHE_VERSION = 6;
+// 6: Windows-1252 files decoded, 7: character spacing joins the key; line spacing needs no
+// field of its own, it changes linesPerPage, which is already in the key)
+constexpr uint8_t CACHE_VERSION = 7;
 // How far into a file detectEncoding() looks for a non-ASCII byte before calling it UTF-8.
 constexpr size_t ENCODING_SCAN_BYTES = 64 * 1024;
 }  // namespace
@@ -68,7 +69,7 @@ void TxtReaderActivity::buildPageIndex() {
   quietIndex_ = false;
 
   while (offset < fileSize) {
-    std::vector<std::string> tempLines;
+    std::vector<TxtLine> tempLines;
     size_t nextOffset = offset;
 
     if (!loadPageAtOffset(offset, tempLines, nextOffset)) {
@@ -99,7 +100,7 @@ void TxtReaderActivity::buildPageIndex() {
   LOG_DBG("TRS", "Built page index: %d pages", totalPages);
 }
 
-bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>& outLines, size_t& nextOffset) {
+bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<TxtLine>& outLines, size_t& nextOffset) {
   outLines.clear();
   const size_t fileSize = txt->getFileSize();
 
@@ -189,14 +190,14 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
     // then continue with wrapping when needed.
     do {
       if (line.empty()) {
-        outLines.emplace_back();
+        outLines.push_back({"", true});
         break;
       }
 
       int lineWidth = renderer.getTextAdvanceX(cachedFontId, line.c_str(), EpdFontFamily::REGULAR);
 
       if (lineWidth <= viewportWidth) {
-        outLines.push_back(line);
+        outLines.push_back({line, true});
         lineBytePos = displayLen;  // Consumed entire display content
         line.clear();
         break;
@@ -223,7 +224,7 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
         breakPos = 1;
       }
 
-      outLines.push_back(line.substr(0, breakPos));
+      outLines.push_back({line.substr(0, breakPos), false});
 
       size_t skipChars = breakPos;
       if (breakPos < line.length() && line[breakPos] == ' ') {
@@ -348,6 +349,13 @@ bool TxtReaderActivity::loadPageIndexCache() {
     return false;
   }
 
+  int8_t charSpacing = 0;
+  serialization::readPod(f, charSpacing);
+  if (charSpacing != cachedCharacterSpacing) {
+    LOG_DBG("TRS", "Cache character spacing mismatch, rebuilding");
+    return false;
+  }
+
   // A truncated index (card pulled mid-save) must not size reserve() or leave
   // zeroed offsets: bound the count by the bytes actually left, check each read.
   uint32_t numPages;
@@ -394,6 +402,7 @@ void TxtReaderActivity::savePageIndexCache() const {
   serialization::writePod(f, static_cast<int32_t>(cachedFontId));
   serialization::writePod(f, static_cast<int32_t>(cachedScreenMargin));
   serialization::writePod(f, cachedParagraphAlignment);
+  serialization::writePod(f, cachedCharacterSpacing);
   serialization::writePod(f, static_cast<uint32_t>(pageOffsets.size()));
 
   for (size_t offset : pageOffsets) {
