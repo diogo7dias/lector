@@ -6,6 +6,8 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <LibraryBuilder.h>
+#include <LibraryIndexFile.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <NearbyPositionReceive.h>
@@ -61,6 +63,7 @@ using bookfiling::ROOT_FOLDER;
 
 void EpubReaderActivity::onEnter() {
   Activity::onEnter();
+  lastInputMs = millis();
   // Back from KOReader Sync or Nearby, launched from a reader menu: that menu comes back once
   // the page is up. Only this reader's own reopens, which take the new reader as their ctx.
   if (const MenuReturn menu = activityManager.takeReaderMenu(); menu.reopen == &EpubReaderActivity::reopenReaderMenu ||
@@ -150,6 +153,7 @@ void EpubReaderActivity::onEnter() {
     currentSpineIndex = sortes::below(count, esp_random);
   } else {
     loadLinkStack();
+    loadReturnHistory();
     openedSpine = currentSpineIndex;
     openedPage = nextPageNumber;
   }
@@ -221,6 +225,7 @@ void EpubReaderActivity::onExit() {
 
   // Update this book's home-list progress badge from the current position. One write
   // per reading session (setProgress skips if unchanged), so no page-turn cost.
+  uint8_t exitPercent = library::CLIX_PERCENT_UNREAD;
   if (epub) {
     const int pct = bookPercent();
     RECENT_BOOKS.setProgress(epub->getPath(), pct);
@@ -234,6 +239,7 @@ void EpubReaderActivity::onExit() {
       book_progress::Marker marker;
       marker.percent = pendingReadFolderMove ? 100 : static_cast<uint8_t>(pct);
       marker.readOrder = readOrder;
+      exitPercent = marker.percent;
       book_progress::write(epub->getCachePath(), marker);
     }
   }
@@ -242,6 +248,8 @@ void EpubReaderActivity::onExit() {
   // book reopens on the viewed page and Back still returns to the link origin.
   applyLinkLanding();
   if (footnoteDepth > 0 && epub) saveLinkStack();
+  // Not from a Sortes visit: it never loaded the history, so it would erase the book's own.
+  if (epub && !pendingDeleteBook && !sortesMode) saveReturnHistory();
 
   // Auto Sync pushes only a book whose page moved since it opened.
   const bool pageMoved =
@@ -273,6 +281,10 @@ void EpubReaderActivity::onExit() {
     finalPath = bookfiling::moveBookToFolder(srcPath, dstPath, oldCachePath);
   } else {
     epub.reset();
+  }
+
+  if (!pendingDeleteBook && !finalPath.empty() && exitPercent != library::CLIX_PERCENT_UNREAD) {
+    library::updateRecordProgress(library::libraryIndexPath(), finalPath.c_str(), exitPercent, readOrder);
   }
 
   if (pageMoved && !pendingDeleteBook && !finalPath.empty()) ko_auto_sync::markMoved(finalPath);

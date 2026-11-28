@@ -52,7 +52,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
     RETURN,                      // back to the last deliberate-jump origin
     VIEW_QUOTES,                 // browse (and delete) the quotes saved in <book>_QUOTES.txt
     FORWARD,                     // redo the last Return
-    GO_TO_PAGE,                  // jump to a printed page number (books with a page list)
+    GO_TO_PAGE,                  // jump to a printed page (page-list books) or chapter page N/M
     NIGHT_MODE,                  // flip Night mode (inverted page) in place
     FRONTLIGHT,                  // flip the frontlight on or off in place
     GO_HOME                      // leave the book for Home
@@ -90,7 +90,6 @@ class EpubReaderMenuActivity final : public UiListActivity {
     bool hasQuotes = false;
     bool hasReturn = false;
     bool hasForward = false;
-    bool hasPageList = false;
     // The row to open on: the one whose screen just closed by Back. SECTION_HEADER opens
     // on the usual tab.
     MenuAction openOn = MenuAction::SECTION_HEADER;
@@ -195,6 +194,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
   uint8_t firedHoldFunction = CrossPointSettings::LP_MENU_DISABLED;
   unsigned long confirmHoldStart = 0;
   MenuAction openOn = MenuAction::SECTION_HEADER;
+  // The heading onEnter() opened by itself (Sleep Screen or Navigate); -1 when none.
+  int landingHeader = -1;
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
   const std::vector<StrId> paragraphNumLabels = {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER};

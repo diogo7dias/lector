@@ -15,6 +15,7 @@ namespace low_battery {
 // Charge at or below this warns; charge above the clear level arms the warning again. The
 // gap keeps a reading that hovers on the threshold from warning over and over.
 inline constexpr uint16_t WARN_PERCENT = 10;
+inline constexpr uint16_t CALM_WARN_PERCENT = 5;
 inline constexpr uint16_t CLEAR_PERCENT = 15;
 
 enum class Action : uint8_t {
@@ -35,6 +36,8 @@ struct Inputs {
   // The screen on top is one the notice may interrupt: the reader or home, never a
   // firmware update, a file transfer, the sleep screen or boot.
   bool screenAllowed = false;
+  // Calm mode suppresses the low-battery nag until the critical 5% floor.
+  bool calmMode = false;
 };
 
 inline constexpr Action resolve(const Inputs& in) {
@@ -44,7 +47,8 @@ inline constexpr Action resolve(const Inputs& in) {
   // shows nothing, it only makes the next drain able to warn.
   if (in.alreadyWarned) return in.percent > CLEAR_PERCENT ? Action::ClearLatch : Action::None;
 
-  if (in.percent > WARN_PERCENT) return Action::None;
+  const uint16_t warnThreshold = in.calmMode ? CALM_WARN_PERCENT : WARN_PERCENT;
+  if (in.percent > warnThreshold) return Action::None;
   if (in.usbConnected || !in.screenAllowed) return Action::None;
   return Action::Warn;
 }

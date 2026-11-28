@@ -7,6 +7,8 @@
 
 #include "activities/UiListActivity.h"
 #include "activities/home/LibrarySearch.h"
+#include "components/OptionPopup.h"
+#include "util/HoldButtonPolicy.h"
 
 // Home > Library: every book on the card, by title with its author under it. Picking
 // one opens it. The list is the on-card index (lib/LibraryIndex), so the screen holds
@@ -34,6 +36,11 @@ class LibraryActivity final : public UiListActivity {
   // The row to open on: a book's Back returns to the row that opened it.
   uint16_t startRow = 0;
 
+  // Ordered ordinals into the CLX v2 index when sort != Title or filter != All.
+  // Empty for default (Title + All), costing zero extra RAM.
+  std::vector<uint16_t> viewOrder;
+  bool viewActive = false;
+
   std::string searchQuery;
   librarysearch::TopMatches<MAX_HITS> hits;
   // Every match, kept or not, for the "N found" line.
@@ -43,34 +50,58 @@ class LibraryActivity final : public UiListActivity {
 
   std::string titles[WINDOW];
   std::string authors[WINDOW];
+  char badges[WINDOW][12] = {};
   library::ClixRecord records[WINDOW];
   std::vector<freeink::ui::ListItem> rows;
   mutable char counter[24] = "";
+  mutable char subHeaderText[48] = "";
 
+  OptionPopup bookActionPopup;
+  hold_button::Tracker confirmHold;
+
+  library::LibrarySort activeSort() const;
+  library::LibraryFilter activeFilter() const;
   bool searchActive() const { return !searchQuery.empty(); }
   // Search row, then Clear search while a query is set.
   int headerRows() const { return bookCount == 0 ? 0 : (searchActive() ? 2 : 1); }
-  int entryCount() const { return searchActive() ? static_cast<int>(hits.size()) : bookCount; }
+  int entryCount() const {
+    if (searchActive()) return static_cast<int>(hits.size());
+    return viewActive ? static_cast<int>(viewOrder.size()) : bookCount;
+  }
   // Index ordinal of the book on entry row `entry`.
-  int ordinalAt(int entry) const { return searchActive() ? hits.indexAt(static_cast<size_t>(entry)) : entry; }
+  int ordinalAt(int entry) const {
+    if (searchActive()) return hits.indexAt(static_cast<size_t>(entry));
+    return viewActive ? viewOrder[static_cast<size_t>(entry)] : entry;
+  }
   void recount() { rowCount = headerRows() + entryCount(); }
 
   void refreshIndex(bool force);
-  // Reads `wanted` entries from entry row `first` into titles/authors.
+  void rebuildView();
+  // Reads `wanted` entries from entry row `first` into titles/authors/records.
   int loadEntries(int first, int wanted);
   void openSearch();
   void applySearch(const std::string& query);
+  void confirmDelete(const std::string& fullPath);
 
  public:
   explicit LibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, uint16_t firstRow = 0)
-      : UiListActivity(activity_name::kLibrary, renderer, mappedInput), startRow(firstRow) {}
+      : UiListActivity(activity_name::kLibrary, renderer, mappedInput, /*wantsTouchLongPress=*/true),
+        startRow(firstRow) {}
   void onEnter() override;
   void onExit() override;
+  bool lightPanelAuxText(char* out, size_t length) const override;
+  bool lightPanelStepAux(int delta) override;
+  bool lightPanelAux2Text(char* out, size_t length) const override;
+  bool lightPanelStepAux2(int delta) override;
 
  protected:
   int listCount() const override { return rowCount; }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
+  void onRowLongPress(int index) override;
+  bool handleCustomInput() override;
+  bool handleButtons() override;
   void onBackButton() override;
   ListChrome chrome() const override;
+  bool drawOverlay() override;
 };

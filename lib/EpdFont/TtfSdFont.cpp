@@ -62,6 +62,7 @@ struct TtfSdFont::Face {
   Slot* slots = nullptr;
   size_t glyphUsed = 0;
   uint16_t sizePx = 0;  // TtfFont pixel height that makes the em the wanted size
+  int8_t cachedInkWeight = 0;
   EpdLigaturePair ligatures[5] = {};
   EpdFontData data = {};
   EpdFont font;
@@ -74,21 +75,34 @@ struct TtfSdFont::Face {
   }
 };
 
-TtfSdFont* TtfSdFont::active_ = nullptr;
+TtfSdFont* TtfSdFont::head_ = nullptr;
+int8_t TtfSdFont::inkWeight_ = 0;
+
+void TtfSdFont::setInkWeight(const int8_t weight) { inkWeight_ = ttfscan::clampInkWeight(weight); }
 
 TtfSdFont::TtfSdFont() {
   for (uint8_t i = 0; i < MAX_STYLES; ++i) ctx_[i] = {this, i};
-  if (active_ == nullptr) active_ = this;
+  next_ = head_;
+  head_ = this;
 }
 
 TtfSdFont::~TtfSdFont() {
-  if (active_ == this) active_ = nullptr;
+  TtfSdFont** link = &head_;
+  while (*link != nullptr) {
+    if (*link == this) {
+      *link = next_;
+      break;
+    }
+    link = &(*link)->next_;
+  }
 }
 
 bool TtfSdFont::ownsMissCtx(const void* ctx) {
-  if (active_ == nullptr || ctx == nullptr) return false;
-  for (const MissCtx& c : active_->ctx_) {
-    if (ctx == &c) return true;
+  if (ctx == nullptr) return false;
+  for (const TtfSdFont* font = head_; font != nullptr; font = font->next_) {
+    for (const MissCtx& c : font->ctx_) {
+      if (ctx == &c) return true;
+    }
   }
   return false;
 }
@@ -98,10 +112,6 @@ EpdFont* TtfSdFont::getEpdFont(const uint8_t style) {
 }
 
 bool TtfSdFont::load(const SdCardFontFamilyInfo& family, const uint8_t pointSize) {
-  if (active_ != this) {
-    LOG_ERR(TAG, "Another TTF family is still resident");
-    return false;
-  }
   pointSize_ = ttfscan::clampTtfPointSize(pointSize);
   contentHash_ = fnv1a::OFFSET_BASIS_32;
   const size_t psramBefore = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
@@ -185,6 +195,7 @@ bool TtfSdFont::loadFace(const uint8_t style, const char* path, const uint8_t po
   const uint16_t emPx = ttfscan::ttfEmPixels(pointSize);
   face->sizePx = ttfscan::ttfHeightForEm(metrics, emPx);
   face->slots = reinterpret_cast<Slot*>(face->slotBytes.get());
+  face->cachedInkWeight = inkWeight_;
   face->resetSlots();
 
   EpdFontData& d = face->data;
@@ -219,6 +230,11 @@ const EpdGlyph* TtfSdFont::onGlyphMiss(void* ctx, const uint32_t codepoint) {
   Face* face = mc->self->faces_[mc->style].get();
   if (face == nullptr) return nullptr;
 
+  if (face->cachedInkWeight != inkWeight_) {
+    face->resetSlots();
+    face->cachedInkWeight = inkWeight_;
+  }
+
   // ponytail: direct-mapped cache, collisions overwrite. Returned pointers stay
   // valid until another codepoint lands in the same slot; callers consume a
   // glyph (measure or draw) before asking for the next, as with SdCardFont.
@@ -235,7 +251,7 @@ const EpdGlyph* TtfSdFont::onGlyphMiss(void* ctx, const uint32_t codepoint) {
     if (bytes > GLYPH_ARENA_BYTES) return nullptr;
   }
   uint8_t* out = face->glyphBytes.get() + face->glyphUsed;
-  ttfscan::pack2Bit(g->pixels, g->width, g->height, out);
+  ttfscan::pack2Bit(g->pixels, g->width, g->height, out, inkWeight_);
 
   slot.cp = codepoint;
   EpdGlyph& e = slot.glyph;

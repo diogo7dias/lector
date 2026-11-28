@@ -1435,6 +1435,7 @@
     <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
     <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 New Folder</button>
     <button class="action-btn" onclick="openFetchModal()">🔗 Fetch from URL</button>
+    <button class="action-btn" onclick="openArticleModal()">📰 Send Article</button>
     <button class="action-btn" id="zipBtn" onclick="downloadSelectedAsZip()">🗜️ Download Selected</button>
     <button class="action-btn delete-action-btn" onclick="openDeleteSelectedModal()">🗑️ Delete Selected</button>
   </div>
@@ -1698,6 +1699,29 @@
   </div>
 </div>
 
+<!-- Send Article Modal -->
+<div class="modal-overlay" id="articleModal">
+  <div class="modal" style="max-width:560px;">
+    <button class="modal-close" onclick="closeArticleModal()">&times;</button>
+    <h3>📰 Send Article</h3>
+    <div class="folder-form">
+      <p class="file-info">Paste text, Markdown, or HTML. Builds an EPUB3 in your browser and uploads it to <strong>/articles/</strong>.</p>
+      <input type="text" id="articleTitle" class="folder-input" placeholder="Article title" oninput="updateArticleSendBtn()">
+      <input type="text" id="articleAuthor" class="folder-input" placeholder="Author or site (optional)" style="margin-top:8px;">
+      <select id="articleFormat" class="folder-input" style="margin-top:8px;">
+        <option value="auto">Format: Auto-detect</option>
+        <option value="text">Format: Plain text</option>
+        <option value="markdown">Format: Markdown</option>
+        <option value="html">Format: HTML</option>
+      </select>
+      <textarea id="articleBody" rows="10" placeholder="Paste article text, Markdown, or HTML..." oninput="updateArticleSendBtn()" style="width:100%; margin-top:8px; padding:10px; border:2px solid var(--ink); font-family:inherit; font-size:0.95em; resize:vertical;"></textarea>
+      <button class="folder-btn" id="articleSendBtn" onclick="sendArticle()" disabled>Send to /articles/</button>
+      <button class="delete-btn-cancel" onclick="closeArticleModal()">Close</button>
+      <p class="file-info" id="articleStatusText"></p>
+    </div>
+  </div>
+</div>
+
 <!-- Fetch from URL Modal -->
 <div class="modal-overlay" id="fetchModal">
   <div class="modal">
@@ -1881,6 +1905,7 @@
           if (overlay.id === 'uploadModal') return closeUploadModal();
           if (overlay.id === 'folderModal') return closeFolderModal();
           if (overlay.id === 'fetchModal') return closeFetchModal();
+          if (overlay.id === 'articleModal') return closeArticleModal();
           if (overlay.id === 'deleteModal') return closeDeleteModal();
           if (overlay.id === 'renameModal') return closeRenameModal();
           if (overlay.id === 'moveModal') return closeMoveModal();
@@ -4804,6 +4829,350 @@ function retryAllFailedUploads() {
     };
 
     xhr.send(formData);
+  }
+
+  // --- SEND_ARTICLE_START ---
+  function escapeXml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  function detectArticleFormat(raw) {
+    if (/<(p|div|article|section|h[1-6]|ul|ol|li|blockquote|br|pre)\b/i.test(raw)) return 'html';
+    if (/^(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|```)/m.test(raw) || /\*\*[^*]+\*\*|\[[^\]]+\]\(https?:\/\//.test(raw)) {
+      return 'markdown';
+    }
+    return 'text';
+  }
+
+  function renderInlineMarkdown(text) {
+    let out = escapeXml(text);
+    out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
+    out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2">$1</a>');
+    out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    out = out.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    out = out.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    out = out.replace(/(^|[\s(])_([^_]+)_([\s).,!?;:]|$)/g, '$1<em>$2</em>$3');
+    return out;
+  }
+
+  function markdownToXhtml(raw) {
+    const lines = raw.replace(/\r\n?/g, '\n').split('\n');
+    const out = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (!line.trim()) { i++; continue; }
+      if (/^```/.test(line.trim())) {
+        const code = [];
+        i++;
+        while (i < lines.length && !/^```/.test(lines[i].trim())) { code.push(lines[i++]); }
+        if (i < lines.length) i++;
+        out.push('<pre><code>' + escapeXml(code.join('\n')) + '</code></pre>');
+        continue;
+      }
+      const h = line.match(/^(#{1,6})\s+(.+?)\s*#*$/);
+      if (h) {
+        const lvl = h[1].length;
+        out.push('<h' + lvl + '>' + renderInlineMarkdown(h[2]) + '</h' + lvl + '>');
+        i++;
+        continue;
+      }
+      if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(line.trim())) {
+        out.push('<hr/>');
+        i++;
+        continue;
+      }
+      if (/^\s*>\s?/.test(line)) {
+        const q = [];
+        while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
+          q.push(renderInlineMarkdown(lines[i++].replace(/^\s*>\s?/, '')));
+        }
+        out.push('<blockquote><p>' + q.join('<br/>') + '</p></blockquote>');
+        continue;
+      }
+      if (/^\s*[-*+]\s+/.test(line)) {
+        const items = [];
+        while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
+          items.push('<li>' + renderInlineMarkdown(lines[i++].replace(/^\s*[-*+]\s+/, '')) + '</li>');
+        }
+        out.push('<ul>' + items.join('') + '</ul>');
+        continue;
+      }
+      if (/^\s*\d+\.\s+/.test(line)) {
+        const items = [];
+        while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+          items.push('<li>' + renderInlineMarkdown(lines[i++].replace(/^\s*\d+\.\s+/, '')) + '</li>');
+        }
+        out.push('<ol>' + items.join('') + '</ol>');
+        continue;
+      }
+      const para = [];
+      while (i < lines.length && lines[i].trim() &&
+             !/^(#{1,6}\s|```|\s*>\s?|\s*[-*+]\s+|\s*\d+\.\s+|(\*{3,}|-{3,}|_{3,})\s*$)/.test(lines[i])) {
+        para.push(renderInlineMarkdown(lines[i++].trim()));
+      }
+      if (para.length) out.push('<p>' + para.join(' ') + '</p>');
+    }
+    return out.join('\n');
+  }
+
+  function plainTextToXhtml(raw) {
+    const blocks = raw.replace(/\r\n?/g, '\n').trim().split(/\n\s*\n+/);
+    return blocks
+      .map(b => b.trim())
+      .filter(Boolean)
+      .map(b => '<p>' + escapeXml(b).replace(/\n/g, '<br/>') + '</p>')
+      .join('\n');
+  }
+
+  function sanitizeHtmlToXhtml(raw) {
+    const allowed = {
+      h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1,
+      p: 1, div: 1, section: 1, article: 1, blockquote: 1,
+      pre: 1, code: 1, ul: 1, ol: 1, li: 1,
+      em: 1, i: 1, strong: 1, b: 1, u: 1, sup: 1, sub: 1,
+      br: 2, hr: 2, a: 3
+    };
+    if (typeof DOMParser !== 'undefined') {
+      const doc = new DOMParser().parseFromString(raw, 'text/html');
+      doc.querySelectorAll('script,style,noscript,iframe,svg,form,input,button,nav').forEach(el => el.remove());
+      function serializeNode(node) {
+        if (node.nodeType === 3) return escapeXml(node.nodeValue || '');
+        if (node.nodeType !== 1) return '';
+        const tag = node.tagName.toLowerCase();
+        const kind = allowed[tag];
+        const inner = Array.from(node.childNodes).map(serializeNode).join('');
+        if (!kind) return inner;
+        if (kind === 2) return '<' + tag + '/>';
+        if (kind === 3) {
+          const href = (node.getAttribute('href') || '').trim();
+          if (/^https?:\/\//i.test(href)) return '<a href="' + escapeXml(href) + '">' + inner + '</a>';
+          return inner;
+        }
+        return '<' + tag + '>' + inner + '</' + tag + '>';
+      }
+      const xhtml = serializeNode(doc.body).trim();
+      return xhtml || plainTextToXhtml(doc.body.textContent || '');
+    }
+    // Headless fallback (e.g. Node unit tests): strip dangerous blocks and normalize tags to valid XHTML.
+    let cleaned = raw
+      .replace(/<(script|style|noscript|iframe|svg|form)[\s\S]*?<\/\1>/gi, '')
+      .replace(/<!--[\s\S]*?-->/g, '');
+    const out = [];
+    const stack = [];
+    const tokenRe = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)([^>]*)>|([^<]+)/g;
+    let m;
+    while ((m = tokenRe.exec(cleaned)) !== null) {
+      if (m[4] !== undefined) {
+        const text = m[4].replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<')
+          .replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#0?39;/gi, "'");
+        out.push(escapeXml(text));
+        continue;
+      }
+      const isClose = m[1] === '/';
+      const tag = m[2].toLowerCase();
+      const attrs = m[3] || '';
+      const kind = allowed[tag];
+      if (!kind) continue;
+      if (kind === 2) {
+        if (!isClose) out.push('<' + tag + '/>');
+        continue;
+      }
+      if (!isClose) {
+        if (kind === 3) {
+          const hm = attrs.match(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+          const href = hm ? (hm[1] || hm[2] || '').trim() : '';
+          if (/^https?:\/\//i.test(href)) {
+            out.push('<a href="' + escapeXml(href) + '">');
+            stack.push('a');
+          }
+        } else {
+          out.push('<' + tag + '>');
+          stack.push(tag);
+        }
+      } else {
+        const idx = stack.lastIndexOf(tag);
+        if (idx !== -1) {
+          while (stack.length > idx) out.push('</' + stack.pop() + '>');
+        }
+      }
+    }
+    while (stack.length) out.push('</' + stack.pop() + '>');
+    const result = out.join('').trim();
+    return result ? '<div>' + result + '</div>' : plainTextToXhtml(raw);
+  }
+
+  function articleBodyToXhtml(body, format) {
+    const mode = (!format || format === 'auto') ? detectArticleFormat(body) : format;
+    if (mode === 'html') return sanitizeHtmlToXhtml(body);
+    if (mode === 'markdown') return markdownToXhtml(body);
+    return plainTextToXhtml(body);
+  }
+
+  function sanitizeArticleFilename(title) {
+    const base = String(title || 'article')
+      .replace(/[\/\\:*?"<>|]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 80)
+      .replace(/\.+$/, '') || 'article';
+    return base + '.epub';
+  }
+
+  async function buildArticleEpub(opts, outputType) {
+    if (typeof JSZip === 'undefined') throw new Error('JSZip not loaded');
+    const title = (opts.title || '').trim() || 'Untitled Article';
+    const author = (opts.author || '').trim() || 'Web Article';
+    const bodyXhtml = articleBodyToXhtml(opts.body || '', opts.format || 'auto');
+    const nowIso = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+    const uid = 'urn:lector:article:' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    const escTitle = escapeXml(title);
+    const escAuthor = escapeXml(author);
+
+    const containerXml =
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">\n' +
+      '  <rootfiles>\n' +
+      '    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>\n' +
+      '  </rootfiles>\n' +
+      '</container>\n';
+
+    const opfXml =
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">\n' +
+      '  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">\n' +
+      '    <dc:identifier id="bookid">' + escapeXml(uid) + '</dc:identifier>\n' +
+      '    <dc:title>' + escTitle + '</dc:title>\n' +
+      '    <dc:creator>' + escAuthor + '</dc:creator>\n' +
+      '    <dc:language>en</dc:language>\n' +
+      '    <meta property="dcterms:modified">' + nowIso + '</meta>\n' +
+      '  </metadata>\n' +
+      '  <manifest>\n' +
+      '    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>\n' +
+      '    <item id="article" href="article.xhtml" media-type="application/xhtml+xml"/>\n' +
+      '  </manifest>\n' +
+      '  <spine>\n' +
+      '    <itemref idref="article"/>\n' +
+      '  </spine>\n' +
+      '</package>\n';
+
+    const navXhtml =
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<!DOCTYPE html>\n' +
+      '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">\n' +
+      '<head><meta charset="UTF-8"/><title>' + escTitle + '</title></head>\n' +
+      '<body><nav epub:type="toc"><h1>Contents</h1><ol><li><a href="article.xhtml">' + escTitle + '</a></li></ol></nav></body>\n' +
+      '</html>\n';
+
+    const byline = opts.author && opts.author.trim() ? '<p><em>' + escAuthor + '</em></p>\n' : '';
+    const articleXhtml =
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<!DOCTYPE html>\n' +
+      '<html xmlns="http://www.w3.org/1999/xhtml">\n' +
+      '<head><meta charset="UTF-8"/><title>' + escTitle + '</title></head>\n' +
+      '<body>\n<h1>' + escTitle + '</h1>\n' + byline + '<hr/>\n' + bodyXhtml + '\n</body>\n' +
+      '</html>\n';
+
+    const zip = new JSZip();
+    zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
+    zip.file('META-INF/container.xml', containerXml);
+    zip.file('OEBPS/content.opf', opfXml);
+    zip.file('OEBPS/nav.xhtml', navXhtml);
+    zip.file('OEBPS/article.xhtml', articleXhtml);
+    return await zip.generateAsync({
+      type: outputType || 'blob',
+      mimeType: 'application/epub+zip',
+      compression: 'DEFLATE'
+    });
+  }
+  // --- SEND_ARTICLE_END ---
+
+  function updateArticleSendBtn() {
+    const body = document.getElementById('articleBody').value.trim();
+    document.getElementById('articleSendBtn').disabled = !body;
+  }
+
+  function openArticleModal() {
+    document.getElementById('articleStatusText').textContent = '';
+    document.getElementById('articleModal').classList.add('open');
+    updateArticleSendBtn();
+    setTimeout(() => document.getElementById('articleTitle').focus(), 50);
+  }
+
+  function closeArticleModal() {
+    document.getElementById('articleModal').classList.remove('open');
+  }
+
+  async function ensureArticlesFolder() {
+    const fd = new FormData();
+    fd.append('name', 'articles');
+    fd.append('path', '/');
+    try {
+      await fetch('/mkdir', { method: 'POST', body: fd });
+    } catch (_) {
+      // Ignore network retry here; the subsequent /upload reports the error.
+    }
+  }
+
+  async function uploadArticleBlob(blob, filename) {
+    const fd = new FormData();
+    fd.append('file', new File([blob], filename, { type: 'application/epub+zip' }));
+    return await fetch('/upload?path=' + encodeURIComponent('/articles'), { method: 'POST', body: fd });
+  }
+
+  async function sendArticle() {
+    const titleEl = document.getElementById('articleTitle');
+    const authorEl = document.getElementById('articleAuthor');
+    const formatEl = document.getElementById('articleFormat');
+    const bodyEl = document.getElementById('articleBody');
+    const btn = document.getElementById('articleSendBtn');
+    const status = document.getElementById('articleStatusText');
+    const body = bodyEl.value.trim();
+    if (!body) return;
+
+    const title = titleEl.value.trim() || 'Untitled Article';
+    btn.disabled = true;
+    status.textContent = 'Building EPUB3...';
+    try {
+      const blob = await buildArticleEpub({
+        title: title,
+        author: authorEl.value.trim(),
+        format: formatEl.value,
+        body: body
+      }, 'blob');
+      status.textContent = 'Uploading to /articles/...';
+      await ensureArticlesFolder();
+      let filename = sanitizeArticleFilename(title);
+      let resp = await uploadArticleBlob(blob, filename);
+      if (!resp.ok) {
+        const text = await resp.text();
+        if (resp.status === 400 && /already exists/i.test(text)) {
+          const stamp = new Date().toISOString().slice(11, 19).replace(/:/g, '');
+          filename = filename.replace(/\.epub$/i, '-' + stamp + '.epub');
+          resp = await uploadArticleBlob(blob, filename);
+          if (!resp.ok) throw new Error(await resp.text() || 'Upload failed');
+        } else {
+          throw new Error(text || 'Upload failed');
+        }
+      }
+      status.textContent = 'Saved /articles/' + filename;
+      showNotification('Sent to /articles/' + filename, 'success');
+      titleEl.value = '';
+      authorEl.value = '';
+      bodyEl.value = '';
+      if (currentPath === '/articles' || currentPath === '/') {
+        setTimeout(() => window.location.reload(), 600);
+      }
+    } catch (err) {
+      status.textContent = 'Error: ' + (err && err.message ? err.message : String(err));
+    } finally {
+      updateArticleSendBtn();
+    }
   }
   hydrate();
 </script>

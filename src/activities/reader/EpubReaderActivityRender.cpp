@@ -31,8 +31,8 @@
 // lays the page out inside these, and every overlay that hit-tests words on it (dictionary
 // pick, quote grab) must use the same, or a hold lands a line off.
 void EpubReaderActivity::pageMargins(int& top, int& right, int& bottom, int& left, const int spine) {
-  // This book's own bar: everything below measures with the same prefs it lays out with.
-  const StatusBarBlock sb = statusBarOf(prefs_);
+  // This book's own bar, masked by Calm Mode without modifying stored prefs or themes.
+  const StatusBarBlock sb = effectiveStatusBar(statusBarOf(prefs_), SETTINGS.calmMode != 0);
 
   ReaderUtils::readerMargins(renderer, prefs_, top, right, bottom, left);
 
@@ -375,6 +375,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   if (showDictionaryMessage) {
     GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
+  }
+
+  if (showPageNotFoundMessage) {
+    GUI.drawPopup(renderer, tr(STR_PAGE_NOT_FOUND));
   }
 
   // A page that just rendered under an open toolbar (a scrub, or the light panel closing)

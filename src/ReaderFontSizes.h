@@ -23,6 +23,14 @@
 // shadows this set outright, sizes included — see readerFontPointSizes below.
 inline constexpr uint8_t BUILTIN_READER_POINT_SIZES[] = {12, 14, 16};
 
+inline uint8_t builtinReaderPointSize(const int fontId) {
+  static constexpr int IDS[] = {CHAREINK_12_FONT_ID, CHAREINK_14_FONT_ID, CHAREINK_16_FONT_ID};
+  for (size_t i = 0; i < std::size(IDS); ++i) {
+    if (IDS[i] == fontId) return BUILTIN_READER_POINT_SIZES[i];
+  }
+  return 0;
+}
+
 // Selects a built-in size without loading it; returns 0 for other font families.
 inline int builtinReaderFontVariant(const int fontId, const float scale) {
   static constexpr int FAMILIES[][std::size(BUILTIN_READER_POINT_SIZES)] = {

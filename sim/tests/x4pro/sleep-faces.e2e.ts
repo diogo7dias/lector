@@ -7,7 +7,7 @@ import { test, expect } from 'e2e';
 
 // Picker rows, top to bottom: Dark, Light, Custom, Cover, Cover + Custom, None, Quick Resume,
 // Transparent, Cover + Transparent.
-const rowY = { dark: 262, none: 457, quickResume: 496 };
+const rowY = { dark: 243, none: 438, quickResume: 477, quote: 594 };
 
 async function device({ app, screen }: any) {
   await app.open('/');

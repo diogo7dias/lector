@@ -52,6 +52,7 @@ class TextSettingsActivity final : public UiGridActivity {
     Font,
     Size,
     PaperbackLook,
+    InkWeight,
     LineSpacing,
     ExtraSpacing,
     WordSpacing,
@@ -69,6 +70,7 @@ class TextSettingsActivity final : public UiGridActivity {
     HiddenDots,  // sub-option of GuideDots: only listed while Guide Dots is on
     EmbeddedStyle,
     Images,
+    KeepHeadings,
     DebugBorders,
     Count,
   };

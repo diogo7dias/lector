@@ -1,6 +1,9 @@
 #pragma once
+#include <HalPowerManager.h>
+
 #include "EpubReaderMenuActivity.h"
 #include "EpubReaderState.h"
+#include "IdlePrewarmTiming.h"
 #include "ProgressMapper.h"
 #include "ReaderLanding.h"
 #include "WatermarkBuildBail.h"
@@ -21,6 +24,8 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // still returns to where a followed link was tapped.
   void saveLinkStack() const;
   void loadLinkStack();
+  void saveReturnHistory() const;
+  void loadReturnHistory();
   void applyLinkLanding();
   void cancelLinkLanding();
   void clearLinkStack();
@@ -43,10 +48,15 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
+  void drawBookmarkDogEar() const;
   // Gate for a background build tick: true when the heap can take parse allocations.
   // Updates buildHeapPaused as a side effect.
   bool buildTickHeapGate();
-  bool readerIdle() const { return lastRenderCompleteMs != 0 && millis() - lastRenderCompleteMs > IDLE_DEBOUNCE_MS; }
+  // Last loop pass that saw input: readerIdle() times the idle clock drop from it.
+  unsigned long lastInputMs = 0;
+  bool readerIdle() const {
+    return idle_prewarm::isReady(millis(), lastInputMs, lastRenderCompleteMs, HalPowerManager::IDLE_POWER_SAVING_MS);
+  }
   bool backgroundBuildWanted() const {
     return section && section->isBuilding() &&
            backgroundBuildTickWanted(section->isPartial(), static_cast<int>(section->pageCount), section->currentPage,
@@ -146,7 +156,10 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   bool handleToolbarInput();
   void paintToolbar();
   void runToolbarTool(int tool);
+  bool toolbarScrubsPages() const;
   void toolbarGotoSpine(int spine);
+  void toolbarGotoPage(int page);
+  void toolbarReturn();
   // Reading margins plus status bar bands: where render() puts the page.
   // spine: whose chapter title sizes the status bar band (default: the open chapter).
   void pageMargins(int& top, int& right, int& bottom, int& left, int spine = -1);
@@ -228,6 +241,7 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // Leave the End-of-Book screen for the book's last page.
   void returnToLastPage();
   void loadCachedBookmarks();
+  bool isCurrentPageBookmarked() const;
   void addBookmark();
 
   // Footnote navigation
@@ -275,6 +289,13 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   void onRevealed() override {
     pageOnScreen.store(false, std::memory_order_release);
     scheduleGhostCleanup();
+  }
+  void onCalmModeChanged() override {
+    {
+      RenderLock lock(*this);
+      dropSectionForRelayout();
+    }
+    requestUpdate();
   }
   bool handleForcedRefresh() override {
     {

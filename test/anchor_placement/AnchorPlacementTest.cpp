@@ -66,3 +66,14 @@ TEST(AnchorPlacement, CountIncludesTargetsStillWaiting) {
   anchors.waitForLine(3, 0);
   EXPECT_EQ(anchors.count(), 3u);
 }
+
+TEST(AnchorPlacement, CarriedLinesMoveTheirTargetsToTheNextPage) {
+  AnchorPlacement anchors;
+  anchors.waitForContent(10);
+  anchors.lineAdded(2);  // line 1 on page 2
+  anchors.waitForContent(11);
+  anchors.lineAdded(2);  // line 2 on page 2
+  anchors.linesCarried(1, 3);
+  EXPECT_EQ(pageOf(anchors, 10), 2);
+  EXPECT_EQ(pageOf(anchors, 11), 3);
+}

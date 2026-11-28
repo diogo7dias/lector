@@ -12,13 +12,13 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "DictionaryWordSelectActivity.h"
-#include "EpubImageInspectActivity.h"
 #include "EpubReaderActivity.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "MappedInputManager.h"
+#include "PageJump.h"
 #include "QrDisplayActivity.h"
 #include "QuoteSelectActivity.h"
 #include "QuotesViewerActivity.h"
@@ -155,30 +155,6 @@ void EpubReaderActivity::openFootnotes() {
                          });
 }
 
-void EpubReaderActivity::openImageInspector(const int startIndex) {
-  if (currentPageImages.empty()) return;
-  std::vector<EpubImageInspectActivity::ImageItem> items;
-  items.reserve(currentPageImages.size());
-  for (const auto& img : currentPageImages) {
-    items.push_back(EpubImageInspectActivity::ImageItem{img.imagePath, img.srcPath});
-  }
-  // Drop the section while inspecting so C3 has maximum contiguous DRAM for full-panel
-  // JPEG/PNG decode; returning restores the cached page via the same path as chapter select.
-  {
-    RenderLock lock(*this);
-    cacheSectionPosition();
-    section.reset();
-  }
-  auto viewer =
-      makeUniqueNoThrow<EpubImageInspectActivity>(renderer, mappedInput, std::move(items), startIndex, epub.get());
-  if (!viewer) {
-    LOG_ERR("ERS", "OOM: EpubImageInspectActivity");
-    requestUpdate();
-    return;
-  }
-  startActivityForResult(std::move(viewer), [this](const ActivityResult&) { requestUpdate(); });
-}
-
 void EpubReaderActivity::openChapterSelection() {
   int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
   // Release the section while the chapter list is up (mirrors the
@@ -261,20 +237,65 @@ void EpubReaderActivity::openPercentSelection() {
 }
 
 void EpubReaderActivity::openPageEntry() {
-  // Labels are what the printed book says, "147" or "xii", so the field takes text.
-  startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, std::string(tr(STR_GO_TO_PAGE)),
-                                                                 std::string(), 16, InputType::Text),
+  if (hasPageList_) {
+    // Labels are what the printed book says, "147" or "xii", so the field takes text.
+    startActivityForResult(
+        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, std::string(tr(STR_GO_TO_PAGE)), std::string(),
+                                                16, InputType::Text),
+        [this](const ActivityResult& result) {
+          if (result.isCancelled) {
+            requestUpdate();
+            return;
+          }
+          const auto* kr = std::get_if<KeyboardResult>(&result.data);
+          const std::string href = kr ? epub->findPrintedPage(kr->text) : std::string();
+          if (href.empty()) {
+            LOG_DBG("ERS", "No printed page: %s", kr ? kr->text.c_str() : "");
+            showPageNotFoundMessage = true;
+            pageNotFoundMessageTime = millis();
+            requestUpdate();
+            return;
+          }
+          recordJumpOrigin(true);
+          navigateToHref(href);
+        });
+    return;
+  }
+
+  // Books without a printed page list jump within the current chapter (1..M).
+  const int curPage = (section ? section->currentPage : nextPageNumber) + 1;
+  const int totalPages = section ? section->estimatedTotalPages() : cachedTotalPages();
+  char titleBuf[48];
+  page_jump::formatChapterTitle(titleBuf, sizeof(titleBuf), tr(STR_GO_TO_PAGE), curPage, totalPages);
+  startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, std::string(titleBuf),
+                                                                 std::string(), 6, InputType::Text),
                          [this](const ActivityResult& result) {
-                           const auto* kr = std::get_if<KeyboardResult>(&result.data);
-                           const std::string href =
-                               !result.isCancelled && kr ? epub->findPrintedPage(kr->text) : std::string();
-                           if (href.empty()) {
-                             if (!result.isCancelled) LOG_DBG("ERS", "No printed page: %s", kr ? kr->text.c_str() : "");
+                           if (result.isCancelled) {
                              requestUpdate();
                              return;
                            }
-                           recordJumpOrigin(true);
-                           navigateToHref(href);
+                           const auto* kr = std::get_if<KeyboardResult>(&result.data);
+                           const int maxPages = section ? section->estimatedTotalPages() : cachedTotalPages();
+                           const auto target = kr ? page_jump::parseChapterPage(kr->text, maxPages) : std::nullopt;
+                           if (!target) {
+                             LOG_DBG("ERS", "Invalid chapter page: %s (max %d)", kr ? kr->text.c_str() : "", maxPages);
+                             showPageNotFoundMessage = true;
+                             pageNotFoundMessageTime = millis();
+                             requestUpdate();
+                             return;
+                           }
+                           {
+                             RenderLock lock(*this);
+                             recordJumpOrigin(true);
+                             clearDeferredReposition();
+                             if (section) {
+                               section->currentPage = *target;
+                             } else {
+                               nextPageNumber = *target;
+                               pendingPageJump = static_cast<uint16_t>(*target);
+                             }
+                           }
+                           requestUpdate();
                          });
 }
 

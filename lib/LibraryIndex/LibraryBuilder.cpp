@@ -63,6 +63,7 @@ struct Build {
   BuildStats* stats;
   ProgressFn progress;
   void* progressCtx;
+  ProgressReaderFn progressReader = nullptr;
   uint32_t entries = 0;
 
   LibraryIndexFile previous;
@@ -154,9 +155,9 @@ bool loadPrior(Build& b) {
   return true;
 }
 
-// Title and author the previous index held for this exact file (same path, size, modified), if any.
+// Title, author and progress the previous index held for this exact file (same path, size, modified), if any.
 bool reuseFromPrevious(Build& b, const uint64_t hash, const uint32_t size, const uint32_t modified, std::string& title,
-                       std::string& author) {
+                       std::string& author, uint8_t& percent, uint32_t& readOrder) {
   if (b.priorCount == 0) return false;
   const PriorEntry* const begin = b.prior.get();
   const PriorEntry* const end = begin + b.priorCount;
@@ -167,7 +168,10 @@ bool reuseFromPrevious(Build& b, const uint64_t hash, const uint32_t size, const
     ClixRecord record;
     if (!b.previous.readRecord(hit->ordinal, record)) return false;
     if (record.modified != modified) continue;
-    return b.previous.readTitle(record, title) && b.previous.readAuthor(record, author);
+    if (!b.previous.readTitle(record, title) || !b.previous.readAuthor(record, author)) return false;
+    percent = record.percent;
+    readOrder = record.readOrder;
+    return true;
   }
   return false;
 }
@@ -199,7 +203,9 @@ bool stageBook(Build& b, const char* path, const std::string_view name, const ui
 
   std::string title;
   std::string author;
-  if (reuseFromPrevious(b, hash, size, modified, title, author)) {
+  uint8_t percent = CLIX_PERCENT_UNREAD;
+  uint32_t readOrder = 0;
+  if (reuseFromPrevious(b, hash, size, modified, title, author, percent, readOrder)) {
     stats.reused++;
   } else {
     title.clear();
@@ -217,12 +223,25 @@ bool stageBook(Build& b, const char* path, const std::string_view name, const ui
     if (title.empty()) title = cleanText(stemOf(path), CLIX_MAX_TITLE);
     if (isUnknownAuthor(author)) author.clear();
   }
+  if (b.progressReader) {
+    uint8_t p = CLIX_PERCENT_UNREAD;
+    uint32_t order = 0;
+    if (b.progressReader(path, p, order) && p <= 100) {
+      percent = p;
+      readOrder = order;
+    } else {
+      percent = CLIX_PERCENT_UNREAD;
+      readOrder = 0;
+    }
+  }
 
   StagedEntry& e = *b.entry;
   std::memset(&e, 0, sizeof(e));
   e.record.pathHash = hash;
   e.record.fileSize = size;
   e.record.modified = modified;
+  e.record.percent = percent;
+  e.record.readOrder = readOrder;
   copyField(e.title, sizeof(e.title), title, e.record.titleLen);
   copyField(e.author, sizeof(e.author), author, e.record.authorLen);
   std::memcpy(e.path, path, pathLen);
@@ -424,7 +443,7 @@ bool isLibraryBookName(const std::string_view name) {
 }
 
 bool buildLibraryIndex(const char* rootPath, const char* indexPath, BuildStats& stats, ProgressFn progress,
-                       void* progressCtx, const bool useMetadata) {
+                       void* progressCtx, const bool useMetadata, ProgressReaderFn progressReader) {
   stats = {};
   auto b = makeUniqueNoThrow<Build>();
   if (!b) {
@@ -435,6 +454,7 @@ bool buildLibraryIndex(const char* rootPath, const char* indexPath, BuildStats& 
   b->stats = &stats;
   b->progress = progress;
   b->progressCtx = progressCtx;
+  b->progressReader = progressReader;
   b->useMetadata = useMetadata;
   b->entry = makeUniqueNoThrow<StagedEntry>();
   if (!b->entry) {

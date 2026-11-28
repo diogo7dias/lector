@@ -10,7 +10,9 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <utility>
 
+#include "EpubReaderActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -33,7 +35,7 @@ void EpubImageInspectActivity::onEnter() {
   originalOrientation = renderer.getOrientation();
   origScreenWidth = renderer.getScreenWidth();
   origScreenHeight = renderer.getScreenHeight();
-  renderFit();
+  requestUpdate();
 }
 
 void EpubImageInspectActivity::onExit() {
@@ -118,7 +120,7 @@ void EpubImageInspectActivity::stepImage(const int delta) {
   const int next = currentIndex + delta;
   if (next < 0 || next >= static_cast<int>(images.size())) return;
   currentIndex = next;
-  renderFit();
+  request(Paint::Fit);
 }
 
 #if defined(BOARD_HAS_PSRAM)
@@ -240,6 +242,43 @@ void EpubImageInspectActivity::panBy(const int dx, const int dy) {
 }
 #endif
 
+// loop() only records what to paint. The paint itself runs here, on the render task, like
+// every other screen: ActivityManager has set the night mode polarity for it, and a pass asked
+// for by something else (the light panel closing over the image) repaints what was showing.
+void EpubImageInspectActivity::request(const Paint paint, const int panDx, const int panDy) {
+  if (paint == Paint::Pan) {
+    if (pendingPaint == Paint::Fit || pendingPaint == Paint::ToggleZoom) return;
+    pendingPanX += panDx;
+    pendingPanY += panDy;
+  }
+  pendingPaint = paint;
+  requestUpdate();
+}
+
+void EpubImageInspectActivity::render(RenderLock&&) {
+  const Paint paint = std::exchange(pendingPaint, Paint::Current);
+  const int panDx = std::exchange(pendingPanX, 0);
+  const int panDy = std::exchange(pendingPanY, 0);
+#if defined(BOARD_HAS_PSRAM)
+  if (paint == Paint::ToggleZoom) {
+    toggleZoom();
+    return;
+  }
+  if (paint == Paint::Pan) {
+    panBy(panDx, panDy);
+    return;
+  }
+  if (paint == Paint::Current && zoomed) {
+    blitZoomed(HalDisplay::HALF_REFRESH);
+    return;
+  }
+#else
+  (void)panDx;
+  (void)panDy;
+#endif
+  renderFit();
+}
+
 void EpubImageInspectActivity::loop() {
   Activity::loop();
 
@@ -250,7 +289,7 @@ void EpubImageInspectActivity::loop() {
 
 #if defined(BOARD_HAS_PSRAM)
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    toggleZoom();
+    request(Paint::ToggleZoom);
     return;
   }
 
@@ -278,7 +317,7 @@ void EpubImageInspectActivity::loop() {
           const int dy = dragStartY - dragLastY;
           if (std::abs(dx) >= 32 || std::abs(dy) >= 32) {
             gpio.suppressTouchContact();
-            panBy(dx, dy);
+            request(Paint::Pan, dx, dy);
             dragStartX = dragLastX;
             dragStartY = dragLastY;
           }
@@ -292,11 +331,11 @@ void EpubImageInspectActivity::loop() {
         int sx = 0, sy = 0, ex = 0, ey = 0;
         renderer.tapToLogical(nxs, nys, sx, sy);
         renderer.tapToLogical(nxe, nye, ex, ey);
-        panBy(sx - ex, sy - ey);
+        request(Paint::Pan, sx - ex, sy - ey);
         return;
       }
       if (mappedInput.wasScreenTapped(tx, ty)) {
-        toggleZoom();
+        request(Paint::ToggleZoom);
         return;
       }
     }
@@ -304,19 +343,19 @@ void EpubImageInspectActivity::loop() {
     const int stepX = std::max(40, renderer.getScreenWidth() / 4);
     const int stepY = std::max(40, renderer.getScreenHeight() / 4);
     if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-      panBy(-stepX, 0);
+      request(Paint::Pan, -stepX, 0);
       return;
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-      panBy(stepX, 0);
+      request(Paint::Pan, stepX, 0);
       return;
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
-      panBy(0, -stepY);
+      request(Paint::Pan, 0, -stepY);
       return;
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-      panBy(0, stepY);
+      request(Paint::Pan, 0, stepY);
       return;
     }
     return;
@@ -326,7 +365,7 @@ void EpubImageInspectActivity::loop() {
     int tx = 0;
     int ty = 0;
     if (mappedInput.wasScreenTapped(tx, ty)) {
-      toggleZoom();
+      request(Paint::ToggleZoom);
       return;
     }
   }
@@ -342,4 +381,29 @@ void EpubImageInspectActivity::loop() {
     stepImage(1);
     return;
   }
+}
+
+// The reader's side of the viewer, kept here with the screen it opens.
+void EpubReaderActivity::openImageInspector(const int startIndex) {
+  if (currentPageImages.empty()) return;
+  std::vector<EpubImageInspectActivity::ImageItem> items;
+  items.reserve(currentPageImages.size());
+  for (const auto& img : currentPageImages) {
+    items.push_back(EpubImageInspectActivity::ImageItem{img.imagePath, img.srcPath});
+  }
+  // Drop the section while inspecting so C3 has maximum contiguous DRAM for full-panel
+  // JPEG/PNG decode; returning restores the cached page via the same path as chapter select.
+  {
+    RenderLock lock(*this);
+    cacheSectionPosition();
+    section.reset();
+  }
+  auto viewer =
+      makeUniqueNoThrow<EpubImageInspectActivity>(renderer, mappedInput, std::move(items), startIndex, epub.get());
+  if (!viewer) {
+    LOG_ERR("ERS", "OOM: EpubImageInspectActivity");
+    requestUpdate();
+    return;
+  }
+  startActivityForResult(std::move(viewer), [this](const ActivityResult&) { requestUpdate(); });
 }

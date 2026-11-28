@@ -66,11 +66,14 @@ class HalStorage {
   uint32_t bookGeneration() const { return bookGen; }
   // Called by the methods above, and by HalFile::rename; call it with the storage mutex held.
   void noteBookPath(const char* path);
+  // Called under storageMutex whenever a write/delete/rename/mkdir may change used space.
+  void invalidateUsedBytes();
   bool rmdir(const char* path);
 
   // Card capacity and used space in bytes, 0 when no card is mounted. The used
-  // figure walks the FAT, so SDCardManager caches it with a short TTL; callers
-  // may poll it per request without paying for a scan each time.
+  // figure walks the FAT, so HalStorage caches it until the next SD write or
+  // mutation rather than rescanning on a fixed timer. For USED_BYTES_SETTLE_MS after a
+  // write the figure is not kept: SDCardManager may still be serving its own older one.
   uint64_t sdTotalBytes();
   uint64_t sdUsedBytes();
 
@@ -111,6 +114,10 @@ class HalStorage {
   static HalStorage instance;
 
   bool initialized = false;
+  uint64_t cachedUsedBytes = 0;
+  bool usedBytesValid = false;
+  bool usedBytesDirty = false;    // a write happened since the last figure that was kept
+  uint32_t usedBytesDirtyAt = 0;  // millis() of the last such write
   volatile uint32_t bookGen = 0;
   SemaphoreHandle_t storageMutex = nullptr;
 };

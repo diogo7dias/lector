@@ -3,11 +3,11 @@
 #include "sleep/WakeFacePolicy.h"
 
 TEST(WakeFacePolicy, StampedFilesKeepEveryOfferedFace) {
-  // CrossPoint's numbers: Dark, Light, Custom, Cover, Cover + Custom, None, Quick Resume,
-  // Transparent, Cover + Transparent.
-  for (uint8_t mode = 0; mode <= 8; mode++) EXPECT_EQ(wake_face::sleepFaceFromFile(mode, true), mode);
-  EXPECT_EQ(wake_face::sleepFaceFromFile(9, true), 2);   // lector's old Transparent slot, no longer a face
-  EXPECT_EQ(wake_face::sleepFaceFromFile(42, true), 2);  // anything a future build wrote
+  // CrossPoint's numbers plus Lector's Quote face: Dark, Light, Custom, Cover, Cover + Custom,
+  // None, Quick Resume, Transparent, Cover + Transparent, Quote.
+  for (uint8_t mode = 0; mode <= 9; mode++) EXPECT_EQ(wake_face::sleepFaceFromFile(mode, true), mode);
+  EXPECT_EQ(wake_face::sleepFaceFromFile(10, true), 2);  // anything a future build wrote
+  EXPECT_EQ(wake_face::sleepFaceFromFile(42, true), 2);
   EXPECT_EQ(wake_face::sleepFaceFromFile(255, true), 2);
 }
 

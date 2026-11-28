@@ -30,6 +30,7 @@ class EpubImageInspectActivity final : public Activity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  void render(RenderLock&&) override;
   bool appliesNightMode() const override { return true; }
 
  private:
@@ -37,6 +38,9 @@ class EpubImageInspectActivity final : public Activity {
   void applyOrientationFor(int srcWidth, int srcHeight);
   void renderFit();
   void stepImage(int delta);
+  // What loop() asks render() to paint. Current repaints what is showing.
+  enum class Paint : uint8_t { Current, Fit, ToggleZoom, Pan };
+  void request(Paint paint, int panDx = 0, int panDy = 0);
 
 #if defined(BOARD_HAS_PSRAM)
   bool buildZoomBuffer();
@@ -54,6 +58,9 @@ class EpubImageInspectActivity final : public Activity {
   int origScreenHeight = 0;
   image_inspect::Rect fitRect{};
   bool decodedOk = false;
+  Paint pendingPaint = Paint::Fit;
+  int pendingPanX = 0;
+  int pendingPanY = 0;
 
 #if defined(BOARD_HAS_PSRAM)
   bool zoomed = false;

@@ -20,6 +20,16 @@ enum class MenuMode : uint8_t { Off = 0, Tap = 1 };
 
 enum class TapAction : uint8_t { None, Prev, Next, Menu };
 
+// Top-right corner tap target on touch boards to toggle a bookmark on the current page.
+// Generous enough for a thumb around the 16x22 px dog-ear without invading the reading area.
+constexpr int BOOKMARK_CORNER_W = 72;
+constexpr int BOOKMARK_CORNER_H = 72;
+
+inline bool isBookmarkCornerTap(bool on, int width, int height, int x, int y) {
+  if (!on || width <= 0 || height <= 0) return false;
+  return x >= width - BOOKMARK_CORNER_W && x < width && y >= 0 && y < BOOKMARK_CORNER_H;
+}
+
 inline bool allowsSwipe(Gesture g) { return g == Gesture::TapAndSwipe || g == Gesture::SwipeOnly; }
 inline bool allowsTap(Gesture g) {
   return g == Gesture::TapAndSwipe || g == Gesture::TapOnly || g == Gesture::InvertedTap;

@@ -50,13 +50,16 @@ struct BuildStats {
 // Called about every 16 directory entries so the caller can feed the watchdog and
 // the busy banner during a walk of thousands of entries.
 using ProgressFn = void (*)(void* ctx);
+// Optional hook to read a book's saved progress marker (percent 0..100, readOrder) while
+// staging records. Return false when the book has never been opened (stored as unread).
+using ProgressReaderFn = bool (*)(const char* path, uint8_t& percentOut, uint32_t& readOrderOut);
 
 // Walk `rootPath` and write the index to `indexPath`. On false the previous
 // index is untouched, unless the failure came between removing it and renaming
 // the new one in, when there is none. `useMetadata` false skips opening EPUBs
 // and lists every book by its filename stem with an empty author.
 bool buildLibraryIndex(const char* rootPath, const char* indexPath, BuildStats& stats, ProgressFn progress = nullptr,
-                       void* progressCtx = nullptr, bool useMetadata = true);
+                       void* progressCtx = nullptr, bool useMetadata = true, ProgressReaderFn progressReader = nullptr);
 
 // Where the firmware keeps its index.
 const char* libraryIndexPath();
