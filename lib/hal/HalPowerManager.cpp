@@ -192,6 +192,14 @@ void HalPowerManager::beginBusyWait() {
     xSemaphoreGive(modeMutex);
     return;
   }
+  // USB Drive serves the host through TinyUSB between its card transfers, when the storage
+  // lock is free: the clock stays up for as long as the card is lent (main.cpp's exclusive
+  // loop holds it up for the same reason).
+  if (Storage.usbDriveState() != UsbDriveState::Unsupported) {
+    Storage.unlock();
+    xSemaphoreGive(modeMutex);
+    return;
+  }
 #endif
   LOG_INF("PWR", "Busy-wait low-power (%d MHz)", LOW_POWER_FREQ);
   // The PLL stays up: the wait is short, and the next thing the panel needs is the full clock.
