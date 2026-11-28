@@ -105,6 +105,11 @@ class CrossPointWebServer {
     std::string error;
   };
 
+  // Any request, upload or discovery packet: restarts the idle timer and brings the radio
+  // out of modem sleep. The server's middleware only runs after a request body is fully
+  // received, so the upload callbacks (HTTP, fonts, WebDAV PUT) call it at their start.
+  void noteActivity() const;
+
  private:
   std::unique_ptr<WebServer> server = nullptr;
   std::unique_ptr<WebSocketsServer> wsServer = nullptr;
@@ -116,7 +121,6 @@ class CrossPointWebServer {
   void openDiscoverySocket();
   void closeDiscoverySocket();
   void answerDiscovery();
-  void noteActivity();
 
   // WebSocket upload state
   void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
@@ -162,8 +166,9 @@ class CrossPointWebServer {
     return fetch.state == FetchStatus::State::Queued || fetch.state == FetchStatus::State::Running;
   }
   unsigned long lastFetchPumpAt = 0;
-  unsigned long lastRequestAt = 0;
-  web_power_save::State powerSave;
+  // mutable: the upload callbacks are const and still count as traffic.
+  mutable unsigned long lastRequestAt = 0;
+  mutable web_power_save::State powerSave;
   // Polled between chunks of a running fetch and on each chunk of an HTTP upload
   // (upstream #3732). The activity sets it so the Back button still cancels while
   // the transfer holds the loop; without it the only way out is the reset pin.
