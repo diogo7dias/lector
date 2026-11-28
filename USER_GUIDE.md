@@ -445,12 +445,13 @@ and the number of rows it holds. Moving onto a heading opens it (the plus turns 
 and closes the one that was open. **Back** closes the open tab; a second **Back** leaves the
 menu. Rows that do not apply to the open book are not shown at all.
 
-The menu opens on **Sleep Screen**. That tab appears alongside the others while the lock
-screen has a wallpaper to act on; on nights it has none, the menu opens on **Navigate**.
+The menu opens with **Sleep Screen** expanded when the lock screen has a wallpaper to act on, or
+with **Navigate** expanded otherwise.
 
 ### Navigate
 
-- **Select Chapter** — the table of contents. Chapters the book lists but cannot actually
+- **Select Chapter** — the table of contents, with the current chapter marked (`>`) and each
+  chapter's book percentage right-aligned. Chapters the book lists but cannot actually
   open are left out, so every row here goes somewhere.
 - **Go to %** — jump by percentage. The front buttons move it by 1, the side buttons by 10.
   On a touch screen a number pad sits under the slider: type the number (4, 7 for 47%),
@@ -459,10 +460,11 @@ screen has a wallpaper to act on; on nights it has none, the menu opens on **Nav
   it (`147`, or `xii` in the front matter) and **OK**. Shown only in EPUB 3 books that carry
   the printed page numbers (a page list); Return takes you back.
 - **Return** — go back to where you were before selecting a chapter, jumping by percentage,
-  or opening a bookmark. Keeps the last eight jump origins during this reading session;
-  ordinary page turns do not add entries. Shown only while there is somewhere to return to.
-  Changing text size still returns to the same passage. Leaving the book (including sleep)
-  clears this history; the Back button and footnote returns keep their usual behavior.
+  or opening a bookmark. Keeps the last eight jump origins and survives sleep and reopening
+  the book; ordinary page turns do not add entries. Shown only while there is somewhere to
+  return to, and also bindable to a button in **Settings > Controls > Buttons**.
+  Changing text size still returns to the same passage; the Back button and footnote returns
+  keep their usual behavior.
 - **Forward** — after a Return, go back to the page you returned from. Shown only after a
   Return. A new jump (chapter, percentage, bookmark) clears it.
 - **Go to Paragraph** — jump by paragraph number, shown only while paragraph numbering is on.

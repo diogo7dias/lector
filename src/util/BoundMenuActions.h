@@ -105,6 +105,8 @@ enum LONG_PRESS_MENU_FUNCTION {
   // Skips to the next or previous chapter (or +/-10 pages in chapterless TXT/XTC).
   LP_MENU_NEXT_CHAPTER = 39,
   LP_MENU_PREV_CHAPTER = 40,
+  // Jumps back to the last deliberate-jump origin (same as Navigate > Return).
+  LP_MENU_RETURN = 41,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 

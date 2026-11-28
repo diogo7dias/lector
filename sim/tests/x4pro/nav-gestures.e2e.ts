@@ -57,8 +57,10 @@ test('home flick, bottom-edge menu/Home, image viewer taps', async ({ app, scree
   await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
   await settle();
   await expect.poll(() => ink(0, 0, 480, 700), { timeout: 30_000 }).not.toBe(pageInk);
-  // Back closes the menu back to the book, then a slow drag (>700 ms) from the bottom 14%
-  // also opens the menu (activity only updates on onEnter(), so verify via ink + log).
+  // Back first collapses the open landing tab (Navigate), then closes the menu back to the book;
+  // then a slow drag (>700 ms) from the bottom 14% also opens the menu (activity only updates on
+  // onEnter(), so verify via ink + log).
+  await tapOnce(60, 780);
   await tapOnce(60, 780);
   await expect.poll(() => ink(0, 0, 480, 700), { timeout: 30_000 }).toBe(pageInk);
   const log = async () => (await fetch(`${app.baseUrl}/log`)).text();
@@ -71,7 +73,7 @@ test('home flick, bottom-edge menu/Home, image viewer taps', async ({ app, scree
   if (!listed) {
     // Remove from Recents (in-book menu > Book) drops the book from Recents on exit and
     // leaves it unfiled at the card root, so later files still find /test_jpeg_images.epub.
-    await tapOnce(100, 198); // Book
+    await tapOnce(100, 358); // Book (below expanded Navigate's 4 rows)
     await tapOnce(100, 318); // Remove from Recents
     await expect(activity).toHaveText('Home', { timeout: 30_000 });
     expect(await ink(0, 230, 480, 60), 'removed from Home recents').toBeLessThan(500);

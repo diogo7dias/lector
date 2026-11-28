@@ -21,6 +21,8 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // still returns to where a followed link was tapped.
   void saveLinkStack() const;
   void loadLinkStack();
+  void saveReturnHistory() const;
+  void loadReturnHistory();
   void applyLinkLanding();
   void cancelLinkLanding();
   void clearLinkStack();

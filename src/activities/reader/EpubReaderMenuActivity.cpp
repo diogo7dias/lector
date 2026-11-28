@@ -241,7 +241,11 @@ void EpubReaderMenuActivity::focusRow(const int index) {
     const int selected = sections.focus(rows.data(), static_cast<int>(rows.size()), index);
     if (selected < 0) return;
     // Published touch indexes belong to the old layout until renderUi() rebuilds it.
-    if (previousHeader != sections.expandedHeader) closeRouting();
+    // Section layout shifts cover large bands of text; run a HALF cleanup to prevent ghosts.
+    if (previousHeader != sections.expandedHeader) {
+      closeRouting();
+      requestCleanPaint();
+    }
     nav.selected = selected;
     nav.drawnRows = 0;  // the old viewport may contain rows that just disappeared
     nav.follow(listCount());
@@ -272,7 +276,12 @@ void EpubReaderMenuActivity::onEnter() {
       first = 0;
       while (first < static_cast<int>(items.size()) && !items[first].isHeader) ++first;
     }
-    nav.reset(first < static_cast<int>(items.size()) ? sections.visibleIndex(rows.data(), items.size(), first) : 0);
+    if (first < static_cast<int>(items.size())) {
+      sections.expandedHeader = first;
+      nav.reset(sections.visibleIndex(rows.data(), items.size(), first));
+    } else {
+      nav.reset(0);
+    }
     // Back from a row's screen: that row, inside its open tab. A row gone since (the last
     // bookmark deleted) leaves the usual landing.
     for (int i = 0; openOn != MenuAction::SECTION_HEADER && i < static_cast<int>(items.size()); ++i) {
@@ -344,6 +353,7 @@ bool EpubReaderMenuActivity::handleButtons() {
       header = sections.collapse(rows.data(), static_cast<int>(rows.size()));
       if (header >= 0) {
         closeRouting();
+        requestCleanPaint();
         nav.selected = header;
         nav.drawnRows = 0;
         nav.follow(listCount());

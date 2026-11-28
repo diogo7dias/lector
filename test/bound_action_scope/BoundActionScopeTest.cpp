@@ -78,3 +78,8 @@ TEST(BoundActionScope, ChapterSkipRequiresOpenBookAndKeepsEnumOrder) {
   EXPECT_EQ(LP_MENU_NEXT_CHAPTER, LP_MENU_CONFIRM + 1);
   EXPECT_EQ(LP_MENU_PREV_CHAPTER, LP_MENU_CONFIRM + 2);
 }
+
+TEST(BoundActionScope, ReturnRequiresOpenBookAndKeepsEnumOrder) {
+  EXPECT_FALSE(allowedOutsideBook(LP_MENU_RETURN));
+  EXPECT_EQ(LP_MENU_RETURN, LP_MENU_PREV_CHAPTER + 1);
+}

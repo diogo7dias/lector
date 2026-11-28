@@ -1,5 +1,6 @@
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
+#include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
 
@@ -387,6 +388,53 @@ void EpubReaderActivity::loadLinkStack() {
   }
   // Consumed once: a later exit rewrites it, and an unclean shutdown must not
   // resurrect a stale stack.
+  Storage.remove(path.c_str());
+}
+
+void EpubReaderActivity::saveReturnHistory() const {
+  if (!epub) return;
+  const std::string path = EpubReaderUtils::returnHistoryPath(epub->getCachePath());
+  if (returnHistory.empty()) {
+    Storage.remove(path.c_str());
+    return;
+  }
+  uint8_t data[ReaderReturnHistory::MAX_SERIALIZED_BYTES];
+  const size_t size = returnHistory.serialize(data, sizeof(data));
+  if (size == 0) return;
+  const std::string part = FsHelpers::partialPathFor(path);
+  bool ok = false;
+  {
+    HalFile f;
+    if (Storage.openFileForWrite("ERS", part, f)) {
+      ok = f.write(data, size) == size;
+    }
+  }
+  if (!ok) {
+    Storage.remove(part.c_str());
+    LOG_ERR("ERS", "Failed to write return history");
+    return;
+  }
+  Storage.remove(path.c_str());
+  if (!Storage.rename(part.c_str(), path.c_str())) {
+    Storage.remove(part.c_str());
+    LOG_ERR("ERS", "Failed to commit return history");
+  }
+}
+
+void EpubReaderActivity::loadReturnHistory() {
+  if (!epub) return;
+  const std::string path = EpubReaderUtils::returnHistoryPath(epub->getCachePath());
+  if (!Storage.exists(path.c_str())) return;
+  {
+    HalFile f;
+    uint8_t data[ReaderReturnHistory::MAX_SERIALIZED_BYTES];
+    if (Storage.openFileForRead("ERS", path, f)) {
+      const int size = f.read(data, sizeof(data));
+      if (size > 0 && returnHistory.deserialize(data, static_cast<size_t>(size), epub->getSpineItemsCount())) {
+        LOG_DBG("ERS", "Loaded return history, count %u", static_cast<unsigned>(returnHistory.count()));
+      }
+    }
+  }
   Storage.remove(path.c_str());
 }
 
