@@ -114,7 +114,7 @@ struct ReaderPrefs {
   // (paragraph gap, kerning, ligatures, link underline, book margins, heading page break,
   // word expansion, fill pages, the layout half of the style switch, indent mode) stay as
   // zeroed padding, the indent byte counts spaces, character spacing counts whole pixels.
-  static constexpr uint8_t VERSION = 27;  // v27: lean typography
+  static constexpr uint8_t VERSION = 28;  // v28: 3-way embeddedStyle (Off / Text Only / Full)
 
   // Bring a sidecar written before the current version onto the current reading
   // defaults. Only these values are re-seeded, and only for books that predate them.
@@ -151,7 +151,7 @@ struct ReaderPrefs {
   uint8_t guideDotsHidden = 0;   // keep the widened guide-dot gap, draw no dot in it
   // Retired setting byte: preserve every later offset in v5-v14 binary sidecars.
   uint8_t reserved14 = 0;
-  uint8_t embeddedStyle = 1;  // the one Book Styling switch
+  uint8_t embeddedStyle = EMBEDDED_STYLE_FULL;  // EmbeddedStyleMode: Off / Text Only / Full
   // Retired: Text Anti-Aliasing (always off since 2026-11-22: its grey pass was 467 ms of a 1215 ms turn).
   uint8_t retiredTextAntiAliasing = 0;
   // Fed into the render spec (edited from the Reader settings category, snapshotted here).
@@ -303,7 +303,7 @@ inline ReaderRenderSpec makeRenderSpec(const ReaderPrefs& p, const int fontId, c
   spec.paragraphAlignment = p.paragraphAlignment;
   spec.viewportWidth = viewportWidth;
   spec.viewportHeight = viewportHeight;
-  spec.embeddedStyle = p.embeddedStyle != 0;
+  spec.embeddedStyle = resolveEmbeddedStyle(p.embeddedStyle);
   // Black & White lays out exactly like Display, so switching between them keeps the
   // section cache; the reader draws the raw mode (see readerImageMode in the reader).
   spec.imageRendering = p.imageRendering == reader_defaults::IMAGES_DISPLAY_BW ? 0 : p.imageRendering;
@@ -399,6 +399,10 @@ inline void migrateReaderPrefsFields(const uint8_t version, ReaderPrefs& p, cons
     }
     settleLegacyLookValues(p);
   }
+  // v28 turns embeddedStyle into 3-way Off (0) / Text Only (1) / Full (2); legacy 1 meant Full.
+  if (version < 28 && p.embeddedStyle != EMBEDDED_STYLE_OFF) {
+    p.embeddedStyle = EMBEDDED_STYLE_FULL;
+  }
   // The retired bytes carry nothing now; zero them so whole-blob comparison is exact.
   p.retiredParagraphSpacing = p.retiredFirstLineIndentMode = p.retiredEmbeddedLayoutStyle = 0;
   p.retiredKerning = p.retiredLigatures = p.retiredLinkUnderline = p.retiredBookMargins = 0;
@@ -445,8 +449,8 @@ inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
   if (version == 23) return READER_PREFS_V23_SIZE;
   if (version == 24) return READER_PREFS_V24_SIZE;
   if (version == 25) return READER_PREFS_V25_SIZE;
-  // v26 and v27 share one layout: v27 only changed what some bytes mean.
-  if (version == 26 || version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
+  // v26, v27 and v28 share one byte layout: v27/v28 only changed what existing bytes mean.
+  if (version == 26 || version == 27 || version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
   return 0;
 }
 
@@ -622,7 +626,7 @@ inline void setStatusBarOf(ReaderPrefs& p, const StatusBarBlock& b) {
 // Whether the book's stylesheet has to be parsed. Decided from the book's own look:
 // a book with its Book Styling switch on needs its CSS even when the global switch is
 // off, and the loader never builds the CSS cache for a book that skipped it.
-inline bool wantsBookCss(const ReaderPrefs& p) { return p.embeddedStyle != 0; }
+inline bool wantsBookCss(const ReaderPrefs& p) { return p.embeddedStyle != EMBEDDED_STYLE_OFF; }
 
 // Brings a sidecar record read at `fromVersion` in line with this firmware.
 // - A record written before whole-book numbering was removed can still say 2; the

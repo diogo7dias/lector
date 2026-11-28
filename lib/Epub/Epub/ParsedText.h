@@ -51,6 +51,7 @@ class ParsedText {
   std::vector<uint8_t> wordSizeSlots;
   static constexpr uint8_t MAX_SIZE_SLOTS = TextBlock::MAX_WORD_FONTS + 1;
   float sizeSlotScales[MAX_SIZE_SLOTS] = {1.0f};
+  bool sizeSlotMonospace[MAX_SIZE_SLOTS] = {};
   int32_t sizeSlotFontIds[MAX_SIZE_SLOTS] = {};
   uint8_t sizeSlotCount = 1;
   int wordFontId(size_t wordIndex, int blockFontId) const;
@@ -175,10 +176,11 @@ class ParsedText {
   // A heading is a chapter title, not paragraph 1, so it must not consume a paragraph number.
   void setHeading(const bool heading) { isHeading = heading; }
   bool getIsHeading() const { return isHeading; }
-  // Slot for words at an absolute size; reuses a matching slot, or the nearest once all are taken.
-  uint8_t sizeSlotFor(float scale);
+  // Slot for words at an absolute size (or monospace); reuses a matching slot, or the nearest once all are taken.
+  uint8_t sizeSlotFor(float scale, bool monospace = false);
   uint8_t sizeSlotsInUse() const { return sizeSlotCount; }
   float sizeSlotScale(uint8_t slot) const { return sizeSlotScales[slot]; }
+  bool sizeSlotIsMonospace(uint8_t slot) const { return sizeSlotMonospace[slot]; }
   void setSizeSlotFontId(uint8_t slot, int32_t fontId) { sizeSlotFontIds[slot] = fontId; }
   // maxLines stops after that many lines (drop-cap lines are laid out narrower first).
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth, LineSinkFn processLine,

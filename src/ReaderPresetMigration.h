@@ -29,6 +29,9 @@ struct LegacyKeys {
   bool hasCharacterSpacingPx = false;
   bool hasLegacyCharacterSpacing = false;  // half pixels, offset 5
   uint8_t legacyCharacterSpacing = 5;
+  bool hasEmbeddedStyleMode = false;    // 3-way: 0=Off, 1=Text Only, 2=Full
+  bool hasLegacyEmbeddedStyle = false;  // legacy 2-way "embeddedStyle" (0=Off, 1=Full)
+  uint8_t legacyEmbeddedStyle = 1;
 };
 
 // Reads those keys from any ArduinoJson object or document; templated so this header
@@ -53,6 +56,9 @@ LegacyKeys readLegacyKeys(const Json& obj) {
   keys.hasCharacterSpacingPx = obj["characterSpacingPx"].template is<uint8_t>();
   keys.hasLegacyCharacterSpacing = obj["characterSpacing"].template is<uint8_t>();
   if (keys.hasLegacyCharacterSpacing) keys.legacyCharacterSpacing = obj["characterSpacing"].template as<uint8_t>();
+  keys.hasEmbeddedStyleMode = obj["embeddedStyleMode"].template is<uint8_t>();
+  keys.hasLegacyEmbeddedStyle = obj["embeddedStyle"].template is<uint8_t>();
+  if (keys.hasLegacyEmbeddedStyle) keys.legacyEmbeddedStyle = obj["embeddedStyle"].template as<uint8_t>();
   return keys;
 }
 
@@ -88,15 +94,27 @@ inline bool migrateMarginLink(const LegacyKeys& keys, uint8_t& screenMargin, uin
 // leaves its default.
 inline void migrateLeanTypography(const LegacyKeys& keys, uint8_t& paragraphIndentSpaces, uint8_t& embeddedStyle,
                                   uint8_t& characterSpacing) {
-  if (keys.hasParagraphIndentSpaces) return;
-  if (keys.hasFirstLineIndent) {
-    paragraphIndentSpaces =
-        reader_defaults::indentSpacesFromLegacy(keys.firstLineIndentMode, keys.firstLineIndentPercent);
+  if (!keys.hasParagraphIndentSpaces) {
+    if (keys.hasFirstLineIndent) {
+      paragraphIndentSpaces =
+          reader_defaults::indentSpacesFromLegacy(keys.firstLineIndentMode, keys.firstLineIndentPercent);
+    }
+    if (!keys.hasCharacterSpacingPx && keys.hasLegacyCharacterSpacing) {
+      characterSpacing = reader_defaults::characterSpacingFromLegacy(keys.legacyCharacterSpacing);
+    }
   }
-  // Off if either half was off: off meant "the book's own styling gone".
-  if (keys.hasEmbeddedLayoutStyle) embeddedStyle = (embeddedStyle != 0 && keys.embeddedLayoutStyle != 0) ? 1 : 0;
-  if (!keys.hasCharacterSpacingPx && keys.hasLegacyCharacterSpacing) {
-    characterSpacing = reader_defaults::characterSpacingFromLegacy(keys.legacyCharacterSpacing);
+  // 3-way Embedded Style (Off=0 / Text Only=1 / Full=2): files written under the old
+  // 2-way "embeddedStyle" key (0=Off, 1=Full) or two-switch split map cleanly without
+  // silently downgrading Full to Text Only.
+  if (!keys.hasEmbeddedStyleMode) {
+    if (keys.hasEmbeddedLayoutStyle) {
+      const uint8_t textVal = keys.hasLegacyEmbeddedStyle ? keys.legacyEmbeddedStyle : embeddedStyle;
+      embeddedStyle = (textVal != 0 && keys.embeddedLayoutStyle != 0) ? EMBEDDED_STYLE_FULL : EMBEDDED_STYLE_OFF;
+    } else if (keys.hasLegacyEmbeddedStyle) {
+      embeddedStyle = keys.legacyEmbeddedStyle != 0 ? EMBEDDED_STYLE_FULL : EMBEDDED_STYLE_OFF;
+    } else if (!keys.hasParagraphIndentSpaces && embeddedStyle == 1) {
+      embeddedStyle = EMBEDDED_STYLE_FULL;
+    }
   }
 }
 
