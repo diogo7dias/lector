@@ -6,6 +6,8 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <LibraryBuilder.h>
+#include <LibraryIndexFile.h>
 #include <Memory.h>
 #include <Serialization.h>
 #include <Utf8.h>
@@ -16,10 +18,12 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "ReaderMargins.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "RuledLines.h"
 #include "SdCardFontSystem.h"
+#include "TxtJustifyLine.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -38,11 +42,12 @@ void TxtReaderActivity::onEnter() {
 
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
-  // Only one SD font size is resident at a time; make it the reader font. A family that
-  // has left the card falls back to built-in and persists nothing.
-  sdFontSystem.ensureLoadedFor(renderer, SETTINGS.sdFontFamilyName, SETTINGS.fontPointSize);
-
   txt->setupCacheDir();
+  loadReaderPrefs();
+
+  // Only one SD font size is resident at a time; make it this book's font. A family that
+  // has left the card falls back to built-in and persists nothing.
+  sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontPointSize);
 
   // Save current txt as last opened file and add to recent books
   auto filePath = txt->getPath();
@@ -81,6 +86,8 @@ void TxtReaderActivity::onExit() {
     marker.percent = static_cast<uint8_t>(pct);
     marker.readOrder = ++APP_STATE.readOrderCounter;
     book_progress::write(txt->getCachePath(), marker);
+    library::updateRecordProgress(library::libraryIndexPath(), txt->getPath().c_str(), marker.percent,
+                                  marker.readOrder);
     APP_STATE.saveToFile();
   }
 
@@ -162,27 +169,23 @@ void TxtReaderActivity::initializeReader() {
     return;
   }
 
-  // Store current settings for cache validation
-  // TXT has its own font selection, independent of the EPUB reader's.
-  cachedFontId = SETTINGS.getReaderFontId();
-  cachedScreenMargin = SETTINGS.screenMargin;
-  cachedParagraphAlignment = SETTINGS.paragraphAlignment;
+  // Store current per-book look for cache validation.
+  cachedFontId = SETTINGS.getReaderFontId(prefs_);
+  cachedLineCompression = readerLineCompression(prefs_.lineSpacingPercent);
+  cachedCharacterSpacing = static_cast<int8_t>(
+      std::min(prefs_.characterSpacing, reader_defaults::MAX_CHARACTER_SPACING) - reader_defaults::CHARACTER_SPACING);
+  cachedScreenMargin = prefs_.screenMargin;
+  cachedParagraphAlignment = prefs_.paragraphAlignment;
 
-  // Uniform margins use screenMargin on every side; otherwise top/bottom are
-  // independent while screenMargin stays the horizontal margin. Changing any of
-  // these alters the viewport (and linesPerPage), which self-invalidates the page
-  // cache, so no extra cache-key field is needed beyond cachedScreenMargin.
-  const uint8_t topMargin = SETTINGS.screenMarginTop;
-  const uint8_t bottomMargin = SETTINGS.screenMarginBottom;
-
-  renderer.getOrientedViewableTRBL(&cachedOrientedMarginTop, &cachedOrientedMarginRight, &cachedOrientedMarginBottom,
-                                   &cachedOrientedMarginLeft);
+  renderer.setCharacterSpacing(cachedFontId, cachedCharacterSpacing);
+  ReaderUtils::readerMargins(renderer, prefs_, cachedOrientedMarginTop, cachedOrientedMarginRight,
+                             cachedOrientedMarginBottom, cachedOrientedMarginLeft);
   // v2 status bar: reserve a band at the top and/or bottom edge (whichever holds
   // items), added on top of the reading margin like the EPUB reader, so a thick
   // progress bar never eats the margin (upstream #4444).
   // TXT has no chapters, so chapter-only items are hidden. A greedy (truncate-off)
   // book-source title wraps, needing extra band height.
-  const StatusBarBlock sb = effectiveStatusBar(SETTINGS.statusBar(), SETTINGS.calmMode != 0);
+  const StatusBarBlock sb = effectiveStatusBar(statusBarOf(prefs_), SETTINGS.calmMode != 0);
   const int sbFontId = UITheme::statusBarFontId(renderer, sb, cachedFontId);
   const int sbLineH = renderer.getLineHeight(sbFontId);
   // TXT has no chapter title: the slot holds the book title (see TitleSlot).
@@ -193,14 +196,12 @@ void TxtReaderActivity::initializeReader() {
   const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(sb, false, sbTitleTop ? sbTitleExtraPx : 0, sbLineH);
   const int sbBottom =
       UITheme::getInstance().getStatusBarV2BottomHeight(sb, false, sbTitleTop ? 0 : sbTitleExtraPx, sbLineH);
-  cachedOrientedMarginTop += topMargin + sbTop;
-  cachedOrientedMarginLeft += cachedScreenMargin;
-  cachedOrientedMarginRight += cachedScreenMargin;
-  cachedOrientedMarginBottom += bottomMargin + sbBottom;
+  cachedOrientedMarginTop += sbTop;
+  cachedOrientedMarginBottom += sbBottom;
 
   viewportWidth = renderer.getScreenWidth() - cachedOrientedMarginLeft - cachedOrientedMarginRight;
   const int viewportHeight = renderer.getScreenHeight() - cachedOrientedMarginTop - cachedOrientedMarginBottom;
-  const int lineHeight = renderer.getLineHeight(cachedFontId);
+  const int lineHeight = renderer.getLineHeight(cachedFontId, cachedLineCompression);
 
   linesPerPage = viewportHeight / lineHeight;
   if (linesPerPage < 1) linesPerPage = 1;
@@ -259,15 +260,18 @@ void TxtReaderActivity::render(RenderLock&&) {
 }
 
 void TxtReaderActivity::renderPage() {
-  const int lineHeight = renderer.getLineHeight(cachedFontId);
+  renderer.setCharacterSpacing(cachedFontId, cachedCharacterSpacing);
+  const int lineHeight = renderer.getLineHeight(cachedFontId, cachedLineCompression);
   const int contentWidth = viewportWidth;
   const int viewportHeight = renderer.getScreenHeight() - cachedOrientedMarginTop - cachedOrientedMarginBottom;
   const int verticalOffset = fullTextPageOffset(
       viewportHeight, 0, (static_cast<int>(currentPageLines.size()) - 1) * lineHeight, lineHeight, lineHeight);
+  const int spaceWidth = renderer.getSpaceWidth(cachedFontId, EpdFontFamily::REGULAR);
 
   auto renderLines = [&]() {
     int y = cachedOrientedMarginTop + verticalOffset;
-    for (const auto& line : currentPageLines) {
+    for (const auto& entry : currentPageLines) {
+      const std::string& line = entry.text;
       if (!line.empty()) {
         int x = cachedOrientedMarginLeft;
         const bool lineIsRtl = BidiUtils::startsWithRtl(line.c_str(), BidiUtils::RTL_PARAGRAPH_PROBE_DEPTH);
@@ -276,29 +280,37 @@ void TxtReaderActivity::renderPage() {
                           effectiveAlignment == CrossPointSettings::JUSTIFIED)) {
           effectiveAlignment = CrossPointSettings::RIGHT_ALIGN;
         }
-        const int textWidth = renderer.getTextAdvanceX(cachedFontId, line.c_str(), EpdFontFamily::REGULAR);
-
-        // Apply text alignment
-        switch (effectiveAlignment) {
-          case CrossPointSettings::LEFT_ALIGN:
-          default:
-            // x already set to left margin
-            break;
-          case CrossPointSettings::CENTER_ALIGN: {
-            x = cachedOrientedMarginLeft + (contentWidth - textWidth) / 2;
-            break;
-          }
-          case CrossPointSettings::RIGHT_ALIGN: {
-            x = cachedOrientedMarginLeft + contentWidth - textWidth;
-            break;
-          }
-          case CrossPointSettings::JUSTIFIED:
-            // For plain text, justified is treated as left-aligned
-            // (true justification would require word spacing adjustments)
-            break;
+        bool drawn = false;
+        if (effectiveAlignment == CrossPointSettings::JUSTIFIED && !lineIsRtl && !entry.isParagraphEnd) {
+          drawn = txt_justify::layoutWords(
+              line, contentWidth, spaceWidth,
+              [&](const char* word) { return renderer.getTextAdvanceX(cachedFontId, word, EpdFontFamily::REGULAR); },
+              [&](const int wordX, const char* word) {
+                renderer.drawText(cachedFontId, cachedOrientedMarginLeft + wordX, y, word);
+              });
         }
+        if (!drawn) {
+          const int textWidth = renderer.getTextAdvanceX(cachedFontId, line.c_str(), EpdFontFamily::REGULAR);
 
-        renderer.drawText(cachedFontId, x, y, line.c_str());
+          // Apply text alignment
+          switch (effectiveAlignment) {
+            case CrossPointSettings::LEFT_ALIGN:
+            case CrossPointSettings::JUSTIFIED:
+            default:
+              // x already set to left margin
+              break;
+            case CrossPointSettings::CENTER_ALIGN: {
+              x = cachedOrientedMarginLeft + (contentWidth - textWidth) / 2;
+              break;
+            }
+            case CrossPointSettings::RIGHT_ALIGN: {
+              x = cachedOrientedMarginLeft + contentWidth - textWidth;
+              break;
+            }
+          }
+
+          renderer.drawText(cachedFontId, x, y, line.c_str());
+        }
       }
       y += lineHeight;
     }
@@ -311,17 +323,19 @@ void TxtReaderActivity::renderPage() {
   renderStatusBar();  // scan: a CJK title joins the batch prewarm
   scope.endScanAndPrewarm();
 
-  // BW rendering. Paperback Look (body, global) thickens the page glyphs; reset
-  // before the status bar (own flag) and the grayscale AA pass below.
-  renderer.setPaperbackLook(SETTINGS.paperbackLookBody);
+  // BW rendering. Paperback Look and Ink Weight (body, per-book) shape the page glyphs;
+  // reset before the status bar (own flag) and ruled lines below.
+  renderer.setPaperbackLook(prefs_.paperbackLookBody);
+  renderer.setInkWeight(reader_defaults::resolveInkWeight(prefs_.inkWeight), /*updateTtf=*/true);
   renderLines();
   renderer.setPaperbackLook(false);
+  renderer.setInkWeight(0);
   if (const int step = ruled_lines::dotStep(SETTINGS.ruledLines)) {
     const auto isBlack = [this](int x, int y) { return renderer.isPixelBlack(x, y); };
     const auto plot = [this](int x, int y) { renderer.drawPixel(x, y); };
     int y = cachedOrientedMarginTop + verticalOffset + lineHeight - 1;
     for (size_t i = 0; i < currentPageLines.size(); ++i, y += lineHeight) {
-      if (!currentPageLines[i].empty())
+      if (!currentPageLines[i].text.empty())
         ruled_lines::drawRow(cachedOrientedMarginLeft, contentWidth, y, step, isBlack, plot);
     }
   }
@@ -344,11 +358,11 @@ void TxtReaderActivity::renderStatusBar() const {
   d.bookTitle = txt->getTitle();
   d.readingFontId = cachedFontId;
   d.sessionPages = sessionPages;
-  const StatusBarBlock sb = effectiveStatusBar(SETTINGS.statusBar(), SETTINGS.calmMode != 0);
+  const StatusBarBlock sb = effectiveStatusBar(statusBarOf(prefs_), SETTINGS.calmMode != 0);
   // Costs a file read only when the item is on, as in the EPUB reader.
   if (sb.paraPagesPos != CrossPointSettings::SB_ANCHOR_OFF) d.paragraphPagesLeft = pagesUntilNextParagraph();
   // Paperback Look (status bar): thicken only status-bar glyphs, then reset.
-  renderer.setPaperbackLook(SETTINGS.paperbackLookStatus);
+  renderer.setPaperbackLook(prefs_.paperbackLookStatus);
   GUI.drawStatusBarV2(renderer, d, sb);
   renderer.setPaperbackLook(false);
 }

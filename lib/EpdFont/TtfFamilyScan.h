@@ -407,19 +407,41 @@ inline int ttfScaleUnits(const TtfMetrics& m, const int32_t units, const uint16_
 
 // --- glyph bitmap packing --------------------------------------------------------
 
+constexpr int8_t INK_WEIGHT_MIN = -2;
+constexpr int8_t INK_WEIGHT_MAX = 2;
+
+inline constexpr int8_t clampInkWeight(const int8_t weight) {
+  return weight < INK_WEIGHT_MIN ? INK_WEIGHT_MIN : (weight > INK_WEIGHT_MAX ? INK_WEIGHT_MAX : weight);
+}
+
+// Quantise an 8-bit stb_truetype coverage sample (0..255) to a 2-bit glyph level
+// (0..3), shifted by `inkWeight` (-2..+2). At 0 this matches fontconvert.py
+// (`coverage >> 6`, thresholds 64/128/192). Negative steps raise the cutoff
+// (96, 128) for lighter strokes; positive steps lower it (32, 1) while keeping
+// pure background (0) white.
+inline constexpr uint8_t quantizeCoverage2Bit(const uint8_t coverage, const int8_t inkWeight = 0) {
+  if (inkWeight == 0) return static_cast<uint8_t>(coverage >> 6);
+  if (coverage == 0) return 0;
+  const int8_t w = clampInkWeight(inkWeight);
+  const int delta = w == 2 ? 63 : static_cast<int>(w) * 32;
+  const int adj = static_cast<int>(coverage) + delta;
+  if (adj <= 0) return 0;
+  if (adj >= 255) return 3;
+  return static_cast<uint8_t>(adj >> 6);
+}
+
 // EpdFont 2-bit format: four pixels per byte, most significant pair first,
-// rows packed back to back with no padding; 0 = white, 3 = black. Coverage is
-// quantised exactly like fontconvert.py (levels at 64/128/192 of 255).
+// rows packed back to back with no padding; 0 = white, 3 = black.
 inline size_t packed2BitBytes(const int w, const int h) {
   return (static_cast<size_t>(w) * static_cast<size_t>(h) + 3) / 4;
 }
 
-inline void pack2Bit(const uint8_t* coverage, const int w, const int h, uint8_t* out) {
+inline void pack2Bit(const uint8_t* coverage, const int w, const int h, uint8_t* out, const int8_t inkWeight = 0) {
   const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h);
   const size_t bytes = packed2BitBytes(w, h);
   for (size_t b = 0; b < bytes; ++b) out[b] = 0;
   for (size_t i = 0; i < n; ++i) {
-    const uint8_t level = static_cast<uint8_t>(coverage[i] >> 6);
+    const uint8_t level = quantizeCoverage2Bit(coverage[i], inkWeight);
     out[i >> 2] |= static_cast<uint8_t>(level << ((3 - (i & 3)) * 2));
   }
 }

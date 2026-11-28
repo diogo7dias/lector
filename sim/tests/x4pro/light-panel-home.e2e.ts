@@ -66,7 +66,7 @@ test('Home key closes the light panel and goes Home', async ({ app, screen }) =>
     expect((await fetch(`${app.baseUrl}/swipe/240/795/240/450`, { method: 'POST' })).ok).toBe(true);
     await settle();
     await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
-    await tapOnce(100, 198); // Book
+    await tapOnce(100, 398); // Book (below expanded Navigate's 5 rows)
     await tapOnce(100, 318); // Remove from Recents
     await expect(activity).toHaveText('Home', { timeout: 30_000 });
     expect(await ink(0, 230, 480, 60), 'removed from Home recents').toBeLessThan(500);

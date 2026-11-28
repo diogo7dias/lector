@@ -37,10 +37,9 @@ class EpubReaderChapterSelectionActivity final : public UiListActivity {
   // window through ListProps::itemsWindowFirst, so nothing outside it is ever touched.
   static constexpr int TOC_WINDOW = 24;
   std::string windowLabels[TOC_WINDOW];
+  char windowPercents[TOC_WINDOW][8] = {};
   std::vector<freeink::ui::ListItem> rows;
   int windowStart = -1;
   int windowCount = 0;
   void refreshTocWindow(int start, int count);
-  // Indent + title for one TOC entry, as drawn.
-  std::string tocLabelAt(int index) const;
 };

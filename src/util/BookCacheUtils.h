@@ -61,3 +61,8 @@ std::string bookCacheDirForPath(const std::string& path);
 // Removes every /.crosspoint cache directory whose book is no longer on the card.
 // Returns false, having deleted nothing, when the live-book walk fails.
 bool cleanOrphanBookCaches(int& removedCount, int& keptCount, int& failedCount);
+
+// Marks a book Read (writes percent.bin = 100 with a fresh readOrder) or Unread (deletes
+// percent.bin), updating both Recents and the CLX v2 library index in place.
+bool markBookRead(const std::string& bookPath);
+bool markBookUnread(const std::string& bookPath);

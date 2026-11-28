@@ -36,6 +36,7 @@ ReaderPrefs makeSample() {
   p.paperbackLookStatus = 1;
   p.paragraphIndentSpaces = 4;
   p.characterSpacing = reader_defaults::CHARACTER_SPACING + 1;
+  p.inkWeight = reader_defaults::INK_WEIGHT + 1;
   p.paragraphNumberSize = 0;  // Small
   std::memset(p.sdFontFamilyName, 0, sizeof(p.sdFontFamilyName));
   std::strncpy(p.sdFontFamilyName, "Bookerly", sizeof(p.sdFontFamilyName) - 1);
@@ -50,6 +51,7 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.extraParagraphSpacing, b.extraParagraphSpacing);
   EXPECT_EQ(a.wordSpacing, b.wordSpacing);
   EXPECT_EQ(a.characterSpacing, b.characterSpacing);
+  EXPECT_EQ(a.inkWeight, b.inkWeight);
   EXPECT_EQ(a.retiredChapterTime, b.retiredChapterTime);
   EXPECT_EQ(a.retiredBookTime, b.retiredBookTime);
   EXPECT_EQ(a.retiredTextContrast, b.retiredTextContrast);
@@ -551,9 +553,15 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V22_SIZE + 1, READER_PREFS_V23_SIZE);
   EXPECT_EQ(READER_PREFS_V23_SIZE + 1, READER_PREFS_V24_SIZE);
   EXPECT_EQ(READER_PREFS_V24_SIZE + 1, READER_PREFS_V25_SIZE);
-  EXPECT_EQ(READER_PREFS_V25_SIZE + 1, READER_PREFS_V27_SIZE);
-  EXPECT_EQ(READER_PREFS_V27_SIZE + 4, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V25_SIZE + 1, READER_PREFS_V28_SIZE);
+  EXPECT_EQ(READER_PREFS_V28_SIZE + 1, READER_PREFS_V29_SIZE);
+  EXPECT_EQ(READER_PREFS_V29_SIZE + 1, READER_PREFS_V30_SIZE);
+  EXPECT_EQ(READER_PREFS_V30_SIZE + 4, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V29_SIZE, readerPrefsRecordSize(29));
+  EXPECT_EQ(READER_PREFS_V30_SIZE, readerPrefsRecordSize(30));
   EXPECT_EQ(READER_PREFS_V25_SIZE, readerPrefsRecordSize(25));
+  EXPECT_EQ(READER_PREFS_V28_SIZE, readerPrefsRecordSize(26));
+  EXPECT_EQ(READER_PREFS_V28_SIZE, readerPrefsRecordSize(27));
   EXPECT_EQ(READER_PREFS_V24_SIZE, readerPrefsRecordSize(24));
   EXPECT_EQ(READER_PREFS_V23_SIZE, readerPrefsRecordSize(23));
   EXPECT_EQ(READER_PREFS_V22_SIZE, readerPrefsRecordSize(22));
@@ -570,10 +578,8 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(29, ReaderPrefs::VERSION);
-  EXPECT_EQ(READER_PREFS_V27_SIZE, readerPrefsRecordSize(26));  // v26, v27 and v28 share one layout
-  EXPECT_EQ(READER_PREFS_V27_SIZE, readerPrefsRecordSize(27));
-  EXPECT_EQ(READER_PREFS_V27_SIZE, readerPrefsRecordSize(28));
+  EXPECT_EQ(31, ReaderPrefs::VERSION);
+  EXPECT_EQ(READER_PREFS_V28_SIZE, readerPrefsRecordSize(28));  // v27/v28 moved meanings, not bytes
 }
 
 // A v23 record stops before Character Spacing: it reads back as the font as designed,
@@ -1064,6 +1070,7 @@ TEST(ReaderPrefs, ACurrentRecordIsNeverConverted) {
   now.imageRendering = 2;  // Suppress is a real choice again
   now.characterSpacing = 4;
   now.wordSpacing = 175;
+  now.inkWeight = 4;
   now.sbAuthorPos = 3;
   now.sbFontSize = 2;
   now.sbDivider = 1;
@@ -1111,4 +1118,27 @@ TEST(ReaderPrefs, CalmModeHidesStatusBarAndOffBarWithoutMutatingSavedPrefs) {
   EXPECT_TRUE(restored.progressBarsVisible());
   EXPECT_EQ(restored.offBar, 2);
   expectEqual(before, saved);
+}
+
+TEST(ReaderPrefs, InkWeightDefaultsToZeroAndMigratesFromV28) {
+  const ReaderPrefs defaults;
+  EXPECT_EQ(reader_defaults::INK_WEIGHT, defaults.inkWeight);
+  EXPECT_EQ(0, reader_defaults::resolveInkWeight(defaults.inkWeight));
+  EXPECT_EQ(-2, reader_defaults::resolveInkWeight(0));
+  EXPECT_EQ(2, reader_defaults::resolveInkWeight(4));
+  EXPECT_EQ(2, reader_defaults::resolveInkWeight(99));  // corrupt byte clamps
+
+  ReaderPrefs v27 = makeSample();
+  v27.inkWeight = 4;  // outside the v28 record; must not be read
+  std::stringstream ss;
+  const uint8_t ver = 28;
+  ss.write(reinterpret_cast<const char*>(&ver), 1);
+  ss.write(reinterpret_cast<const char*>(&v27), READER_PREFS_V28_SIZE);
+
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(ss, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(reader_defaults::INK_WEIGHT, loaded.inkWeight);
+  EXPECT_EQ(v27.paragraphNumberPlace, loaded.paragraphNumberPlace);
 }

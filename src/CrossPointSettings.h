@@ -29,6 +29,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     QUICK_RESUME = 6,
     TRANSPARENT_CUSTOM = 7,
     COVER_TRANSPARENT = 8,
+    QUOTE = 9,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
@@ -241,6 +242,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr auto LP_MENU_NEXT_CHAPTER = bound_action::LP_MENU_NEXT_CHAPTER;
   static constexpr auto LP_MENU_PREV_CHAPTER = bound_action::LP_MENU_PREV_CHAPTER;
   static constexpr auto LP_MENU_CALM_MODE = bound_action::LP_MENU_CALM_MODE;
+  static constexpr auto LP_MENU_RETURN = bound_action::LP_MENU_RETURN;
   static constexpr auto LONG_PRESS_MENU_FUNCTION_COUNT = bound_action::LONG_PRESS_MENU_FUNCTION_COUNT;
 
   // The three buttons the Buttons screen binds, in the order it lists them. Left and
@@ -406,6 +408,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t wordSpacing = reader_defaults::WORD_SPACING;  // percent of natural space advance; no limit on justification
   // Whole pixels between letters, offset: 2 is the font as designed, 0..4 shows as -2..+2.
   uint8_t characterSpacing = reader_defaults::CHARACTER_SPACING;
+  // Finer ink weight, offset: 2 is normal (0), 0..4 shows as -2..+2.
+  uint8_t inkWeight = reader_defaults::INK_WEIGHT;
   // On, with both directions on Swipe Only by default: a swipe works the same wherever the
   // thumb lands, and leaves the whole page free of invisible tap targets.
   uint8_t touchReaderControls = 1;
@@ -528,6 +532,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t opdsFilenameFormat = 0;
   // Read EPUB title/author metadata when building the Library index; off lists filenames only.
   uint8_t libraryUseMetadata = 1;
+  // Library sort order (0=Title, 1=Author, 2=Recently Added, 3=Last Read) and filter
+  // (0=All, 1=Reading, 2=Unread, 3=Read), matching library::LibrarySort / LibraryFilter.
+  uint8_t librarySort = 0;
+  uint8_t libraryFilter = 0;
   // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
@@ -660,6 +668,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // create, but draw no dot in it. Only meaningful while guideDotsEnabled is on, and
   // it feeds the render spec too, so toggling it rebuilds the cache.
   uint8_t guideDotsHidden = 0;
+  // Keep Headings with Text (0 = off by default): never strand a heading at the page
+  // bottom, and avoid 1-line orphans and widows on 4+ line paragraphs.
+  uint8_t keepHeadingsWithText = 0;
   // Diagnostic: outline the reader text viewport (0 = off, 1 = on). Drawn as an
   // overlay after the page renders, so it never affects layout or the cache.
   uint8_t debugBorders = 0;

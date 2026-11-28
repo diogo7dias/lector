@@ -17,6 +17,7 @@
 #include "activities/home/LibrarySearch.h"
 #include "activities/network/NearbyFileTransferActivity.h"
 #include "activities/reader/DictionaryDefinitionActivity.h"
+#include "activities/util/BookInfoHelper.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/BusyBanner.h"
@@ -610,36 +611,55 @@ void FileBrowserActivity::loop() {
         // A folder is not sent anywhere and is not moved from here, so its hold goes
         // straight to the delete confirmation rather than opening a pop-up.
         const bool sendable = nearby_file::isAcceptedFilename(entry);
-        StrId actions[5];
+        const bool markable = FsHelpers::hasEpubExtension(entry) || FsHelpers::hasTextBookExtension(entry);
+        const bool isRead = markable && readingPercentAt(fileIndex) >= 100;
+        StrId actions[6];
         int count = 0;
         if (FsHelpers::hasEpubExtension(entry)) actions[count++] = StrId::STR_BOOK_INFO;
+        if (markable) actions[count++] = isRead ? StrId::STR_MARK_UNREAD : StrId::STR_MARK_READ;
         if (sendable) actions[count++] = StrId::STR_NEARBY_SEND_FILE;
         actions[count++] = StrId::STR_RENAME;
         actions[count++] = StrId::STR_MOVE_TO_FOLDER;
         actions[count++] = StrId::STR_DELETE;
-        fileActionPopup.show(StrId::STR_FILE_ACTIONS, actions, count, 0, [this, fullPath, actions](const int choice) {
-          switch (actions[choice]) {
-            case StrId::STR_BOOK_INFO:
-              showBookInfo(fullPath);
-              break;
-            case StrId::STR_NEARBY_SEND_FILE:
-              // Replaces the browser (the radio wants its RAM); Back rebuilds it on this file.
-              activityManager.replaceFromOpener(
-                  makeUniqueNoThrow<NearbyFileTransferActivity>(renderer, mappedInput,
-                                                                NearbyFileTransferActivity::Mode::Send, fullPath),
-                  ActivityManager::Opener::FileBrowser, fullPath);
-              break;
-            case StrId::STR_RENAME:
-              promptRename(fullPath);
-              break;
-            case StrId::STR_MOVE_TO_FOLDER:
-              promptMoveToFolder(fullPath);
-              break;
-            default:
-              confirmDelete(fullPath);
-              break;
-          }
-        });
+        fileActionPopup.show(
+            StrId::STR_FILE_ACTIONS, actions, count, 0, [this, fullPath, fileIndex, actions](const int choice) {
+              switch (actions[choice]) {
+                case StrId::STR_BOOK_INFO:
+                  showBookInfo(fullPath);
+                  break;
+                case StrId::STR_MARK_READ:
+                case StrId::STR_MARK_UNREAD: {
+                  const bool ok =
+                      actions[choice] == StrId::STR_MARK_READ ? markBookRead(fullPath) : markBookUnread(fullPath);
+                  if (ok) {
+                    RenderLock lock(*this);
+                    if (SETTINGS.bookBrowserOrder == CrossPointSettings::BOOK_ORDER_LAST_READ) {
+                      loadFiles();
+                    } else if (fileIndex >= 0 && static_cast<size_t>(fileIndex) < readingPercents.size()) {
+                      readingPercents[static_cast<size_t>(fileIndex)] = PERCENT_NOT_LOOKED_UP;
+                    }
+                  }
+                  requestUpdate();
+                  break;
+                }
+                case StrId::STR_NEARBY_SEND_FILE:
+                  // Replaces the browser (the radio wants its RAM); Back rebuilds it on this file.
+                  activityManager.replaceFromOpener(
+                      makeUniqueNoThrow<NearbyFileTransferActivity>(renderer, mappedInput,
+                                                                    NearbyFileTransferActivity::Mode::Send, fullPath),
+                      ActivityManager::Opener::FileBrowser, fullPath);
+                  break;
+                case StrId::STR_RENAME:
+                  promptRename(fullPath);
+                  break;
+                case StrId::STR_MOVE_TO_FOLDER:
+                  promptMoveToFolder(fullPath);
+                  break;
+                default:
+                  confirmDelete(fullPath);
+                  break;
+              }
+            });
         requestUpdate();
         return;
       }
@@ -993,37 +1013,8 @@ void FileBrowserActivity::promptMoveToFolder(const std::string& fullPath) {
 }
 
 void FileBrowserActivity::showBookInfo(const std::string& fullPath) {
-  std::string title;
-  std::string text;
-  std::string cover;
-  {
-    // A book never opened builds its metadata cache here, which can take a few seconds.
-    RenderLock lock(*this);
-    BusyBanner banner(renderer, tr(STR_LOADING));
-    auto epub = makeUniqueNoThrow<Epub>(fullPath, "/.crosspoint");
-    if (!epub) {
-      LOG_ERR("FileBrowser", "OOM: Epub");
-      requestUpdate();
-      return;
-    }
-    epub->setupCacheDir();
-    if (!epub->load(true, true)) {
-      LOG_ERR("FileBrowser", "Book info: cannot load %s", fullPath.c_str());
-      requestUpdate();
-      return;
-    }
-    title = epub->getTitle();
-    const std::string& author = epub->getAuthor();
-    const std::string& description = epub->getDescription();
-    if (!author.empty()) text = author + "\n\n";
-    text += description.empty() ? tr(STR_NO_DESCRIPTION) : description;
-    // The sleep screen's fit cover: made once per book, reused after.
-    if (epub->generateCoverBmp(false)) cover = epub->getCoverBmpPath(false);
-  }
   pendingFullRefresh = true;
-  startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(
-                             renderer, mappedInput, std::move(title), std::move(text), false, false, std::move(cover)),
-                         [this](const ActivityResult&) { requestUpdate(); });
+  openBookInfoScreen(*this, renderer, mappedInput, fullPath, [this] { requestUpdate(); });
 }
 
 void FileBrowserActivity::promptRename(const std::string& fullPath) {

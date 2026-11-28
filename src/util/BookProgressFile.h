@@ -34,6 +34,9 @@ struct Marker {
 // the cache directory is empty, so a caller need not special-case a format with no cache.
 bool write(const std::string& cacheDir, const Marker& marker);
 
+// Removes `<cacheDir>/percent.bin` if it exists. Returns true when removed or already absent.
+bool remove(const std::string& cacheDir);
+
 // Reads the marker for the book at `bookPath`. Returns false when the book has no cache
 // directory, no marker, or an unreadable one — all of which mean "draw no badge".
 bool readForBook(const std::string& bookPath, Marker& markerOut);

@@ -173,6 +173,7 @@ constexpr RowSpec ROW_SPECS[] = {
     {nullptr, StrId::STR_FONT, false},                                          // Font
     {nullptr, StrId::STR_SIZE, false},                                          // Size
     {&CrossPointSettings::paperbackLookBody, StrId::STR_NONE_OPT, false},       // PaperbackLook
+    {&CrossPointSettings::inkWeight, StrId::STR_NONE_OPT, false},               // InkWeight
     {&CrossPointSettings::lineSpacingPercent, StrId::STR_NONE_OPT, false},      // LineSpacing
     {&CrossPointSettings::extraParagraphSpacing, StrId::STR_NONE_OPT, false},   // ExtraSpacing
     {&CrossPointSettings::wordSpacing, StrId::STR_NONE_OPT, true},              // WordSpacing
@@ -190,6 +191,7 @@ constexpr RowSpec ROW_SPECS[] = {
     {&CrossPointSettings::guideDotsHidden, StrId::STR_NONE_OPT, false},         // HiddenDots
     {&CrossPointSettings::embeddedStyle, StrId::STR_NONE_OPT, false},           // EmbeddedStyle
     {&CrossPointSettings::imageRendering, StrId::STR_NONE_OPT, false},          // Images
+    {&CrossPointSettings::keepHeadingsWithText, StrId::STR_NONE_OPT, false},    // KeepHeadings
     {&CrossPointSettings::debugBorders, StrId::STR_NONE_OPT, false},            // DebugBorders
 };
 }  // namespace
@@ -257,6 +259,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
 
   // The two that change how the ink itself sits on the page.
   rows.push_back(Row::PaperbackLook);
+  rows.push_back(Row::InkWeight);
 
   rows.push_back(Row::LineSpacing);
   rows.push_back(Row::ExtraSpacing);
@@ -293,6 +296,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
 
   rows.push_back(Row::EmbeddedStyle);
   rows.push_back(Row::Images);
+  rows.push_back(Row::KeepHeadings);
 
   rows.push_back(Row::DebugBorders);
   return rows;

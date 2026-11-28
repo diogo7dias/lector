@@ -39,6 +39,10 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  if (mappedInput.isInputActive()) {
+    lastInputMs = millis();
+  }
+
   applyLinkLanding();
   rememberBookOnceRendered();
   // Auto Sync pulls once the first page is up, so the book never waits on the radio.

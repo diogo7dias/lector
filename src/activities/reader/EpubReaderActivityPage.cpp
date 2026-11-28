@@ -79,13 +79,15 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     renderer.clearScreen();
   }
 
-  // Paperback Look (body): thicken the page glyphs on the BW base pass, then reset so
+  // Paperback Look and Ink Weight (body): apply on the BW base pass, then reset so
   // the paragraph numbers, the status bar (its own flag) and any grayscale/overlay
-  // passes render thin. Image pages keep the thick text: the smear pixels set here
+  // passes render clean. Image pages keep the body weight: the BW pixels set here
   // persist through the image-area re-blank/re-render below.
   renderer.setPaperbackLook(prefs_.paperbackLookBody);
+  renderer.setInkWeight(reader_defaults::resolveInkWeight(prefs_.inkWeight), /*updateTtf=*/true);
   page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
   renderer.setPaperbackLook(false);
+  renderer.setInkWeight(0);
   // Before the quote underlines, which would otherwise read as ink and cut the rule.
   ruled_lines::drawPage(renderer, *page, fontId, SETTINGS.getReaderLineCompression(prefs_), orientedMarginLeft,
                         orientedMarginTop, orientedMarginRight, orientedMarginBottom);

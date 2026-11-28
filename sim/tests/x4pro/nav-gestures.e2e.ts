@@ -71,7 +71,7 @@ test('home flick, bottom-edge menu/Home, image viewer taps', async ({ app, scree
   if (!listed) {
     // Remove from Recents (in-book menu > Book) drops the book from Recents on exit and
     // leaves it unfiled at the card root, so later files still find /test_jpeg_images.epub.
-    await tapOnce(100, 198); // Book
+    await tapOnce(100, 398); // Book (below expanded Navigate's 5 rows)
     await tapOnce(100, 318); // Remove from Recents
     await expect(activity).toHaveText('Home', { timeout: 30_000 });
     expect(await ink(0, 230, 480, 60), 'removed from Home recents').toBeLessThan(500);

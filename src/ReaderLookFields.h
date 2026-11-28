@@ -40,7 +40,9 @@
   X(guideDotsHidden)                 \
   X(embeddedStyle)                   \
   X(characterSpacing)                \
-  X(imageRendering)
+  X(inkWeight)                       \
+  X(imageRendering)                  \
+  X(keepHeadingsWithText)
 
 // Per-book toggles that live in the in-book menu, not on the Reader Settings screen.
 // The Reader Settings screen never edits them, so after an edit the book's own values

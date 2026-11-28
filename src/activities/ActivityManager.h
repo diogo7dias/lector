@@ -120,6 +120,7 @@ class ActivityManager {
   // its action grid, and what a step of that aux row means here.
   void buildLightPanelContext(light_panel::Context& context);
   bool stepLightPanelAux(int delta);
+  bool stepLightPanelAux2(int delta);
 
   // One of the home screen's books, chosen at random, or empty when the list is.
   std::string randomBookPath();

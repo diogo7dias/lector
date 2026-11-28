@@ -62,6 +62,13 @@ inline constexpr uint8_t WORD_SPACING = 100;  // percent of the font's natural s
 // the font as designed and 0..4 covers -2..+2.
 inline constexpr uint8_t CHARACTER_SPACING = 2;
 inline constexpr uint8_t MAX_CHARACTER_SPACING = 4;
+// Ink Weight is stored unsigned like Character Spacing: 0..4 covers -2..+2, with 2 = 0 (normal).
+inline constexpr uint8_t INK_WEIGHT = 2;
+inline constexpr uint8_t MAX_INK_WEIGHT = 4;
+inline constexpr int8_t resolveInkWeight(const uint8_t stored) {
+  const uint8_t clamped = stored > MAX_INK_WEIGHT ? MAX_INK_WEIGHT : stored;
+  return static_cast<int8_t>(clamped) - static_cast<int8_t>(INK_WEIGHT);
+}
 // The side margin: 5 to 40 px in steps of 5. Top and bottom keep the wider 0 to 100 range.
 inline constexpr uint8_t MIN_SCREEN_MARGIN = 5;
 inline constexpr uint8_t MAX_SCREEN_MARGIN = 40;
@@ -114,10 +121,12 @@ struct ReaderPrefs {
   // (paragraph gap, kerning, ligatures, link underline, book margins, heading page break,
   // word expansion, fill pages, the layout half of the style switch, indent mode) stay as
   // zeroed padding, the indent byte counts spaces, character spacing counts whole pixels.
-  // v28 turned embeddedStyle 3-way (Off / Text Only / Full) in the same bytes. v29 appends the
-  // status bar designer fields (sbAuthorPos, sbFontSize, sbDivider, sbHideTopOnChapterStart);
-  // v5-v28 sidecars read at their own length and default them to 0.
-  static constexpr uint8_t VERSION = 29;  // v29: status bar designer fields
+  // v28: 3-way embeddedStyle (Off / Text Only / Full), same bytes as v27.
+  // v29 appends inkWeight (0..4 stored, -2..+2 shown, default 2 = 0).
+  // v30 appends keepHeadingsWithText.
+  // v31 appends the status bar designer fields (sbAuthorPos, sbFontSize, sbDivider,
+  // sbHideTopOnChapterStart); older sidecars read at their own length and leave them 0.
+  static constexpr uint8_t VERSION = 31;  // v31: status bar designer fields
 
   // Bring a sidecar written before the current version onto the current reading
   // defaults. Only these values are re-seeded, and only for books that predate them.
@@ -266,7 +275,15 @@ struct ReaderPrefs {
   // paragraphNumberSize. APPENDED LAST.
   uint8_t paragraphNumberPlace = 1;  // CrossPointSettings::PARA_NUM_PLACE_TEXT
 
-  // Status bar designer options (v29): author slot, font size, hairline divider, and
+  // Finer ink weight (-2..+2 stored as 0..4, offset by reader_defaults::INK_WEIGHT).
+  // Draw-only (does not affect layout or the section cache).
+  uint8_t inkWeight = reader_defaults::INK_WEIGHT;
+
+  // Keep Headings with Text (0 = off by default): never strand a heading at the page
+  // bottom and avoid 1-line orphans/widows on 4+ line paragraphs.
+  uint8_t keepHeadingsWithText = 0;
+
+  // Status bar designer options (v31): author slot, font size, hairline divider, and
   // hiding the top header on page 0 of a chapter. APPENDED LAST.
   uint8_t sbAuthorPos = 0;              // SB_ANCHOR_OFF
   uint8_t sbFontSize = 0;               // SB_FONT_10PT
@@ -322,6 +339,7 @@ inline ReaderRenderSpec makeRenderSpec(const ReaderPrefs& p, const int fontId, c
   spec.paragraphIndentSpaces = std::min(p.paragraphIndentSpaces, reader_defaults::MAX_PARAGRAPH_INDENT_SPACES);
   spec.characterSpacing = static_cast<int8_t>(std::min(p.characterSpacing, reader_defaults::MAX_CHARACTER_SPACING) -
                                               reader_defaults::CHARACTER_SPACING);
+  spec.keepHeadingsWithText = p.keepHeadingsWithText != 0;
   return spec;
 }
 
@@ -345,7 +363,9 @@ inline constexpr size_t READER_PREFS_V22_SIZE = offsetof(ReaderPrefs, sbBookTitl
 inline constexpr size_t READER_PREFS_V23_SIZE = offsetof(ReaderPrefs, characterSpacing);
 inline constexpr size_t READER_PREFS_V24_SIZE = offsetof(ReaderPrefs, retiredFillPages);
 inline constexpr size_t READER_PREFS_V25_SIZE = offsetof(ReaderPrefs, paragraphNumberPlace);
-inline constexpr size_t READER_PREFS_V27_SIZE = offsetof(ReaderPrefs, sbAuthorPos);
+inline constexpr size_t READER_PREFS_V28_SIZE = offsetof(ReaderPrefs, inkWeight);
+inline constexpr size_t READER_PREFS_V29_SIZE = offsetof(ReaderPrefs, keepHeadingsWithText);
+inline constexpr size_t READER_PREFS_V30_SIZE = offsetof(ReaderPrefs, sbAuthorPos);
 
 // A record older than v12 carries one "Embedded Style" choice, in what is now the text
 // switch. Someone who turned it off wanted the book's own styling gone, so the layout
@@ -461,7 +481,9 @@ inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
   if (version == 24) return READER_PREFS_V24_SIZE;
   if (version == 25) return READER_PREFS_V25_SIZE;
   // v26, v27 and v28 share one byte layout: v27/v28 only changed what existing bytes mean.
-  if (version == 26 || version == 27 || version == 28) return READER_PREFS_V27_SIZE;
+  if (version == 26 || version == 27 || version == 28) return READER_PREFS_V28_SIZE;
+  if (version == 29) return READER_PREFS_V29_SIZE;
+  if (version == 30) return READER_PREFS_V30_SIZE;
   if (version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
   return 0;
 }
@@ -491,9 +513,12 @@ static_assert(READER_PREFS_V22_SIZE == READER_PREFS_V21_SIZE + 1, "v22 adds word
 static_assert(READER_PREFS_V23_SIZE == READER_PREFS_V22_SIZE + 1, "v23 adds sbBookTitlePos");
 static_assert(READER_PREFS_V24_SIZE == READER_PREFS_V23_SIZE + 1, "v24 adds characterSpacing");
 static_assert(READER_PREFS_V25_SIZE == READER_PREFS_V24_SIZE + 1, "v25 adds fillPages");
-static_assert(READER_PREFS_V27_SIZE == READER_PREFS_V25_SIZE + 1, "v26-v28 end after paragraphNumberPlace");
-static_assert(sizeof(ReaderPrefs) == READER_PREFS_V27_SIZE + 4,
-              "v29 status bar designer fields must be the last four bytes: every new field goes last");
+static_assert(READER_PREFS_V28_SIZE == READER_PREFS_V25_SIZE + 1, "v26 to v28 add paragraphNumberPlace");
+static_assert(READER_PREFS_V29_SIZE == READER_PREFS_V28_SIZE + 1, "v29 adds inkWeight");
+static_assert(READER_PREFS_V30_SIZE == READER_PREFS_V29_SIZE + 1, "v30 adds keepHeadingsWithText");
+static_assert(sizeof(ReaderPrefs) == READER_PREFS_V30_SIZE + 4,
+              "the v31 status bar designer fields must be the last four bytes: every new field goes "
+              "last, or this firmware misreads every sidecar written by the version before it");
 
 // ── The field lists cover the struct ──────────────────────────────────────────
 // Every live byte of ReaderPrefs is either the fixed-width font name or a uint8_t named by

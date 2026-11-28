@@ -24,7 +24,7 @@ class GfxRenderer {
   // Font ids 1..8 exist; the scaled variants of the body font resolve to id + 1 / id - 1.
   int resolveFontVariant(const int fontId, const float scale) const {
     if (scale > 1.2f) return fontId + 1;
-    if (scale < 0.8f && fontId > 1) return fontId - 1;
+    if (scale < 0.9f && fontId > 1) return fontId - 1;
     return fontId;
   }
   int resolveMonospaceFont(int, float) const { return monospaceFontId; }

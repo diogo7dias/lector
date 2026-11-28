@@ -83,3 +83,8 @@ TEST(BoundActionScope, CalmModeWorksAnywhereAndKeepsEnumOrder) {
   EXPECT_TRUE(allowedOutsideBook(LP_MENU_CALM_MODE));
   EXPECT_EQ(LP_MENU_CALM_MODE, LP_MENU_PREV_CHAPTER + 1);
 }
+
+TEST(BoundActionScope, ReturnRequiresOpenBookAndKeepsEnumOrder) {
+  EXPECT_FALSE(allowedOutsideBook(LP_MENU_RETURN));
+  EXPECT_EQ(LP_MENU_RETURN, LP_MENU_CALM_MODE + 1);
+}

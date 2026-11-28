@@ -55,10 +55,14 @@ struct PaintPlan {
   bool grayscalePlanes = false;
 };
 
-// The "Entering sleep" popup, drawn before the face is picked because reading the card
-// can take seconds and the press needs a visible answer first. One FAST submission,
-// every lock, every face.
+// The "Entering sleep" popup, drawn before the face is picked on a manual lock
+// because reading the card can take seconds and the press needs a visible answer
+// first. Skipped when auto-sleep triggers on inactivity (fromTimeout == true):
+// nobody pressed a button and skipping it saves a full FAST refresh with zero
+// effect on the clean pre-clear or face waveforms that follow.
 inline constexpr uint8_t POPUP_SUBMISSIONS = 1;
+
+inline constexpr uint8_t popupSubmissions(const bool fromTimeout) { return fromTimeout ? 0 : POPUP_SUBMISSIONS; }
 
 // sourceHasGrayscale is what the SOURCE offers and the cover filter allows, not what the
 // panel can do: a .bmp whose tone survived the filter (Bitmap::hasGreyscale() &&
@@ -97,10 +101,10 @@ inline constexpr PaintPlan planFor(const Face face, const bool sourceHasGrayscal
   }
 }
 
-// What one lock actually costs the panel, popup included. The prose this replaces said
-// "two panel submissions" for every lock, which was only ever true of the 1-bit faces.
-inline constexpr uint8_t totalSubmissions(const Face face, const bool sourceHasGrayscale, const DeviceProfile& dev) {
-  return static_cast<uint8_t>(POPUP_SUBMISSIONS + planFor(face, sourceHasGrayscale, dev).submissions);
+// What one lock actually costs the panel, popup included (unless skipped on timeout).
+inline constexpr uint8_t totalSubmissions(const Face face, const bool sourceHasGrayscale, const DeviceProfile& dev,
+                                          const bool fromTimeout = false) {
+  return static_cast<uint8_t>(popupSubmissions(fromTimeout) + planFor(face, sourceHasGrayscale, dev).submissions);
 }
 
 // The two grayscale planes of the OEM 3-pass pipeline and their commit, shared by the
