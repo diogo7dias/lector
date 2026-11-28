@@ -1,6 +1,7 @@
 #pragma once
 #include "EpubReaderMenuActivity.h"
 #include "EpubReaderState.h"
+#include "IdlePrewarmTiming.h"
 #include "ProgressMapper.h"
 #include "ReaderLanding.h"
 #include "WatermarkBuildBail.h"
@@ -48,8 +49,9 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   void drawBookmarkDogEar() const;
   // Gate for a background build tick: true when the heap can take parse allocations.
   // Updates buildHeapPaused as a side effect.
+  unsigned long lastInputMs = 0;
   bool buildTickHeapGate();
-  bool readerIdle() const { return lastRenderCompleteMs != 0 && millis() - lastRenderCompleteMs > IDLE_DEBOUNCE_MS; }
+  bool readerIdle() const { return idle_prewarm::isReady(millis(), lastInputMs, lastRenderCompleteMs); }
   bool backgroundBuildWanted() const {
     return section && section->isBuilding() &&
            backgroundBuildTickWanted(section->isPartial(), static_cast<int>(section->pageCount), section->currentPage,
