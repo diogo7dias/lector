@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "BookReaderPrefs.h"
 #include "CrossPointSettings.h"
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderActivity.h"
@@ -36,16 +37,7 @@ void EpubReaderActivity::loadReaderPrefs() {
 
 bool EpubReaderActivity::writeReaderOverride(const ReaderPrefs& p) const {
   if (sortesMode) return true;
-  HalFile f;
-  if (!Storage.openFileForWrite("ERS", readerOverridePath(), f)) {
-    LOG_ERR("ERS", "Failed to open reader_override.bin for write");
-    return false;
-  }
-  if (!writeReaderPrefs(f, p)) {
-    LOG_ERR("ERS", "Short write to reader_override.bin");
-    return false;
-  }
-  return true;
+  return book_reader_prefs::writeOverride("ERS", epub->getCachePath(), p);
 }
 
 void EpubReaderActivity::reloadForReaderPrefsChange() {
@@ -101,33 +93,15 @@ void EpubReaderActivity::readerEditSinkThunk(void* ctx, const ReaderPrefs& live)
 
 void EpubReaderActivity::persistReaderSettingsEdit(const ReaderPrefs& live) const {
   if (sortesMode) return;
-  const ReaderOverrideDecision decision = decideReaderOverride(live, prefs_, prefsCustom_);
-  switch (decision.action) {
-    case ReaderOverrideAction::Write:
-      writeReaderOverride(decision.prefs);
-      break;
-    case ReaderOverrideAction::Remove:
-      Storage.remove(readerOverridePath().c_str());
-      break;
-    case ReaderOverrideAction::Keep:
-      break;
-  }
+  book_reader_prefs::persistLiveEdit("ERS", epub->getCachePath(), live, prefs_, prefsCustom_);
 }
 
 void EpubReaderActivity::applyReaderSettingsEdit() {
-  ReaderPrefs edited = readerEdit_;
-  // The in-book toggles are not part of the Reader Settings screen, so they are not in
-  // the screen's round-trip; carry the book's values across so editing font or margins
-  // never resets them.
-  restoreBookOnlyFields(edited, prefs_);
-  if (std::memcmp(&edited, &prefs_, sizeof(ReaderPrefs)) == 0) {
+  if (!book_reader_prefs::commitEdit("ERS", epub->getCachePath(), readerEdit_, prefs_, prefsCustom_)) {
     // Opened the settings screen but changed nothing — leave the book as it was.
     requestUpdate();
     return;
   }
-  prefs_ = edited;
-  prefsCustom_ = true;
-  writeReaderOverride(prefs_);
   reloadForReaderPrefsChange();
   requestUpdate();
 }
@@ -188,11 +162,12 @@ void EpubReaderActivity::applyStatusBarEdit() {
 }
 
 void EpubReaderActivity::resetReaderPrefsToGlobal() {
-  if (!sortesMode) Storage.remove(readerOverridePath().c_str());
-  // SETTINGS only ever holds the global look (Text Settings edits a copy), so
-  // fromGlobal() is the true global snapshot.
-  prefs_ = ReaderPrefs::fromGlobal();
-  prefsCustom_ = false;
+  if (sortesMode) {
+    prefs_ = ReaderPrefs::fromGlobal();
+    prefsCustom_ = false;
+  } else {
+    book_reader_prefs::resetToGlobal(epub->getCachePath(), prefs_, prefsCustom_);
+  }
   reloadForReaderPrefsChange();
   requestUpdate();
 }
@@ -262,35 +237,26 @@ void EpubReaderActivity::applyStolenLook(const std::string& sourceCachePath) {
 // it names is no longer installed. The caller uses that to write the correction back to
 // a stored preset, so a dead font name is repaired rather than re-applied forever.
 ReaderPrefs EpubReaderActivity::applyReaderPrefsFrom(const ReaderPrefs& incoming) {
-  ReaderPrefs next = incoming;
-
-  // A preset saved months ago can name an SD font that has since left the card.
-  // resolveFontId answers with whatever family is currently RESIDENT rather than the
-  // one asked for, so an unchecked name lays the book out at the wrong font and size on
-  // every open. Fall back to the built-in family instead, and report it.
-  if (next.sdFontFamilyName[0] != '\0') {
-    const auto& families = sdFontSystem.registry().getFamilies();
-    const bool installed = std::any_of(families.begin(), families.end(), [&](const SdCardFontFamilyInfo& fam) {
-      return fam.name == next.sdFontFamilyName;
-    });
-    if (!installed) {
-      LOG_ERR("ERS", "Reader prefs name a missing SD font '%s' — falling back to the built-in family",
-              next.sdFontFamilyName);
-      std::memset(next.sdFontFamilyName, 0, sizeof(next.sdFontFamilyName));
-      next.fontFamily = CrossPointSettings::CHAREINK;
+  ReaderPrefs adopted;
+  bool changed = false;
+  if (sortesMode) {
+    adopted = incoming;
+    book_reader_prefs::fallbackMissingSdFont("ERS", adopted);
+    changed = std::memcmp(&adopted, &prefs_, sizeof(ReaderPrefs)) != 0;
+    if (changed) {
+      prefs_ = adopted;
+      prefsCustom_ = true;
     }
+  } else {
+    changed = book_reader_prefs::applyIncoming("ERS", epub->getCachePath(), incoming, prefs_, prefsCustom_, &adopted);
   }
-
-  if (std::memcmp(&next, &prefs_, sizeof(ReaderPrefs)) == 0) {
+  if (!changed) {
     requestUpdate();  // already identical — nothing to copy, and no re-layout to pay for
-    return next;
+    return adopted;
   }
-  prefs_ = next;
-  prefsCustom_ = true;
-  writeReaderOverride(prefs_);
   // Orientation is deliberately NOT part of ReaderPrefs here: rotating is a device
   // choice, not a book's look, so adopting a look never spins the screen.
   reloadForReaderPrefsChange();
   requestUpdate();
-  return next;
+  return adopted;
 }

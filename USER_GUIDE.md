@@ -316,6 +316,7 @@ books copied from a computer carry a real date, while books the device downloade
 | --------------- | ----------------------------------------------------- |
 | `.epub`         | The full reader: chapters, footnotes, bookmarks, quotes |
 | `.txt`          | Plain-text reader: per-book Text Settings, Reading Themes, justification |
+| `.md`           | Markdown reader: headings (`#`, `##`) as TOC, bold/italic, quotes, lists, fenced and inline code, links |
 | `.xtc`          | XTC reader, the Xteink book format                    |
 | `.bmp`, `.png`, `.jpg` | Image viewer                                   |
 | `.pxc`          | Image viewer for the packed wallpaper format          |
