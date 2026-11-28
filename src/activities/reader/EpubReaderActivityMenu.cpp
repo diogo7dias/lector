@@ -71,6 +71,7 @@ void EpubReaderActivity::openReaderMenuList(const EpubReaderMenuActivity::MenuAc
   menuContext.bookProgressPercent = bookProgressPercent;
   menuContext.currentOrientation = SETTINGS.orientation;
   menuContext.hasFootnotes = !currentPageFootnotes.empty();
+  menuContext.hasImages = !currentPageImages.empty();
   menuContext.hasPageList = epub->hasPageList();
   menuContext.hasBookmarks = !cachedBookmarks.empty();
   menuContext.hasReaderOverride = prefsCustom_;
@@ -324,6 +325,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     case EpubReaderMenuActivity::MenuAction::FOOTNOTES:
       openFootnotes();
+      break;
+    case EpubReaderMenuActivity::MenuAction::INSPECT_IMAGE:
+      openImageInspector(0);
       break;
     case EpubReaderMenuActivity::MenuAction::GO_TO_PAGE:
       openPageEntry();

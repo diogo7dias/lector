@@ -100,6 +100,7 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // Navigation
   void openChapterSelection();
   void openFootnotes();
+  void openImageInspector(int startIndex = 0);
   void openPercentSelection();
   void openPageEntry();
   // Whole-book reading percent (util/ReadingPercent.h) for every place that shows one.

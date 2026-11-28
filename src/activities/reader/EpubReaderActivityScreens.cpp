@@ -12,6 +12,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "DictionaryWordSelectActivity.h"
+#include "EpubImageInspectActivity.h"
 #include "EpubReaderActivity.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
@@ -152,6 +153,30 @@ void EpubReaderActivity::openFootnotes() {
                            }
                            requestUpdate();
                          });
+}
+
+void EpubReaderActivity::openImageInspector(const int startIndex) {
+  if (currentPageImages.empty()) return;
+  std::vector<EpubImageInspectActivity::ImageItem> items;
+  items.reserve(currentPageImages.size());
+  for (const auto& img : currentPageImages) {
+    items.push_back(EpubImageInspectActivity::ImageItem{img.imagePath, img.srcPath});
+  }
+  // Drop the section while inspecting so C3 has maximum contiguous DRAM for full-panel
+  // JPEG/PNG decode; returning restores the cached page via the same path as chapter select.
+  {
+    RenderLock lock(*this);
+    cacheSectionPosition();
+    section.reset();
+  }
+  auto viewer =
+      makeUniqueNoThrow<EpubImageInspectActivity>(renderer, mappedInput, std::move(items), startIndex, epub.get());
+  if (!viewer) {
+    LOG_ERR("ERS", "OOM: EpubImageInspectActivity");
+    requestUpdate();
+    return;
+  }
+  startActivityForResult(std::move(viewer), [this](const ActivityResult&) { requestUpdate(); });
 }
 
 void EpubReaderActivity::openChapterSelection() {

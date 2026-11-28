@@ -240,7 +240,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   for (int dstY = firstDstY; dstY < endDstY; dstY++) {
     ctx->lastDstY = dstY;
     int outY = ctx->config->y + dstY;
-    if (outY >= ctx->screenHeight) continue;
+    if (outY < 0 || outY >= ctx->screenHeight) continue;
 
     pw.beginRow(outY);
 
@@ -265,7 +265,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
 
     for (int dstX = 0; dstX < dstWidth; dstX++) {
       int outX = outXBase + dstX;
-      if (outX < screenWidth) {
+      if (outX >= 0 && outX < screenWidth) {
         const uint8_t alpha = ctx->alphaLineBuffer ? ctx->alphaLineBuffer[srcX] : 255;
         if (alpha >= 8 && alpha > alphaThreshold4x4(outX, outY)) {
           uint8_t gray = ctx->grayLineBuffer[srcX];

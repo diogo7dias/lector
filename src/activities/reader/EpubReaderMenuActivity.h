@@ -17,6 +17,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
     SECTION_HEADER,  // not an action: the marker a section heading row carries
     SELECT_CHAPTER,
     FOOTNOTES,
+    INSPECT_IMAGE,
     GO_TO_PERCENT,
     ROTATE_SCREEN,
     BOOKMARKS,
@@ -73,6 +74,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
     int bookProgressPercent = 0;
     uint8_t currentOrientation = 0;
     bool hasFootnotes = false;
+    bool hasImages = false;
     bool hasBookmarks = false;
     bool hasReaderOverride = false;
     uint8_t paragraphNumbering = 0;

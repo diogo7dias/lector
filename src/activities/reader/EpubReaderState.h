@@ -11,6 +11,7 @@
 
 #include "BookmarkEntry.h"
 #include "EndOfBookOptions.h"
+#include "ImageInspectLayout.h"
 #include "LinkBackStack.h"
 #include "ReaderPinchGesture.h"
 #include "ReaderPrefs.h"
@@ -231,6 +232,14 @@ struct EpubReaderState {
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
+  // Images on the current rendered page (screen coordinates for touch hit-testing and inspection).
+  struct PageImageRef {
+    std::string imagePath;
+    std::string srcPath;
+    image_inspect::Rect bounds{};
+  };
+  std::vector<PageImageRef> currentPageImages;
+  image_inspect::DoubleTapTracker imageDoubleTap;
   using SavedPosition = link_stack::Position;
   static constexpr int MAX_FOOTNOTE_DEPTH = 3;
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};

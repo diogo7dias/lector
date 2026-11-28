@@ -70,7 +70,7 @@ void renderCanvasRow(const uint8_t* grayRow, const int srcY, GifContext& ctx) {
   for (int dstY = firstDstY; dstY < endDstY; ++dstY) {
     ctx.lastDstY = dstY;
     const int outY = ctx.config->y + dstY;
-    if (outY >= ctx.screenHeight) continue;
+    if (outY < 0 || outY >= ctx.screenHeight) continue;
 
     pw.beginRow(outY);
 
@@ -92,7 +92,7 @@ void renderCanvasRow(const uint8_t* grayRow, const int srcY, GifContext& ctx) {
     int error = 0;
     for (int dstX = 0; dstX < ctx.dstWidth; ++dstX) {
       const int outX = ctx.config->x + dstX;
-      if (outX < ctx.screenWidth) {
+      if (outX >= 0 && outX < ctx.screenWidth) {
         const uint8_t level = quantize4Level(grayRow[srcX], outX, outY, ctx.config->useDithering);
         pw.writePixel(outX, level);
         if (caching) cw.writePixel(outX, level);
