@@ -11,6 +11,7 @@ inline constexpr char kFileBrowser[] = "FileBrowser";
 inline constexpr char kLibrary[] = "Library";
 inline constexpr char kSettings[] = "Settings";
 inline constexpr char kQuotesViewer[] = "QuotesViewer";
+inline constexpr char kBookSearchResults[] = "BookSearchResults";
 inline constexpr char kInstalledFonts[] = "InstalledFonts";
 inline constexpr char kFontPicker[] = "FontPicker";
 inline constexpr char kFontDownload[] = "FontDownload";

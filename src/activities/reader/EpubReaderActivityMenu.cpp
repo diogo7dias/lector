@@ -333,6 +333,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::GO_TO_PARAGRAPH:
       openParagraphEntry();
       break;
+    case EpubReaderMenuActivity::MenuAction::SEARCH_IN_BOOK:
+      openBookSearch();
+      break;
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS:
       openBookmarks();
       break;

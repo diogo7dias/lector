@@ -1,17 +1,123 @@
+#include <HalStorage.h>
 #include <I18n.h>
+#include <Logging.h>
+#include <Memory.h>
 
+#include <algorithm>
+#include <cstdio>
+
+#include "BookSearchResultsActivity.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
 #include "TxtReaderActivity.h"
 #include "activities/util/ConfirmationActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
+#include "components/UITheme.h"
 #include "util/BookFilingNames.h"
+#include "util/BookSearch.h"
+#include "util/BusyTick.h"
+#include "util/TaskWatchdog.h"
 
 void TxtReaderActivity::openSettingsPopup() {
-  // One row: a TXT book follows the EPUB font and size, so Delete Book is all the pop-up holds.
-  const std::vector<std::string> rows = {tr(STR_DELETE_BOOK)};
-  settingsPopup.show(StrId::STR_BOOK_MENU, rows, 0, [this](const int) { askDeleteBook(); });
+  const std::vector<std::string> rows = {tr(STR_SEARCH_IN_BOOK), tr(STR_DELETE_BOOK)};
+  settingsPopup.show(StrId::STR_BOOK_MENU, rows, 0, [this](const int index) {
+    if (index == 0) {
+      openBookSearch();
+    } else {
+      askDeleteBook();
+    }
+  });
   requestUpdate();
+}
+
+void TxtReaderActivity::openBookSearch() {
+  if (!txt) return;
+  startActivityForResult(
+      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, std::string(tr(STR_SEARCH_IN_BOOK)),
+                                              lastSearchQuery, book_search::MAX_QUERY_BYTES, InputType::Text),
+      [this](const ActivityResult& result) {
+        if (result.isCancelled || !txt) {
+          requestUpdate();
+          return;
+        }
+        const auto* kr = std::get_if<KeyboardResult>(&result.data);
+        char norm[book_search::MAX_QUERY_BYTES + 1];
+        if (!kr || book_search::normalizeQuery(kr->text, norm) == 0) {
+          requestUpdate();
+          return;
+        }
+        lastSearchQuery = kr->text;
+
+        auto scanner = makeUniqueNoThrow<book_search::TxtStreamScanner>(lastSearchQuery, book_search::DEFAULT_MAX_HITS);
+        auto chunk = makeUniqueNoThrow<char[]>(1024);
+        if (!scanner || !chunk) {
+          LOG_ERR("SRCH", "OOM allocating TXT search buffers");
+          requestUpdate();
+          return;
+        }
+
+        GUI.drawPopup(renderer, tr(STR_SEARCHING_BOOK));
+        const uint32_t startMs = millis();
+        size_t bytesScanned = 0;
+        {
+          HalFile file;
+          if (Storage.openFileForRead("SRCH", txt->getPath(), file)) {
+            uint32_t ticks = 0;
+            while (!scanner->isFull()) {
+              const int n = file.read(chunk.get(), 1024);
+              if (n <= 0) break;
+              scanner->feed(chunk.get(), static_cast<size_t>(n));
+              bytesScanned += static_cast<size_t>(n);
+              if ((++ticks & 0x07) == 0) {
+                busy::tick();
+                resetTaskWatchdogIfSubscribed();
+              }
+            }
+          }
+        }
+        scanner->finish();
+        const uint32_t elapsedMs = millis() - startMs;
+        const bool truncated = scanner->truncated() || scanner->isFull();
+        auto rawHits = scanner->takeHits();
+        scanner.reset();
+        chunk.reset();
+
+        LOG_INF("SRCH", "TXT search '%s': %u hits%s, %u B in %u ms", lastSearchQuery.c_str(),
+                static_cast<unsigned>(rawHits.size()), truncated ? "+" : "", static_cast<unsigned>(bytesScanned),
+                static_cast<unsigned>(elapsedMs));
+
+        std::vector<BookSearchResultsActivity::ResultItem> items;
+        items.reserve(rawHits.size());
+        for (const auto& h : rawHits) {
+          int page = 0;
+          if (!pageOffsets.empty()) {
+            const auto it = std::upper_bound(pageOffsets.begin(), pageOffsets.end(), static_cast<size_t>(h.offset));
+            if (it != pageOffsets.begin()) {
+              page = static_cast<int>(std::distance(pageOffsets.begin(), it) - 1);
+            }
+          }
+          char pageBuf[20];
+          snprintf(pageBuf, sizeof(pageBuf), "p.%d", page + 1);
+          items.push_back({page, h.offset, pageBuf, h.snippet});
+        }
+
+        auto resultsAct = makeUniqueNoThrow<BookSearchResultsActivity>(renderer, mappedInput, lastSearchQuery,
+                                                                       std::move(items), truncated);
+        if (!resultsAct) {
+          LOG_ERR("SRCH", "OOM allocating BookSearchResultsActivity");
+          requestUpdate();
+          return;
+        }
+        startActivityForResult(std::move(resultsAct), [this](const ActivityResult& res) {
+          if (!res.isCancelled && !pageOffsets.empty()) {
+            const auto& jump = std::get<ProgressChangeResult>(res.data);
+            currentPage = std::clamp(jump.spineIndex, 0, std::max(0, totalPages - 1));
+          }
+          pagesUntilFullRefresh = 0;
+          requestUpdate();
+        });
+      });
 }
 
 void TxtReaderActivity::relayoutForFontChange() {

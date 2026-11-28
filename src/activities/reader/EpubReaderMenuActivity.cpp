@@ -150,6 +150,8 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
       marks.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
     }
     group(items, std::move(marks));
+
+    group(items, {{MenuAction::SEARCH_IN_BOOK, StrId::STR_SEARCH_IN_BOOK}});
   }
 
   // --- This Book: what the book says about itself, and what you take out of it ---

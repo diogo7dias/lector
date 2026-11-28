@@ -52,6 +52,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
     VIEW_QUOTES,                 // browse (and delete) the quotes saved in <book>_QUOTES.txt
     FORWARD,                     // redo the last Return
     GO_TO_PAGE,                  // jump to a printed page (page-list books) or chapter page N/M
+    SEARCH_IN_BOOK,              // full-text streaming search across chapters
     NIGHT_MODE,                  // flip Night mode (inverted page) in place
     FRONTLIGHT,                  // flip the frontlight on or off in place
     GO_HOME                      // leave the book for Home

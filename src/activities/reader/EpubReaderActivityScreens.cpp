@@ -4,11 +4,13 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <Print.h>
 
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
 
+#include "BookSearchResultsActivity.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "DictionaryWordSelectActivity.h"
@@ -32,10 +34,13 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "sleep/SleepPauseToggle.h"
+#include "util/BookSearch.h"
 #include "util/BoundMenuLabels.h"
+#include "util/BusyTick.h"
 #include "util/FavoriteImage.h"
 #include "util/QuoteText.h"
 #include "util/ReadingPercent.h"
+#include "util/TaskWatchdog.h"
 
 void EpubReaderActivity::openDictionaryWordSelect() {
   if (SETTINGS.dictionaryName[0] == '\0') {
@@ -315,6 +320,136 @@ void EpubReaderActivity::openParagraphEntry() {
           }
         }
         requestUpdate();
+      });
+}
+
+void EpubReaderActivity::openBookSearch() {
+  startActivityForResult(
+      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, std::string(tr(STR_SEARCH_IN_BOOK)),
+                                              lastSearchQuery, book_search::MAX_QUERY_BYTES, InputType::Text),
+      [this](const ActivityResult& result) {
+        if (result.isCancelled) {
+          requestUpdate();
+          return;
+        }
+        const auto* kr = std::get_if<KeyboardResult>(&result.data);
+        char norm[book_search::MAX_QUERY_BYTES + 1];
+        if (!kr || book_search::normalizeQuery(kr->text, norm) == 0) {
+          requestUpdate();
+          return;
+        }
+        lastSearchQuery = kr->text;
+
+        // Release the active chapter section so the scan runs with maximum DRAM headroom
+        // on ESP32-C3; Cancel or a jump restores cleanly via cached position or jumpToContentOffset.
+        {
+          RenderLock lock(*this);
+          cacheSectionPosition();
+          section.reset();
+        }
+
+        auto scanner =
+            makeUniqueNoThrow<book_search::HtmlStreamScanner>(lastSearchQuery, book_search::DEFAULT_MAX_HITS);
+        if (!scanner) {
+          LOG_ERR("SRCH", "OOM allocating HtmlStreamScanner");
+          requestUpdate();
+          return;
+        }
+
+        // Paint the busy notice before borrowing the 48 KB framebuffer: InflateStream claims
+        // the lent framebuffer bytes via buildscratch instead of allocating 32 KB on heap.
+        GUI.drawPopup(renderer, tr(STR_SEARCHING_BOOK));
+        scheduleGhostCleanup();
+
+        const uint32_t startMs = millis();
+        size_t bytesScanned = 0;
+        uint32_t minFreeHeap = ESP.getFreeHeap();
+
+        class HtmlSearchSink final : public Print {
+         public:
+          book_search::HtmlStreamScanner& scanner;
+          size_t& bytes;
+          uint32_t& minHeap;
+          uint32_t ticks = 0;
+
+          HtmlSearchSink(book_search::HtmlStreamScanner& s, size_t& b, uint32_t& mh)
+              : scanner(s), bytes(b), minHeap(mh) {}
+
+          size_t write(uint8_t b) override { return write(&b, 1); }
+          size_t write(const uint8_t* buf, size_t size) override {
+            if (scanner.isFull()) return 0;
+            scanner.feed(reinterpret_cast<const char*>(buf), size);
+            bytes += size;
+            if ((++ticks & 0x07) == 0) {
+              busy::tick();
+              resetTaskWatchdogIfSubscribed();
+              const uint32_t fh = ESP.getFreeHeap();
+              if (fh < minHeap) minHeap = fh;
+            }
+            return scanner.isFull() ? 0 : size;
+          }
+        };
+
+        {
+          GfxRenderer::FrameBufferLoan fbLoan(renderer);
+          HtmlSearchSink sink(*scanner, bytesScanned, minFreeHeap);
+          const int spineCount = epub->getSpineItemsCount();
+          const int startSpine = (currentSpineIndex >= 0 && currentSpineIndex < spineCount) ? currentSpineIndex : 0;
+          for (int i = 0; i < spineCount && !scanner->isFull(); ++i) {
+            const int spine = (startSpine + i) % spineCount;
+            const auto entry = epub->getSpineItem(spine);
+            if (entry.href.empty()) continue;
+            scanner->beginChapter(spine);
+            epub->readItemContentsToStream(entry.href, sink, 1024, /*allowEarlyStop=*/true);
+            scanner->finishChapter();
+            busy::tick();
+            resetTaskWatchdogIfSubscribed();
+            const uint32_t fh = ESP.getFreeHeap();
+            if (fh < minFreeHeap) minFreeHeap = fh;
+          }
+        }
+
+        const uint32_t elapsedMs = millis() - startMs;
+        const bool truncated = scanner->truncated() || scanner->isFull();
+        auto rawHits = scanner->takeHits();
+        scanner.reset();
+
+        LOG_INF("SRCH", "EPUB search '%s': %u hits%s, %u B in %u ms (minFreeHeap %u)", lastSearchQuery.c_str(),
+                static_cast<unsigned>(rawHits.size()), truncated ? "+" : "", static_cast<unsigned>(bytesScanned),
+                static_cast<unsigned>(elapsedMs), static_cast<unsigned>(minFreeHeap));
+
+        std::vector<BookSearchResultsActivity::ResultItem> items;
+        items.reserve(rawHits.size());
+        for (const auto& h : rawHits) {
+          std::string label;
+          const int tocIdx = epub->getTocIndexForSpineIndex(h.spineIndex);
+          if (tocIdx != -1) {
+            label = epub->getTocItem(tocIdx).title;
+          }
+          if (label.empty()) {
+            char chBuf[16];
+            snprintf(chBuf, sizeof(chBuf), "Ch %d", h.spineIndex + 1);
+            label = chBuf;
+          }
+          items.push_back({h.spineIndex, h.offset, std::move(label), h.snippet});
+        }
+
+        auto resultsAct = makeUniqueNoThrow<BookSearchResultsActivity>(renderer, mappedInput, lastSearchQuery,
+                                                                       std::move(items), truncated);
+        if (!resultsAct) {
+          LOG_ERR("SRCH", "OOM allocating BookSearchResultsActivity");
+          requestUpdate();
+          return;
+        }
+        startActivityForResult(std::move(resultsAct), [this](const ActivityResult& res) {
+          if (!res.isCancelled) {
+            const auto& jump = std::get<ProgressChangeResult>(res.data);
+            RenderLock lock(*this);
+            recordJumpOrigin(true);
+            jumpToContentOffset(jump.spineIndex, jump.visibleTextOffset);
+          }
+          requestUpdate();
+        });
       });
 }
 

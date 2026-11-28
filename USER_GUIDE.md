@@ -472,6 +472,9 @@ screen has a wallpaper to act on; on nights it has none, the menu opens on **Nav
 - **Bookmarks** — the list, shown once the book has one.
 - **Toggle Bookmark** — drop or lift a bookmark on this page.
 - **Footnotes** — shown only in books that have them.
+- **Search in Book** — case-insensitive streaming search across the open EPUB (starting from
+  the current chapter) or TXT book (via the TXT book menu). Selecting a match jumps directly
+  to it, and **Return** takes you back to where you searched from.
 
 ### This Book
 
