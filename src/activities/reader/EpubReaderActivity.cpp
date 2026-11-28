@@ -152,6 +152,7 @@ void EpubReaderActivity::onEnter() {
     currentSpineIndex = sortes::below(count, esp_random);
   } else {
     loadLinkStack();
+    loadReturnHistory();
     openedSpine = currentSpineIndex;
     openedPage = nextPageNumber;
   }
@@ -246,6 +247,8 @@ void EpubReaderActivity::onExit() {
   // book reopens on the viewed page and Back still returns to the link origin.
   applyLinkLanding();
   if (footnoteDepth > 0 && epub) saveLinkStack();
+  // Not from a Sortes visit: it never loaded the history, so it would erase the book's own.
+  if (epub && !pendingDeleteBook && !sortesMode) saveReturnHistory();
 
   // Auto Sync pushes only a book whose page moved since it opened.
   const bool pageMoved =

@@ -84,6 +84,8 @@ class UiListActivity : public Activity, protected UiAppHost {
   void syncListViewport(UiScreen& screen, freeink::ui::ListProps& props, bool hasSubtitle = false);
   // Move the selection to index and pull the viewport to it.
   void moveSelectionTo(int index);
+  // Promote the next render() to HALF_REFRESH (e.g. after expanding/collapsing sections).
+  void requestCleanPaint() { cleanPaint_ = true; }
 
   // The chevrons that say "more above" / "more below", drawn after the list has
   // reported its real window. Base render() calls it; a screen that paints its own

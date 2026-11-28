@@ -10,6 +10,7 @@
 namespace EpubReaderUtils {
 
 inline std::string linkStackPath(const std::string& cachePath) { return cachePath + "/links.bin"; }
+inline std::string returnHistoryPath(const std::string& cachePath) { return cachePath + "/returns.bin"; }
 
 // Persists reader progress for an EPUB to its cache directory. Returns true on success.
 inline bool saveProgress(const Epub& epub, int spineIndex, int pageNumber, int pageCount,

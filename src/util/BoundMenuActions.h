@@ -108,6 +108,8 @@ enum LONG_PRESS_MENU_FUNCTION {
   // Distraction-free reading overlay: hides status bar, off-bar, low-battery nag (until 5%)
   // and centre-tap menu without overwriting Reading Themes or the saved status bar.
   LP_MENU_CALM_MODE = 41,
+  // Jumps back to the last deliberate-jump origin (same as Navigate > Return).
+  LP_MENU_RETURN = 42,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 
