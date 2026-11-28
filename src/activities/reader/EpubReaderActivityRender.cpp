@@ -366,6 +366,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
   }
 
+  if (showPageNotFoundMessage) {
+    GUI.drawPopup(renderer, tr(STR_PAGE_NOT_FOUND));
+  }
+
   // A page that just rendered under an open toolbar (a scrub, or the light panel closing)
   // gets the sheet back on top.
   if (toolbarOpen) paintToolbar();

@@ -139,6 +139,9 @@ struct EpubReaderState {
   // "No dictionary set" popup, shown when a lookup is triggered without a configured dictionary.
   bool showDictionaryMessage = false;
   unsigned long dictionaryMessageTime = 0UL;
+  // "Page not found" popup, shown when Go to Page fails to match a printed or chapter page.
+  bool showPageNotFoundMessage = false;
+  unsigned long pageNotFoundMessageTime = 0UL;
   bool ignoreNextConfirmRelease = false;
   // Idle-time glyph prewarm: after a page settles, scan the neighbour the
   // reader is moving toward (scan mode draws nothing) and load its missing

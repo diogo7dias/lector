@@ -137,4 +137,25 @@ struct TapStroke {
   }
 };
 
+// Pure label filtering for non-UiList screens (Home, FileBrowser) so they follow the
+// exact same X4 Pro touch-band rule as ListChrome: no dead Confirm hint when nothing is
+// selected, and no dead Up/Down hints when nothing scrolls (while preserving a screen's
+// own non-scroll slot verb such as "Move Here").
+struct ListHintLabels {
+  const char* confirm = "";
+  const char* third = "";
+  const char* fourth = "";
+};
+
+inline ListHintLabels resolveListHints(const bool hasTouch, const bool showsSelection, const bool scrolls,
+                                       const char* confirmLabel, const char* defaultThird, const char* defaultFourth,
+                                       const char* pageUpLabel, const char* pageDownLabel,
+                                       const char* customThird = nullptr) {
+  if (!hasTouch) {
+    return {confirmLabel, customThird != nullptr ? customThird : defaultThird, defaultFourth};
+  }
+  return {showsSelection ? confirmLabel : "", customThird != nullptr ? customThird : (scrolls ? pageUpLabel : ""),
+          scrolls ? pageDownLabel : ""};
+}
+
 }  // namespace hint_band
