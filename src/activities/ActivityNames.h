@@ -17,6 +17,7 @@ inline constexpr char kFontDownload[] = "FontDownload";
 inline constexpr char kReader[] = "Reader";
 inline constexpr char kEpubReader[] = "EpubReader";
 inline constexpr char kTxtReader[] = "TxtReader";
+inline constexpr char kMarkdownReader[] = "MarkdownReader";
 inline constexpr char kXtcReader[] = "XtcReader";
 inline constexpr char kCrossPointWebServer[] = "CrossPointWebServer";
 inline constexpr char kOpdsBookBrowser[] = "OpdsBookBrowser";

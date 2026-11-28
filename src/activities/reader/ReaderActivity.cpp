@@ -10,6 +10,7 @@
 #include "CrossPointSettings.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
+#include "MarkdownReaderActivity.h"
 #include "SdCardFontSystem.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
@@ -141,6 +142,11 @@ void ReaderActivity::onGoToTxtReader(std::unique_ptr<Txt> txt) {
       std::make_unique<TxtReaderActivity>(renderer, mappedInput, std::move(txt), initialRefreshCountdown()));
 }
 
+void ReaderActivity::onGoToMarkdownReader(std::unique_ptr<Txt> txt) {
+  activityManager.replaceActivity(
+      std::make_unique<MarkdownReaderActivity>(renderer, mappedInput, std::move(txt), initialRefreshCountdown()));
+}
+
 void ReaderActivity::onEnter() {
   Activity::onEnter();
 
@@ -183,6 +189,14 @@ void ReaderActivity::onEnter() {
     }
     waitForPanel();
     onGoToXtcReader(std::move(xtc));
+  } else if (FsHelpers::hasMarkdownExtension(initialBookPath)) {
+    auto txt = loadTxt(initialBookPath);
+    if (!txt) {
+      onGoBack();
+      return;
+    }
+    waitForPanel();
+    onGoToMarkdownReader(std::move(txt));
   } else if (FsHelpers::hasTextBookExtension(initialBookPath)) {
     auto txt = loadTxt(initialBookPath);
     if (!txt) {
