@@ -44,6 +44,8 @@ void EpubReaderActivity::pageMargins(int& top, int& right, int& bottom, int& lef
   // A greedy (truncate-off) title can wrap to several lines; reserve the extra band
   // height in whichever edge holds the title so the reading text is pushed clear.
   // Stacked titles (book above chapter) need a line each, whatever Truncate Title says.
+  const int sbFontId = UITheme::statusBarFontId(renderer, sb, SETTINGS.getReaderFontId(prefs_));
+  const int sbLineH = renderer.getLineHeight(sbFontId);
   int sbTitleExtraPx = 0;
   bool sbTitleTop = false;
   if (sb.textOn() && sb.titleSlot(true).anchor != CrossPointSettings::SB_ANCHOR_OFF) {
@@ -55,11 +57,12 @@ void EpubReaderActivity::pageMargins(int& top, int& right, int& bottom, int& lef
     }
     if (chapterTitle.empty()) chapterTitle = tr(STR_UNNAMED);
     const int lines = UITheme::getStatusBarV2TitleLines(sb, renderer, true, chapterTitle.c_str(),
-                                                        epub->getTitle().c_str(), &sbTitleTop);
-    sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
+                                                        epub->getTitle().c_str(), &sbTitleTop, sbFontId);
+    sbTitleExtraPx = (lines - 1) * sbLineH;
   }
-  const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(sb, true, sbTitleTop ? sbTitleExtraPx : 0);
-  const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(sb, true, sbTitleTop ? 0 : sbTitleExtraPx);
+  const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(sb, true, sbTitleTop ? sbTitleExtraPx : 0, sbLineH);
+  const int sbBottom =
+      UITheme::getInstance().getStatusBarV2BottomHeight(sb, true, sbTitleTop ? 0 : sbTitleExtraPx, sbLineH);
   top += sbTop;
   bottom += sbBottom;
 }

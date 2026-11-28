@@ -66,6 +66,7 @@ void collectStatusBarSlots(const StatusBarBlock& sb, bool top, std::string slots
       {sb.sessionPagesPos, "+8"},
       {sb.paraPagesPos, ">P.0"},
       {sb.bookTitlePos, I18N.get(StrId::STR_BOOK_TITLE)},
+      {sb.authorPos, I18N.get(StrId::STR_AUTHOR)},
   };
   for (const auto& item : items) {
     if (item.anchor == CrossPointSettings::SB_ANCHOR_OFF) continue;
@@ -85,27 +86,34 @@ void collectStatusBarSlots(const StatusBarBlock& sb, bool top, std::string slots
 // Draws one edge of the status bar and returns the height it occupied, which is the part
 // of the vertical margin the page does not get to use.
 int drawStatusBarEdge(const GfxRenderer& renderer, const StatusBarBlock& sb, bool top, int edgeY, int paneLeft,
-                      int paneWidth) {
+                      int paneWidth, int readingFontId) {
   if (!sb.textOn()) return 0;
 
   std::string slots[3];
   collectStatusBarSlots(sb, top, slots);
   if (slots[0].empty() && slots[1].empty() && slots[2].empty()) return 0;
 
-  const int lineH = renderer.getTextHeight(UI_10_FONT_ID);
+  const int sbFont = UITheme::statusBarFontId(renderer, sb, readingFontId);
+  const int lineH = renderer.getTextHeight(sbFont);
   const int sideMargin = UITheme::getInstance().getMetrics().statusBarHorizontalMargin;
   const int y = top ? edgeY : edgeY - lineH;
 
-  if (!slots[0].empty()) renderer.drawText(UI_10_FONT_ID, paneLeft + sideMargin, y, slots[0].c_str());
+  if (!slots[0].empty()) renderer.drawText(sbFont, paneLeft + sideMargin, y, slots[0].c_str());
   if (!slots[1].empty()) {
-    const int w = renderer.getTextWidth(UI_10_FONT_ID, slots[1].c_str());
-    renderer.drawText(UI_10_FONT_ID, paneLeft + (paneWidth - w) / 2, y, slots[1].c_str());
+    const int w = renderer.getTextWidth(sbFont, slots[1].c_str());
+    renderer.drawText(sbFont, paneLeft + (paneWidth - w) / 2, y, slots[1].c_str());
   }
   if (!slots[2].empty()) {
-    const int w = renderer.getTextWidth(UI_10_FONT_ID, slots[2].c_str());
-    renderer.drawText(UI_10_FONT_ID, paneLeft + paneWidth - sideMargin - w, y, slots[2].c_str());
+    const int w = renderer.getTextWidth(sbFont, slots[2].c_str());
+    renderer.drawText(sbFont, paneLeft + paneWidth - sideMargin - w, y, slots[2].c_str());
   }
-  return lineH;
+  int occupied = lineH;
+  if (sb.divider == CrossPointSettings::SB_DIVIDER_HAIRLINE) {
+    const int ruleY = top ? (y + lineH + 2) : (y - 3);
+    renderer.fillRect(paneLeft + sideMargin, ruleY, std::max(1, paneWidth - 2 * sideMargin), 1, true);
+    occupied += 4;
+  }
+  return occupied;
 }
 
 // Feeds one space-separated word at a time; addWord handles NFC/CJK/RTL/focus splitting.
@@ -235,7 +243,7 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const Rea
   }
   if (layout.lines.empty()) return;
 
-  const int topBarHeight = drawStatusBarEdge(renderer, sb, /*top=*/true, top, paneLeft, paneWidth);
+  const int topBarHeight = drawStatusBarEdge(renderer, sb, /*top=*/true, top, paneLeft, paneWidth, fontId);
 
   // The smear and ink weight are renderer state, so both must be cleared on every exit
   // path below — otherwise the row list and the button hints would inherit them.

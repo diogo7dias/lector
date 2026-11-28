@@ -39,8 +39,12 @@ class UITheme {
   // which don't render on chapterless books (TXT, flat XTC). `extraTitleHeightPx`
   // is the extra height a wrapped (truncate-off) title needs beyond its first
   // line, added only when that band actually holds the title.
-  static int getStatusBarV2TopHeight(const StatusBarBlock& sb, bool hasChapters, int extraTitleHeightPx = 0);
-  static int getStatusBarV2BottomHeight(const StatusBarBlock& sb, bool hasChapters, int extraTitleHeightPx = 0);
+  // Resolved font ID for the v2 status bar (10pt / 12pt / reading font small).
+  static int statusBarFontId(const GfxRenderer& renderer, const StatusBarBlock& sb, int readingFontId = 0);
+  static int getStatusBarV2TopHeight(const StatusBarBlock& sb, bool hasChapters, int extraTitleHeightPx = 0,
+                                     int fontLineHeight = 0);
+  static int getStatusBarV2BottomHeight(const StatusBarBlock& sb, bool hasChapters, int extraTitleHeightPx = 0,
+                                        int fontLineHeight = 0);
   // Usable text-band width the v2 bar wraps/aligns within (screen minus the
   // status-bar horizontal margins and the oriented viewable insets). Shared by the
   // renderer and the reader's wrap-line count so both agree.
@@ -51,7 +55,8 @@ class UITheme {
   // stack (book title above chapter title) adds the book title's lines on top. Takes
   // the same strings the bar draws, so the reserved height and the draw agree.
   static int getStatusBarV2TitleLines(const StatusBarBlock& sb, const GfxRenderer& renderer, bool hasChapters,
-                                      const char* chapterTitle, const char* bookTitle, bool* onTop);
+                                      const char* chapterTitle, const char* bookTitle, bool* onTop,
+                                      int fontId = UI_10_FONT_ID);
   // Safety ceiling on one title's wrapped lines: real book/chapter titles never
   // approach it, but it bounds the reserved band (and the render loop).
   static constexpr int kMaxStatusBarTitleLines = 6;

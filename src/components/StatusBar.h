@@ -28,6 +28,11 @@ struct StatusBarData {
   int chapterPercent = 0;  // 0..100
   std::string bookTitle;
   std::string chapterTitle;
+  std::string author;
+  // Reading font ID for the "Reading Small" status bar font option (0 falls back to global).
+  int readingFontId = 0;
+  // True on page 0 of a chapter; lets "Hide Top on Chapter Start" suppress the top header.
+  bool atChapterStart = false;
   // Forward pages turned since this book was opened. -1 hides the item in readers
   // without a session counter.
   int sessionPages = -1;
@@ -112,7 +117,8 @@ struct Seg {
   X(ChapterNum, chapterNumPos, true)      \
   X(SessionPages, sessionPagesPos, false) \
   X(ParaPages, paraPagesPos, false)       \
-  X(BookTitle, bookTitlePos, false)
+  X(BookTitle, bookTitlePos, false)       \
+  X(Author, authorPos, false)
 
 #define SB_ITEM_ENUM(id, field, chapterOnly) id,
 enum Item : uint8_t { STATUS_BAR_ITEMS(SB_ITEM_ENUM) kItemCount };
@@ -167,5 +173,16 @@ void reflowTitle(BarLayout& layout, int titleAnchor, int titleSegIndex, bool tit
 // band: a corner stops `sepW` short of the centre cluster (or the far corner when the
 // centre is empty), the centre stays clear of the wider corner on both sides.
 int clipRoom(const BarLayout& layout, int anchor, int bandWidth, int sepW);
+
+// Height reserved for a text band: keeps defaultBandPx for 10pt so existing layouts stay
+// identical, grows when a larger status bar font is chosen, and adds hairline divider room.
+inline int bandTextHeight(int defaultBandPx, int fontLineHeight, bool hasDivider) {
+  const int base = (fontLineHeight > 0 && fontLineHeight + 4 > defaultBandPx) ? (fontLineHeight + 4) : defaultBandPx;
+  return base + (hasDivider ? 4 : 0);
+}
+
+inline bool topBandSuppressed(bool hideTopOnChapterStart, bool atChapterStart) {
+  return hideTopOnChapterStart && atChapterStart;
+}
 
 }  // namespace statusbar

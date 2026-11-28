@@ -198,6 +198,9 @@ void EpubReaderActivity::renderStatusBar() const {
   d.chapterMarks = chapterMarks_;
   d.chapterMarkCount = chapterMarkCount_;
   d.bookTitle = epub->getTitle();
+  d.author = epub->getAuthor();
+  d.readingFontId = SETTINGS.getReaderFontId(prefs_);
+  d.atChapterStart = section->currentPage == 0;
   d.chapterTotal = epub->getTocItemsCount();
   d.printedPage = printedPageLabel();
 

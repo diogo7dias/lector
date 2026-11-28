@@ -186,13 +186,16 @@ void TxtReaderActivity::initializeReader() {
   // TXT has no chapters, so chapter-only items are hidden. A greedy (truncate-off)
   // book-source title wraps, needing extra band height.
   const StatusBarBlock sb = effectiveStatusBar(statusBarOf(prefs_), SETTINGS.calmMode != 0);
+  const int sbFontId = UITheme::statusBarFontId(renderer, sb, cachedFontId);
+  const int sbLineH = renderer.getLineHeight(sbFontId);
   // TXT has no chapter title: the slot holds the book title (see TitleSlot).
   bool sbTitleTop = false;
   const int sbTitleLines =
-      UITheme::getStatusBarV2TitleLines(sb, renderer, false, "", txt->getTitle().c_str(), &sbTitleTop);
-  const int sbTitleExtraPx = (sbTitleLines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
-  const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(sb, false, sbTitleTop ? sbTitleExtraPx : 0);
-  const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(sb, false, sbTitleTop ? 0 : sbTitleExtraPx);
+      UITheme::getStatusBarV2TitleLines(sb, renderer, false, "", txt->getTitle().c_str(), &sbTitleTop, sbFontId);
+  const int sbTitleExtraPx = (sbTitleLines - 1) * sbLineH;
+  const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(sb, false, sbTitleTop ? sbTitleExtraPx : 0, sbLineH);
+  const int sbBottom =
+      UITheme::getInstance().getStatusBarV2BottomHeight(sb, false, sbTitleTop ? 0 : sbTitleExtraPx, sbLineH);
   cachedOrientedMarginTop += sbTop;
   cachedOrientedMarginBottom += sbBottom;
 
@@ -353,6 +356,7 @@ void TxtReaderActivity::renderStatusBar() const {
   d.chapterPages = static_cast<int>(totalPages);
   d.bookPercent = reading_percent::pagePercent(currentPage, totalPages);
   d.bookTitle = txt->getTitle();
+  d.readingFontId = cachedFontId;
   d.sessionPages = sessionPages;
   const StatusBarBlock sb = effectiveStatusBar(statusBarOf(prefs_), SETTINGS.calmMode != 0);
   // Costs a file read only when the item is on, as in the EPUB reader.

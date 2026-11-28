@@ -122,7 +122,27 @@ bool sbBandHasText(const StatusBarBlock& sb, bool top, bool hasChapters) {
 }
 }  // namespace
 
-int UITheme::getStatusBarV2TopHeight(const StatusBarBlock& sb, bool hasChapters, int extraTitleHeightPx) {
+int UITheme::statusBarFontId(const GfxRenderer& renderer, const StatusBarBlock& sb, const int readingFontId) {
+  switch (sb.fontSize) {
+    case CrossPointSettings::SB_FONT_12PT:
+      return UI_12_FONT_ID;
+    case CrossPointSettings::SB_FONT_READING_SMALL: {
+      const int base = readingFontId != 0 ? readingFontId : SETTINGS.getReaderFontId();
+      if (base != 0) {
+        const int variant = renderer.resolveFontVariant(base, 0.75f);
+        if (variant != 0 && renderer.ensureFontLoaded(variant)) return variant;
+        if (renderer.getFontMap().count(base) != 0) return base;
+      }
+      return renderer.getFontMap().count(CHAREINK_12_FONT_ID) != 0 ? CHAREINK_12_FONT_ID : UI_10_FONT_ID;
+    }
+    case CrossPointSettings::SB_FONT_10PT:
+    default:
+      return UI_10_FONT_ID;
+  }
+}
+
+int UITheme::getStatusBarV2TopHeight(const StatusBarBlock& sb, bool hasChapters, int extraTitleHeightPx,
+                                     int fontLineHeight) {
   // The bars can outlive the text: with the status bar hidden and sbOffBar set, this
   // band reserves the bar only. See StatusBarBlock::progressBarsVisible().
   if (!sb.progressBarsVisible()) return 0;
@@ -132,11 +152,14 @@ int UITheme::getStatusBarV2TopHeight(const StatusBarBlock& sb, bool hasChapters,
   if (sb.bookBar == CrossPointSettings::SB_EDGE_TOP) bars += barPx;
   if (sb.chapterBar == CrossPointSettings::SB_EDGE_TOP && hasChapters) bars += barPx;
   const bool hasText = sb.textOn() && sbBandHasText(sb, true, hasChapters);
-  const int text = hasText ? metrics.statusBarVerticalMargin + (extraTitleHeightPx > 0 ? extraTitleHeightPx : 0) : 0;
+  const int bandPx = statusbar::bandTextHeight(metrics.statusBarVerticalMargin, fontLineHeight,
+                                               sb.divider == CrossPointSettings::SB_DIVIDER_HAIRLINE);
+  const int text = hasText ? bandPx + (extraTitleHeightPx > 0 ? extraTitleHeightPx : 0) : 0;
   return text + (bars > 0 ? bars + metrics.progressBarMarginTop : 0);
 }
 
-int UITheme::getStatusBarV2BottomHeight(const StatusBarBlock& sb, bool hasChapters, int extraTitleHeightPx) {
+int UITheme::getStatusBarV2BottomHeight(const StatusBarBlock& sb, bool hasChapters, int extraTitleHeightPx,
+                                        int fontLineHeight) {
   if (!sb.progressBarsVisible()) return 0;
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
   const int barPx = statusBarThicknessPx(sb.activeBarThickness());
@@ -144,7 +167,9 @@ int UITheme::getStatusBarV2BottomHeight(const StatusBarBlock& sb, bool hasChapte
   if (sb.bookBar == CrossPointSettings::SB_EDGE_BOTTOM) bars += barPx;
   if (sb.chapterBar == CrossPointSettings::SB_EDGE_BOTTOM && hasChapters) bars += barPx;
   const bool hasText = sb.textOn() && sbBandHasText(sb, false, hasChapters);
-  const int text = hasText ? metrics.statusBarVerticalMargin + (extraTitleHeightPx > 0 ? extraTitleHeightPx : 0) : 0;
+  const int bandPx = statusbar::bandTextHeight(metrics.statusBarVerticalMargin, fontLineHeight,
+                                               sb.divider == CrossPointSettings::SB_DIVIDER_HAIRLINE);
+  const int text = hasText ? bandPx + (extraTitleHeightPx > 0 ? extraTitleHeightPx : 0) : 0;
   return text + (bars > 0 ? bars + metrics.progressBarMarginTop : 0);
 }
 
@@ -158,7 +183,7 @@ int UITheme::getStatusBarV2BandWidth(const GfxRenderer& renderer) {
 }
 
 int UITheme::getStatusBarV2TitleLines(const StatusBarBlock& sb, const GfxRenderer& renderer, const bool hasChapters,
-                                      const char* chapterTitle, const char* bookTitle, bool* onTop) {
+                                      const char* chapterTitle, const char* bookTitle, bool* onTop, const int fontId) {
   const StatusBarBlock::TitleSlot slot = sb.titleSlot(hasChapters);
   if (onTop) *onTop = sbAnchorTop(slot.anchor);
   if (!sb.textOn() || slot.anchor == CrossPointSettings::SB_ANCHOR_OFF) return 1;
@@ -171,7 +196,7 @@ int UITheme::getStatusBarV2TitleLines(const StatusBarBlock& sb, const GfxRendere
   auto linesOf = [&](const char* t) {
     if (!t || t[0] == '\0') return 0;
     if (sb.titleTruncate != 0 || bandWidth <= 0) return 1;  // a clipping title stays one line
-    const int n = static_cast<int>(renderer.wrappedText(UI_10_FONT_ID, t, bandWidth, kMaxStatusBarTitleLines).size());
+    const int n = static_cast<int>(renderer.wrappedText(fontId, t, bandWidth, kMaxStatusBarTitleLines).size());
     return n < 1 ? 1 : n;
   };
   const int lines = linesOf(title) + linesOf(above);

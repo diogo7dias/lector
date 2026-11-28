@@ -313,6 +313,10 @@ class BaseTheme {
   // the sb* settings and pulls battery/clock from the HAL; the reader supplies the
   // book/chapter data. Draws top and/or bottom bands plus edge progress bars.
   void drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data, const StatusBarBlock& sb) const;
+  // Same renderer constrained to an arbitrary bounds rectangle (used by both the full-screen
+  // drawStatusBarV2 and the live preview strip in StatusBarSettingsActivity).
+  void drawStatusBarV2InRect(GfxRenderer& renderer, Rect bounds, const StatusBarData& data, const StatusBarBlock& sb,
+                             int stretchTop = 0, int stretchBottom = 0, int bleedSides = 0) const;
   // Centred lines of help text, wrapped to the rect's width and never cut. The caller
   // reserves helpTextLines() lines; every line is drawn.
   void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;

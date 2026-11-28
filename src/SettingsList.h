@@ -710,8 +710,22 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
   emit(SettingInfo::Enum(StrId::STR_BOOK_TITLE, &CrossPointSettings::sbBookTitlePos, anchorPositions, "sbBookTitlePos",
                          StrId::STR_CUSTOMISE_STATUS_BAR));
 
+  emit(SettingInfo::Enum(StrId::STR_AUTHOR, &CrossPointSettings::sbAuthorPos, anchorPositions, "sbAuthorPos",
+                         StrId::STR_CUSTOMISE_STATUS_BAR));
+
   emit(SettingInfo::Toggle(StrId::STR_TRUNCATE_TITLE, &CrossPointSettings::sbTitleTruncate, "sbTitleTruncate",
                            StrId::STR_CUSTOMISE_STATUS_BAR));
+
+  emit(SettingInfo::Enum(StrId::STR_SB_FONT_SIZE, &CrossPointSettings::sbFontSize,
+                         {StrId::STR_SB_FONT_10PT, StrId::STR_SB_FONT_12PT, StrId::STR_SB_FONT_READING_SMALL},
+                         "sbFontSize", StrId::STR_CUSTOMISE_STATUS_BAR));
+
+  emit(SettingInfo::Enum(StrId::STR_SB_DIVIDER, &CrossPointSettings::sbDivider,
+                         {StrId::STR_STATE_OFF, StrId::STR_SB_DIVIDER_HAIRLINE}, "sbDivider",
+                         StrId::STR_CUSTOMISE_STATUS_BAR));
+
+  emit(SettingInfo::Toggle(StrId::STR_SB_HIDE_TOP_CHAPTER_START, &CrossPointSettings::sbHideTopOnChapterStart,
+                           "sbHideTopOnChapterStart", StrId::STR_CUSTOMISE_STATUS_BAR));
 
   emit(SettingInfo::Enum(StrId::STR_PAGE_IN_CHAPTER, &CrossPointSettings::sbPagePos, anchorPositions, "sbPagePos",
                          StrId::STR_CUSTOMISE_STATUS_BAR));
