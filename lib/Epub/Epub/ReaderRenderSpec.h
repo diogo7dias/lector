@@ -8,6 +8,17 @@ enum GuideDotsMode : uint8_t {
   GUIDE_DOTS_HIDDEN = 2,   // widened gap, no dot drawn ("Hidden Dots")
 };
 
+// Embedded Style modes, stored in ReaderPrefs::embeddedStyle and ReaderRenderSpec::embeddedStyle.
+enum EmbeddedStyleMode : uint8_t {
+  EMBEDDED_STYLE_OFF = 0,        // ignore the book's CSS completely
+  EMBEDDED_STYLE_TEXT_ONLY = 1,  // keep inline text styling; drop margins, padding, font sizes, boxes
+  EMBEDDED_STYLE_FULL = 2,       // honour all supported book CSS
+};
+
+constexpr uint8_t resolveEmbeddedStyle(const uint8_t raw) {
+  return raw <= EMBEDDED_STYLE_FULL ? raw : EMBEDDED_STYLE_FULL;
+}
+
 // The settings UI carries Guide Dots and its Hidden Dots sub-option as two independent
 // toggles; the layout engine wants one state. Hidden Dots is meaningless on its own, so
 // a stored "hidden" with dots off collapses back to off.
@@ -39,9 +50,8 @@ struct ReaderRenderSpec {
   uint8_t paragraphAlignment = 0;
   uint16_t viewportWidth = 0;
   uint16_t viewportHeight = 0;
-  // One switch for the book's own CSS: text styling, alignment, indents, margins, padding
-  // and book-set image sizes. Off means the stylesheet is never even parsed.
-  bool embeddedStyle = true;
+  // EmbeddedStyleMode: Off (0), Text Only (1), or Full (2). Off skips parsing the stylesheet.
+  uint8_t embeddedStyle = EMBEDDED_STYLE_FULL;
   uint8_t imageRendering = 0;
   bool focusReadingEnabled = false;
   // Guide dots: widen the gap between words as a reading aid, with a middle dot

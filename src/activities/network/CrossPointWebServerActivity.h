@@ -33,6 +33,9 @@ class CrossPointWebServerActivity final : public UiStatusActivity {
   // Network mode
   NetworkMode networkMode = NetworkMode::JOIN_NETWORK;
   bool isApMode = false;
+  // Join Network brought the radio up in this session. Switching it off again does not
+  // undo the heap fragmentation (SilentRestart.h), so the way out still reboots.
+  bool wifiUsed = false;
   int modeRow = 0;  // the mode list's row on entry
 
   // Web server - owned by this activity

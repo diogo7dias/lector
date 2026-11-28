@@ -10,6 +10,7 @@
 
 #include "BatteryPercentPoll.h"
 #include "HalGPIO.h"
+#include "PowerClockPolicy.h"
 
 class HalPowerManager;
 extern HalPowerManager powerManager;  // Singleton
@@ -19,6 +20,7 @@ extern HalPowerManager powerManager;  // Singleton
 class HalPowerManager {
   int normalFreq = 0;  // MHz
   bool isLowPower = false;
+  bool bbpllDisabled = false;
   unsigned long storageWokeAtMs = 0;  // last time a card access had to restore full speed
 
   mutable BatteryPercentPoll _batteryPoll;
@@ -29,15 +31,21 @@ class HalPowerManager {
   bool chargeWake = false;                // see setChargeWake()
 
  public:
+#ifndef LECTOR_LOW_POWER_FREQ_MHZ
 #if BOARD_HAS_PSRAM
   // The crystal, the lowest clock the S3 datasheet gives an idle current for: 13.2 mA
   // against 22.0 mA at 80 MHz (Table 5-9, peripheral clocks off). Below 80 MHz the CPU
   // leaves the PLL, which the flash, the PSRAM and the SD host are timed against: see
-  // setCpuClock() and holdNormalSpeedForStorage() for what that takes.
-  static constexpr int LOW_POWER_FREQ = 40;  // MHz
+  // setCpuClock() and holdNormalSpeedForStorage() for what that takes. Override with
+  // -DLECTOR_LOW_POWER_FREQ_MHZ=20 or 10 to test lower XTAL dividers on X4 Pro.
+#define LECTOR_LOW_POWER_FREQ_MHZ 40
 #else
-  static constexpr int LOW_POWER_FREQ = 10;  // MHz
+#define LECTOR_LOW_POWER_FREQ_MHZ 10
 #endif
+#endif
+  static constexpr int LOW_POWER_FREQ = LECTOR_LOW_POWER_FREQ_MHZ;  // MHz
+  static_assert(power_clock::isValidLowPowerFreqMhz(LOW_POWER_FREQ),
+                "LECTOR_LOW_POWER_FREQ_MHZ must be 10, 20, 40, or 80");
   // How long after the last input the clock drops. CrossPoint's 3 s on the C3 boards.
   // X4 Pro: 1 s. Every wait for the next page turn already runs at the low clock, so this
   // only removes two seconds of full clock per turn. Work that outlives a render without

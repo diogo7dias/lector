@@ -182,7 +182,7 @@ void TxtReaderActivity::initializeReader() {
   // progress bar never eats the margin (upstream #4444).
   // TXT has no chapters, so chapter-only items are hidden. A greedy (truncate-off)
   // book-source title wraps, needing extra band height.
-  const StatusBarBlock sb = SETTINGS.statusBar();
+  const StatusBarBlock sb = effectiveStatusBar(SETTINGS.statusBar(), SETTINGS.calmMode != 0);
   const int sbFontId = UITheme::statusBarFontId(renderer, sb, cachedFontId);
   const int sbLineH = renderer.getLineHeight(sbFontId);
   // TXT has no chapter title: the slot holds the book title (see TitleSlot).
@@ -344,7 +344,7 @@ void TxtReaderActivity::renderStatusBar() const {
   d.bookTitle = txt->getTitle();
   d.readingFontId = cachedFontId;
   d.sessionPages = sessionPages;
-  const StatusBarBlock sb = SETTINGS.statusBar();
+  const StatusBarBlock sb = effectiveStatusBar(SETTINGS.statusBar(), SETTINGS.calmMode != 0);
   // Costs a file read only when the item is on, as in the EPUB reader.
   if (sb.paraPagesPos != CrossPointSettings::SB_ANCHOR_OFF) d.paragraphPagesLeft = pagesUntilNextParagraph();
   // Paperback Look (status bar): thicken only status-bar glyphs, then reset.

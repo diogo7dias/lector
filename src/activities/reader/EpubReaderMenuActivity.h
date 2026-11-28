@@ -51,7 +51,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
     RETURN,                      // back to the last deliberate-jump origin
     VIEW_QUOTES,                 // browse (and delete) the quotes saved in <book>_QUOTES.txt
     FORWARD,                     // redo the last Return
-    GO_TO_PAGE,                  // jump to a printed page number (books with a page list)
+    GO_TO_PAGE,                  // jump to a printed page (page-list books) or chapter page N/M
     NIGHT_MODE,                  // flip Night mode (inverted page) in place
     FRONTLIGHT,                  // flip the frontlight on or off in place
     GO_HOME                      // leave the book for Home
@@ -88,7 +88,6 @@ class EpubReaderMenuActivity final : public UiListActivity {
     bool hasQuotes = false;
     bool hasReturn = false;
     bool hasForward = false;
-    bool hasPageList = false;
     // The row to open on: the one whose screen just closed by Back. SECTION_HEADER opens
     // on the usual tab.
     MenuAction openOn = MenuAction::SECTION_HEADER;
