@@ -53,4 +53,23 @@ TEST(TxtJustify, PreservesLeadingIndentWhileJustifyingInterWordGaps) {
   EXPECT_EQ(words[1].x + 20, 75);
 }
 
+// More words than the fixed width table holds, or a word longer than the word buffer:
+// nothing is drawn and the caller falls back to a left-aligned line.
+TEST(TxtJustify, TooManyWordsOrAnOverlongWordFallBackWithoutDrawing) {
+  int calls = 0;
+  std::string dense;
+  for (int i = 0; i < 49; ++i) dense += "a ";
+  dense.pop_back();
+  EXPECT_FALSE(txt_justify::layoutWords(dense, 5000, 5, fixedMeasure, [&](int, const char*) { ++calls; }));
+  const std::string longWord = "x " + std::string(128, 'y');
+  EXPECT_FALSE(txt_justify::layoutWords(longWord, 5000, 5, fixedMeasure, [&](int, const char*) { ++calls; }));
+  EXPECT_EQ(calls, 0);
+
+  std::string fits;
+  for (int i = 0; i < 48; ++i) fits += "a ";
+  fits.pop_back();
+  EXPECT_TRUE(txt_justify::layoutWords(fits, 5000, 5, fixedMeasure, [&](int, const char*) { ++calls; }));
+  EXPECT_EQ(calls, 48);
+}
+
 }  // namespace
