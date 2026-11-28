@@ -114,7 +114,7 @@ struct ReaderPrefs {
   // (paragraph gap, kerning, ligatures, link underline, book margins, heading page break,
   // word expansion, fill pages, the layout half of the style switch, indent mode) stay as
   // zeroed padding, the indent byte counts spaces, character spacing counts whole pixels.
-  static constexpr uint8_t VERSION = 27;  // v27: lean typography
+  static constexpr uint8_t VERSION = 28;  // v28: keepHeadingsWithText
 
   // Bring a sidecar written before the current version onto the current reading
   // defaults. Only these values are re-seeded, and only for books that predate them.
@@ -263,6 +263,10 @@ struct ReaderPrefs {
   // paragraphNumberSize. APPENDED LAST.
   uint8_t paragraphNumberPlace = 1;  // CrossPointSettings::PARA_NUM_PLACE_TEXT
 
+  // Keep Headings with Text (0 = off by default): never strand a heading at the page
+  // bottom and avoid 1-line orphans/widows on 4+ line paragraphs. APPENDED LAST.
+  uint8_t keepHeadingsWithText = 0;
+
   // Copy the status bar block from `source`.
   //
   // A sidecar written before v11 stops before that block, so every field would
@@ -312,6 +316,7 @@ inline ReaderRenderSpec makeRenderSpec(const ReaderPrefs& p, const int fontId, c
   spec.paragraphIndentSpaces = std::min(p.paragraphIndentSpaces, reader_defaults::MAX_PARAGRAPH_INDENT_SPACES);
   spec.characterSpacing = static_cast<int8_t>(std::min(p.characterSpacing, reader_defaults::MAX_CHARACTER_SPACING) -
                                               reader_defaults::CHARACTER_SPACING);
+  spec.keepHeadingsWithText = p.keepHeadingsWithText != 0;
   return spec;
 }
 
@@ -335,6 +340,7 @@ inline constexpr size_t READER_PREFS_V22_SIZE = offsetof(ReaderPrefs, sbBookTitl
 inline constexpr size_t READER_PREFS_V23_SIZE = offsetof(ReaderPrefs, characterSpacing);
 inline constexpr size_t READER_PREFS_V24_SIZE = offsetof(ReaderPrefs, retiredFillPages);
 inline constexpr size_t READER_PREFS_V25_SIZE = offsetof(ReaderPrefs, paragraphNumberPlace);
+inline constexpr size_t READER_PREFS_V27_SIZE = offsetof(ReaderPrefs, keepHeadingsWithText);
 
 // A record older than v12 carries one "Embedded Style" choice, in what is now the text
 // switch. Someone who turned it off wanted the book's own styling gone, so the layout
@@ -446,7 +452,8 @@ inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
   if (version == 24) return READER_PREFS_V24_SIZE;
   if (version == 25) return READER_PREFS_V25_SIZE;
   // v26 and v27 share one layout: v27 only changed what some bytes mean.
-  if (version == 26 || version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
+  if (version == 26 || version == 27) return READER_PREFS_V27_SIZE;
+  if (version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
   return 0;
 }
 
@@ -475,8 +482,9 @@ static_assert(READER_PREFS_V22_SIZE == READER_PREFS_V21_SIZE + 1, "v22 adds word
 static_assert(READER_PREFS_V23_SIZE == READER_PREFS_V22_SIZE + 1, "v23 adds sbBookTitlePos");
 static_assert(READER_PREFS_V24_SIZE == READER_PREFS_V23_SIZE + 1, "v24 adds characterSpacing");
 static_assert(READER_PREFS_V25_SIZE == READER_PREFS_V24_SIZE + 1, "v25 adds fillPages");
-static_assert(sizeof(ReaderPrefs) == READER_PREFS_V25_SIZE + 1,
-              "paragraphNumberPlace must be the last byte: every new field goes last, or "
+static_assert(READER_PREFS_V27_SIZE == READER_PREFS_V25_SIZE + 1, "v26/v27 ends at paragraphNumberPlace");
+static_assert(sizeof(ReaderPrefs) == READER_PREFS_V27_SIZE + 1,
+              "keepHeadingsWithText must be the last byte: every new field goes last, or "
               "this firmware misreads every sidecar written by the version before it");
 
 // ── The field lists cover the struct ──────────────────────────────────────────

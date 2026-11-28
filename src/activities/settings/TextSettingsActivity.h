@@ -69,6 +69,7 @@ class TextSettingsActivity final : public UiGridActivity {
     HiddenDots,  // sub-option of GuideDots: only listed while Guide Dots is on
     EmbeddedStyle,
     Images,
+    KeepHeadings,
     DebugBorders,
     Count,
   };

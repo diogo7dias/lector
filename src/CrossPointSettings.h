@@ -646,6 +646,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // create, but draw no dot in it. Only meaningful while guideDotsEnabled is on, and
   // it feeds the render spec too, so toggling it rebuilds the cache.
   uint8_t guideDotsHidden = 0;
+  // Keep Headings with Text (0 = off by default): never strand a heading at the page
+  // bottom, and avoid 1-line orphans and widows on 4+ line paragraphs.
+  uint8_t keepHeadingsWithText = 0;
   // Diagnostic: outline the reader text viewport (0 = off, 1 = on). Drawn as an
   // overlay after the page renders, so it never affects layout or the cache.
   uint8_t debugBorders = 0;

@@ -172,7 +172,9 @@ namespace {
 //      first or last line or a heading from sitting alone, so pages end full.
 // v93: An unstyled blockquote is inset 1 em from each side (shrunk when nested), so
 //      chapters with quotes wrap differently.
-constexpr uint8_t SECTION_FILE_VERSION = 93;
+// v94: Keep Headings with Text enters the header; when on, headings stay with the text
+//      that follows and 4+ line paragraphs avoid 1-line orphans and widows.
+constexpr uint8_t SECTION_FILE_VERSION = 94;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -195,7 +197,8 @@ constexpr uint32_t HEADER_SIZE =
     sizeof(bool) /*extraParagraphSpacing*/ + sizeof(uint8_t) /*wordSpacing*/ + sizeof(uint8_t) /*alignment*/ +
     sizeof(uint16_t) * 2 /*viewport*/ + sizeof(bool) /*embeddedStyle*/ + sizeof(uint8_t) /*imageRendering*/ +
     sizeof(bool) /*focusReading*/ + sizeof(uint8_t) /*guideDotsMode*/ + sizeof(uint8_t) /*paragraphIndentSpaces*/ +
-    sizeof(int8_t) /*characterSpacing*/ + sizeof(uint16_t) /*pageCount*/ + sizeof(uint32_t) * 5 /*LUT offsets*/;
+    sizeof(int8_t) /*characterSpacing*/ + sizeof(bool) /*keepHeadingsWithText*/ + sizeof(uint16_t) /*pageCount*/ +
+    sizeof(uint32_t) * 5 /*LUT offsets*/;
 // The header ends with the patched-later fields, in this order. Named once so a seek
 // never re-derives its offset from the end of the header by hand.
 constexpr uint32_t PAGE_LUT_FIELD = HEADER_SIZE - sizeof(uint32_t) * 5;
