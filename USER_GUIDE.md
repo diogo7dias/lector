@@ -1203,6 +1203,10 @@ The other numbers in Settings, such as Time to Sleep, open their own slider scre
 - **Font** — ChareInk, plus any SD card families; opens a full-screen picker.
 - **Size** — the sizes the chosen font has: 12, 14 and 16 pt for ChareInk, whatever is installed for
   an SD card family.
+- **Ink Weight** — finer font weight in five steps, from -2 (lighter) to +2 (darker); 0 is the font
+  as designed (default). On the X4 Pro, TrueType and OpenType fonts shift their rasterizer coverage
+  threshold; built-in and `.cpfont` fonts adjust their 2-bit ink levels before Paperback Look. Changing
+  it repaints immediately without re-paginating the book.
 - **Line Spacing** — 80% to 175%. Full text pages automatically share leftover vertical space above
   and below the text, inside your margins and status bar. Short pages stay at the top;
   EPUB pages with images, rules or ruby keep their layout. This balances line boxes

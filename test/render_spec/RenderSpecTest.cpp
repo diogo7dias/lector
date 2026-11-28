@@ -14,7 +14,7 @@ namespace {
 // the margins become the viewport, and the rest are draw-only.
 const std::set<std::string> NOT_IN_SPEC = {
     "fontFamily",         "fontPointSize",  "screenMargin",   "screenMarginTop",
-    "screenMarginBottom", "marginLinkMode", "dynamicMargins",
+    "screenMarginBottom", "marginLinkMode", "dynamicMargins", "inkWeight",
 };
 
 // Guide dots on, so Hidden Dots has something to change.

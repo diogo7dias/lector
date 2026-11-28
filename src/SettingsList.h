@@ -427,6 +427,12 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
            .withTextSettings()
            .withDisplayOffset(-static_cast<int8_t>(reader_defaults::CHARACTER_SPACING)));
 
+  // 5-step ink weight, stored 0..4 and shown -2..+2 (default 2 = 0).
+  emit(SettingInfo::Value(StrId::STR_INK_WEIGHT, &CrossPointSettings::inkWeight,
+                          {0, reader_defaults::MAX_INK_WEIGHT, 1}, "inkWeight", StrId::STR_CAT_READER)
+           .withTextSettings()
+           .withDisplayOffset(-static_cast<int8_t>(reader_defaults::INK_WEIGHT)));
+
   emit(SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
                          {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS,
                           StrId::STR_IMAGES_DISPLAY_BW},

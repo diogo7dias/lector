@@ -391,6 +391,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t wordSpacing = reader_defaults::WORD_SPACING;  // percent of natural space advance; no limit on justification
   // Whole pixels between letters, offset: 2 is the font as designed, 0..4 shows as -2..+2.
   uint8_t characterSpacing = reader_defaults::CHARACTER_SPACING;
+  // Finer ink weight, offset: 2 is normal (0), 0..4 shows as -2..+2.
+  uint8_t inkWeight = reader_defaults::INK_WEIGHT;
   // On, with both directions on Swipe Only by default: a swipe works the same wherever the
   // thumb lands, and leaves the whole page free of invisible tap targets.
   uint8_t touchReaderControls = 1;

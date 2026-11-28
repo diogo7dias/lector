@@ -55,6 +55,12 @@ class TtfSdFont {
   // fontData->bitmap + glyph->dataOffset like a flash font's.
   static bool ownsMissCtx(const void* ctx);
 
+  // Shifts the 8-bit stb_truetype coverage threshold (-2..+2) used when packing
+  // newly rasterized glyphs into the 2-bit cache. Faces flush lazily on their
+  // next lookup only when their cached weight differs, so page turns pay zero
+  // extra cost while the setting is unchanged.
+  static void setInkWeight(int8_t weight);
+
  private:
   struct Slot {
     uint32_t cp;
@@ -79,6 +85,7 @@ class TtfSdFont {
   // One TTF family is resident at a time (SdCardFontManager), so the bitmap
   // lookup can identify a miss context by comparing against this instance.
   static TtfSdFont* active_;
+  static int8_t inkWeight_;
 };
 
 #endif  // CROSSPOINT_TTF_READER
