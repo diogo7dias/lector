@@ -285,6 +285,7 @@ add_subdirectory(web_power_save)
 add_subdirectory(idle_prewarm_timing)
 add_subdirectory(busy_wait_isr)
 add_subdirectory(idle_sleep_policy)
+add_subdirectory(end_of_book)
 
 if(LECTOR_FUZZ)
   add_subdirectory(fuzz)

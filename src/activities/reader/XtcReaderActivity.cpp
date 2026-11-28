@@ -127,6 +127,8 @@ void XtcReaderActivity::loop() {
       case EndOfBookOptions::Action::Redraw:
         requestUpdate();
         return;
+      case EndOfBookOptions::Action::SyncProgress:
+      case EndOfBookOptions::Action::ViewQuotes:
       case EndOfBookOptions::Action::None:
         break;
     }

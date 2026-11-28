@@ -12,6 +12,7 @@
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderActivity.h"
 #include "EpubReaderUtils.h"
+#include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "QuoteSelectActivity.h"
 #include "ReaderMargins.h"
@@ -184,7 +185,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (currentSpineIndex == epub->getSpineItemsCount()) {
     // Sole load site: runs on the render task (serialized by RenderLock); the main
     // task only reads the suggestions once the loaded flag is published
-    endOfBookOptions.loadOnce(epub->getPath(), epub->getTitle(), epub->getAuthor());
+    const bool canSync = !sortesMode && KOREADER_STORE.hasCredentials();
+    endOfBookOptions.loadOnce(epub->getPath(), epub->getTitle(), epub->getAuthor(), canSync, /*allowQuotes=*/true);
     renderer.clearScreen();
     endOfBookOptions.render(renderer, mappedInput);
     renderer.displayBuffer(endOfBookPainted ? HalDisplay::FAST_REFRESH : HalDisplay::HALF_REFRESH);
