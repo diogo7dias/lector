@@ -63,3 +63,19 @@ TEST(WifiRadioOffOnCancel, FailedNearbyTransportBeginTurnsStaOffBeforeReturning)
   ASSERT_NE(modeOff, std::string::npos) << "transport.begin() failure must call WiFi.mode(WIFI_OFF)";
   EXPECT_LT(disconnect, modeOff);
 }
+
+// Switching the radio off does not give the Wi-Fi heap back (SilentRestart.h), so Back after a
+// cancelled Join Network must still reboot, as it did while the radio was left on.
+TEST(WifiRadioOffOnCancel, LeavingAfterACancelledJoinStillReboots) {
+  const std::string source = readFile(std::filesystem::path(NETWORK_ACTIVITY_DIR) / "CrossPointWebServerActivity.cpp");
+  const std::string join = bodyOf(source, "void CrossPointWebServerActivity::onNetworkModeSelected(");
+  ASSERT_NE(join.find("wifiUsed = true;"), std::string::npos) << "Join Network must record that the radio came up";
+
+  const std::string exit = bodyOf(source, "void CrossPointWebServerActivity::onExit()");
+  ASSERT_FALSE(exit.empty()) << "onExit() not found";
+  const size_t gate = exit.find("wifiRestartNeeded(radioOn, wifiUsed)");
+  const size_t reboot = exit.find("silentRestartBack();");
+  ASSERT_NE(gate, std::string::npos) << "onExit() must reboot when Wi-Fi was used, not only when the radio is on";
+  ASSERT_NE(reboot, std::string::npos);
+  EXPECT_LT(gate, reboot);
+}
