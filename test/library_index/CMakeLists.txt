@@ -1,5 +1,6 @@
 add_executable(LibraryIndexTest
   LibraryIndexTest.cpp
+  LibraryProgressViewTest.cpp
   ${REPO_ROOT}/lib/LibraryIndex/LibraryBuilder.cpp
   ${REPO_ROOT}/lib/LibraryIndex/LibraryIndexFile.cpp
   ${REPO_ROOT}/lib/LibraryIndex/LibraryFormat.cpp

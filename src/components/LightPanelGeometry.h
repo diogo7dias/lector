@@ -16,7 +16,7 @@ namespace light_panel {
 
 // The rows that hold a value. Toggle is not one: it is a button, and a hit on it means
 // "flip the light", not "move something".
-enum class Row : uint8_t { None = 0, Brightness, Warmth, Aux };
+enum class Row : uint8_t { None = 0, Brightness, Warmth, Aux, Aux2 };
 
 // Matches banner::RULE (components/BannerStyle.h). Repeated rather than included so this
 // header stays free of the font and renderer headers the host tests do not build.
@@ -101,11 +101,13 @@ struct Layout {
   bool hasLight;  // false on a board with no frontlight: no toggle, brightness or warmth row
   bool hasWarmth;
   bool hasAux;
+  bool hasAux2;
   int actionColumns;
   Rect toggle;  // zero-sized without a light
   StepRow brightness;
   StepRow warmth;  // height 0 when the board has no colour temperature
   StepRow aux;     // height 0 when the context has nothing to put there
+  StepRow aux2;    // second stepper row (e.g. Library Filter below Sort); height 0 when unused
   Rect actions[kMaxActions];
   int actionCount;
   Rect readout;
@@ -127,7 +129,8 @@ inline bool insideRect(const Rect& rect, const int x, const int y) {
 }
 
 inline Layout forScreen(const int screenWidth, const int lineHeight, const int readoutLineHeight, const bool hasWarmth,
-                        const bool hasAux, const int actionCount, const bool hasLight = true) {
+                        const bool hasAux, const int actionCount, const bool hasLight = true,
+                        const bool hasAux2 = false) {
   // The steppers give way before the track does: a track too thin to drag would leave the
   // row with nothing the steppers do not already do.
   const int stepsWidth = [&] {
@@ -147,6 +150,7 @@ inline Layout forScreen(const int screenWidth, const int lineHeight, const int r
   layout.hasLight = hasLight;
   layout.hasWarmth = hasLight && hasWarmth;
   layout.hasAux = hasAux;
+  layout.hasAux2 = hasAux2;
 
   int y = kSidePad;
   if (hasLight) {
@@ -179,6 +183,7 @@ inline Layout forScreen(const int screenWidth, const int lineHeight, const int r
   layout.warmth =
       layout.hasWarmth ? place(Row::Warmth, /*withBar=*/true) : StepRow{Row::Warmth, y, 0, {}, {}, {}, {}, {}};
   layout.aux = hasAux ? place(Row::Aux, /*withBar=*/false) : StepRow{Row::Aux, y, 0, {}, {}, {}, {}, {}};
+  layout.aux2 = hasAux2 ? place(Row::Aux2, /*withBar=*/false) : StepRow{Row::Aux2, y, 0, {}, {}, {}, {}, {}};
 
   layout.actionCount = std::clamp(actionCount, 0, kMaxActions);
   const int actionHeight = std::max(kMinActionHeight, lineHeight + kActionPadY * 2);
@@ -214,7 +219,7 @@ inline Hit hitTest(const Layout& layout, const int x, const int y) {
 
   // Steppers before the track, so the stepper column can never read as a drag; the track
   // is inset between them anyway, but the order is what guarantees it.
-  for (const StepRow* row : {&layout.brightness, &layout.warmth, &layout.aux}) {
+  for (const StepRow* row : {&layout.brightness, &layout.warmth, &layout.aux, &layout.aux2}) {
     if (row->height == 0) continue;
     if (insideRect(row->minus, x, y)) return Hit{Hit::Kind::Step, row->row, -1, -1};
     if (insideRect(row->plus, x, y)) return Hit{Hit::Kind::Step, row->row, 1, -1};
@@ -241,9 +246,9 @@ struct Cursor {
 };
 
 // The value rows this layout shows, top to bottom. Returns how many.
-inline int valueRows(const Layout& layout, Row (&out)[3]) {
+inline int valueRows(const Layout& layout, Row (&out)[4]) {
   int count = 0;
-  for (const StepRow* row : {&layout.brightness, &layout.warmth, &layout.aux}) {
+  for (const StepRow* row : {&layout.brightness, &layout.warmth, &layout.aux, &layout.aux2}) {
     if (row->height > 0) out[count++] = row->row;
   }
   return count;
@@ -251,7 +256,7 @@ inline int valueRows(const Layout& layout, Row (&out)[3]) {
 
 // Where the cursor starts: the first value row, or the first button when there is none.
 inline Cursor firstCursor(const Layout& layout) {
-  Row rows[3];
+  Row rows[4];
   if (valueRows(layout, rows) > 0) return Cursor{rows[0], -1};
   return layout.actionCount > 0 ? Cursor{Row::None, 0} : Cursor{};
 }
@@ -260,7 +265,7 @@ inline Cursor firstCursor(const Layout& layout) {
 // last value row lands on the first button). Stops at either end rather than wrapping, like
 // every list on the device.
 inline Cursor moveVertical(const Layout& layout, const Cursor cursor, const int delta) {
-  Row rows[3];
+  Row rows[4];
   const int rowCount = valueRows(layout, rows);
   const int columns = std::max(1, layout.actionColumns);
   if (cursor.onGrid()) {
