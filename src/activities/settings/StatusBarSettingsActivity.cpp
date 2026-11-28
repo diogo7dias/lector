@@ -4,35 +4,45 @@
 #include <HalClock.h>
 #include <I18n.h>
 
+#include <algorithm>
 #include <string>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "StatusBarPreview.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace fui = freeink::ui;
 
 namespace {
+// Live preview strip above the settings rows, mirroring TextSettingsPreview.
+constexpr int16_t PREVIEW_HEIGHT = 112;
+constexpr int PREVIEW_MAX_PERCENT = 35;
+
 // Item ids in display order. Clock is X3-only and is filtered out in onEnter().
 enum ItemId {
-  ITEM_ENABLED,         // master on/off (toggle)
-  ITEM_OFF_BAR,         // Off / Slim / Medium / Fat (cycle) — only while ENABLED is off
-  ITEM_BATTERY,         // anchor
-  ITEM_CLOCK,           // anchor (X3 only)
-  ITEM_TITLE,           // anchor (chapter title)
-  ITEM_BOOK_TITLE,      // anchor
-  ITEM_TITLE_TRUNCATE,  // On / Off (toggle)
-  ITEM_PAGE,            // anchor
-  ITEM_PAGE_FORMAT,     // N/M | N left (cycle)
-  ITEM_BOOK_PCT,        // anchor
-  ITEM_CHAPTER_PCT,     // anchor
-  ITEM_CHAPTER_NUM,     // anchor
-  ITEM_SESSION_PAGES,   // anchor
-  ITEM_PARA_PAGES,      // anchor
-  ITEM_BOOK_BAR,        // Off / Top / Bottom (cycle)
-  ITEM_CHAPTER_BAR,     // Off / Top / Bottom (cycle)
-  ITEM_BAR_THICKNESS,   // Slim / Medium / Fat (cycle)
+  ITEM_ENABLED,                 // master on/off (toggle)
+  ITEM_OFF_BAR,                 // Off / Slim / Medium / Fat (cycle) — only while ENABLED is off
+  ITEM_BATTERY,                 // anchor
+  ITEM_CLOCK,                   // anchor (X3 only)
+  ITEM_TITLE,                   // anchor (chapter title)
+  ITEM_BOOK_TITLE,              // anchor
+  ITEM_AUTHOR,                  // anchor (book author)
+  ITEM_TITLE_TRUNCATE,          // On / Off (toggle)
+  ITEM_PAGE,                    // anchor
+  ITEM_PAGE_FORMAT,             // N/M | N left (cycle)
+  ITEM_BOOK_PCT,                // anchor
+  ITEM_CHAPTER_PCT,             // anchor
+  ITEM_CHAPTER_NUM,             // anchor
+  ITEM_SESSION_PAGES,           // anchor
+  ITEM_PARA_PAGES,              // anchor
+  ITEM_FONT_SIZE,               // 10 pt / 12 pt / Reading Small (cycle)
+  ITEM_DIVIDER,                 // Off / Hairline (cycle)
+  ITEM_HIDE_TOP_CHAPTER_START,  // On / Off (toggle)
+  ITEM_BOOK_BAR,                // Off / Top / Bottom (cycle)
+  ITEM_CHAPTER_BAR,             // Off / Top / Bottom (cycle)
+  ITEM_BAR_THICKNESS,           // Slim / Medium / Fat (cycle)
   ITEM_ID_COUNT
 };
 
@@ -52,6 +62,8 @@ StrId itemLabel(int id) {
       return StrId::STR_TRUNCATE_TITLE;
     case ITEM_BOOK_TITLE:
       return StrId::STR_BOOK_TITLE;
+    case ITEM_AUTHOR:
+      return StrId::STR_AUTHOR;
     case ITEM_PAGE:
       return StrId::STR_PAGE_IN_CHAPTER;
     case ITEM_PAGE_FORMAT:
@@ -66,6 +78,12 @@ StrId itemLabel(int id) {
       return StrId::STR_SESSION_PAGES;
     case ITEM_PARA_PAGES:
       return StrId::STR_PARA_PAGES;
+    case ITEM_FONT_SIZE:
+      return StrId::STR_SB_FONT_SIZE;
+    case ITEM_DIVIDER:
+      return StrId::STR_SB_DIVIDER;
+    case ITEM_HIDE_TOP_CHAPTER_START:
+      return StrId::STR_SB_HIDE_TOP_CHAPTER_START;
     case ITEM_BOOK_BAR:
       return StrId::STR_BOOK_BAR;
     case ITEM_CHAPTER_BAR:
@@ -89,6 +107,10 @@ const StrId thicknessNames[CrossPointSettings::STATUS_BAR_BAR_THICKNESS_COUNT] =
 // Off plus the same three thicknesses, so the row is both the switch and the size.
 const StrId offBarNames[CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT] = {
     StrId::STR_STATE_OFF, StrId::STR_SLIM, StrId::STR_PROGRESS_BAR_MEDIUM, StrId::STR_FAT};
+const StrId fontSizeNames[CrossPointSettings::STATUS_BAR_FONT_SIZE_COUNT] = {
+    StrId::STR_SB_FONT_10PT, StrId::STR_SB_FONT_12PT, StrId::STR_SB_FONT_READING_SMALL};
+const StrId dividerNames[CrossPointSettings::STATUS_BAR_DIVIDER_COUNT] = {StrId::STR_STATE_OFF,
+                                                                          StrId::STR_SB_DIVIDER_HAIRLINE};
 
 // Row value for a position item: "[TC]" for an anchor, "Off" when parked.
 std::string anchorRowValue(uint8_t v) {
@@ -109,6 +131,8 @@ uint8_t* StatusBarSettingsActivity::anchorFieldFor(int itemId) {
       return &sb.titlePos;
     case ITEM_BOOK_TITLE:
       return &sb.bookTitlePos;
+    case ITEM_AUTHOR:
+      return &sb.authorPos;
     case ITEM_PAGE:
       return &sb.pagePos;
     case ITEM_BOOK_PCT:
@@ -154,6 +178,10 @@ void StatusBarSettingsActivity::onEnter() {
   clampField(sb.sessionPagesPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
   clampField(sb.paraPagesPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
   clampField(sb.bookTitlePos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
+  clampField(sb.authorPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
+  clampField(sb.fontSize, CrossPointSettings::STATUS_BAR_FONT_SIZE_COUNT);
+  clampField(sb.divider, CrossPointSettings::STATUS_BAR_DIVIDER_COUNT);
+  clampField(sb.hideTopOnChapterStart, 2);
   clampField(sb.pageFormat, CrossPointSettings::STATUS_BAR_PAGE_FORMAT_COUNT);
   clampField(sb.bookBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);
   clampField(sb.chapterBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);
@@ -211,6 +239,15 @@ void StatusBarSettingsActivity::handleSelection(const int index) {
     case ITEM_PAGE_FORMAT:
       sb.pageFormat = cycle(sb.pageFormat, CrossPointSettings::STATUS_BAR_PAGE_FORMAT_COUNT);
       break;
+    case ITEM_FONT_SIZE:
+      sb.fontSize = cycle(sb.fontSize, CrossPointSettings::STATUS_BAR_FONT_SIZE_COUNT);
+      break;
+    case ITEM_DIVIDER:
+      sb.divider = cycle(sb.divider, CrossPointSettings::STATUS_BAR_DIVIDER_COUNT);
+      break;
+    case ITEM_HIDE_TOP_CHAPTER_START:
+      sb.hideTopOnChapterStart = cycle(sb.hideTopOnChapterStart, 2);
+      break;
     case ITEM_BOOK_BAR:
       sb.bookBar = cycle(sb.bookBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);
       break;
@@ -249,6 +286,12 @@ std::string StatusBarSettingsActivity::rowValue(const int id) const {
       return sb.titleTruncate ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case ITEM_PAGE_FORMAT:
       return sb.pageFormat == CrossPointSettings::SB_PAGE_LEFT ? tr(STR_PAGE_LEFT) : tr(STR_PAGE_FRACTION);
+    case ITEM_FONT_SIZE:
+      return I18N.get(fontSizeNames[sb.fontSize < CrossPointSettings::STATUS_BAR_FONT_SIZE_COUNT ? sb.fontSize : 0]);
+    case ITEM_DIVIDER:
+      return I18N.get(dividerNames[sb.divider < CrossPointSettings::STATUS_BAR_DIVIDER_COUNT ? sb.divider : 0]);
+    case ITEM_HIDE_TOP_CHAPTER_START:
+      return sb.hideTopOnChapterStart ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case ITEM_BOOK_BAR:
       return I18N.get(edgeNames[sb.bookBar < CrossPointSettings::STATUS_BAR_EDGE_COUNT ? sb.bookBar : 0]);
     case ITEM_CHAPTER_BAR:
@@ -262,6 +305,16 @@ std::string StatusBarSettingsActivity::rowValue(const int id) const {
 }
 
 void StatusBarSettingsActivity::buildScreen(UiScreen& screen) {
+  const int16_t maxPreviewH = static_cast<int16_t>(screen.body().height * PREVIEW_MAX_PERCENT / 100);
+  const int16_t previewH = std::min(PREVIEW_HEIGHT, maxPreviewH);
+  const int sidePad = UITheme::getInstance().getMetrics().contentSidePadding;
+  if (previewH >= 48) {
+    const fui::Rect band = screen.takeTop(previewH, screen.theme().spaceSm);
+    previewRect_ = Rect{band.x + sidePad, band.y, std::max(1, band.width - 2 * sidePad), band.height};
+  } else {
+    previewRect_ = Rect{};
+  }
+
   const int itemCount = static_cast<int>(visibleItems.size());
   subtitles.assign(static_cast<size_t>(itemCount), std::string());
   rows.assign(static_cast<size_t>(itemCount), fui::ListItem{});
@@ -282,4 +335,14 @@ void StatusBarSettingsActivity::buildScreen(UiScreen& screen) {
   screen.list(props);
 }
 
-bool StatusBarSettingsActivity::drawOverlay() { return anchorPopup.processRender(renderer, mappedInput); }
+void StatusBarSettingsActivity::drawPreview() const {
+  const bool atChapterStart = nav.selected >= 0 && nav.selected < static_cast<int>(visibleItems.size()) &&
+                              visibleItems[nav.selected] == ITEM_HIDE_TOP_CHAPTER_START &&
+                              sb.hideTopOnChapterStart != 0;
+  statusbar_preview::renderPreview(renderer, previewRect_, sb, atChapterStart);
+}
+
+bool StatusBarSettingsActivity::drawOverlay() {
+  drawPreview();
+  return anchorPopup.processRender(renderer, mappedInput);
+}

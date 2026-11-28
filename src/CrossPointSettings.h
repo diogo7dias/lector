@@ -82,6 +82,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     STATUS_BAR_PAGE_FORMAT_COUNT
   };
   enum STATUS_BAR_EDGE { SB_EDGE_OFF = 0, SB_EDGE_TOP = 1, SB_EDGE_BOTTOM = 2, STATUS_BAR_EDGE_COUNT };
+  enum STATUS_BAR_FONT_SIZE {
+    SB_FONT_10PT = 0,
+    SB_FONT_12PT = 1,
+    SB_FONT_READING_SMALL = 2,
+    STATUS_BAR_FONT_SIZE_COUNT
+  };
+  enum STATUS_BAR_DIVIDER { SB_DIVIDER_OFF = 0, SB_DIVIDER_HAIRLINE = 1, STATUS_BAR_DIVIDER_COUNT };
   enum STATUS_BAR_BAR_THICKNESS { SB_BAR_SLIM = 0, SB_BAR_MEDIUM = 1, SB_BAR_FAT = 2, STATUS_BAR_BAR_THICKNESS_COUNT };
   // Progress bar kept alive while the status bar itself is hidden. Off plus the same
   // three thicknesses, so one row is both the switch and the thickness. Values 1..3
@@ -361,6 +368,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sbSessionPagesPos = SB_ANCHOR_BC;  // pages turned this sitting (+N) anchor
   uint8_t sbParaPagesPos = SB_ANCHOR_BC;     // pages left in this paragraph (>P.N) anchor
   uint8_t sbBookTitlePos = SB_ANCHOR_OFF;    // book title anchor; on the chapter title's, stacked above it
+  uint8_t sbAuthorPos = SB_ANCHOR_OFF;       // book author anchor
+  uint8_t sbFontSize = SB_FONT_10PT;         // 10pt / 12pt / reading font small
+  uint8_t sbDivider = SB_DIVIDER_OFF;        // Off / Hairline rule separating bar from text
+  uint8_t sbHideTopOnChapterStart = 0;       // hide top header on page 0 of a chapter
   uint8_t sbBookBar = SB_EDGE_OFF;           // book progress bar edge (Off/Top/Bottom)
   uint8_t sbChapterBar = SB_EDGE_BOTTOM;     // chapter progress bar edge
   uint8_t sbBarThickness = SB_BAR_MEDIUM;    // progress bar thickness slim/med/fat

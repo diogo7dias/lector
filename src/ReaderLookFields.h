@@ -57,24 +57,28 @@
 // The status bar layout, moved as one block between CrossPointSettings, StatusBarBlock
 // and ReaderPrefs. X(prefsName, settingsName, blockName) — the three structs disagree
 // on names, so all three are spelled out.
-#define READER_STATUS_BAR_FIELDS(X)                        \
-  X(statusBarEnabled, sbEnabled, enabled)                  \
-  X(sbBatteryPos, sbBatteryPos, batteryPos)                \
-  X(sbClockPos, sbClockPos, clockPos)                      \
-  X(sbTitlePos, sbTitlePos, titlePos)                      \
-  X(sbTitleSource, sbTitleSource, titleSource)             \
-  X(sbTitleTruncate, sbTitleTruncate, titleTruncate)       \
-  X(sbPagePos, sbPagePos, pagePos)                         \
-  X(sbPageFormat, sbPageFormat, pageFormat)                \
-  X(sbBookPctPos, sbBookPctPos, bookPctPos)                \
-  X(sbChapterPctPos, sbChapterPctPos, chapterPctPos)       \
-  X(sbChapterNumPos, sbChapterNumPos, chapterNumPos)       \
-  X(sbSessionPagesPos, sbSessionPagesPos, sessionPagesPos) \
-  X(sbParaPagesPos, sbParaPagesPos, paraPagesPos)          \
-  X(sbBookTitlePos, sbBookTitlePos, bookTitlePos)          \
-  X(sbBookBar, sbBookBar, bookBar)                         \
-  X(sbChapterBar, sbChapterBar, chapterBar)                \
-  X(sbBarThickness, sbBarThickness, barThickness)          \
-  X(sbFloatingBar, sbFloatingBar, floatingBar)             \
-  X(sbBarOutline, sbBarOutline, barOutline)                \
+#define READER_STATUS_BAR_FIELDS(X)                                          \
+  X(statusBarEnabled, sbEnabled, enabled)                                    \
+  X(sbBatteryPos, sbBatteryPos, batteryPos)                                  \
+  X(sbClockPos, sbClockPos, clockPos)                                        \
+  X(sbTitlePos, sbTitlePos, titlePos)                                        \
+  X(sbTitleSource, sbTitleSource, titleSource)                               \
+  X(sbTitleTruncate, sbTitleTruncate, titleTruncate)                         \
+  X(sbPagePos, sbPagePos, pagePos)                                           \
+  X(sbPageFormat, sbPageFormat, pageFormat)                                  \
+  X(sbBookPctPos, sbBookPctPos, bookPctPos)                                  \
+  X(sbChapterPctPos, sbChapterPctPos, chapterPctPos)                         \
+  X(sbChapterNumPos, sbChapterNumPos, chapterNumPos)                         \
+  X(sbSessionPagesPos, sbSessionPagesPos, sessionPagesPos)                   \
+  X(sbParaPagesPos, sbParaPagesPos, paraPagesPos)                            \
+  X(sbBookTitlePos, sbBookTitlePos, bookTitlePos)                            \
+  X(sbAuthorPos, sbAuthorPos, authorPos)                                     \
+  X(sbFontSize, sbFontSize, fontSize)                                        \
+  X(sbDivider, sbDivider, divider)                                           \
+  X(sbHideTopOnChapterStart, sbHideTopOnChapterStart, hideTopOnChapterStart) \
+  X(sbBookBar, sbBookBar, bookBar)                                           \
+  X(sbChapterBar, sbChapterBar, chapterBar)                                  \
+  X(sbBarThickness, sbBarThickness, barThickness)                            \
+  X(sbFloatingBar, sbFloatingBar, floatingBar)                               \
+  X(sbBarOutline, sbBarOutline, barOutline)                                  \
   X(sbOffBar, sbOffBar, offBar)

@@ -717,22 +717,29 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 }
 
 void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data, const StatusBarBlock& sb) const {
+  int mt, mr, mb, ml;
+  renderer.getOrientedViewableTRBL(&mt, &mr, &mb, &ml);
+  const Rect bounds{ml, mt, renderer.getScreenWidth() - ml - mr, renderer.getScreenHeight() - mt - mb};
+  drawStatusBarV2InRect(renderer, bounds, data, sb, mt, mb, kEdgeBarBleedPx);
+}
+
+void BaseTheme::drawStatusBarV2InRect(GfxRenderer& renderer, Rect bounds, const StatusBarData& data,
+                                      const StatusBarBlock& sb, const int stretchTop, const int stretchBottom,
+                                      const int bleedSides) const {
   // Two independent halves. The text items need the status bar switched on; the edge
   // progress bars can also be kept alive on their own by sbOffBar, in which case this
   // function draws the bars and returns before touching any text.
   const bool drawText = sb.textOn();
   if (!drawText && !sb.progressBarsVisible()) return;
+  if (bounds.width <= 0 || bounds.height <= 0) return;
 
-  const int f = UI_10_FONT_ID;
+  const bool hideTop = statusbar::topBandSuppressed(sb.hideTopOnChapterStart != 0, data.atChapterStart);
+  const int f = UITheme::statusBarFontId(renderer, sb, data.readingFontId);
   const auto& metrics = UITheme::getInstance().getMetrics();
-  int mt, mr, mb, ml;
-  renderer.getOrientedViewableTRBL(&mt, &mr, &mb, &ml);
-  const int screenW = renderer.getScreenWidth();
-  const int screenH = renderer.getScreenHeight();
 
-  int leftEdge, rightEdge;
-  statusbar::bandEdges(screenW, ml, mr, metrics.statusBarHorizontalMargin, &leftEdge, &rightEdge);
-  const int bandWidth = rightEdge - leftEdge;
+  const int leftEdge = bounds.x + metrics.statusBarHorizontalMargin + 1;
+  const int rightEdge = bounds.x + bounds.width - metrics.statusBarHorizontalMargin;
+  const int bandWidth = std::max(1, rightEdge - leftEdge);
   const int lineH = renderer.getLineHeight(f);
 
   // --- Progress bars --------------------------------------------------------
@@ -740,20 +747,9 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   // bottomTextY fall out of the same stacking, so the text band always sits inside
   // whatever the bars left free — matching the heights UITheme reserved.
   const int barPx = statusBarThicknessPx(sb.activeBarThickness());
-  // Edge bars bleed past both ends of the logical screen. On the X4 Pro the panel sits
-  // slightly off-centre behind its bezel, so a bar drawn exactly to x=0 stops short of
-  // the glass on one side and its starting edge shows as a stub at low percentages.
-  // Overdrawing costs nothing (fillRect clips) and makes an empty bar start off-screen
-  // and a full one run off the other end, which is what reads as edge to edge.
-  const int barLeft = ml - kEdgeBarBleedPx;
-  const int barMaxW = std::max(1, screenW - ml - mr + kEdgeBarBleedPx * 2);
+  const int barLeft = bounds.x - bleedSides;
+  const int barMaxW = std::max(1, bounds.width + bleedSides * 2);
   auto clampPct = [](int p) { return p < 0 ? 0 : (p > 100 ? 100 : p); };
-  // How far the bar nearest an edge is stretched to reach the panel itself. The
-  // viewable margins hold content clear of the bezel, which leaves a strip of paper
-  // between a "flush" bar and the edge of the screen; filling it is what makes the
-  // bar read as flush.
-  const int stretchTop = mt;
-  const int stretchBottom = mb;
   auto drawEdgeBar = [&](int y, int pct, int stretchUp = 0, int stretchDown = 0) {
     const int top = y - stretchUp;
     const int height = barPx + stretchUp + stretchDown;
@@ -774,24 +770,26 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   const bool anyBottomBar = sb.bookBar == CrossPointSettings::SB_EDGE_BOTTOM ||
                             (sb.chapterBar == CrossPointSettings::SB_EDGE_BOTTOM && data.hasChapters);
 
-  // Top edge: book bar then chapter bar; text band below them.
-  int topStack = mt;
-  // Only the bar nearest the edge reaches for it; a second bar stacks under the first.
+  // Top edge: book bar then chapter bar; text band below them (suppressed on chapter start
+  // when Hide Top on Chapter Start is enabled).
+  int topStack = bounds.y;
   bool topOutermost = true;
-  if (sb.bookBar == CrossPointSettings::SB_EDGE_TOP) {
-    drawEdgeBar(topStack, data.bookPercent, stretchTop);
-    drawChapterMarks(topStack, data.bookPercent);
-    topStack += barPx;
-    topOutermost = false;
-  }
-  if (sb.chapterBar == CrossPointSettings::SB_EDGE_TOP && data.hasChapters) {
-    drawEdgeBar(topStack, data.chapterPercent, topOutermost ? stretchTop : 0);
-    topStack += barPx;
+  if (!hideTop) {
+    if (sb.bookBar == CrossPointSettings::SB_EDGE_TOP) {
+      drawEdgeBar(topStack, data.bookPercent, stretchTop);
+      drawChapterMarks(topStack, data.bookPercent);
+      topStack += barPx;
+      topOutermost = false;
+    }
+    if (sb.chapterBar == CrossPointSettings::SB_EDGE_TOP && data.hasChapters) {
+      drawEdgeBar(topStack, data.chapterPercent, topOutermost ? stretchTop : 0);
+      topStack += barPx;
+    }
   }
   const int topTextY = topStack + 2;
 
   // Bottom edge: bars along the bottom; text band above them.
-  int bottomStack = screenH - mb;
+  int bottomStack = bounds.y + bounds.height;
   bool bottomOutermost = true;
   if (sb.bookBar == CrossPointSettings::SB_EDGE_BOTTOM) {
     bottomStack -= barPx;
@@ -881,6 +879,7 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
     }
   }
   if (slot.bookItem != 0 && !data.bookTitle.empty()) set(statusbar::BookTitle, data.bookTitle.c_str());
+  if (!data.author.empty()) set(statusbar::Author, data.author.c_str());
   // Page in chapter ("3/40" or "8 left")
   if (sb.pageFormat == CrossPointSettings::SB_PAGE_LEFT) {
     const int remaining = data.chapterPages - data.chapterPage;
@@ -922,17 +921,18 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
 
   // Place the items in table order (STATUS_BAR_ITEMS), the same list the band heights
   // are reserved from.
-  // Clipped to its room after the reflow: the separate book title always, and a lone title
-  // when Truncate Title is on. drawAnchor only clips a centred title, so a corner one ran
-  // off the edge. A stack cuts its own lines where it draws them.
+  // Clipped to its room after the reflow: the separate book title and author always, and a
+  // lone title when Truncate Title is on.
   auto clipItem = [&](statusbar::Item item) {
-    return item == statusbar::BookTitle || (item == statusbar::Title && sb.titleTruncate != 0 && !stackedBook);
+    return item == statusbar::BookTitle || item == statusbar::Author ||
+           (item == statusbar::Title && sb.titleTruncate != 0 && !stackedBook);
   };
   auto push = [&](statusbar::Item item, uint8_t anchor, bool chapterOnly) {
     if (!text[item] || anchor == CrossPointSettings::SB_ANCHOR_OFF) return;
     if (chapterOnly && !data.hasChapters) return;  // chapter items hide on chapterless books
     const int idx = static_cast<int>(anchor) - 1;  // TL(1)..BR(6) -> 0..5
     if (idx < 0 || idx >= statusbar::kAnchorCount) return;
+    if (hideTop && idx < 3) return;
     L.buckets[idx][L.counts[idx]++] = Seg{text[item], width[item], item == statusbar::Battery, clipItem(item)};
     if (item == statusbar::Title) {
       titleAnchorIdx = idx;  // reflow pivots on where the greedy title landed
@@ -946,19 +946,19 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   // --- Reflow: a greedy (truncate-OFF) title bumps overlapping same-band
   // neighbours into the opposite band. Pure + allocation-free (see StatusBar.cpp).
   // The opposite band may only *receive* bumped items when it already reserves
-  // height (has native text) — the band heights are computed pre-reflow from native
-  // anchors, so a bump into an unreserved band would draw over the reading text.
+  // height (has native text) and is not suppressed on chapter start.
   const bool stacked = titleAnchorIdx >= 0 && stackedBook != nullptr;
   if (titleAnchorIdx >= 0 && (sb.titleTruncate == 0 || stacked)) {
     const int destBase = (titleAnchorIdx < 3) ? 3 : 0;
-    const bool destReserved = L.counts[destBase] > 0 || L.counts[destBase + 1] > 0 || L.counts[destBase + 2] > 0;
+    const bool destReserved = !(hideTop && destBase == 0) &&
+                              (L.counts[destBase] > 0 || L.counts[destBase + 1] > 0 || L.counts[destBase + 2] > 0);
     statusbar::reflowTitle(L, titleAnchorIdx, titleSegIdx, sb.titleTruncate != 0, bandWidth, sepW, destReserved,
                            stacked);
   }
 
-  // Clip the titles marked above to the room their anchor has left, now that the reflow
-  // has settled where everything sits. One string per title: they live until the draw.
-  std::string clipped[2];
+  // Clip the titles/author marked above to the room their anchor has left, now that reflow
+  // has settled where everything sits. Up to three strings: Title, BookTitle, Author.
+  std::string clipped[3];
   int clippedCount = 0;
   for (int a = 0; a < statusbar::kAnchorCount; a++) {
     for (int i = 0; i < L.counts[a]; i++) {
@@ -966,7 +966,7 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
       if (!s.clip) continue;
       const int over = statusbar::clusterWidth(L, a, sepW) - statusbar::clipRoom(L, a, bandWidth, sepW);
       if (over <= 0) continue;
-      if (clippedCount == 2) continue;  // only the two titles are ever marked
+      if (clippedCount == 3) continue;
       std::string& out = clipped[clippedCount++];
       out = renderer.truncatedText(f, s.text, s.width - over);
       s.text = out.c_str();
@@ -989,11 +989,9 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
       const int rw = clusterW(top ? 2 : 5);
       const int avail = bandWidth - lw - rw - 20;
       if (avail > 0 && total > avail) {
-        // Only reached by a truncate-ON title (the greedy truncate-OFF title is
-        // drawn wrapped above and its bucket emptied) -> clip with an ellipsis.
-        std::string clipped = renderer.truncatedText(f, L.buckets[idx][0].text, avail);
-        const int cx = leftEdge + lw + (bandWidth - lw - rw - renderer.getTextWidth(f, clipped.c_str())) / 2;
-        renderer.drawText(f, cx, y, clipped.c_str());
+        std::string clippedStr = renderer.truncatedText(f, L.buckets[idx][0].text, avail);
+        const int cx = leftEdge + lw + (bandWidth - lw - rw - renderer.getTextWidth(f, clippedStr.c_str())) / 2;
+        renderer.drawText(f, cx, y, clippedStr.c_str());
         return;
       }
     }
@@ -1001,7 +999,6 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
     int x = (align == 0) ? leftEdge : (align == 2) ? (rightEdge - total) : (leftEdge + (bandWidth - total) / 2);
     for (int i = 0; i < L.counts[idx]; i++) {
       if (i > 0) {
-        // Vertical bar centred in the separator advance, equal gap each side.
         x += sepGap;
         renderer.fillRect(x, y + 2, sepBarW, lineH - 4, true);
         x += sepBarW + sepGap;
@@ -1016,13 +1013,9 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
     }
   };
 
-  // A greedy (truncate-off) lone title wraps across as many lines as it needs and
-  // is drawn here, aligned to its anchor column (left/centre/right). A stack (book title
-  // above chapter title) is drawn here too, each title wrapped, or cut to one line when
-  // Truncate Title is on. The band's extra height was reserved by
-  // getStatusBarV2TitleLines at inset time. We empty its bucket so the generic pass
-  // below skips it. A truncate-ON lone title (or a greedy one sharing its anchor) falls
-  // through to drawAnchor's single-line ellipsis clip.
+  int topLines = 0;
+  int bottomLines = 0;
+
   if (titleAnchorIdx >= 0 && L.counts[titleAnchorIdx] == 1 && (sb.titleTruncate == 0 || stacked)) {
     const int col = titleAnchorIdx % 3;
     const bool top = titleAnchorIdx < 3;
@@ -1046,8 +1039,16 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
       const int y = top ? (topTextY + i * lineH) : (bottomTextY - (n - 1 - i) * lineH);
       renderer.drawText(f, x, y, lines[i].c_str());
     }
+    if (top) {
+      topLines = n;
+    } else {
+      bottomLines = n;
+    }
     L.counts[titleAnchorIdx] = 0;  // consumed; skip in the generic pass
   }
+
+  if (topLines == 0 && (L.counts[0] > 0 || L.counts[1] > 0 || L.counts[2] > 0)) topLines = 1;
+  if (bottomLines == 0 && (L.counts[3] > 0 || L.counts[4] > 0 || L.counts[5] > 0)) bottomLines = 1;
 
   drawAnchor(0, 0, topTextY);     // TL
   drawAnchor(1, 1, topTextY);     // TC
@@ -1055,6 +1056,15 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   drawAnchor(3, 0, bottomTextY);  // BL
   drawAnchor(4, 1, bottomTextY);  // BC
   drawAnchor(5, 2, bottomTextY);  // BR
+
+  if (sb.divider == CrossPointSettings::SB_DIVIDER_HAIRLINE) {
+    if (!hideTop && topLines > 0) {
+      renderer.fillRect(leftEdge, topTextY + topLines * lineH + 2, bandWidth, kLine, true);
+    }
+    if (bottomLines > 0) {
+      renderer.fillRect(leftEdge, bottomTextY - (bottomLines - 1) * lineH - 3, bandWidth, kLine, true);
+    }
+  }
 }
 
 void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const {

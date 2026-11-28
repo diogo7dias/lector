@@ -55,6 +55,10 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.retiredTextContrast, b.retiredTextContrast);
   EXPECT_EQ(a.paragraphNumberPlace, b.paragraphNumberPlace);
   EXPECT_EQ(a.sbBookTitlePos, b.sbBookTitlePos);
+  EXPECT_EQ(a.sbAuthorPos, b.sbAuthorPos);
+  EXPECT_EQ(a.sbFontSize, b.sbFontSize);
+  EXPECT_EQ(a.sbDivider, b.sbDivider);
+  EXPECT_EQ(a.sbHideTopOnChapterStart, b.sbHideTopOnChapterStart);
   EXPECT_EQ(a.screenMargin, b.screenMargin);
   EXPECT_EQ(a.screenMarginTop, b.screenMarginTop);
   EXPECT_EQ(a.screenMarginBottom, b.screenMarginBottom);
@@ -547,7 +551,8 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V22_SIZE + 1, READER_PREFS_V23_SIZE);
   EXPECT_EQ(READER_PREFS_V23_SIZE + 1, READER_PREFS_V24_SIZE);
   EXPECT_EQ(READER_PREFS_V24_SIZE + 1, READER_PREFS_V25_SIZE);
-  EXPECT_EQ(READER_PREFS_V25_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V25_SIZE + 1, READER_PREFS_V27_SIZE);
+  EXPECT_EQ(READER_PREFS_V27_SIZE + 4, sizeof(ReaderPrefs));
   EXPECT_EQ(READER_PREFS_V25_SIZE, readerPrefsRecordSize(25));
   EXPECT_EQ(READER_PREFS_V24_SIZE, readerPrefsRecordSize(24));
   EXPECT_EQ(READER_PREFS_V23_SIZE, readerPrefsRecordSize(23));
@@ -565,8 +570,9 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(27, ReaderPrefs::VERSION);
-  EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(26));  // v27 moved meanings, not bytes
+  EXPECT_EQ(28, ReaderPrefs::VERSION);
+  EXPECT_EQ(READER_PREFS_V27_SIZE, readerPrefsRecordSize(26));  // v26 and v27 share one layout
+  EXPECT_EQ(READER_PREFS_V27_SIZE, readerPrefsRecordSize(27));
 }
 
 // A v23 record stops before Character Spacing: it reads back as the font as designed,
@@ -1054,6 +1060,10 @@ TEST(ReaderPrefs, ACurrentRecordIsNeverConverted) {
   now.imageRendering = 2;  // Suppress is a real choice again
   now.characterSpacing = 4;
   now.wordSpacing = 175;
+  now.sbAuthorPos = 3;
+  now.sbFontSize = 2;
+  now.sbDivider = 1;
+  now.sbHideTopOnChapterStart = 1;
   std::stringstream file;
   writeReaderPrefs(file, now);
   ReaderPrefs loaded;
@@ -1061,4 +1071,22 @@ TEST(ReaderPrefs, ACurrentRecordIsNeverConverted) {
   ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
   EXPECT_FALSE(migrated);
   expectEqual(now, loaded);
+}
+
+TEST(ReaderPrefs, AV27RecordMigratesCleanlyWithDesignerFieldsOff) {
+  ReaderPrefs old = makeSample();
+  old.sbAuthorPos = 3;
+  old.sbFontSize = 2;
+  old.sbDivider = 1;
+  old.sbHideTopOnChapterStart = 1;
+  std::stringstream file = asRecord(27, old);
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(0, loaded.sbAuthorPos);
+  EXPECT_EQ(0, loaded.sbFontSize);
+  EXPECT_EQ(0, loaded.sbDivider);
+  EXPECT_EQ(0, loaded.sbHideTopOnChapterStart);
+  EXPECT_EQ(old.paragraphNumberPlace, loaded.paragraphNumberPlace);
 }

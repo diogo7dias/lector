@@ -114,7 +114,9 @@ struct ReaderPrefs {
   // (paragraph gap, kerning, ligatures, link underline, book margins, heading page break,
   // word expansion, fill pages, the layout half of the style switch, indent mode) stay as
   // zeroed padding, the indent byte counts spaces, character spacing counts whole pixels.
-  static constexpr uint8_t VERSION = 27;  // v27: lean typography
+  // v28 appends the status bar designer fields (sbAuthorPos, sbFontSize, sbDivider,
+  // sbHideTopOnChapterStart); v5-v27 sidecars read at their own length and default them to 0.
+  static constexpr uint8_t VERSION = 28;  // v28: status bar designer fields
 
   // Bring a sidecar written before the current version onto the current reading
   // defaults. Only these values are re-seeded, and only for books that predate them.
@@ -263,6 +265,13 @@ struct ReaderPrefs {
   // paragraphNumberSize. APPENDED LAST.
   uint8_t paragraphNumberPlace = 1;  // CrossPointSettings::PARA_NUM_PLACE_TEXT
 
+  // Status bar designer options (v28): author slot, font size, hairline divider, and
+  // hiding the top header on page 0 of a chapter. APPENDED LAST.
+  uint8_t sbAuthorPos = 0;              // SB_ANCHOR_OFF
+  uint8_t sbFontSize = 0;               // SB_FONT_10PT
+  uint8_t sbDivider = 0;                // SB_DIVIDER_OFF
+  uint8_t sbHideTopOnChapterStart = 0;  // off
+
   // Copy the status bar block from `source`.
   //
   // A sidecar written before v11 stops before that block, so every field would
@@ -335,6 +344,7 @@ inline constexpr size_t READER_PREFS_V22_SIZE = offsetof(ReaderPrefs, sbBookTitl
 inline constexpr size_t READER_PREFS_V23_SIZE = offsetof(ReaderPrefs, characterSpacing);
 inline constexpr size_t READER_PREFS_V24_SIZE = offsetof(ReaderPrefs, retiredFillPages);
 inline constexpr size_t READER_PREFS_V25_SIZE = offsetof(ReaderPrefs, paragraphNumberPlace);
+inline constexpr size_t READER_PREFS_V27_SIZE = offsetof(ReaderPrefs, sbAuthorPos);
 
 // A record older than v12 carries one "Embedded Style" choice, in what is now the text
 // switch. Someone who turned it off wanted the book's own styling gone, so the layout
@@ -446,7 +456,8 @@ inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
   if (version == 24) return READER_PREFS_V24_SIZE;
   if (version == 25) return READER_PREFS_V25_SIZE;
   // v26 and v27 share one layout: v27 only changed what some bytes mean.
-  if (version == 26 || version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
+  if (version == 26 || version == 27) return READER_PREFS_V27_SIZE;
+  if (version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
   return 0;
 }
 
@@ -475,9 +486,9 @@ static_assert(READER_PREFS_V22_SIZE == READER_PREFS_V21_SIZE + 1, "v22 adds word
 static_assert(READER_PREFS_V23_SIZE == READER_PREFS_V22_SIZE + 1, "v23 adds sbBookTitlePos");
 static_assert(READER_PREFS_V24_SIZE == READER_PREFS_V23_SIZE + 1, "v24 adds characterSpacing");
 static_assert(READER_PREFS_V25_SIZE == READER_PREFS_V24_SIZE + 1, "v25 adds fillPages");
-static_assert(sizeof(ReaderPrefs) == READER_PREFS_V25_SIZE + 1,
-              "paragraphNumberPlace must be the last byte: every new field goes last, or "
-              "this firmware misreads every sidecar written by the version before it");
+static_assert(READER_PREFS_V27_SIZE == READER_PREFS_V25_SIZE + 1, "v26/v27 ends after paragraphNumberPlace");
+static_assert(sizeof(ReaderPrefs) == READER_PREFS_V27_SIZE + 4,
+              "v28 status bar designer fields must be the last four bytes: every new field goes last");
 
 // ── The field lists cover the struct ──────────────────────────────────────────
 // Every live byte of ReaderPrefs is either the fixed-width font name or a uint8_t named by
@@ -528,6 +539,10 @@ struct StatusBarBlock {
   uint8_t sessionPagesPos = 0;
   uint8_t paraPagesPos = 0;
   uint8_t bookTitlePos = 0;
+  uint8_t authorPos = 0;
+  uint8_t fontSize = 0;
+  uint8_t divider = 0;
+  uint8_t hideTopOnChapterStart = 0;
   uint8_t bookBar = 0;
   uint8_t chapterBar = 0;
   uint8_t barThickness = 0;

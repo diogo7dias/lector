@@ -1298,9 +1298,10 @@ is centred.
 - **All Bookmarks** — every book's bookmarks in one list, book by book. Pick one to open
   that book at it.
 
-**Customise Status Bar** places each element in one of six slots (top left, top centre, top
-right, bottom left, bottom centre, bottom right) or turns it off: **Battery**, **Clock**,
-**Chapter Title**, **Book Title**, **Page in Chapter**, **Book %**, **Chapter %**, **Chapter Number**, **Pages This
+**Customise Status Bar** shows a live preview of your top and bottom bars above the list, and
+places each element in one of six slots (top left, top centre, top right, bottom left, bottom
+centre, bottom right) or turns it off: **Battery**, **Clock**, **Chapter Title**, **Book Title**,
+**Author**, **Page in Chapter**, **Book %**, **Chapter %**, **Chapter Number**, **Pages This
 Session**, **Pages to Paragraph**. Alongside them:
 
 - **Chapter Title** and **Book Title** can go in different slots, for example the book on top
@@ -1308,8 +1309,15 @@ Session**, **Pages to Paragraph**. Alongside them:
   stack in the Chapter Title's slot: the book title on the first line, the chapter title on
   the line below. A book without chapters (TXT) shows
   its title in the Book Title slot, or in the Chapter Title slot when Book Title is off.
+- **Author** — shows the book's author metadata on EPUB books (clipped if it overflows its slot).
 - **Truncate Title** — off, a title wraps onto as many lines as it needs; on, it is cut short
   with `…`. A Book Title in a slot of its own is always one line.
+- **Font Size** — **10 pt**, **12 pt**, or **Reading Small** (a smaller size of the current
+  reading font).
+- **Divider** — **Off** or **Hairline** (a thin 1 px rule separating the top or bottom bar from
+  the page text).
+- **Hide Top on Chapter Start** — suppresses the top header (text, top progress bars, and top
+  divider) on the opening page of each chapter without changing pagination.
 - **Page Format** — `N/M` or `N left`. In a book that carries the printed page numbers the
   printed page follows it, `8/12 p.17`.
 - **Pages This Session** counts forward page turns in the open EPUB or TXT book and resets when

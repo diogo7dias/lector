@@ -56,6 +56,11 @@ class StatusBarSettingsActivity final : public UiListActivity {
   uint8_t* anchorFieldFor(int itemId);
   // The value column text for one item id.
   std::string rowValue(int id) const;
+  // Draws a live mini-page preview of `sb` inside `previewRect_`.
+  void drawPreview() const;
+
+  // Reserved strip above the list for the live status bar preview.
+  Rect previewRect_{};
 
   // Row text owns its strings; the ListItems borrow them.
   std::vector<std::string> subtitles;

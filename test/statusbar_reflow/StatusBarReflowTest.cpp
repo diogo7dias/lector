@@ -283,3 +283,18 @@ TEST(StatusBarReflow, AStackedTitleKeepsItsAnchorToItselfEvenWhenClipping) {
   EXPECT_EQ(l.buckets[TL][0].width, 80);
   EXPECT_EQ(total(l), 3);  // the page count moved to the bottom band, not dropped
 }
+
+TEST(StatusBarDesigner, BandTextHeightGrowsForLargerFontsAndHairlineDivider) {
+  EXPECT_EQ(statusbar::bandTextHeight(19, 15, false), 19);
+  EXPECT_EQ(statusbar::bandTextHeight(19, 15, true), 23);
+  EXPECT_EQ(statusbar::bandTextHeight(19, 22, false), 26);
+  EXPECT_EQ(statusbar::bandTextHeight(19, 22, true), 30);
+  EXPECT_EQ(statusbar::bandTextHeight(19, 0, false), 19);
+}
+
+TEST(StatusBarDesigner, TopBandSuppressedOnlyAtChapterStartWhenEnabled) {
+  EXPECT_FALSE(statusbar::topBandSuppressed(false, false));
+  EXPECT_FALSE(statusbar::topBandSuppressed(false, true));
+  EXPECT_FALSE(statusbar::topBandSuppressed(true, false));
+  EXPECT_TRUE(statusbar::topBandSuppressed(true, true));
+}
