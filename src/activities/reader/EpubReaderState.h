@@ -11,6 +11,8 @@
 
 #include "BookmarkEntry.h"
 #include "EndOfBookOptions.h"
+#include "FootnoteHitTest.h"
+#include "FootnotePopupUi.h"
 #include "LinkBackStack.h"
 #include "ReaderPinchGesture.h"
 #include "ReaderPrefs.h"
@@ -231,6 +233,18 @@ struct EpubReaderState {
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
+  // Touch hit boxes for the current page's footnote links (empty on non-touch boards).
+  std::vector<footnote_hit::HitBox> currentPageFootnoteBoxes;
+  // Footnote pop-up sheet over the live page; heap-resident only while open.
+  std::unique_ptr<FootnotePopupUi> footnotePopupUi;
+  bool footnotePopupOpen = false;
+  bool footnotePopupPaintOnly = false;
+  bool footnotePopupCanJump = false;
+  int footnotePopupPage = 0;
+  int pendingFootnotePopupIndex = -1;
+  std::string footnotePopupTitle;
+  std::string footnotePopupHref;
+  std::vector<std::string> footnotePopupLines;
   using SavedPosition = link_stack::Position;
   static constexpr int MAX_FOOTNOTE_DEPTH = 3;
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};

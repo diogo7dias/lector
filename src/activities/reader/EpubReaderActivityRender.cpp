@@ -170,6 +170,15 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       return;
     }
   }
+  // Same sheet-only repaint path for the footnote pop-up card over the live page.
+  if (footnotePopupOpen) {
+    const bool sheetOnly = footnotePopupPaintOnly && renderer.frameBufferLoanCount() == pageLoanCount;
+    footnotePopupPaintOnly = false;
+    if (sheetOnly) {
+      paintFootnotePopup();
+      return;
+    }
+  }
   pageLoanCount = renderer.frameBufferLoanCount();  // everything below repaints the framebuffer
 
   // edge case handling for sub-zero spine index
@@ -366,7 +375,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
   }
 
-  // A page that just rendered under an open toolbar (a scrub, or the light panel closing)
-  // gets the sheet back on top.
+  // A page that just rendered under an open toolbar or footnote card (a scrub, or the
+  // light panel closing) gets the sheet back on top.
   if (toolbarOpen) paintToolbar();
+  if (footnotePopupOpen) paintFootnotePopup();
 }

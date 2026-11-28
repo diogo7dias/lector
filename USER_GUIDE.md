@@ -378,9 +378,15 @@ button does nothing, unless you bind that hold in **Buttons**, which then takes 
 
 ### Footnotes
 
-In an EPUB with footnotes, open a footnote from its reference and return afterwards to where
-you were. Falling asleep or closing the book after following a link reopens the book on the
-page you were viewing, and Back still returns you to where you tapped the link.
+In an EPUB with footnotes, opening a footnote shows its note text in a pop-up card over the
+live page without leaving the chapter. On X4 Pro, tap the footnote link directly on the page to
+open the card; on any device, open it from **Footnotes** in the in-book menu or via a bound
+shortcut. Long notes page inside the card and include a **Jump to Note** button to open the full
+endnote page. Press **Back** or tap outside the card to close it. Linked EPUB 3 `<aside>`
+footnote blocks stay out of the main reading flow and appear in the pop-up when opened.
+
+When you jump to an endnote page, falling asleep or closing the book reopens on the page you
+were viewing, and **Back** still returns you to where you followed the link.
 
 **Short Power Button Click > Footnotes** opens the footnotes for the page with a short press;
 when the page holds a single footnote, it opens that one directly.

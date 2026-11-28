@@ -136,14 +136,26 @@ class Page {
   // progress without a second section-file open per page turn.
   uint32_t visibleTextOffset = 0;
 
-  void addFootnote(const char* number, const char* href) {
+  void addFootnote(const char* number, const char* href, const uint16_t startWord = 0, const uint8_t wordCount = 0) {
     if (footnotes.size() >= MAX_FOOTNOTES_PER_PAGE) return;  // Cap per-page footnotes
     FootnoteEntry entry;
     strncpy(entry.number, number, sizeof(entry.number) - 1);
     entry.number[sizeof(entry.number) - 1] = '\0';
     strncpy(entry.href, href, sizeof(entry.href) - 1);
     entry.href[sizeof(entry.href) - 1] = '\0';
+    entry.startWord = startWord;
+    entry.wordCount = wordCount;
     footnotes.push_back(entry);
+  }
+
+  uint16_t totalWordCount() const {
+    uint32_t total = 0;
+    for (const auto& el : elements) {
+      if (el->getTag() != TAG_PageLine) continue;
+      const auto* line = static_cast<const PageLine*>(el.get());
+      if (line->getBlock()) total += line->getBlock()->wordCount();
+    }
+    return total > UINT16_MAX ? UINT16_MAX : static_cast<uint16_t>(total);
   }
 
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;

@@ -271,6 +271,7 @@ add_subdirectory(jpeg_decode_accuracy)
 add_subdirectory(pinch_font_resize)
 add_subdirectory(reader_font_swap_lock)
 add_subdirectory(chapter_build_safety)
+add_subdirectory(footnote_popup)
 
 if(LECTOR_FUZZ)
   add_subdirectory(fuzz)

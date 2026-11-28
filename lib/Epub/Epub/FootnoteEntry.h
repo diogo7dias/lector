@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <cstring>
 
 #define FOOTNOTE_NUMBER_LEN 32
@@ -13,4 +14,7 @@ struct FootnoteEntry {
   // Whole buffers go into the section cache: zero them, or stale heap bytes land on the card.
   char number[FOOTNOTE_NUMBER_LEN]{};
   char href[FOOTNOTE_HREF_LEN]{};
+  // Word span on the page (zero-based across PageLine elements) for touch hit-testing.
+  uint16_t startWord = 0;
+  uint8_t wordCount = 0;
 };

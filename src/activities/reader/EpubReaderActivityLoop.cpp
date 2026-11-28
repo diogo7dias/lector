@@ -71,6 +71,7 @@ void EpubReaderActivity::loop() {
   // for the same reason as the Quick Menu above: it acts on the press, and a press it ate
   // must never be latched as the reader's own.
   if (handleToolbarInput()) return;
+  if (handleFootnotePopupInput()) return;
 
   // Must run before any early return below, so a genuine press is never missed. See
   // ReaderUtils::ButtonPressLatch: the reader acts on release, child screens close on
@@ -179,6 +180,27 @@ void EpubReaderActivity::loop() {
   if (mappedInput.wasScreenLongPress(holdX, holdY, /*keepContact=*/true)) {
     openQuoteGrab(holdX, holdY);
     return;
+  }
+  // Direct footnote tap on touch boards (X4 Pro): hit-test the current page's footnote
+  // word boxes before page-turn / menu tap routing.
+  if (!atEndOfBook && mappedInput.hasTouch() && !currentPageFootnoteBoxes.empty() &&
+      pageOnScreen.load(std::memory_order_acquire)) {
+    int tapX = 0;
+    int tapY = 0;
+    if (mappedInput.wasScreenTapped(tapX, tapY)) {
+      FootnoteEntry tappedEntry = {};
+      bool hit = false;
+      {
+        RenderLock lock(*this);
+        const int fnIdx = footnote_hit::hitTest(currentPageFootnoteBoxes.data(),
+                                                static_cast<int>(currentPageFootnoteBoxes.size()), tapX, tapY);
+        if (fnIdx >= 0 && fnIdx < static_cast<int>(currentPageFootnotes.size())) {
+          tappedEntry = currentPageFootnotes[static_cast<size_t>(fnIdx)];
+          hit = true;
+        }
+      }
+      if (hit && openFootnotePopup(tappedEntry)) return;
+    }
   }
   // Touch on the open page, read once per loop: a tap or swipe can turn the page or
   // open the menu. Read before the Confirm handling below so the menu opens from

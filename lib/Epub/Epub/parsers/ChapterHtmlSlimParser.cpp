@@ -23,6 +23,7 @@
 #include <new>
 
 #include "Epub.h"
+#include "Epub/FootnoteExtractor.h"
 #include "Epub/Page.h"
 #include "Epub/VisibleTextUtils.h"
 #include "Epub/WholeFileWrite.h"
@@ -1291,6 +1292,20 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
+  // Keep linked <aside epub:type="footnote"> blocks out of main reading flow;
+  // they stay in the EPUB zip for the footnote pop-up card.
+  const char* footnoteAsideId = nullptr;
+  if (footnote_extract::isFootnoteAsideElement(name, atts, &footnoteAsideId) && footnoteAsideId) {
+    const uint64_t asideHash = arxHash64(footnoteAsideId);
+    if (std::find(self->linkedFootnoteAnchors.begin(), self->linkedFootnoteAnchors.end(), asideHash) !=
+        self->linkedFootnoteAnchors.end()) {
+      if (self->partWordBufferIndex > 0) self->flushPartWordBuffer();
+      self->skipUntilDepth = self->depth;
+      self->depth += 1;
+      return;
+    }
+  }
+
   if (strcmp(name, "p") == 0) {
     self->xpathParagraphIndex++;
   }
@@ -2008,10 +2023,36 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
       self->insideFootnoteLink = true;
       self->footnoteLinkDepth = self->depth;
+      self->footnoteStartWordInBlock =
+          self->wordsExtractedInBlock + (self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0);
       strncpy(self->currentFootnote.href, href, sizeof(self->currentFootnote.href) - 1);
       self->currentFootnote.href[sizeof(self->currentFootnote.href) - 1] = '\0';
       self->currentFootnote.number[0] = '\0';
       self->currentFootnoteLinkTextLen = 0;
+
+      // Remember same-chapter fragment targets so linked <aside epub:type="footnote">
+      // blocks stay out of main reading flow while endnotes chapters still render.
+      if (self->linkedFootnoteAnchors.size() < MAX_LINKED_FOOTNOTE_ANCHORS) {
+        std::string targetFile;
+        std::string targetFrag;
+        if (footnote_extract::splitHref(href, targetFile, targetFrag)) {
+          const size_t slash = self->filepath.find_last_of('/');
+          const std::string_view chapterBase = (slash == std::string::npos)
+                                                   ? std::string_view(self->filepath)
+                                                   : std::string_view(self->filepath).substr(slash + 1);
+          const size_t targetSlash = targetFile.find_last_of('/');
+          const std::string_view targetBase = (targetSlash == std::string::npos)
+                                                  ? std::string_view(targetFile)
+                                                  : std::string_view(targetFile).substr(targetSlash + 1);
+          if (targetFile.empty() || targetBase == chapterBase) {
+            const uint64_t fragHash = arxHash64(targetFrag.c_str());
+            if (std::find(self->linkedFootnoteAnchors.begin(), self->linkedFootnoteAnchors.end(), fragHash) ==
+                self->linkedFootnoteAnchors.end()) {
+              self->linkedFootnoteAnchors.push_back(fragHash);
+            }
+          }
+        }
+      }
 
       // Links are always underlined.
       StyleStackEntry entry;
@@ -2666,9 +2707,12 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       entry.number[sizeof(entry.number) - 1] = '\0';
       strncpy(entry.href, self->currentFootnote.href, sizeof(entry.href) - 1);
       entry.href[sizeof(entry.href) - 1] = '\0';
-      int wordIndex =
+      const int endWord =
           self->wordsExtractedInBlock + (self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0);
-      self->pendingFootnotes.push_back({wordIndex, entry});
+      const int startInBlock =
+          (endWord > self->footnoteStartWordInBlock) ? self->footnoteStartWordInBlock : std::max(0, endWord - 1);
+      const uint8_t wordCount = static_cast<uint8_t>(std::clamp(endWord - startInBlock, 1, 255));
+      self->pendingFootnotes.push_back({startInBlock, wordCount, entry});
     }
     self->insideFootnoteLink = false;
   }
@@ -2823,6 +2867,11 @@ bool ChapterHtmlSlimParser::beginParse() {
     lines.clear();
   }
   tableLineVisibleOffsets.clear();
+  insideFootnoteLink = false;
+  footnoteLinkDepth = -1;
+  footnoteStartWordInBlock = 0;
+  pendingFootnotes.clear();
+  linkedFootnoteAnchors.clear();
 
   auto paragraphAlignmentBlockStyle = BlockStyle();
   paragraphAlignmentBlockStyle.textAlignDefined = true;
@@ -3037,11 +3086,16 @@ void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const
   }
   setCurrentPageVisibleOffset(visibleOffset);
 
-  // Track cumulative words to assign footnotes to the page containing their anchor
+  // Track cumulative words to assign footnotes to the page and word span containing their anchor
+  const int lineStartInBlock = wordsExtractedInBlock;
+  const uint16_t pageWordsBeforeLine = pendingFootnotes.empty() ? 0 : currentPage->totalWordCount();
   wordsExtractedInBlock += line->wordCount() + lineImages.size();
   auto footnoteIt = pendingFootnotes.begin();
-  while (footnoteIt != pendingFootnotes.end() && footnoteIt->first <= wordsExtractedInBlock) {
-    currentPage->addFootnote(footnoteIt->second.number, footnoteIt->second.href);
+  while (footnoteIt != pendingFootnotes.end() && footnoteIt->startWordInBlock < wordsExtractedInBlock) {
+    const int offsetInLine = std::clamp(footnoteIt->startWordInBlock - lineStartInBlock, 0,
+                                        std::max(0, static_cast<int>(line->wordCount()) - 1));
+    const uint16_t pageStartWord = static_cast<uint16_t>(std::min<int>(pageWordsBeforeLine + offsetInLine, UINT16_MAX));
+    currentPage->addFootnote(footnoteIt->entry.number, footnoteIt->entry.href, pageStartWord, footnoteIt->wordCount);
     ++footnoteIt;
   }
   pendingFootnotes.erase(pendingFootnotes.begin(), footnoteIt);
@@ -3122,8 +3176,10 @@ void ChapterHtmlSlimParser::makePages(const bool includeLastLine, const bool par
   // Normally addLineToPage handles this via word-index tracking, but this catches
   // edge cases where a footnote's word index equals the exact block size.
   if (!pendingFootnotes.empty() && currentPage) {
-    for (const auto& [idx, fn] : pendingFootnotes) {
-      currentPage->addFootnote(fn.number, fn.href);
+    const uint16_t pageWords = currentPage->totalWordCount();
+    const uint16_t fallbackStart = pageWords > 0 ? static_cast<uint16_t>(pageWords - 1) : 0;
+    for (const auto& pending : pendingFootnotes) {
+      currentPage->addFootnote(pending.entry.number, pending.entry.href, fallbackStart, pending.wordCount);
     }
     pendingFootnotes.clear();
   }

@@ -144,14 +144,28 @@ void EpubReaderActivity::openQuickMenu(const int row) {
 }
 
 void EpubReaderActivity::openFootnotes() {
-  startActivityForResult(std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, currentPageFootnotes),
-                         [this](const ActivityResult& result) {
-                           if (!result.isCancelled) {
-                             const auto& footnoteResult = std::get<FootnoteResult>(result.data);
-                             navigateToHref(footnoteResult.href, true);
-                           }
-                           requestUpdate();
-                         });
+  if (currentPageFootnotes.size() == 1) {
+    if (pageOnScreen.load(std::memory_order_acquire) && section) {
+      openFootnotePopup(currentPageFootnotes[0]);
+    } else {
+      pendingFootnotePopupIndex = 0;
+      requestUpdate();
+    }
+    return;
+  }
+  startActivityForResult(
+      std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, currentPageFootnotes),
+      [this](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          const auto& footnoteResult = std::get<FootnoteResult>(result.data);
+          if (footnoteResult.index >= 0 && footnoteResult.index < static_cast<int>(currentPageFootnotes.size())) {
+            pendingFootnotePopupIndex = footnoteResult.index;
+          } else {
+            navigateToHref(footnoteResult.href, true);
+          }
+        }
+        requestUpdate();
+      });
 }
 
 void EpubReaderActivity::openChapterSelection() {

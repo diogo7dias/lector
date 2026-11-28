@@ -172,7 +172,10 @@ namespace {
 //      first or last line or a heading from sitting alone, so pages end full.
 // v93: An unstyled blockquote is inset 1 em from each side (shrunk when nested), so
 //      chapters with quotes wrap differently.
-constexpr uint8_t SECTION_FILE_VERSION = 93;
+// v94: FootnoteEntry records startWord (uint16_t) and wordCount (uint8_t) in the page
+//      cache for direct footnote tap hit-testing, and linked <aside epub:type="footnote">
+//      blocks stay out of main reading flow.
+constexpr uint8_t SECTION_FILE_VERSION = 94;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
