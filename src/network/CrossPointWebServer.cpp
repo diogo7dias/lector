@@ -422,7 +422,7 @@ void CrossPointWebServer::handleClient() {
   }
 }
 
-void CrossPointWebServer::noteActivity() {
+void CrossPointWebServer::noteActivity() const {
   const unsigned long now = millis();
   lastRequestAt = now;
   if (powerSave.noteActivity(now)) {
@@ -1098,6 +1098,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
   if (upload.status == UPLOAD_FILE_START) {
     // Reset watchdog - this is the critical 1% crash point
     resetTaskWatchdogIfSubscribed();
+    noteActivity();  // the body arrives before the middleware runs: wake the radio now
 
     state.fileName = upload.filename;
     state.size = 0;
@@ -2464,6 +2465,7 @@ void CrossPointWebServer::handleFontUploadData() {
   switch (upload.status) {
     case UPLOAD_FILE_START: {
       resetTaskWatchdogIfSubscribed();
+      noteActivity();
       String family = server->arg("family");
       fontUpload.file = HalFile();
       fontUpload.filePath.clear();
