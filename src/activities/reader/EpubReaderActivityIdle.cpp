@@ -14,11 +14,15 @@
 #include "EpubReaderActivity.h"
 #include "EpubReaderUtils.h"
 #include "IdlePrewarmNeighbour.h"
+#include "IdlePrewarmTiming.h"
 #include "MappedInputManager.h"
 #include "QuoteSelectActivity.h"
 #include "WatermarkBuildBail.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "util/SortesSelection.h"
+
+static_assert(idle_prewarm::CLOCK_DROP_MARGIN_MS < HalPowerManager::IDLE_POWER_SAVING_MS,
+              "the idle work must be able to start before the idle clock drop");
 
 void EpubReaderActivity::runIdleBackgroundWork() {
   // Idle glyph prewarm for the neighbour the reader is moving toward. The scan
