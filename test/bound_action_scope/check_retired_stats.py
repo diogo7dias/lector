@@ -78,10 +78,11 @@ int main() {
   turn(true);
   assert(sessionPages == std::numeric_limits<int>::max());
   static_assert(CrossPointSettings::TRANSPARENT_CUSTOM == 7);
+  static_assert(CrossPointSettings::QUOTE == 9);
   static_assert(CrossPointSettings::HOME_BACK_STATS == 2);
   static_assert(CrossPointSettings::HOME_BACK_SORTES == 3);
   static_assert(LP_MENU_READING_STATS == 31);
-  assert(wake_face::sleepFaceFromFile(9, true) == 2);
+  assert(wake_face::sleepFaceFromFile(10, true) == 2);
   Document modern;
   modern.values["btnUiPowerSingle"] = {LP_MENU_DISABLED};
   for (uint8_t value = 0; value < LONG_PRESS_MENU_FUNCTION_COUNT; ++value) {

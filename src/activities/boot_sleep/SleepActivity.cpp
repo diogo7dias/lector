@@ -187,6 +187,8 @@ void SleepActivity::renderSleepScreen() const {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM):
       // The cover while reading, a wallpaper otherwise (and when the book has no cover).
       return APP_STATE.lastSleepFromReader ? renderCoverSleepScreen(CoverFallback::Custom) : renderCustomSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::QUOTE):
+      return renderQuoteSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM):
     default:
       return renderCustomSleepScreen();
