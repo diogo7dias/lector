@@ -308,7 +308,7 @@ books copied from a computer carry a real date, while books the device downloade
 | Type            | Opens as                                              |
 | --------------- | ----------------------------------------------------- |
 | `.epub`         | The full reader: chapters, footnotes, bookmarks, quotes |
-| `.txt`          | Plain-text reader                                     |
+| `.txt`          | Plain-text reader: per-book Text Settings, Reading Themes, justification |
 | `.xtc`          | XTC reader, the Xteink book format                    |
 | `.bmp`, `.png`, `.jpg` | Image viewer                                   |
 | `.pxc`          | Image viewer for the packed wallpaper format          |

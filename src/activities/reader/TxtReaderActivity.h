@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
+#include "ReaderPrefs.h"
 #include "ReaderProgressSaveDebouncer.h"
 #include "ReaderUtils.h"
 #include "SimpleReaderShortcut.h"
@@ -18,9 +19,14 @@ class TxtReaderActivity final : public Activity {
   int totalPages = 1;
   int pagesUntilFullRefresh = 0;
 
+  struct TxtLine {
+    std::string text;
+    bool isParagraphEnd = true;
+  };
+
   // Streaming text reader - stores file offsets for each page
   std::vector<size_t> pageOffsets;  // File offset for start of each page
-  std::vector<std::string> currentPageLines;
+  std::vector<TxtLine> currentPageLines;
   int linesPerPage = 0;
   int viewportWidth = 0;
   bool initialized = false;
@@ -29,12 +35,19 @@ class TxtReaderActivity final : public Activity {
   bool unsupportedEncoding = false;  // UTF-16 file: nothing indexed, a message instead
   bool legacy8Bit = false;           // Windows-1252 / Latin-1 bytes, decoded to UTF-8 per page
 
+  // Per-book look (loaded from <cachePath>/reader_override.bin, or global default).
+  ReaderPrefs prefs_;
+  bool prefsCustom_ = false;
+  ReaderPrefs readerEdit_;
+
   // Pairs the Back release with the press this activity saw, so a release left over by a
   // child screen that closed on press is not read as "leave the book".
   ReaderUtils::ButtonPressLatch backLatch_;
 
   // Cached settings for cache validation (different fonts/margins require re-indexing)
   int cachedFontId = 0;
+  float cachedLineCompression = 1.0f;
+  int8_t cachedCharacterSpacing = 0;
   uint8_t cachedScreenMargin = 0;
   uint8_t cachedParagraphAlignment = CrossPointSettings::LEFT_ALIGN;
   int cachedOrientedMarginTop = 0;
@@ -42,8 +55,7 @@ class TxtReaderActivity final : public Activity {
   int cachedOrientedMarginBottom = 0;
   int cachedOrientedMarginLeft = 0;
 
-  // Confirm inside a TXT book opens this small popup instead of a full menu: a plain
-  // text file has only a handful of things worth changing, so three rows cover it.
+  // Confirm inside a TXT book opens the book popup (Text Settings, Reading Themes, Reset, Delete).
   OptionPopup settingsPopup;
   // Set when the popup's Delete row has been confirmed; the file and its cache are
   // removed in onExit, after the Txt handle is released, the same ordering the EPUB
@@ -56,10 +68,21 @@ class TxtReaderActivity final : public Activity {
   mutable int paraPagesFor = -1;
   mutable int paraPagesLeft = -1;
 
+  std::string readerOverridePath() const;
+  bool writeReaderOverride(const ReaderPrefs& p) const;
+  void loadReaderPrefs();
+  static void readerEditSinkThunk(void* ctx, const ReaderPrefs& live);
+  void persistReaderSettingsEdit(const ReaderPrefs& live) const;
+  void applyReaderSettingsEdit();
+  ReaderPrefs applyReaderPrefsFrom(const ReaderPrefs& incoming);
+  void resetReaderPrefsToGlobal();
   void openSettingsPopup();
+  void openReaderSettings();
+  void openReadingThemes();
+  void askResetReaderSettings();
   void askDeleteBook();
-  // Re-layout after a font or size change: rebuilds the page index against the new
-  // font and lands on the page holding the byte the reader was showing before.
+  // Re-layout after a font or look change: rebuilds the page index against the new
+  // look and lands on the page holding the byte the reader was showing before.
   void relayoutForFontChange();
 
   void renderPage();
@@ -73,7 +96,7 @@ class TxtReaderActivity final : public Activity {
   int pagesUntilNextParagraph() const;
 
   void initializeReader();
-  bool loadPageAtOffset(size_t offset, std::vector<std::string>& outLines, size_t& nextOffset);
+  bool loadPageAtOffset(size_t offset, std::vector<TxtLine>& outLines, size_t& nextOffset);
   void buildPageIndex();
   bool loadPageIndexCache();
   void detectEncoding();
