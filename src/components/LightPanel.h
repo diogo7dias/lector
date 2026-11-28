@@ -38,10 +38,11 @@ class LightPanel {
   // CrossPointSettings::LP_MENU_* values and returns whether anything took it; stepAux
   // moves the aux row by -1 or +1 and returns whether the value changed.
   void setHost(std::function<void(light_panel::Context&)> buildContext, std::function<bool(uint8_t)> runAction,
-               std::function<bool(int)> stepAux) {
+               std::function<bool(int)> stepAux, std::function<bool(int)> stepAux2 = nullptr) {
     buildContext_ = std::move(buildContext);
     runAction_ = std::move(runAction);
     stepAux_ = std::move(stepAux);
+    stepAux2_ = std::move(stepAux2);
   }
 
   // Opens on every board. Without a frontlight (X3, X4) it is the aux row, the action grid
@@ -58,6 +59,8 @@ class LightPanel {
       cursor_ = {light_panel::Row::Brightness, -1};
     } else if (context_.hasAux()) {
       cursor_ = {light_panel::Row::Aux, -1};
+    } else if (context_.hasAux2()) {
+      cursor_ = {light_panel::Row::Aux2, -1};
     } else {
       cursor_ = {light_panel::Row::None, context_.actionCount > 0 ? 0 : -1};
     }
@@ -211,7 +214,7 @@ class LightPanel {
     const int lineHeight = renderer.getLineHeight(banner::FONT_ID);
     layout_ = light_panel::forScreen(screenWidth, lineHeight, renderer.getLineHeight(UI_10_FONT_ID),
                                      Frontlight.hasColorTemperature(), context_.hasAux(), context_.actionCount,
-                                     Frontlight.present());
+                                     Frontlight.present(), context_.hasAux2());
 
     // Physical top crop (X4 crops ~9px, X3 none): the backing reaches the physical
     // edge while the rows sit below the crop, matching message popups.
@@ -234,6 +237,7 @@ class LightPanel {
     drawSliderRow(renderer, layout_.brightness, Sun24Icon, brightness_);
     if (layout_.hasWarmth) drawSliderRow(renderer, layout_.warmth, Thermometer24Icon, warmth_);
     if (layout_.hasAux) drawAuxRow(renderer, layout_.aux, context_.auxText);
+    if (layout_.hasAux2) drawAuxRow(renderer, layout_.aux2, context_.aux2Text);
 
     for (int i = 0; i < layout_.actionCount; ++i) {
       drawBox(renderer, layout_.actions[i], I18N.get(boundMenuActionLabel(context_.actions[i])), cursor_.action == i);
@@ -383,8 +387,9 @@ class LightPanel {
   }
 
   void step(const light_panel::Row row, const int delta, const std::function<void()>& requestUpdate) {
-    if (row == light_panel::Row::Aux) {
-      if (!stepAux_ || !stepAux_(delta)) return;
+    if (row == light_panel::Row::Aux || row == light_panel::Row::Aux2) {
+      const auto& fn = row == light_panel::Row::Aux2 ? stepAux2_ : stepAux_;
+      if (!fn || !fn(delta)) return;
       // The row shows the value it just moved, so the text has to be asked for again.
       rebuildContext();
       requestUpdate();
@@ -420,6 +425,7 @@ class LightPanel {
   std::function<void(light_panel::Context&)> buildContext_;
   std::function<bool(uint8_t)> runAction_;
   std::function<bool(int)> stepAux_;
+  std::function<bool(int)> stepAux2_;
   mutable int topInset_ = 0;
   mutable light_panel::Layout layout_{};
   ButtonNavigator nav_{120, 350};

@@ -604,6 +604,16 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
                          {StrId::STR_FMT_AUTHOR_TITLE, StrId::STR_FMT_TITLE_AUTHOR, StrId::STR_FMT_TITLE},
                          "opdsFilenameFormat"));
 
+  // Library sort and filter: cycled from the Quick Panel while in Library.
+  emit(SettingInfo::Enum(StrId::STR_SORT, &CrossPointSettings::librarySort,
+                         {StrId::STR_SORT_TITLE, StrId::STR_SORT_AUTHOR, StrId::STR_BOOK_ORDER_RECENTLY_ADDED,
+                          StrId::STR_BOOK_ORDER_LAST_READ},
+                         "librarySort"));
+  emit(SettingInfo::Enum(
+      StrId::STR_FILTER, &CrossPointSettings::libraryFilter,
+      {StrId::STR_FILTER_ALL, StrId::STR_FILTER_READING, StrId::STR_FILTER_UNREAD, StrId::STR_FILTER_READ},
+      "libraryFilter"));
+
   // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
   emit(SettingInfo::DynamicString(
       StrId::STR_KOREADER_USERNAME, [] { return KOREADER_STORE.getUsername(); },

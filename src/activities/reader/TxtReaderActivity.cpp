@@ -6,6 +6,8 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <LibraryBuilder.h>
+#include <LibraryIndexFile.h>
 #include <Memory.h>
 #include <Serialization.h>
 #include <Utf8.h>
@@ -81,6 +83,8 @@ void TxtReaderActivity::onExit() {
     marker.percent = static_cast<uint8_t>(pct);
     marker.readOrder = ++APP_STATE.readOrderCounter;
     book_progress::write(txt->getCachePath(), marker);
+    library::updateRecordProgress(library::libraryIndexPath(), txt->getPath().c_str(), marker.percent,
+                                  marker.readOrder);
     APP_STATE.saveToFile();
   }
 

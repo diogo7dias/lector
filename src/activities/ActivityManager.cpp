@@ -96,7 +96,8 @@ void ActivityManager::setSleepAction(std::function<void()> onSleep) {
                        MenuReturn::Scope backToPanel(&ActivityManager::reopenLightPanel, this, 0);
                        return runBoundAction(function);
                      },
-                     [this](const int delta) { return stepLightPanelAux(delta); });
+                     [this](const int delta) { return stepLightPanelAux(delta); },
+                     [this](const int delta) { return stepLightPanelAux2(delta); });
 }
 
 void ActivityManager::buildLightPanelContext(light_panel::Context& context) {
@@ -107,6 +108,9 @@ void ActivityManager::buildLightPanelContext(light_panel::Context& context) {
   if (!taken && !isBookContext()) {
     snprintf(context.auxText, sizeof(context.auxText), "%s: %s", I18N.get(StrId::STR_SORT),
              I18N.get(bookOrderLabel(SETTINGS.bookBrowserOrder)));
+  }
+  if (currentActivity) {
+    currentActivity->lightPanelAux2Text(context.aux2Text, sizeof(context.aux2Text));
   }
 
   const bool inBook = isBookContext();
@@ -130,6 +134,10 @@ bool ActivityManager::stepLightPanelAux(const int delta) {
   // rather than re-sort what it drew: Last Read reads a key per book off the card.
   if (currentActivity) currentActivity->onBookOrderChanged();
   return true;
+}
+
+bool ActivityManager::stepLightPanelAux2(const int delta) {
+  return currentActivity && currentActivity->lightPanelStepAux2(delta);
 }
 
 void ActivityManager::begin() {
