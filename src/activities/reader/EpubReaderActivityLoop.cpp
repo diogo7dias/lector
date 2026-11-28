@@ -122,6 +122,12 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
 
+  if (showPageNotFoundMessage && (millis() - pageNotFoundMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showPageNotFoundMessage = false;
+    scheduleGhostCleanup();
+    requestUpdate();
+  }
+
   // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
   // input. Anything it doesn't handle (e.g. long-press Back to the file browser) falls
   // through to the regular handlers below; page turns are absorbed by the end-of-book

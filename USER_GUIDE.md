@@ -202,7 +202,8 @@ The Home screen is the entry point. It lists the books you have been reading, an
 - **Library** — every book on the card by title, see [Library](#library).
 - **OPDS Browser** — shown once at least one catalog is configured, see
   [section 9](#9-getting-books-onto-the-device).
-- **File Transfer** — Wi-Fi transfers, see [section 9](#9-getting-books-onto-the-device).
+- **Nearby Sync** — receive a reading position or send and receive files with another Lector nearby, see
+  [section 10](#10-syncing-reading-position). Wi-Fi, Hotspot, Calibre and USB Drive live under **Settings > File Transfer**.
 - **Quick Panel** — the X3 and X4 only: opens the quick panel (see Settings reference), the same
   panel a double click of **Power** opens.
 - **Settings** — see [section 12](#12-settings-reference).
@@ -455,9 +456,11 @@ screen has a wallpaper to act on; on nights it has none, the menu opens on **Nav
 - **Go to %** — jump by percentage. The front buttons move it by 1, the side buttons by 10.
   On a touch screen a number pad sits under the slider: type the number (4, 7 for 47%),
   the delete key takes back the last digit, and **OK** jumps.
-- **Go to Page** — jump to a page number of the printed edition: type it as the book prints
-  it (`147`, or `xii` in the front matter) and **OK**. Shown only in EPUB 3 books that carry
-  the printed page numbers (a page list); Return takes you back.
+- **Go to Page** — in an EPUB 3 book that carries printed page numbers (a page list), jump to a
+  printed page by typing it as the book prints it (`147`, or `xii` in the front matter) and **OK**.
+  In every other EPUB, jump to a page within the current chapter (`1` to the chapter's total, shown
+  as `N/M` in the prompt). Entering a page that does not exist shows **Page not found**; Return
+  takes you back.
 - **Return** — go back to where you were before selecting a chapter, jumping by percentage,
   or opening a bookmark. Keeps the last eight jump origins during this reading session;
   ordinary page turns do not add entries. Shown only while there is somewhere to return to.
