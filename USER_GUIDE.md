@@ -315,7 +315,7 @@ books copied from a computer carry a real date, while books the device downloade
 | Type            | Opens as                                              |
 | --------------- | ----------------------------------------------------- |
 | `.epub`         | The full reader: chapters, footnotes, bookmarks, quotes |
-| `.txt`          | Plain-text reader                                     |
+| `.txt`          | Plain-text reader: per-book Text Settings, Reading Themes, justification |
 | `.xtc`          | XTC reader, the Xteink book format                    |
 | `.bmp`, `.png`, `.jpg` | Image viewer                                   |
 | `.pxc`          | Image viewer for the packed wallpaper format          |
@@ -1182,13 +1182,12 @@ default 30; a brightness above it is brought down), **Restore on Wake** (on by d
 **Light On Until** times (20:00 and 07:00 by default, in quarter-hour steps).
 
 In a book the quick panel also has **Calm Mode**, **Align Left** and **Justify**, which set the
-book's paragraph alignment (for that EPUB alone; in a TXT book, for every TXT book), and
-**Paragraph Spacing**, which turns the extra space between an EPUB's paragraphs on or off for
-that book. **Calm Mode** (off by default; also bindable to a button in **Settings > Controls >
-Buttons**) hides the status bar, the hidden-bar progress bar, the low-battery notice (until the
-critical 5% floor) and the centre-tap reader menu; a bottom-edge swipe up and **Confirm** still
-open the menu. Turning it off restores your exact previous setup without modifying saved status
-bar settings or Reading Themes.
+book's paragraph alignment for that book alone, and **Paragraph Spacing**, which turns the extra
+space between an EPUB's paragraphs on or off for that book. **Calm Mode** (off by default; also
+bindable to a button in **Settings > Controls > Buttons**) hides the status bar, the hidden-bar
+progress bar, the low-battery notice (until the critical 5% floor) and the centre-tap reader menu;
+a bottom-edge swipe up and **Confirm** still open the menu. Turning it off restores your exact
+previous setup without modifying saved status bar settings or Reading Themes.
 
 **Screen**
 
