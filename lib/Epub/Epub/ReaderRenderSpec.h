@@ -69,6 +69,9 @@ struct ReaderRenderSpec {
   // word changes width, so part of the cache key; the renderer applies it
   // (GfxRenderer::setCharacterSpacing).
   int8_t characterSpacing = 0;
+  // Keep Headings with Text (opt-in, default off): never strand a heading at the bottom
+  // of a page, and avoid 1-line orphans and widows on paragraphs of 4+ lines.
+  bool keepHeadingsWithText = false;
 
   // Memberwise: padding is ignored and float equality keeps its usual semantics.
   constexpr bool operator==(const ReaderRenderSpec&) const = default;

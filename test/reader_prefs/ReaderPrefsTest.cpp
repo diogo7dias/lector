@@ -550,10 +550,12 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V23_SIZE + 1, READER_PREFS_V24_SIZE);
   EXPECT_EQ(READER_PREFS_V24_SIZE + 1, READER_PREFS_V25_SIZE);
   EXPECT_EQ(READER_PREFS_V25_SIZE + 1, READER_PREFS_V28_SIZE);
-  EXPECT_EQ(READER_PREFS_V28_SIZE + 1, sizeof(ReaderPrefs));
-  EXPECT_EQ(READER_PREFS_V28_SIZE, readerPrefsRecordSize(27));
-  EXPECT_EQ(READER_PREFS_V28_SIZE, readerPrefsRecordSize(26));  // v27 moved meanings, not bytes
+  EXPECT_EQ(READER_PREFS_V28_SIZE + 1, READER_PREFS_V29_SIZE);
+  EXPECT_EQ(READER_PREFS_V29_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V29_SIZE, readerPrefsRecordSize(29));
   EXPECT_EQ(READER_PREFS_V25_SIZE, readerPrefsRecordSize(25));
+  EXPECT_EQ(READER_PREFS_V28_SIZE, readerPrefsRecordSize(26));
+  EXPECT_EQ(READER_PREFS_V28_SIZE, readerPrefsRecordSize(27));
   EXPECT_EQ(READER_PREFS_V24_SIZE, readerPrefsRecordSize(24));
   EXPECT_EQ(READER_PREFS_V23_SIZE, readerPrefsRecordSize(23));
   EXPECT_EQ(READER_PREFS_V22_SIZE, readerPrefsRecordSize(22));
@@ -570,7 +572,7 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(29, ReaderPrefs::VERSION);
+  EXPECT_EQ(30, ReaderPrefs::VERSION);
   EXPECT_EQ(READER_PREFS_V28_SIZE, readerPrefsRecordSize(28));  // v27/v28 moved meanings, not bytes
 }
 

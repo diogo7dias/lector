@@ -453,6 +453,10 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
                            StrId::STR_CAT_READER)
            .withTextSettings());
 
+  emit(SettingInfo::Toggle(StrId::STR_KEEP_HEADINGS, &CrossPointSettings::keepHeadingsWithText, "keepHeadingsWithText",
+                           StrId::STR_CAT_READER)
+           .withTextSettings());
+
   emit(SettingInfo::Toggle(StrId::STR_DEBUG_BORDERS, &CrossPointSettings::debugBorders, "debugBorders",
                            StrId::STR_CAT_READER)
            .withTextSettings());

@@ -41,12 +41,12 @@ TEST(SectionCacheValidity, OldHeadersRejectedBeforeSpecReadAndNewHeadersRoundTri
     EXPECT_FALSE(section.file.opened);
   }
 
-  EXPECT_EQ(94, SECTION_FILE_VERSION);
-  EXPECT_EQ(188, SECTION_FILE_PARTIAL_VERSION);
+  EXPECT_EQ(95, SECTION_FILE_VERSION);
+  EXPECT_EQ(187, SECTION_FILE_PARTIAL_VERSION);
   for (uint8_t version : {SECTION_FILE_VERSION, SECTION_FILE_PARTIAL_VERSION}) {
     Section writer;
     writer.writeSectionFileHeader(spec);
-    ASSERT_EQ(44u, writer.file.size());  // v89 dropped nine switch bytes and merged two indent bytes
+    ASSERT_EQ(45u, writer.file.size());  // v95 adds keepHeadingsWithText
     writer.file.seek(0);
     serialization::writePod(writer.file, version);
     if (version == SECTION_FILE_PARTIAL_VERSION) {

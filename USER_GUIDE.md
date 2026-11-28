@@ -1269,11 +1269,15 @@ The other numbers in Settings, such as Time to Sleep, open their own slider scre
   reader's own settings always win. Footnote and cross-reference links are always underlined, and
   kerning and ligatures are always on.
 
-Pages always end full: no line moves to the next page to keep a paragraph's first or last line
+By default pages end full: no line moves to the next page to keep a paragraph's first or last line
 or a heading from sitting alone at a page edge. Page breaks the book asks for still apply. Tables size each column to its content.
 Small pictures in the text (icons, symbols drawn as images, up to two lines tall) stay inside
 the line; larger ones get their own centred block, and a small picture alone in its paragraph
 is centred.
+- **Keep Headings** — off by default. When on, a heading never sits stranded at the bottom of a
+  page (it moves to the next page with the text that follows it), and paragraphs of four or more
+  lines avoid leaving a single orphan line at the bottom or a single widow line at the top of the
+  next page. Changing it re-paginates the book.
 - **Bionic Reading** — bolds the first part of each word as a fixation point.
 - **Word Spacing %** — sets the baseline gap between words, from 50% to 200% in steps of 25.
   100% keeps the original spacing. Justified lines still stretch to the right margin;
