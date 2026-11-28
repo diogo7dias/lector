@@ -1104,15 +1104,26 @@ void loop() {
     if (idleMs >= HalPowerManager::IDLE_PANEL_POWER_OFF_MS) display.powerOffPanel();
 
     if (idleMs >= HalPowerManager::IDLE_POWER_SAVING_MS) {
-      // If we've been inactive for a while, increase the delay to save power
+      // If we've been inactive for a while, drop the clock and either take a
+      // guarded light-sleep slice (X4 Pro) or poll on the raised idle cadence (C3).
       powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
-      // Sleep in short slices and wake the poll as soon as a button contact closes.
-      // InputManager commits a press only when two consecutive polls agree, so a
-      // press shorter than one 50 ms sleep could land in a single sample and be lost.
-      const unsigned long idleStart = millis();
-      while (millis() - idleStart < 50) {
-        delay(10);
-        if (gpio.rawInputActive()) break;
+      uint32_t maxSliceMs = idle_sleep::SLICE_TOUCH_ASLEEP_MS;
+      const auto clampDeadline = [&](const unsigned long deadlineMs) {
+        if (deadlineMs > 0 && idleMs < deadlineMs) {
+          const unsigned long remaining = deadlineMs - idleMs;
+          if (remaining < maxSliceMs) maxSliceMs = static_cast<uint32_t>(remaining);
+        }
+      };
+      clampDeadline(HalPowerManager::IDLE_PANEL_POWER_OFF_MS);
+      clampDeadline(touchSleepMs);
+      clampDeadline(sleepTimeoutMs);
+      float touchX = 0.0f;
+      float touchY = 0.0f;
+      const bool touchHeld = gpio.isTouchHeldAt(touchX, touchY);
+      if (!powerManager.idleLightSleepSlice(/*renderIdle=*/true, touchHeld, gpio.isTouchAsleep(), maxSliceMs)) {
+        // Re-poll quickly while a raw contact is closed so 5 ms debounce commits on
+        // the next pass; otherwise sleep the full idle interval to cut wakeups/s.
+        delay(gpio.rawInputActive() ? 5 : idle_sleep::C3_IDLE_POLL_MS);
       }
     } else {
       // Short delay to prevent tight loop while still being responsive

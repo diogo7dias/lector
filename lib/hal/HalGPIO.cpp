@@ -237,6 +237,8 @@ void HalGPIO::suppressTouchContact() { inputMgr.suppressTouchContact(); }
 
 void HalGPIO::setTouchAsleep(const bool asleep) { inputMgr.setTouchAsleep(asleep); }
 
+bool HalGPIO::isTouchAsleep() const { return inputMgr.isTouchAsleep(); }
+
 bool HalGPIO::hasHomeKey() const { return BoardConfig::hasHomeKey(); }
 
 bool HalGPIO::wasHomeKeyTapped() const { return inputMgr.wasHomeKeyTapped(); }
