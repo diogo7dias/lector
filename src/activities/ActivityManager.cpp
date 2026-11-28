@@ -56,10 +56,10 @@ namespace {
 // pair side by side so it reads as one choice.
 constexpr uint8_t IN_BOOK_ACTIONS[] = {CrossPointSettings::LP_MENU_FORCE_REFRESH,
                                        CrossPointSettings::LP_MENU_ROTATE,
+                                       CrossPointSettings::LP_MENU_NIGHT_MODE,
                                        CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR,
                                        CrossPointSettings::LP_MENU_READER_SETTINGS,
-                                       CrossPointSettings::LP_MENU_ALIGN_LEFT,
-                                       CrossPointSettings::LP_MENU_ALIGN_JUSTIFY,
+                                       CrossPointSettings::LP_MENU_TOGGLE_ALIGNMENT,
                                        CrossPointSettings::LP_MENU_TOGGLE_PARAGRAPH_SPACING};
 
 constexpr uint8_t OUT_OF_BOOK_ACTIONS[] = {
@@ -687,6 +687,13 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
       SETTINGS.frontlightOn = Frontlight.isOn() ? 0 : 1;
       applyFrontlightSetting(&CrossPointSettings::frontlightOn);
       SETTINGS.saveToFile();
+      return true;
+    }
+    case CrossPointSettings::LP_MENU_NIGHT_MODE: {
+      SETTINGS.screenInverted = SETTINGS.screenInverted ? 0 : 1;
+      SETTINGS.saveToFile();
+      if (currentActivity) currentActivity->onRevealed();
+      requestUpdate(/*immediate=*/true);
       return true;
     }
     default:

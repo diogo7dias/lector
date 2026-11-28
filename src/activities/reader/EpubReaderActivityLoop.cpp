@@ -27,10 +27,42 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "util/BookFiling.h"
 #include "util/SortesSelection.h"
+#include "util/StatusBarTapCycle.h"
 
 namespace {
 bool isInReadFolder(const std::string& path) { return bookfiling::isInFolder(path, bookfiling::READ_FOLDER); }
 }  // namespace
+
+bool EpubReaderActivity::handleStatusBarTap() {
+  if (!mappedInput.hasTouch()) return false;
+  int tx = 0;
+  int ty = 0;
+  if (!mappedInput.wasScreenTapped(tx, ty)) return false;
+
+  int viewTop = 0;
+  int viewRight = 0;
+  int viewBottom = 0;
+  int viewLeft = 0;
+  renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &viewLeft);
+  int sbTop = 0;
+  int sbBottom = 0;
+  statusBarBandHeights(sbTop, sbBottom);
+  const bool barVisible = statusBarOf(prefs_).textOn();
+  if (!status_bar_tap::hitTestBand(renderer.getScreenHeight(), viewTop, viewBottom, sbTop, sbBottom, barVisible, ty)) {
+    return false;
+  }
+
+  const auto step = status_bar_tap::nextState({prefs_.statusBarEnabled, prefs_.sbPageFormat});
+  prefs_.sbPageFormat = step.next.pageFormat;
+  if (step.layoutChanged) {
+    applyStatusBar(step.next.enabled, prefs_.sbOffBar);
+  } else {
+    prefsCustom_ = true;
+    writeReaderOverride(prefs_);
+  }
+  requestUpdate();
+  return true;
+}
 
 void EpubReaderActivity::loop() {
   if (!epub) {
@@ -180,6 +212,7 @@ void EpubReaderActivity::loop() {
     openQuoteGrab(holdX, holdY);
     return;
   }
+  if (!atEndOfBook && handleStatusBarTap()) return;
   // Touch on the open page, read once per loop: a tap or swipe can turn the page or
   // open the menu. Read before the Confirm handling below so the menu opens from
   // either input on the same pass.

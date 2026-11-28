@@ -248,7 +248,9 @@ std::string StatusBarSettingsActivity::rowValue(const int id) const {
     case ITEM_TITLE_TRUNCATE:
       return sb.titleTruncate ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case ITEM_PAGE_FORMAT:
-      return sb.pageFormat == CrossPointSettings::SB_PAGE_LEFT ? tr(STR_PAGE_LEFT) : tr(STR_PAGE_FRACTION);
+      if (sb.pageFormat == CrossPointSettings::SB_PAGE_LEFT) return tr(STR_PAGE_LEFT);
+      if (sb.pageFormat == CrossPointSettings::SB_PAGE_BOOK_PERCENT) return tr(STR_BOOK_PERCENT);
+      return tr(STR_PAGE_FRACTION);
     case ITEM_BOOK_BAR:
       return I18N.get(edgeNames[sb.bookBar < CrossPointSettings::STATUS_BAR_EDGE_COUNT ? sb.bookBar : 0]);
     case ITEM_CHAPTER_BAR:

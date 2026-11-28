@@ -1,0 +1,4 @@
+add_executable(StatusBarTapCycleTest StatusBarTapCycleTest.cpp)
+target_link_libraries(StatusBarTapCycleTest PRIVATE crosspoint_test_common GTest::gtest_main)
+target_include_directories(StatusBarTapCycleTest PRIVATE ${REPO_ROOT}/src)
+gtest_discover_tests(StatusBarTapCycleTest)

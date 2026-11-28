@@ -1156,9 +1156,9 @@ default 30; a brightness above it is brought down), **Restore on Wake** (on by d
 (at each wake inside the set hours the light comes on by itself) with its **Light On From** and
 **Light On Until** times (20:00 and 07:00 by default, in quarter-hour steps).
 
-In a book the quick panel also has **Align Left** and **Justify**, which set the book's paragraph
-alignment (for that EPUB alone; in a TXT book, for every TXT book), and **Paragraph Spacing**,
-which turns the extra space between an EPUB's paragraphs on or off for that book.
+In a book the quick panel also has **Night mode**, **Left / Justify** (which flips the book's
+paragraph alignment between Left and Justify, for that EPUB alone or for every TXT book), and
+**Paragraph Spacing**, which turns the extra space between an EPUB's paragraphs on or off for that book.
 
 **Screen**
 
@@ -1310,8 +1310,9 @@ Session**, **Pages to Paragraph**. Alongside them:
   its title in the Book Title slot, or in the Chapter Title slot when Book Title is off.
 - **Truncate Title** — off, a title wraps onto as many lines as it needs; on, it is cut short
   with `…`. A Book Title in a slot of its own is always one line.
-- **Page Format** — `N/M` or `N left`. In a book that carries the printed page numbers the
-  printed page follows it, `8/12 p.17`.
+- **Page Format** — `N/M`, `N left` or `Book %`. In a book that carries the printed page numbers the
+  printed page follows it, `8/12 p.17`. On the X4 Pro, tapping the status bar band while reading
+  cycles `N/M`, `N left`, `Book %` and hidden (tap the bottom edge while hidden to bring it back).
 - **Pages This Session** counts forward page turns in the open EPUB or TXT book and resets when
   the book closes.
 - **Pages to Paragraph** shows `>P.0` on most pages: the paragraph you are in ends before the

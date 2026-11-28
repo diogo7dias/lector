@@ -105,6 +105,12 @@ enum LONG_PRESS_MENU_FUNCTION {
   // Skips to the next or previous chapter (or +/-10 pages in chapterless TXT/XTC).
   LP_MENU_NEXT_CHAPTER = 39,
   LP_MENU_PREV_CHAPTER = 40,
+  // Flips Night mode (inverted display on reading surfaces) globally.
+  LP_MENU_NIGHT_MODE = 41,
+  // Opens Reading Themes for the open EPUB.
+  LP_MENU_READING_THEMES = 42,
+  // Flips paragraph alignment between Left and Justify (used in the Quick Panel to free a slot).
+  LP_MENU_TOGGLE_ALIGNMENT = 43,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 

@@ -28,6 +28,7 @@
 #include "util/BookProgressFile.h"
 #include "util/ProgressFile.h"
 #include "util/ReadingPercent.h"
+#include "util/StatusBarTapCycle.h"
 
 void TxtReaderActivity::onEnter() {
   Activity::onEnter();
@@ -111,8 +112,38 @@ void TxtReaderActivity::loop() {
   // child screen that closed on press, instead of reading it as "leave the book".
   backLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Back));
 
-  // Touch on the open page, read once per loop, as in EpubReaderActivity: a tap or swipe
+  // Touch on the open page, read once per loop, as in EpubReaderActivity: a tap on the
+  // status bar band cycles N/M -> N left -> Book % -> Hidden; otherwise a tap or swipe
   // turns the page, and the menu gesture opens what Confirm opens here.
+  if (mappedInput.hasTouch()) {
+    int tx = 0;
+    int ty = 0;
+    if (mappedInput.wasScreenTapped(tx, ty)) {
+      int vt = 0, vr = 0, vb = 0, vl = 0;
+      renderer.getOrientedViewableTRBL(&vt, &vr, &vb, &vl);
+      const StatusBarBlock sb = SETTINGS.statusBar();
+      bool sbTitleTop = false;
+      const int sbTitleLines =
+          UITheme::getStatusBarV2TitleLines(sb, renderer, false, "", txt->getTitle().c_str(), &sbTitleTop);
+      const int sbTitleExtraPx = (sbTitleLines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
+      const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(sb, false, sbTitleTop ? sbTitleExtraPx : 0);
+      const int sbBottom =
+          UITheme::getInstance().getStatusBarV2BottomHeight(sb, false, sbTitleTop ? 0 : sbTitleExtraPx);
+      if (status_bar_tap::hitTestBand(renderer.getScreenHeight(), vt, vb, sbTop, sbBottom, sb.textOn(), ty)) {
+        const auto step = status_bar_tap::nextState({SETTINGS.sbEnabled, SETTINGS.sbPageFormat});
+        SETTINGS.sbEnabled = step.next.enabled;
+        SETTINGS.sbPageFormat = step.next.pageFormat;
+        SETTINGS.saveToFile();
+        if (step.layoutChanged) {
+          quietIndex_ = true;
+          relayoutForFontChange();
+        } else {
+          requestUpdate();
+        }
+        return;
+      }
+    }
+  }
   const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
   if (ReaderUtils::isTouchMenuGesture(renderer, mappedInput, touch.menu) ||
       mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {

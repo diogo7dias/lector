@@ -55,9 +55,14 @@ bool TxtReaderActivity::runBoundAction(const uint8_t function) {
     return true;
   }
 
-  if (function == CrossPointSettings::LP_MENU_ALIGN_LEFT || function == CrossPointSettings::LP_MENU_ALIGN_JUSTIFY) {
-    const uint8_t alignment = function == CrossPointSettings::LP_MENU_ALIGN_LEFT ? CrossPointSettings::LEFT_ALIGN
-                                                                                 : CrossPointSettings::JUSTIFIED;
+  if (function == CrossPointSettings::LP_MENU_ALIGN_LEFT || function == CrossPointSettings::LP_MENU_ALIGN_JUSTIFY ||
+      function == CrossPointSettings::LP_MENU_TOGGLE_ALIGNMENT) {
+    const uint8_t alignment =
+        function == CrossPointSettings::LP_MENU_TOGGLE_ALIGNMENT
+            ? (SETTINGS.paragraphAlignment == CrossPointSettings::LEFT_ALIGN ? CrossPointSettings::JUSTIFIED
+                                                                             : CrossPointSettings::LEFT_ALIGN)
+            : (function == CrossPointSettings::LP_MENU_ALIGN_LEFT ? CrossPointSettings::LEFT_ALIGN
+                                                                  : CrossPointSettings::JUSTIFIED);
     if (SETTINGS.paragraphAlignment == alignment) return true;
     // TXT has no per-book prefs: the global setting is the one it reads.
     SETTINGS.paragraphAlignment = alignment;
