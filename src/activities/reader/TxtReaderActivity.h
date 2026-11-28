@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
+#include "EndOfBookOptions.h"
 #include "ReaderProgressSaveDebouncer.h"
 #include "ReaderUtils.h"
 #include "SimpleReaderShortcut.h"
@@ -66,6 +67,7 @@ class TxtReaderActivity final : public Activity {
   // One page forward or back. Shared
   // by the side keys and by a paging action bound to any other button.
   void pageTurn(bool forward);
+  void returnToLastPage();
   void skipPages(int delta);
   void renderStatusBar() const;
   // Pages after the current one wholly inside the paragraph running off its bottom
@@ -81,6 +83,7 @@ class TxtReaderActivity final : public Activity {
   void saveProgress(uint32_t page);
   void loadProgress();
   ReaderProgressSaveDebouncer progressSaveDebouncer;
+  EndOfBookOptions endOfBookOptions;
 
  public:
   explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt,

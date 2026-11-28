@@ -20,6 +20,7 @@
 #include "RecentBooksStore.h"
 #include "RuledLines.h"
 #include "SdCardFontSystem.h"
+#include "activities/ActivityManager.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -111,11 +112,36 @@ void TxtReaderActivity::loop() {
   // child screen that closed on press, instead of reading it as "leave the book".
   backLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Back));
 
+  const bool atEndOfBook = initialized && !pageOffsets.empty() && currentPage >= totalPages;
+
+  // While the end screen menu is showing it owns Confirm/Back/navigation input.
+  if (atEndOfBook && endOfBookOptions.menuActive()) {
+    std::string openPath;
+    switch (endOfBookOptions.handleMenuInput(mappedInput, &openPath)) {
+      case EndOfBookOptions::Action::OpenBook:
+        activityManager.goToReader(openPath);
+        return;
+      case EndOfBookOptions::Action::GoHome:
+        onGoHome();
+        return;
+      case EndOfBookOptions::Action::LastPage:
+        returnToLastPage();
+        return;
+      case EndOfBookOptions::Action::Redraw:
+        requestUpdate();
+        return;
+      case EndOfBookOptions::Action::SyncProgress:
+      case EndOfBookOptions::Action::ViewQuotes:
+      case EndOfBookOptions::Action::None:
+        break;
+    }
+  }
+
   // Touch on the open page, read once per loop, as in EpubReaderActivity: a tap or swipe
   // turns the page, and the menu gesture opens what Confirm opens here.
   const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
-  if (ReaderUtils::isTouchMenuGesture(renderer, mappedInput, touch.menu) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+  if (!atEndOfBook && (ReaderUtils::isTouchMenuGesture(renderer, mappedInput, touch.menu) ||
+                       mappedInput.wasPressed(MappedInputManager::Button::Confirm))) {
     openSettingsPopup();
     return;
   }
@@ -133,7 +159,24 @@ void TxtReaderActivity::loop() {
   pageTurn(nextTriggered);
 }
 
+void TxtReaderActivity::returnToLastPage() {
+  currentPage = totalPages > 0 ? totalPages - 1 : 0;
+  requestUpdate();
+}
+
 void TxtReaderActivity::pageTurn(const bool forward) {
+  if (currentPage >= totalPages) {
+    if (endOfBookOptions.menuActive()) {
+      return;
+    }
+    if (forward) {
+      onGoHome();
+    } else {
+      returnToLastPage();
+    }
+    return;
+  }
+
   if (!forward) {
     if (currentPage == 0) return;
     currentPage--;
@@ -145,7 +188,8 @@ void TxtReaderActivity::pageTurn(const bool forward) {
     currentPage++;
     requestUpdate();
   } else {
-    onGoHome();
+    currentPage = totalPages;  // sentinel: show End of Book screen
+    requestUpdate();
   }
 }
 
@@ -236,9 +280,15 @@ void TxtReaderActivity::render(RenderLock&&) {
     return;
   }
 
-  // Bounds check
+  // Bounds check: currentPage == totalPages shows the End of Book screen.
   if (currentPage < 0) currentPage = 0;
-  if (currentPage >= totalPages) currentPage = totalPages - 1;
+  if (currentPage >= totalPages) {
+    endOfBookOptions.loadOnce(txt->getPath(), txt->getTitle(), "");
+    renderer.clearScreen();
+    endOfBookOptions.render(renderer, mappedInput);
+    renderer.displayBuffer();
+    return;
+  }
 
   size_t offset = pageOffsets[currentPage];
   size_t nextOffset;
@@ -386,7 +436,7 @@ ScreenshotInfo TxtReaderActivity::getScreenshotInfo() const {
     const std::string t = txt->getTitle();
     snprintf(info.title, sizeof(info.title), "%s", t.c_str());
   }
-  info.currentPage = currentPage + 1;
+  info.currentPage = std::min(currentPage + 1, totalPages);
   info.totalPages = totalPages;
   info.progressPercent = reading_percent::pagePercent(currentPage, totalPages);
   return info;

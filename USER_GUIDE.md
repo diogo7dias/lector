@@ -249,9 +249,12 @@ list keeps the best 64. **Clear search**, or **Back**, returns to every book.
 
 ### End of book
 
-Turning past the last page shows **End of book** with the title and author, the day you
-finished (when the clock is set), and the last quote you saved from it. Any books from the
-same folder follow under **Continue with**.
+Turning past the last page of an EPUB, TXT, or XTC book shows **End of book** with the title and
+author, the day you finished (when the clock is set), and the last quote you saved from it.
+Suggested next books follow under **Continue with** — drawn from the same folder, or from the
+library index (unread books by the same author or sharing a series filename prefix) when the book
+was filed into `/recents` or has no folder siblings. Action rows (**Sync Progress** when configured,
+**View Quotes** when quotes exist, and **Home**) and button hints are always shown below.
 
 ---
 
