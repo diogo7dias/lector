@@ -98,7 +98,7 @@ void QuotesViewerActivity::loadQuotes() {
     if (record.hasNote && record.noteEnd > record.noteStart) {
       entry.note = quote_text::sanitizeNote(buf.substr(record.noteStart, record.noteEnd - record.noteStart));
     }
-    entry.displayLabel = entry.note.empty() ? entry.text : (entry.text + "\n> " + entry.note);
+    if (!entry.note.empty()) entry.displayLabel = entry.text + "\n> " + entry.note;
     if (!entry.text.empty()) quotes.push_back(std::move(entry));
   }
 }
@@ -268,7 +268,7 @@ void QuotesViewerActivity::buildScreen(UiScreen& screen) {
   chapterTags.assign(static_cast<size_t>(count), std::string());
   rows.assign(static_cast<size_t>(count), fui::ListItem{});
   for (int i = 0; i < count; ++i) {
-    rows[i].label = quotes[i].displayLabel.c_str();
+    rows[i].label = (quotes[i].displayLabel.empty() ? quotes[i].text : quotes[i].displayLabel).c_str();
     if (!quotes[i].chapter.empty()) {
       chapterTags[i] =
           renderer.truncatedText(UI_10_FONT_ID, quotes[i].chapter.c_str(), chapterMaxWidth, EpdFontFamily::REGULAR);

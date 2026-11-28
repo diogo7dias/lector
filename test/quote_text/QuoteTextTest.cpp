@@ -279,3 +279,16 @@ TEST(QuoteText, KindleNoteClippingLayout) {
   EXPECT_EQ("Dune (Frank Herbert)\n- Your Note on Page 1\n\nn\n==========\n",
             formatNoteClipping("Dune", "Frank Herbert", "", 1, "n", 0));
 }
+
+// A quote that itself starts with '>' is text, never a note: a misparse would empty the
+// text and the next viewer rewrite would drop the quote.
+TEST(QuoteText, QuoteStartingWithAngleBracketIsNotANote) {
+  for (const std::string& entry :
+       {formatQuoteEntry("Ch 1", "@q1:1,2,3", "> quoted line"), std::string("> quoted line\n---\n\n")}) {
+    size_t pos = 0;
+    QuoteRecord rec;
+    ASSERT_TRUE(nextQuoteRecord(entry, pos, rec));
+    EXPECT_FALSE(rec.hasNote);
+    EXPECT_EQ("> quoted line", entry.substr(rec.textStart, rec.textEnd - rec.textStart));
+  }
+}

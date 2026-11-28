@@ -25,7 +25,7 @@ class QuotesViewerActivity final : public UiListActivity {
     quote_text::QuoteMeta meta;  // save time and text offset, kept on rewrite like the anchor
     std::string text;
     std::string note;
-    std::string displayLabel;  // quote text, plus "\n> note" when a note is attached
+    std::string displayLabel;  // "text\n> note"; empty without a note, so the text is not held twice
   };
 
   QuotesViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& quotesFilePath)
