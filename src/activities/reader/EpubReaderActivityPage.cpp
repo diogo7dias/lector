@@ -49,6 +49,10 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   scope.endScanAndPrewarm();
   const auto tPrewarm = millis();
 
+  // Clear after scan and SD prewarm so a rapid turn overlaps them with a previous
+  // in-flight refresh before clearScreen() waits for the panel to finish.
+  renderer.clearScreen();
+
   // Images: Display (B/W): the page turns as plain B/W, images dither in the B/W pass and
   // text keeps its anti-aliasing. The layout is the same as Display, so only the draw differs.
   const bool imagesInBw = prefs_.imageRendering == CrossPointSettings::IMAGES_DISPLAY_BW;
@@ -105,7 +109,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     // Match CrossPoint: image pages use one base refresh before the grayscale pass.
     // FAST leaves the panel receptive to the gray waveform; pending cleanup still honors
     // the scheduled/manual HALF refresh.
-    renderer.displayBuffer(cleanImageBasePending ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+    renderer.displayBufferAsync(cleanImageBasePending ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
     // The grayscale pass below leaves gray charge in the image region that a plain
     // fast diff on the next page can't clear, so force the next ordinary page onto the
     // HALF ghost-cleanup path.

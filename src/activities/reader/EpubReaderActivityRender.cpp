@@ -252,8 +252,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // a plain resume / unchanged pagination). If still building, this defers to loop() on completion.
   applyDeferredReposition();
 
-  renderer.clearScreen();
-
   if (section->pageCount == 0) {
     if (!section->isBuilding()) {
       // An empty chapter skipped the clamp above, so a backward turn's last-page sentinel
@@ -265,6 +263,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     }
     returnHistory.finishReturn(false);
     LOG_DBG("ERS", "No pages to render");
+    renderer.clearScreen();
     renderer.drawCenteredText(UI_10_FONT_ID, 300, tr(STR_EMPTY_CHAPTER), true, EpdFontFamily::REGULAR);
     renderStatusBar();
     renderer.displayBuffer();
@@ -275,6 +274,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (section->currentPage < 0 || section->currentPage >= section->pageCount) {
     returnHistory.finishReturn(false);
     LOG_DBG("ERS", "Page out of bounds: %d (max %d)", section->currentPage, section->pageCount);
+    renderer.clearScreen();
     renderer.drawCenteredText(UI_10_FONT_ID, 300, tr(STR_OUT_OF_BOUNDS), true, EpdFontFamily::REGULAR);
     renderStatusBar();
     renderer.displayBuffer();

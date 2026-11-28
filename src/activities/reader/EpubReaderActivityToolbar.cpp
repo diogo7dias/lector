@@ -57,6 +57,7 @@ void EpubReaderActivity::closeToolbar(const bool repaint) {
 void EpubReaderActivity::paintToolbar() {
   // Render task, the page already in the framebuffer.
   if (!toolbarOpen || !toolbarUi || !section || !epub) return;
+  renderer.waitRefreshComplete();
   std::string chapterTitle = tr(STR_UNNAMED);
   const int tocIndex = section->getTocIndexForPage(section->currentPage);
   if (tocIndex != -1) chapterTitle = epub->getTocItem(tocIndex).title;

@@ -1627,6 +1627,7 @@ void GfxRenderer::clearScreen(const uint8_t color) const {
     return;
   }
   if (!hasFrameBuffer()) return;
+  waitRefreshComplete();
   display.clearScreen(color);
 }
 
@@ -1665,6 +1666,7 @@ bool GfxRenderer::glyphIntersectsStrip(int x0, int y0, int x1, int y1) const {
 
 void GfxRenderer::invertScreen() const {
   if (!hasFrameBuffer()) return;
+  waitRefreshComplete();
   for (uint32_t i = 0; i < frameBufferSize; i++) {
     frameBuffer[i] = ~frameBuffer[i];
   }
@@ -1732,6 +1734,7 @@ size_t GfxRenderer::readFramebufferRegion(int x, int y, int w, int h, uint8_t* d
 
 void GfxRenderer::writeFramebufferRegion(int x, int y, int w, int h, const uint8_t* src) {
   if (src == nullptr || w <= 0 || h <= 0 || !frameBuffer) return;
+  waitRefreshComplete();
 
   const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, w, h, panelWidth, panelHeight);
   if (!mem.valid) return;
@@ -2292,6 +2295,7 @@ void GfxRenderer::freeBwBufferChunks() {
  */
 bool GfxRenderer::storeBwBuffer() {
   if (!frameBuffer) return false;
+  waitRefreshComplete();
   for (size_t i = 0; i < bwBufferChunks.size(); i++) {
     // Check if any chunks are already allocated
     if (bwBufferChunks[i]) {
@@ -2327,6 +2331,7 @@ void GfxRenderer::restoreBwBuffer() {
     freeBwBufferChunks();
     return;
   }
+  waitRefreshComplete();
   bool missingChunks = false;
   for (const auto& bwBufferChunk : bwBufferChunks) {
     if (!bwBufferChunk) {

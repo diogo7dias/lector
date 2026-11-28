@@ -243,6 +243,7 @@ class LightPanel {
 
   bool processRender(GfxRenderer& renderer) const {
     if (!active_) return false;
+    renderer.waitRefreshComplete();
     render(renderer);
     renderer.displayBuffer();
     return true;

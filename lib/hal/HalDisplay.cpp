@@ -57,6 +57,11 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
 }
 
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+  if (pendingAsync) {
+    // HALF and FULL write both planes themselves, so no pre-sync of RED is needed.
+    if (mode != RefreshMode::FAST_REFRESH) pendingAsyncBaselineSync = false;
+    waitRefreshComplete();
+  }
   if (deviceProfile.isX3 && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
   }
@@ -66,10 +71,25 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen)
 }
 
 void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
-  pendingAsync = true;
-  if (deviceProfile.isX3 && mode == RefreshMode::HALF_REFRESH) {
-    einkDisplay.requestResync(1);
+  // On X3 (UC8253), HALF/FULL runs post-conditioning and fast-settle passes inside
+  // displayFinish() (~1.1 s of extra waveforms). Deferring those on a plain page turn
+  // delays the cleanup flash until idle power-off (freezing main-loop input and flashing
+  // 2 s late). Run X3 non-FAST refreshes synchronously; FAST_REFRESH is single-pass on
+  // every deferring driver and stays async.
+  if (deviceProfile.isX3 && mode != RefreshMode::FAST_REFRESH) {
+    displayBuffer(mode);
+    return;
   }
+  if (pendingAsync) {
+    if (mode != RefreshMode::FAST_REFRESH) pendingAsyncBaselineSync = false;
+    waitRefreshComplete();
+  }
+  pendingAsync = true;
+  // Single-buffer SSD1677 async FAST does not rewrite RED RAM after the waveform; mark
+  // it so waitRefreshComplete() restores the differential baseline before any mutation.
+  // Inverted mode takes the SDK's blocking path, and HALF/FULL writes both planes upfront.
+  pendingAsyncBaselineSync =
+      deviceProfile.controllerIsSsd1677 && !einkDisplay.isInverted() && mode == RefreshMode::FAST_REFRESH;
 
   einkDisplay.displayBufferAsyncNoShadow(convertRefreshMode(mode));
 }
@@ -79,28 +99,56 @@ void HalDisplay::waitRefreshComplete() {
   if (pendingAsync) {
     refreshCompleted = true;
     pendingAsync = false;
+    if (pendingAsyncBaselineSync) {
+      pendingAsyncBaselineSync = false;
+      if (uint8_t* fb = einkDisplay.getFrameBuffer()) {
+        einkDisplay.cleanupGrayscaleBuffers(fb);
+      }
+    }
   }
 }
 
 bool HalDisplay::supportsAsyncRefresh() const { return einkDisplay.supportsAsyncRefresh(); }
 
-void HalDisplay::setInverted(bool inverted) { einkDisplay.setInverted(inverted); }
+void HalDisplay::setInverted(bool inverted) {
+  if (pendingAsync && inverted != einkDisplay.isInverted()) {
+    pendingAsyncBaselineSync = false;
+    waitRefreshComplete();
+  }
+  einkDisplay.setInverted(inverted);
+}
 
 bool HalDisplay::isInverted() const { return einkDisplay.isInverted(); }
 
-void HalDisplay::deepSleep() { einkDisplay.deepSleep(); }
+void HalDisplay::deepSleep() {
+  if (pendingAsync) {
+    pendingAsyncBaselineSync = false;
+    waitRefreshComplete();
+  }
+  einkDisplay.deepSleep();
+}
 
 // Safe to call at any time and as often as you like: the driver keeps its own power flag
 // and returns immediately when the rails are already down, so a repeat costs no bus traffic.
-void HalDisplay::powerOffPanel() { einkDisplay.powerOffPanel(); }
+void HalDisplay::powerOffPanel() {
+  if (pendingAsync) waitRefreshComplete();
+  einkDisplay.powerOffPanel();
+}
 
 uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
-uint8_t* HalDisplay::lendFrameBufferStorage(uint32_t* sizeOut) { return einkDisplay.lendBuildStorage(sizeOut); }
+uint8_t* HalDisplay::lendFrameBufferStorage(uint32_t* sizeOut) {
+  if (pendingAsync) waitRefreshComplete();
+  return einkDisplay.lendBuildStorage(sizeOut);
+}
 
 void HalDisplay::returnFrameBufferStorage() { einkDisplay.returnBuildStorage(); }
 
 void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) {
+  if (pendingAsync) {
+    pendingAsyncBaselineSync = false;
+    waitRefreshComplete();
+  }
   // X3: a HALF fallback means the caller wants a clean base (e.g. the sleep
   // cover, a full-screen swap from arbitrary prior content). Without this, the
   // X3 grayscale base takes its gentle differential happy path and the prior
@@ -124,11 +172,29 @@ void HalDisplay::preconditionGrayscale(uint16_t x, uint16_t y, uint16_t w, uint1
   einkDisplay.preconditionGrayscale(x, y, w, h);
 }
 
-void HalDisplay::copyGrayscaleLsbBuffers(const uint8_t* lsbBuffer) { einkDisplay.copyGrayscaleLsbBuffers(lsbBuffer); }
+void HalDisplay::copyGrayscaleLsbBuffers(const uint8_t* lsbBuffer) {
+  if (pendingAsync) {
+    pendingAsyncBaselineSync = false;
+    waitRefreshComplete();
+  }
+  einkDisplay.copyGrayscaleLsbBuffers(lsbBuffer);
+}
 
-void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) { einkDisplay.copyGrayscaleMsbBuffers(msbBuffer); }
+void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) {
+  if (pendingAsync) {
+    pendingAsyncBaselineSync = false;
+    waitRefreshComplete();
+  }
+  einkDisplay.copyGrayscaleMsbBuffers(msbBuffer);
+}
 
-void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.cleanupGrayscaleBuffers(bwBuffer); }
+void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) {
+  if (pendingAsync) {
+    pendingAsyncBaselineSync = false;
+    waitRefreshComplete();
+  }
+  einkDisplay.cleanupGrayscaleBuffers(bwBuffer);
+}
 
 void HalDisplay::driveAllPixelsNextFast() { einkDisplay.requestDriveAllNextFast(); }
 
@@ -220,6 +286,10 @@ static_assert(!LECTOR_X4PRO_SPLIT_MIDS || (phasesAgree(kSplitGray02) && phasesAg
 #endif
 
 void HalDisplay::displayGrayBuffer(bool turnOffScreen, bool fullTone) {
+  if (pendingAsync) {
+    pendingAsyncBaselineSync = false;
+    waitRefreshComplete();
+  }
   // Null keeps the driver's own waveform. The override is UC8279-X4 bytes only: an X4 Pro
   // that probes as SSD1677 must never be handed it.
   const unsigned char* lut = nullptr;
@@ -237,6 +307,10 @@ void HalDisplay::displayGrayBuffer(bool turnOffScreen, bool fullTone) {
 }
 
 void HalDisplay::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* rows, uint16_t yStart, uint16_t numRows) {
+  if (pendingAsync) {
+    pendingAsyncBaselineSync = false;
+    waitRefreshComplete();
+  }
   einkDisplay.writeGrayscalePlaneStrip(lsbPlane ? EInkDisplay::GRAY_PLANE_LSB : EInkDisplay::GRAY_PLANE_MSB, rows,
                                        yStart, numRows);
 }
