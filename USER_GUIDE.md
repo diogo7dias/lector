@@ -1156,9 +1156,14 @@ default 30; a brightness above it is brought down), **Restore on Wake** (on by d
 (at each wake inside the set hours the light comes on by itself) with its **Light On From** and
 **Light On Until** times (20:00 and 07:00 by default, in quarter-hour steps).
 
-In a book the quick panel also has **Align Left** and **Justify**, which set the book's paragraph
-alignment (for that EPUB alone; in a TXT book, for every TXT book), and **Paragraph Spacing**,
-which turns the extra space between an EPUB's paragraphs on or off for that book.
+In a book the quick panel also has **Calm Mode**, **Align Left** and **Justify**, which set the
+book's paragraph alignment (for that EPUB alone; in a TXT book, for every TXT book), and
+**Paragraph Spacing**, which turns the extra space between an EPUB's paragraphs on or off for
+that book. **Calm Mode** (off by default; also bindable to a button in **Settings > Controls >
+Buttons**) hides the status bar, the hidden-bar progress bar, the low-battery notice (until the
+critical 5% floor) and the centre-tap reader menu; a bottom-edge swipe up and **Confirm** still
+open the menu. Turning it off restores your exact previous setup without modifying saved status
+bar settings or Reading Themes.
 
 **Screen**
 

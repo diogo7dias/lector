@@ -207,7 +207,7 @@ void EpubReaderActivity::renderStatusBar() const {
   // Read from the chapter's paragraph table, and only when the item is on: it costs
   // one section-file open, which is not worth paying on every page for a number
   // nobody asked to see.
-  const StatusBarBlock sb = statusBarOf(prefs_);
+  const StatusBarBlock sb = effectiveStatusBar(statusBarOf(prefs_), SETTINGS.calmMode != 0);
   if (sb.paraPagesPos != CrossPointSettings::SB_ANCHOR_OFF) {
     if (const auto left = section->pagesUntilNextParagraph(section->currentPage)) {
       d.paragraphPagesLeft = static_cast<int>(*left);

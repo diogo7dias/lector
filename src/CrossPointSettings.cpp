@@ -113,6 +113,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   // Hold Wallpaper — no longer a SettingsList row (it lives in the in-book menu), so the
   // generic loop no longer sees it.
   doc["wallpaperRotationPaused"] = wallpaperRotationPaused;
+  doc["calmMode"] = calmMode;
   // Marks the one-time 0.8.2 reading-defaults migration in fromJson as done.
   doc["readingDefaults0820"] = true;
   // Marks the one-time Touch Sleep Off migration in migrateFromJson as done.
@@ -202,6 +203,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
 
   // Hold Wallpaper — see toJson. Loaded by hand for the same reason.
   wallpaperRotationPaused = (doc["wallpaperRotationPaused"] | (uint8_t)0) ? 1 : 0;
+  calmMode = (doc["calmMode"] | (uint8_t)0) ? 1 : 0;
 
   // Menu Pop-up membership. Masked to the defined actions so a hand-edited or
   // future-version settings file cannot set a bit no builder knows how to draw, and
