@@ -283,9 +283,14 @@ class ChapterHtmlSlimParser {
   // Footnote link tracking
   bool insideFootnoteLink = false;
   int footnoteLinkDepth = -1;
+  int footnoteStartWordInBlock = 0;
   FootnoteEntry currentFootnote = {};
   int currentFootnoteLinkTextLen = 0;
-  std::vector<std::pair<int, FootnoteEntry>> pendingFootnotes;  // <wordIndex, entry>
+  std::vector<PendingFootnote> pendingFootnotes;
+  // Same-chapter #id hashes referenced by <a> links; matching <aside epub:type="footnote">
+  // blocks are kept out of main reading flow (they remain in the EPUB zip for pop-ups).
+  static constexpr size_t MAX_LINKED_FOOTNOTE_ANCHORS = 256;
+  std::vector<uint64_t> linkedFootnoteAnchors;
   int wordsExtractedInBlock = 0;
 
   // Resumable parse state. The one-shot parseAndBuildPages() drives these

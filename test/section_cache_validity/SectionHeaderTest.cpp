@@ -27,11 +27,12 @@ struct Section {
 
 TEST(SectionCacheValidity, OldHeadersRejectedBeforeSpecReadAndNewHeadersRoundTrip) {
   const ReaderRenderSpec spec;
-  for (uint8_t oldVersion : {61, 221, 81, 201, 88, 194, 91, 191}) {
+  for (uint8_t oldVersion : {61, 221, 81, 201, 88, 194, 91, 191, 96, 186}) {
     // v61 finalized and suspended headers were 47 bytes, including the retired toggle; v81
     // (and its partial 201) is the layout just before TrueType .notdef fallbacks; v88 (and
     // its partial 194) is the last layout before the lean typography header; v91 (and its
-    // partial 191) still carried orphan, widow and heading lines to the next page.
+    // partial 191) still carried orphan, widow and heading lines to the next page; v96 (and
+    // its partial 186) lacked FootnoteEntry word spans and aside skipping.
     Storage.bytes.assign(47, 0xFF);
     Storage.bytes[0] = oldVersion;
     Section section;
@@ -41,8 +42,8 @@ TEST(SectionCacheValidity, OldHeadersRejectedBeforeSpecReadAndNewHeadersRoundTri
     EXPECT_FALSE(section.file.opened);
   }
 
-  EXPECT_EQ(96, SECTION_FILE_VERSION);
-  EXPECT_EQ(186, SECTION_FILE_PARTIAL_VERSION);
+  EXPECT_EQ(97, SECTION_FILE_VERSION);
+  EXPECT_EQ(185, SECTION_FILE_PARTIAL_VERSION);
   for (uint8_t version : {SECTION_FILE_VERSION, SECTION_FILE_PARTIAL_VERSION}) {
     Section writer;
     writer.writeSectionFileHeader(spec);

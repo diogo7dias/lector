@@ -47,6 +47,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // its own SD pass after the scope ends.
   renderStatusBar();
   scope.endScanAndPrewarm();
+  computeFootnoteBoxes(*page, orientedMarginLeft, orientedMarginTop, fontId);
   const auto tPrewarm = millis();
 
   // Images: Display (B/W): the page turns as plain B/W, images dither in the B/W pass and

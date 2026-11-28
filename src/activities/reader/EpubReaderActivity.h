@@ -243,7 +243,12 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   bool isCurrentPageBookmarked() const;
   void addBookmark();
 
-  // Footnote navigation
+  // Footnote navigation and pop-up card (EpubReaderActivityFootnotePopup.cpp)
+  void computeFootnoteBoxes(const Page& page, int marginLeft, int marginTop, int fontId);
+  bool openFootnotePopup(const FootnoteEntry& entry);
+  void closeFootnotePopup(bool repaint);
+  void paintFootnotePopup();
+  bool handleFootnotePopupInput();
   void navigateToHref(const std::string& href, bool savePosition = false);
   void restoreSavedPosition();
 

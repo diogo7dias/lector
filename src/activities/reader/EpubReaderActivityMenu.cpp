@@ -134,9 +134,9 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
       // The number to type is the one the marks print; with numbering off there is none.
       return prefs_.paragraphNumbering != 0;
     case CrossPointSettings::LP_MENU_FOOTNOTES:
-      // Inside a footnote the same binding walks back out, which is what the "Power
-      // returns from footnote" toggle governs. With that off, only the way in is offered.
-      if (footnoteDepth > 0) return SETTINGS.pwrBtnFootnoteBack != 0;
+      // Inside a footnote (pop-up card or jumped endnote) the same binding walks back out,
+      // which is what the "Power returns from footnote" toggle governs.
+      if (footnotePopupOpen || footnoteDepth > 0) return SETTINGS.pwrBtnFootnoteBack != 0;
       return !currentPageFootnotes.empty();
     case CrossPointSettings::LP_MENU_BOOKMARKS:
       // Same test the in-book menu uses for its own Bookmarks row: an empty list screen
@@ -225,6 +225,11 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::GO_TO_PARAGRAPH);
       return true;
     case CrossPointSettings::LP_MENU_FOOTNOTES:
+      if (footnotePopupOpen) {
+        if (SETTINGS.pwrBtnFootnoteBack == 0) return false;
+        closeFootnotePopup(true);
+        return true;
+      }
       if (footnoteDepth > 0) {
         if (SETTINGS.pwrBtnFootnoteBack == 0) return false;
         restoreSavedPosition();

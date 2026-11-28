@@ -144,17 +144,6 @@ void EpubReaderActivity::openQuickMenu(const int row) {
   requestUpdate();
 }
 
-void EpubReaderActivity::openFootnotes() {
-  startActivityForResult(std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, currentPageFootnotes),
-                         [this](const ActivityResult& result) {
-                           if (!result.isCancelled) {
-                             const auto& footnoteResult = std::get<FootnoteResult>(result.data);
-                             navigateToHref(footnoteResult.href, true);
-                           }
-                           requestUpdate();
-                         });
-}
-
 void EpubReaderActivity::openChapterSelection() {
   int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
   // Release the section while the chapter list is up (mirrors the

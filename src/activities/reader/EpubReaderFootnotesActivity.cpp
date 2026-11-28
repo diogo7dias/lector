@@ -46,7 +46,7 @@ void EpubReaderFootnotesActivity::buildScreen(UiScreen& screen) {
 void EpubReaderFootnotesActivity::activateIndex(const int index) {
   if (index < 0 || index >= listCount()) return;
   app.clearTapFlash();
-  setResult(FootnoteResult{footnotes[index].href});
+  setResult(FootnoteResult{footnotes[index].href, index});
   finish();
 }
 

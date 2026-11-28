@@ -81,6 +81,7 @@ struct NetworkModeResult {
 
 struct FootnoteResult {
   std::string href;
+  int index = -1;
 };
 
 struct FilePathResult {
