@@ -24,6 +24,16 @@ constexpr size_t kMaxDescriptionBytes = 1500;
 constexpr size_t kMaxTitleBytes = 512;
 constexpr size_t kMaxAuthorBytes = 512;
 constexpr size_t kMaxLanguageBytes = 32;
+constexpr size_t kMaxSeriesBytes = 96;
+constexpr size_t kMaxPositionBytes = 16;
+
+std::string trimAscii(const std::string& in) {
+  size_t b = 0;
+  while (b < in.size() && static_cast<unsigned char>(in[b]) <= ' ') ++b;
+  size_t e = in.size();
+  while (e > b && static_cast<unsigned char>(in[e - 1]) <= ' ') --e;
+  return in.substr(b, e - b);
+}
 
 // Appending stops at the cap rather than trimming afterwards, so an oversized field is never
 // allocated in the first place. A cut may land inside a UTF-8 sequence; the cache writer
@@ -49,6 +59,30 @@ bool startsWithImageMediaType(const std::string& mediaType) {
   return true;
 }
 }  // namespace
+
+uint16_t ContentOpfParser::parseSeriesIndexX10(const char* text) {
+  if (!text) return 0;
+  while (*text && static_cast<unsigned char>(*text) <= ' ') ++text;
+  if (!*text || *text == '-') return 0;
+  if (*text == '+') ++text;
+  if (*text < '0' || *text > '9') return 0;
+  uint32_t whole = 0;
+  while (*text >= '0' && *text <= '9') {
+    if (whole < 6554) whole = whole * 10 + static_cast<uint32_t>(*text - '0');
+    ++text;
+  }
+  uint32_t tenth = 0;
+  if (*text == '.') {
+    ++text;
+    if (*text >= '0' && *text <= '9') {
+      tenth = static_cast<uint32_t>(*text - '0');
+      ++text;
+      if (*text >= '5' && *text <= '9') tenth++;
+    }
+  }
+  const uint32_t scaled = whole * 10 + tenth;
+  return scaled > 65535 ? 65535 : static_cast<uint16_t>(scaled);
+}
 
 bool ContentOpfParser::setup() {
   parser = XML_ParserCreate(nullptr);
@@ -170,19 +204,50 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   }
 
   if (self->state == IN_METADATA && xmlLocalNameEquals(name, "meta")) {
-    bool isCover = false;
-    std::string coverItemId;
+    const char* metaName = nullptr;
+    const char* metaContent = nullptr;
+    const char* metaProperty = nullptr;
+    const char* metaId = nullptr;
+    const char* metaRefines = nullptr;
 
     for (int i = 0; atts[i]; i += 2) {
-      if (strcmp(atts[i], "name") == 0 && strcmp(atts[i + 1], "cover") == 0) {
-        isCover = true;
+      if (strcmp(atts[i], "name") == 0) {
+        metaName = atts[i + 1];
       } else if (strcmp(atts[i], "content") == 0) {
-        coverItemId = atts[i + 1];
+        metaContent = atts[i + 1];
+      } else if (strcmp(atts[i], "property") == 0) {
+        metaProperty = atts[i + 1];
+      } else if (strcmp(atts[i], "id") == 0) {
+        metaId = atts[i + 1];
+      } else if (strcmp(atts[i], "refines") == 0) {
+        metaRefines = atts[i + 1];
       }
     }
 
-    if (isCover) {
-      self->coverItemId = coverItemId;
+    if (metaName && metaContent) {
+      if (strcmp(metaName, "cover") == 0) {
+        self->coverItemId = metaContent;
+      } else if (strcmp(metaName, "calibre:series") == 0 && self->series.empty()) {
+        std::string raw;
+        appendCapped(raw, metaContent, static_cast<int>(strlen(metaContent)), kMaxSeriesBytes);
+        self->series = trimAscii(raw);
+      } else if (strcmp(metaName, "calibre:series_index") == 0 && self->seriesIndexX10 == 0) {
+        self->seriesIndexX10 = parseSeriesIndexX10(metaContent);
+      }
+    } else if (metaProperty) {
+      if (strcmp(metaProperty, "belongs-to-collection") == 0 && self->series.empty()) {
+        self->collectionId = metaId ? metaId : "";
+        self->collectionText.clear();
+        self->state = IN_META_COLLECTION;
+      } else if (strcmp(metaProperty, "group-position") == 0 && self->seriesIndexX10 == 0) {
+        const bool refinesMatch = !metaRefines || self->collectionId.empty() ||
+                                  (metaRefines[0] == '#' && self->collectionId == metaRefines + 1) ||
+                                  self->collectionId == metaRefines;
+        if (refinesMatch) {
+          self->groupPositionText.clear();
+          self->state = IN_META_GROUP_POSITION;
+        }
+      }
     }
     return;
   }
@@ -369,6 +434,16 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
     appendCapped(self->description, s, len, kMaxDescriptionBytes);
     return;
   }
+
+  if (self->state == IN_META_COLLECTION) {
+    appendCapped(self->collectionText, s, len, kMaxSeriesBytes);
+    return;
+  }
+
+  if (self->state == IN_META_GROUP_POSITION) {
+    appendCapped(self->groupPositionText, s, len, kMaxPositionBytes);
+    return;
+  }
 }
 
 void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) {
@@ -409,6 +484,18 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
   }
 
   if (self->state == IN_BOOK_DESCRIPTION && xmlLocalNameEquals(name, "description")) {
+    self->state = IN_METADATA;
+    return;
+  }
+
+  if (self->state == IN_META_COLLECTION && xmlLocalNameEquals(name, "meta")) {
+    if (self->series.empty()) self->series = trimAscii(self->collectionText);
+    self->state = IN_METADATA;
+    return;
+  }
+
+  if (self->state == IN_META_GROUP_POSITION && xmlLocalNameEquals(name, "meta")) {
+    if (self->seriesIndexX10 == 0) self->seriesIndexX10 = parseSeriesIndexX10(self->groupPositionText.c_str());
     self->state = IN_METADATA;
     return;
   }

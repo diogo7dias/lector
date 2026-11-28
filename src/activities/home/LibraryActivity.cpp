@@ -37,8 +37,6 @@ namespace {
 bool builtThisBoot = false;
 uint32_t builtAtGeneration = 0;
 
-constexpr unsigned long HOLD_ACTIONS_MS = 700;
-
 void feedWatchdog(void*) {
   resetTaskWatchdogIfSubscribed();
   busy::tick();
@@ -71,6 +69,7 @@ void LibraryActivity::onEnter() {
   // render task must not read the index while the walk replaces it.
   RenderLock lock(*this);
   UiListActivity::onEnter();
+  app.on(ACTION_TAB, &LibraryActivity::tabActionTrampoline, this);
   refreshIndex(false);
 }
 
@@ -78,6 +77,9 @@ void LibraryActivity::onExit() {
   UiListActivity::onExit();
   rows.clear();
   viewOrder.clear();
+  groups.clear();
+  activeGroup.clear();
+  activeTab = LibraryTab::Books;
   viewActive = false;
 }
 
@@ -103,7 +105,7 @@ void LibraryActivity::refreshIndex(const bool force) {
   const bool useMetadata = SETTINGS.libraryUseMetadata != 0;
   library::LibraryIndexFile index;
   bool usable = !force && builtThisBoot && builtAtGeneration == generation && index.open(library::libraryIndexPath()) &&
-                index.metadataEnabled() == useMetadata;
+                index.metadataEnabled() == useMetadata && (!useMetadata || index.hasSeriesMetadata());
   if (!usable) {
     index.close();
     BusyBanner banner(renderer, tr(STR_LIBRARY_REBUILDING));
@@ -268,6 +270,13 @@ void LibraryActivity::buildScreen(UiScreen& screen) {
     screen.centeredText(failed ? tr(STR_LIBRARY_REBUILD_FAILED) : tr(STR_LIBRARY_EMPTY));
     return;
   }
+  if (!inGroupDetail()) {
+    drawLibraryTabBar(screen, activeTab, ACTION_TAB);
+  }
+  if (showingGroups()) {
+    buildGroupListScreen(screen);
+    return;
+  }
 
   fui::ListProps props{};
   props.count = static_cast<uint16_t>(rowCount);
@@ -320,6 +329,11 @@ void LibraryActivity::buildScreen(UiScreen& screen) {
       continue;
     }
     rows[i].label = titles[i].c_str();
+    if (inGroupDetail() && activeTab == LibraryTab::Series && records[i].seriesIndexX10 > 0) {
+      char num[16];
+      library::formatSeriesBadge(records[i].seriesIndexX10, num, sizeof(num));
+      authors[i] = authors[i].empty() ? std::string(num) : std::string(num) + " · " + authors[i];
+    }
     if (!authors[i].empty()) rows[i].subtitle = authors[i].c_str();
     const int pct = library::isRecordUnread(records[i]) ? -1 : static_cast<int>(records[i].percent);
     const std::string chip = book_badge::chipLabel(pct, tr(STR_READ_BADGE));
@@ -355,6 +369,10 @@ void LibraryActivity::buildScreen(UiScreen& screen) {
 
 void LibraryActivity::activateIndex(const int index) {
   if (index < 0 || index >= rowCount) return;
+  if (showingGroups()) {
+    openGroup(index);
+    return;
+  }
   if (index < headerRows()) {
     if (index == 0) {
       openSearch();
@@ -389,106 +407,24 @@ void LibraryActivity::activateIndex(const int index) {
   activityManager.goToReader(path);
 }
 
-void LibraryActivity::onRowLongPress(const int index) {
-  if (index < headerRows() || index >= rowCount) return;
-  std::string path;
-  library::ClixRecord record{};
-  {
-    RenderLock lock(*this);
-    library::LibraryIndexFile file;
-    if (file.open(library::libraryIndexPath()) &&
-        file.readRecord(static_cast<uint16_t>(ordinalAt(index - headerRows())), record)) {
-      file.readPath(record, path);
-    }
-    file.close();
-    if (path.empty() || !Storage.exists(path.c_str())) {
-      refreshIndex(/*force=*/true);
-      return;
-    }
-  }
-
-  StrId actions[3];
-  int count = 0;
-  if (FsHelpers::hasEpubExtension(path)) actions[count++] = StrId::STR_BOOK_INFO;
-  if (FsHelpers::hasEpubExtension(path) || FsHelpers::hasTextBookExtension(path)) {
-    actions[count++] = library::isRecordRead(record) ? StrId::STR_MARK_UNREAD : StrId::STR_MARK_READ;
-  }
-  actions[count++] = StrId::STR_DELETE;
-
-  app.clearTapFlash();
-  bookActionPopup.show(StrId::STR_FILE_ACTIONS, actions, count, 0, [this, path, actions](const int choice) {
-    switch (actions[choice]) {
-      case StrId::STR_BOOK_INFO:
-        openBookInfoScreen(*this, renderer, mappedInput, path, [this] { requestUpdate(); });
-        break;
-      case StrId::STR_MARK_READ:
-      case StrId::STR_MARK_UNREAD: {
-        const bool ok = actions[choice] == StrId::STR_MARK_READ ? markBookRead(path) : markBookUnread(path);
-        if (ok) {
-          RenderLock lock(*this);
-          rebuildView();
-          if (nav.selected >= rowCount && rowCount > 0) nav.selected = rowCount - 1;
-        }
-        requestUpdate();
-        break;
-      }
-      default:
-        confirmDelete(path);
-        break;
-    }
-  });
-  requestUpdate();
-}
-
-void LibraryActivity::confirmDelete(const std::string& fullPath) {
-  const std::string heading = tr(STR_DELETE) + std::string("? ");
-  startActivityForResult(
-      std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading,
-                                             utf8ComposeNfc(std::string(bookfiling::fileNameOf(fullPath)))),
-      [this, fullPath](const ActivityResult& res) {
-        if (!res.isCancelled) {
-          if (deleteOpenedBook(fullPath)) {
-            RenderLock lock(*this);
-            refreshIndex(false);
-          } else {
-            GUI.drawPopup(renderer, tr(STR_DELETE_FAILED));
-            delay(1200);
-            requestUpdate(true);
-          }
-        } else {
-          requestUpdate();
-        }
-      });
-}
-
-bool LibraryActivity::handleCustomInput() {
-  return bookActionPopup.handleInput(mappedInput, [this] { requestUpdate(); });
-}
-
-bool LibraryActivity::handleButtons() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    onBackButton();
-    return true;
-  }
-  switch (confirmHold.update(mappedInput.wasPressed(MappedInputManager::Button::Confirm),
-                             mappedInput.isPressed(MappedInputManager::Button::Confirm),
-                             mappedInput.wasReleased(MappedInputManager::Button::Confirm), mappedInput.getHeldTime(),
-                             HOLD_ACTIONS_MS)) {
-    case hold_button::Fired::Hold:
-      confirmHold.reset();
-      if (nav.selected >= headerRows() && nav.selected < rowCount) onRowLongPress(nav.selected);
-      return true;
-    case hold_button::Fired::Short:
-      if (nav.selected >= 0 && nav.selected < rowCount) activateIndex(nav.selected);
-      return true;
-    case hold_button::Fired::None:
-      break;
-  }
-  return false;
-}
-
-// Back leaves a search before it leaves the Library.
 void LibraryActivity::onBackButton() {
+  if (inGroupDetail()) {
+    {
+      RenderLock lock(*this);
+      activeGroup.clear();
+      viewOrder.clear();
+      viewActive = false;
+      recount();
+      nav.reset(std::min(groupReturnRow, std::max(0, rowCount - 1)));
+      nav.followOnBuild = true;
+    }
+    requestUpdate();
+    return;
+  }
+  if (activeTab != LibraryTab::Books) {
+    switchTab(LibraryTab::Books);
+    return;
+  }
   if (searchActive()) {
     applySearch(std::string());
     return;
@@ -499,7 +435,10 @@ void LibraryActivity::onBackButton() {
 ListChrome LibraryActivity::chrome() const {
   ListChrome chrome;
   chrome.title = tr(STR_LIBRARY);
-  if (library_view::formatSubHeader(activeSort(), activeFilter(), subHeaderText, sizeof(subHeaderText))) {
+  if (inGroupDetail()) {
+    chrome.subHeader = activeGroup.c_str();
+  } else if (activeTab == LibraryTab::Books &&
+             library_view::formatSubHeader(activeSort(), activeFilter(), subHeaderText, sizeof(subHeaderText))) {
     chrome.subHeader = subHeaderText;
   }
   if (bookCount == 0) {

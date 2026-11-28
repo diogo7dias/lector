@@ -63,6 +63,7 @@ class Epub {
   // opened before, otherwise by parsing the package's <metadata> alone. Writes nothing.
   // Raw as the book states them (no filename fallback); false when the file is no EPUB.
   bool loadMetadata(std::string& title, std::string& author);
+  bool loadMetadata(std::string& title, std::string& author, std::string& series, uint16_t& seriesIndexX10);
   // After load, for the book being read: finds every item without rescanning the card.
   void indexZipEntries();
   // For a book that skipped its stylesheet at load and now wants it: parses the CSS into

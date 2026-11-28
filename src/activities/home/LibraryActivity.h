@@ -1,12 +1,14 @@
 #pragma once
 
 #include <LibraryFormat.h>
+#include <LibraryGroups.h>
 
 #include <string>
 #include <vector>
 
 #include "activities/UiListActivity.h"
 #include "activities/home/LibrarySearch.h"
+#include "activities/home/LibraryTabBar.h"
 #include "components/OptionPopup.h"
 #include "util/HoldButtonPolicy.h"
 
@@ -36,10 +38,16 @@ class LibraryActivity final : public UiListActivity {
   // The row to open on: a book's Back returns to the row that opened it.
   uint16_t startRow = 0;
 
-  // Ordered ordinals into the CLX v2 index when sort != Title or filter != All.
-  // Empty for default (Title + All), costing zero extra RAM.
+  static constexpr freeink::ui::ActionId ACTION_TAB = ACTION_USER;
+
+  // Ordered ordinals into the CLX v2 index when sort != Title, filter != All, or inside a group.
   std::vector<uint16_t> viewOrder;
   bool viewActive = false;
+
+  LibraryTab activeTab = LibraryTab::Books;
+  std::vector<library::GroupEntry> groups;
+  std::string activeGroup;
+  int groupReturnRow = 0;
 
   std::string searchQuery;
   librarysearch::TopMatches<MAX_HITS> hits;
@@ -50,7 +58,7 @@ class LibraryActivity final : public UiListActivity {
 
   std::string titles[WINDOW];
   std::string authors[WINDOW];
-  char badges[WINDOW][12] = {};
+  char badges[WINDOW][16] = {};
   library::ClixRecord records[WINDOW];
   std::vector<freeink::ui::ListItem> rows;
   mutable char counter[24] = "";
@@ -61,20 +69,28 @@ class LibraryActivity final : public UiListActivity {
 
   library::LibrarySort activeSort() const;
   library::LibraryFilter activeFilter() const;
-  bool searchActive() const { return !searchQuery.empty(); }
-  // Search row, then Clear search while a query is set.
-  int headerRows() const { return bookCount == 0 ? 0 : (searchActive() ? 2 : 1); }
+  bool showingGroups() const { return activeTab != LibraryTab::Books && activeGroup.empty(); }
+  bool inGroupDetail() const { return activeTab != LibraryTab::Books && !activeGroup.empty(); }
+  bool searchActive() const { return activeTab == LibraryTab::Books && !searchQuery.empty(); }
+  int headerRows() const {
+    if (bookCount == 0 || activeTab != LibraryTab::Books) return 0;
+    return searchActive() ? 2 : 1;
+  }
   int entryCount() const {
+    if (showingGroups()) return static_cast<int>(groups.size());
     if (searchActive()) return static_cast<int>(hits.size());
     return viewActive ? static_cast<int>(viewOrder.size()) : bookCount;
   }
-  // Index ordinal of the book on entry row `entry`.
   int ordinalAt(int entry) const {
     if (searchActive()) return hits.indexAt(static_cast<size_t>(entry));
     return viewActive ? viewOrder[static_cast<size_t>(entry)] : entry;
   }
   void recount() { rowCount = headerRows() + entryCount(); }
 
+  static void tabActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
+  void switchTab(LibraryTab tab);
+  void openGroup(int groupIndex);
+  void buildGroupListScreen(UiScreen& screen);
   void refreshIndex(bool force);
   void rebuildView();
   // Reads `wanted` entries from entry row `first` into titles/authors/records.

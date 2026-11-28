@@ -233,7 +233,12 @@ name. Books in any folder are listed, wherever they are filed (`/recents` and `/
 not the folders Lector keeps for itself (`/sleep`, `/fonts` and the like) or hidden files.
 
 Open the **Quick Panel** while in Library to change **Sort** (**Title**, **Author**, **Recently
-Added** or **Last Read**) and **Filter** (**All**, **Reading**, **Unread** or **Read**). Hold
+Added** or **Last Read**) and **Filter** (**All**, **Reading**, **Unread** or **Read**). Use the
+**Books | Authors | Series** switcher at the bottom of Library (tap a tab on touch devices, or press
+**Left** / **Right** from the top row or an Authors/Series list on button-only devices) to browse by
+author or by EPUB series (`calibre:series` / `series_index` and EPUB3 `belongs-to-collection` /
+`group-position`), sorted in reading order with `#N` numbers. When finishing a book in a series, the
+end-of-book screen suggests the next book in the series first. Hold
 **Confirm** on a book (on the X4 Pro, press and hold the row) for **Book Info** (EPUB only),
 **Mark Read** or **Mark Unread**, and **Delete**.
 
