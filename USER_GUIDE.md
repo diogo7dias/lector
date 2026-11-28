@@ -1228,23 +1228,24 @@ The other numbers in Settings, such as Time to Sleep, open their own slider scre
   Justify distributes all spare horizontal space between eligible gaps; the last line
   keeps its natural spacing. Korean text wraps and stretches only at the spaces between
   words, never between syllables, unless a single word is wider than the line.
-- **Embedded Style** — honour the book's own CSS: how the words look (bold, italic, underline,
-  superscript and subscript, writing direction, passages the book marks as hidden, and lists
-  the book marks as having no bullets or numbers) and where blocks sit (alignment, the book's
-  margins and padding, image sizes, the boxes and shading around passages, and the page breaks it
-  asks for). Bold and italic written as `<b>` or `<i>` tags are always honoured, switch or not.
+- **Embedded Style** — **Off**, **Text Only** or **Full** (default).
+  - **Full** honours all supported CSS: text styling (bold, italic, underline, small caps,
+    superscript and subscript, writing direction, preserved whitespace, hidden passages) and layout
+    (alignment, margins, padding, font sizes, image sizes, borders, shading, drop caps and page
+    breaks). **Paragraph Alignment: Book's Style** needs Full.
+  - **Text Only** keeps inline text styling (weight, italic, decoration, small caps, superscript
+    and subscript, white-space, `display:none` and writing direction) while dropping the book's
+    margins, padding, font sizes and boxes so your reader layout stays uniform.
+  - **Off** ignores the book's stylesheet completely. Bold and italic written as `<b>` or `<i>` tags
+    are always honoured, and `<code>`, `<pre>`, `<tt>` and `<kbd>` render in the installed
+    **IBMPlexMono** SD font when present (falling back cleanly to the reading font if missing).
   Numbered lists always show their numbers, and a nested list counts from 1 again.
   An inline passage in another writing direction keeps the enclosing paragraph's base direction.
   Arabic and Persian text is shaped once, preserving Alef and Lam order; Latin ligatures remain supported.
-  It also honours drop caps (a large first letter spanning two to four lines), small caps,
-  text the book keeps as typed (poetry, code) and the book's relative font sizes for
-  headings, paragraphs and words. Each is drawn at the nearest size the font has: 12, 14 or 16 pt
-  for ChareInk, whatever is installed for an SD card family. **Paragraph Alignment: Book's
-  Style** reads the book's CSS, so it needs this on. The book's fonts and line height are never
-  used: the reader's own settings always win. Older builds had separate Embedded Text Style and
-  Embedded Layout Style switches: the style is on after the update only if both were on.
-  Footnote and cross-reference links are always underlined, and kerning and ligatures are
-  always on.
+  Each scaled font size is drawn at the nearest size the font has: 12, 14 or 16 pt for ChareInk,
+  whatever is installed for an SD card family. The book's fonts and line height are never used: the
+  reader's own settings always win. Footnote and cross-reference links are always underlined, and
+  kerning and ligatures are always on.
 
 Pages always end full: no line moves to the next page to keep a paragraph's first or last line
 or a heading from sitting alone at a page edge. Page breaks the book asks for still apply. Tables size each column to its content.

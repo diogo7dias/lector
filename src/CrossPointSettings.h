@@ -632,11 +632,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t fadingFix = 0;
   // Power button return from footnotes (1 = enabled, 0 = disabled)
   uint8_t pwrBtnFootnoteBack = 1;
-  // The book's own CSS, one switch: text styling (weight, slant, decoration, super/sub,
-  // direction, display:none) and layout (alignment, indents, margins, padding, book-set
-  // image sizes). Written under the "embeddedStyle" key (1 = enabled, 0 = disabled).
-  // Paragraph Alignment "Book's Style" needs this on.
-  uint8_t embeddedStyle = 1;
+  // EmbeddedStyleMode: 0 = Off, 1 = Text Only (weight, italic, decoration, small caps,
+  // sup/sub, white-space, display:none, direction), 2 = Full. Written under "embeddedStyleMode".
+  // Paragraph Alignment "Book's Style" needs Full.
+  uint8_t embeddedStyle = 2;
   // Focus Reading - emphasizes the first part of words with bold
   uint8_t focusReadingEnabled = 0;
   // Guide Dots — draw a middle dot (U+00B7) between words as a reading aid. Restored

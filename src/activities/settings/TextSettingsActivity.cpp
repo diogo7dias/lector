@@ -41,9 +41,12 @@ constexpr LookField LOOK_FIELDS[] = {
 // The option that defers to the book's own CSS, and so goes inert when Book Styling is off.
 constexpr uint8_t ALIGNMENT_BOOK_INDEX = 4;  // STR_BOOK_S_STYLE
 
-// "Book's Style (Embedded Style Off)": the option is chosen but has nothing to defer to.
-std::string inertBookStyleLabel(const std::string& label) {
-  return label + " (" + I18N.get(StrId::STR_EMBEDDED_STYLE) + " " + I18N.get(StrId::STR_STATE_OFF) + ")";
+// "Book's Style (Embedded Style Off)" / "(Embedded Style Text Only)": the option is chosen
+// but CSS alignment is dropped in those modes.
+std::string inertBookStyleLabel(const std::string& label, const uint8_t embeddedStyle) {
+  const StrId modeId =
+      embeddedStyle == EMBEDDED_STYLE_TEXT_ONLY ? StrId::STR_EMBEDDED_STYLE_TEXT_ONLY : StrId::STR_STATE_OFF;
+  return label + " (" + I18N.get(StrId::STR_EMBEDDED_STYLE) + " " + I18N.get(modeId) + ")";
 }
 
 // The preview is the whole point of the screen, so it takes a fixed slice of the height
@@ -402,7 +405,8 @@ std::string TextSettingsActivity::rowValueText(const Row row) const {
   // "Book's Style" reads the book's own CSS, which is exactly what Book Styling switches
   // off. Saying so on the row beats a setting that looks chosen and does nothing.
   const bool defersToBook = row == Row::Alignment && v == ALIGNMENT_BOOK_INDEX;
-  return (defersToBook && !look_.embeddedStyle) ? inertBookStyleLabel(label) : label;
+  return (defersToBook && look_.embeddedStyle != EMBEDDED_STYLE_FULL) ? inertBookStyleLabel(label, look_.embeddedStyle)
+                                                                      : label;
 }
 
 // Up and Down move a whole grid row so the column is kept; Left and Right move one cell,

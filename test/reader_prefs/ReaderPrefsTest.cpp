@@ -523,7 +523,7 @@ TEST(ReaderPrefs, Version11SidecarSeedsTheLayoutSwitchFromTheOldSingleChoice) {
 
     ReaderPrefs loaded;
     ASSERT_TRUE(readReaderPrefs(ss, loaded));
-    EXPECT_EQ(choice, loaded.embeddedStyle);
+    EXPECT_EQ(choice ? EMBEDDED_STYLE_FULL : EMBEDDED_STYLE_OFF, loaded.embeddedStyle);
     EXPECT_EQ(0, loaded.retiredEmbeddedLayoutStyle);  // folded into the one switch, then zeroed
   }
 }
@@ -565,8 +565,9 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(27, ReaderPrefs::VERSION);
-  EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(26));  // v27 moved meanings, not bytes
+  EXPECT_EQ(28, ReaderPrefs::VERSION);
+  EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(26));  // v27/v28 moved meanings, not bytes
+  EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(27));
 }
 
 // A v23 record stops before Character Spacing: it reads back as the font as designed,
@@ -733,7 +734,7 @@ TEST(ReaderPrefs, RetiredByteKeepsLegacyOffsetsAndDoesNotAffectComparisons) {
   ReaderPrefs loaded;
   ASSERT_TRUE(readReaderPrefs(in, loaded));
   EXPECT_EQ(0, loaded.reserved14);
-  EXPECT_EQ(1, loaded.embeddedStyle);
+  EXPECT_EQ(EMBEDDED_STYLE_FULL, loaded.embeddedStyle);
   EXPECT_STREQ("Bookerly", loaded.sdFontFamilyName);
   EXPECT_EQ(125, loaded.wordSpacing);
   record[1 + 14] = 0;
@@ -748,9 +749,11 @@ TEST(ReaderPrefs, RetiredByteKeepsLegacyOffsetsAndDoesNotAffectComparisons) {
 // global switch is off.
 TEST(ReaderPrefs, WantsBookCssWhenTheEmbeddedSwitchIsOn) {
   ReaderPrefs p;
-  p.embeddedStyle = 0;
+  p.embeddedStyle = EMBEDDED_STYLE_OFF;
   EXPECT_FALSE(wantsBookCss(p));
-  p.embeddedStyle = 1;
+  p.embeddedStyle = EMBEDDED_STYLE_TEXT_ONLY;
+  EXPECT_TRUE(wantsBookCss(p));
+  p.embeddedStyle = EMBEDDED_STYLE_FULL;
   EXPECT_TRUE(wantsBookCss(p));
 }
 
@@ -967,7 +970,7 @@ TEST(ReaderPrefs, AV26RecordIsConvertedToTheLeanMeanings) {
   EXPECT_TRUE(migrated);
   EXPECT_EQ(2, loaded.paragraphIndentSpaces);  // 23 percent of the column, now two spaces
   EXPECT_EQ(reader_defaults::CHARACTER_SPACING + 1, loaded.characterSpacing);
-  EXPECT_EQ(1, loaded.embeddedStyle);
+  EXPECT_EQ(EMBEDDED_STYLE_FULL, loaded.embeddedStyle);
   EXPECT_EQ(0, loaded.imageRendering);
   EXPECT_EQ(100, loaded.wordSpacing);  // 107 lands on the 25 percent grid
   EXPECT_EQ(reader_defaults::MIN_LINE_SPACING_PERCENT, loaded.lineSpacingPercent);
@@ -989,7 +992,8 @@ TEST(ReaderPrefs, AV26RecordWithEitherStyleHalfOffComesBackWithTheStyleOff) {
       std::stringstream file = asRecord(26, old);
       ReaderPrefs loaded;
       ASSERT_TRUE(readReaderPrefs(file, loaded));
-      EXPECT_EQ(text && layout ? 1 : 0, loaded.embeddedStyle) << int(text) << int(layout);
+      EXPECT_EQ(text && layout ? EMBEDDED_STYLE_FULL : EMBEDDED_STYLE_OFF, loaded.embeddedStyle)
+          << int(text) << int(layout);
     }
   }
 }

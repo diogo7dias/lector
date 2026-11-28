@@ -164,13 +164,16 @@ void relayout(const ReaderPrefs& look, PreviewLayout& layout, const GfxRenderer&
   layout.secondParagraphLine = 0;
 
   const BlockStyle body = bodyStyle(look);
-  if (look.embeddedStyle) {
+  if (look.embeddedStyle == EMBEDDED_STYLE_FULL) {
     BlockStyle heading;
     heading.alignment = CssTextAlign::Center;
     heading.textAlignDefined = true;
     appendParagraph(look, layout, renderer, fontId, textWidth, I18N.get(StrId::STR_PREVIEW_HEADING), heading, true, 0);
     appendParagraph(look, layout, renderer, fontId, textWidth, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), body, false,
                     lineAdvance / 2);
+  } else if (look.embeddedStyle == EMBEDDED_STYLE_TEXT_ONLY) {
+    appendParagraph(look, layout, renderer, fontId, textWidth, I18N.get(StrId::STR_PREVIEW_HEADING), body, true, 0);
+    appendParagraph(look, layout, renderer, fontId, textWidth, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), body, false, 0);
   } else {
     appendParagraph(look, layout, renderer, fontId, textWidth, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), body, false, 0);
   }
@@ -226,7 +229,7 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const Rea
       if (look.guideDotsEnabled) prewarmText += GUIDE_DOT_UTF8;
       // Bit 1 is the bold mask the heading needs; bit 0 the regular body.
       uint8_t styleMask = look.focusReadingEnabled ? 0x03 : 0x01;
-      if (look.embeddedStyle) styleMask |= 0x02;
+      if (look.embeddedStyle != EMBEDDED_STYLE_OFF) styleMask |= 0x02;
       fcm->prewarmCache(fontId, prewarmText.c_str(), styleMask);
     }
     relayout(look, layout, renderer, fontId, textWidth, lineAdvance, paragraphGap);

@@ -320,10 +320,10 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
   // Styling is one switch (it was text and layout). Same rule as a saved preset's. The
   // pre-0.8.2 defaults block below still wins over the indent this reads.
   const auto leanKeys = reader_preset_migration::readLegacyKeys(doc);
-  if (!leanKeys.hasParagraphIndentSpaces) {
+  if (!leanKeys.hasParagraphIndentSpaces || (!leanKeys.hasEmbeddedStyleMode && leanKeys.hasLegacyEmbeddedStyle)) {
     reader_preset_migration::migrateLeanTypography(leanKeys, paragraphIndentSpaces, embeddedStyle, characterSpacing);
     // Placeholder and Suppress did nothing from 2026-08-11 until the Images row came back.
-    imageRendering = IMAGES_DISPLAY;
+    if (!leanKeys.hasParagraphIndentSpaces) imageRendering = IMAGES_DISPLAY;
     needsResave = true;
   }
   // Word Spacing and the side margin moved to coarser steps, so a saved value lands on the grid.
