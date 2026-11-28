@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include "WebPowerSavePolicy.h"
+
 // Structure to hold file information
 struct FileInfo {
   String name;
@@ -113,7 +115,8 @@ class CrossPointWebServer {
   int discoverySocket = -1;  // UDP discovery, -1 when closed
   void openDiscoverySocket();
   void closeDiscoverySocket();
-  void answerDiscovery() const;
+  void answerDiscovery();
+  void noteActivity();
 
   // WebSocket upload state
   void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
@@ -160,6 +163,7 @@ class CrossPointWebServer {
   }
   unsigned long lastFetchPumpAt = 0;
   unsigned long lastRequestAt = 0;
+  web_power_save::State powerSave;
   // Polled between chunks of a running fetch and on each chunk of an HTTP upload
   // (upstream #3732). The activity sets it so the Back button still cancels while
   // the transfer holds the loop; without it the only way out is the reset pin.

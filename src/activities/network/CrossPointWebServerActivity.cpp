@@ -199,6 +199,7 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
   } else {
     // AP mode - start access point
     state = WebServerActivityState::AP_STARTING;
+    onRevealed();
     requestUpdate();
     startAccessPoint();
   }
@@ -314,8 +315,9 @@ void CrossPointWebServerActivity::startWebServer() {
       ipFallbackLine = std::string(tr(STR_OR_HTTP_PREFIX)) + AP_HOSTNAME + ".local/";
     }
 
-    // Force an immediate render since we're transitioning from a subactivity
-    // that had its own rendering task. We need to make sure our display is shown.
+    // Force a clean HALF_REFRESH for the initial QR paint; subsequent signal-bar
+    // updates only change a small corner icon and run on FAST_REFRESH.
+    onRevealed();
     requestUpdate();
   } else {
     LOG_ERR("WEBACT", "ERROR: Failed to start web server!");
@@ -410,9 +412,10 @@ UiStatusActivity::StatusView CrossPointWebServerActivity::statusView() const {
   }
 
   view.title = isApMode ? tr(STR_HOTSPOT_MODE) : tr(STR_FILE_TRANSFER);
-  // Nearly all QR: a differential waveform leaves the old pattern as speckle
-  // under a dense block of black, which is what made this screen unreadable.
-  view.refresh = HalDisplay::HALF_REFRESH;
+  // UiStatusActivity promotes FAST_REFRESH to HALF_REFRESH on entry, reveal,
+  // and overlay clear, so the QR code still paints cleanly while 2 s RSSI
+  // bar-only redraws stay on FAST_REFRESH.
+  view.refresh = HalDisplay::FAST_REFRESH;
 
   if (state == WebServerActivityState::AP_STARTING) {
     view.lines = {tr(STR_STARTING_HOTSPOT), nullptr, nullptr, nullptr};
