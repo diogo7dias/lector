@@ -35,6 +35,7 @@
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/network/NearbyFileTransferActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "activities/reader/ReaderPresetsActivity.h"
 #include "activities/settings/SettingsListNav.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -315,6 +316,7 @@ void SettingsActivity::rebuildSettingsList() {
   }
   readerSettings.push_back(SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_ALL_BOOKMARKS, SettingAction::AllBookmarks));
+  readerSettings.push_back(SettingInfo::Action(StrId::STR_READING_THEMES, SettingAction::ReadingThemes));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_INSTALLED_FONTS, SettingAction::InstalledFonts));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
@@ -349,7 +351,8 @@ void SettingsActivity::rebuildSettingsList() {
           // the toggle that hides it.
           {StrId::STR_GRP_LOOK,
            {StrId::STR_PAPERBACK_LOOK, StrId::STR_PAPERBACK_STATUS, StrId::STR_RULED_LINES,
-            StrId::STR_CUSTOMISE_STATUS_BAR, StrId::STR_NIGHT_MODE, StrId::STR_READER_MENU_STYLE}},
+            StrId::STR_CUSTOMISE_STATUS_BAR, StrId::STR_NIGHT_MODE, StrId::STR_READER_MENU_STYLE,
+            StrId::STR_READING_THEMES}},
           {StrId::STR_GRP_LIBRARY, {StrId::STR_ALL_BOOKMARKS}},
       });
 
@@ -401,6 +404,11 @@ std::unique_ptr<SettingsActivity> SettingsActivity::onFileTransferCard(GfxRender
 std::unique_ptr<SettingsActivity> SettingsActivity::onShareCredentials(GfxRenderer& renderer,
                                                                        MappedInputManager& mappedInput) {
   return makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, kSystem, kSystem, SettingAction::ShareCredentials);
+}
+
+std::unique_ptr<SettingsActivity> SettingsActivity::onReadingThemes(GfxRenderer& renderer,
+                                                                    MappedInputManager& mappedInput) {
+  return makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, 1, 1, SettingAction::ReadingThemes);
 }
 
 // A restart step (ActivityManager::backTrail): (category + 1) << 8, then the row's action in a
@@ -733,6 +741,17 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::ShareCredentials:
         shareCredentials();
+        break;
+      case SettingAction::ReadingThemes:
+        if (auto themes = makeUniqueNoThrow<ReaderPresetsActivity>(renderer, mappedInput, ReaderPrefs::fromGlobal(),
+                                                                   /*inBook=*/false)) {
+          startActivityForResult(std::move(themes), [this](const ActivityResult&) {
+            rebuildSettingsList();
+            restoreCursorAfterRebuild();
+          });
+        } else {
+          LOG_ERR("SET", "OOM: ReaderPresetsActivity");
+        }
         break;
       case SettingAction::Network:
         startActivityForResult(

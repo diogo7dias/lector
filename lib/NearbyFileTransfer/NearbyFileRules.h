@@ -65,6 +65,8 @@ struct OfferCheck {
  * RAM; a real bundle (8 WiFi networks, 8 OPDS servers at most) is a few KB.
  */
 constexpr uint64_t MAX_CREDENTIAL_BUNDLE_BYTES = 16 * 1024;
+/** Largest Reading Themes bundle (.cpthemes) offer accepted. */
+constexpr uint64_t MAX_PRESET_BUNDLE_BYTES = 16 * 1024;
 
 /**
  * True when the name ends in a format this reader can actually open: books

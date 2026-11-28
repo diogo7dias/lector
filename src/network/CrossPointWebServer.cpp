@@ -26,6 +26,7 @@
 #include "OpdsServerStore.h"
 #include "OpdsTokenStore.h"
 #include "ProtectedPaths.h"
+#include "ReaderPresetStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "SettingsList.h"
@@ -197,6 +198,8 @@ void CrossPointWebServer::begin() {
   server->on("/settings", HTTP_GET, [this] { handleSettingsPage(); });
   server->on("/api/settings", HTTP_GET, [this] { handleGetSettings(); });
   server->on("/api/settings", HTTP_POST, [this] { handlePostSettings(); });
+  server->on("/api/presets", HTTP_GET, [this] { handleGetPresets(); });
+  server->on("/api/presets", HTTP_POST, [this] { handlePostPresets(); });
 
   // Font management endpoints
   server->on("/fonts", HTTP_GET, [this] { handleFontsPage(); });
@@ -1594,6 +1597,32 @@ void CrossPointWebServer::handleDelete() const {
 void CrossPointWebServer::handleSettingsPage() const {
   sendStaticContent(server.get(), SettingsPageHtml, sizeof(SettingsPageHtml), SettingsPageHtmlETag, "text/html");
   LOG_DBG("WEB", "Served settings page");
+}
+
+void CrossPointWebServer::handleGetPresets() const {
+  JsonDocument doc;
+  READER_PRESETS.toJson(doc);
+  std::string out;
+  serializeJson(doc, out);
+  server->send(200, "application/json", out.c_str());
+  LOG_DBG("WEB", "Served %zu reading presets", READER_PRESETS.getCount());
+}
+
+void CrossPointWebServer::handlePostPresets() {
+  JsonDocument doc;
+  if (!parseJsonBody(*server, doc)) return;
+  if (!doc["presets"].is<JsonArrayConst>()) {
+    server->send(400, "application/json", "{\"error\":\"Missing presets array\"}");
+    return;
+  }
+  if (!READER_PRESETS.importFromJson(doc)) {
+    server->send(500, "application/json", "{\"error\":\"Failed to save reading themes\"}");
+    return;
+  }
+  char resp[48];
+  snprintf(resp, sizeof(resp), "{\"count\":%zu}", READER_PRESETS.getCount());
+  server->send(200, "application/json", resp);
+  LOG_INF("WEB", "Imported %zu reading presets", READER_PRESETS.getCount());
 }
 
 void CrossPointWebServer::handleGetSettings() const {

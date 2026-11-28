@@ -31,6 +31,7 @@ enum class SettingAction {
   ShareCredentials,
   ScreenCalibration,
   AllBookmarks,
+  ReadingThemes,
   TimeZone,
   Maintenance,
 };

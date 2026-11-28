@@ -175,6 +175,8 @@ class CrossPointWebServer {
   void handleSettingsPage() const;
   void handleGetSettings() const;
   void handlePostSettings();
+  void handleGetPresets() const;
+  void handlePostPresets();
 
   // Font management handlers
   void handleFontsPage() const;

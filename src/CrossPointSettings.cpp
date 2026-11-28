@@ -585,6 +585,15 @@ void CrossPointSettings::applyReaderPrefs(const ReaderPrefs& p) {
   std::strncpy(sdFontFamilyName, p.sdFontFamilyName, sizeof(sdFontFamilyName) - 1);
 }
 
+void CrossPointSettings::applyGlobalPreset(const ReaderPrefs& p, const bool carriesStatusBar) {
+  applyReaderPrefs(p);
+#define CP_APPLY_BOOK_FIELD(name) name = p.name;
+  READER_LOOK_BOOK_FIELDS(CP_APPLY_BOOK_FIELD)
+#undef CP_APPLY_BOOK_FIELD
+  if (carriesStatusBar) setStatusBar(statusBarOf(p));
+  saveToFile();
+}
+
 StatusBarBlock CrossPointSettings::statusBar() const {
   StatusBarBlock b;
 #define CP_CAPTURE_SB(prefsName, settingsName, blockName) b.blockName = settingsName;

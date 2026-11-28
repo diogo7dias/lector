@@ -109,6 +109,33 @@ bool ReaderPresetStore::fromJson(JsonVariantConst doc) {
   return true;
 }
 
+bool ReaderPresetStore::importFromJson(JsonVariantConst doc) {
+  if (!doc["presets"].is<JsonArrayConst>()) return false;
+  fromJson(doc);
+  return saveToFile();
+}
+
+int ReaderPresetStore::mergeFromJson(JsonVariantConst doc) {
+  if (!doc["presets"].is<JsonArrayConst>()) return -1;
+  JsonArrayConst arr = doc["presets"].as<JsonArrayConst>();
+  int added = 0;
+  for (JsonObjectConst obj : arr) {
+    if (isFull()) break;
+    const std::string rawName = readerpreset::sanitizeName(obj["name"] | "");
+    if (rawName.empty()) continue;
+    const std::string unique = readerpreset::makeUniqueName(rawName, names());
+    if (unique.empty()) continue;
+    ReaderPreset preset;
+    preset.name = unique;
+    preset.prefs = readPrefs(obj);
+    preset.carriesStatusBar = obj["statusBarEnabled"].is<uint8_t>();
+    presets.push_back(std::move(preset));
+    added++;
+  }
+  if (added > 0 && !saveToFile()) return -1;
+  return added;
+}
+
 const ReaderPreset* ReaderPresetStore::get(const size_t index) const {
   return index < presets.size() ? &presets[index] : nullptr;
 }

@@ -9,11 +9,10 @@ namespace {
 
 // Formats this reader can open: books first, then the image formats the sleep
 // screen and cover viewer use.
-// ".cpcred" is a WiFi and OPDS credential bundle. It is not a file the reader
-// opens: the receiving screen reads it, offers to import it, and deletes it either
-// way. It is listed here because the offer has to survive the name check first.
-constexpr std::array<std::string_view, 8> ACCEPTED_EXTENSIONS = {".epub", ".txt", ".md",  ".xtc",
-                                                                 ".xtch", ".png", ".bmp", ".cpcred"};
+// ".cpcred" is a WiFi and OPDS credential bundle and ".cpthemes" is a Reading Themes bundle.
+// Neither is opened as a book: the receiving screen imports it and deletes the staged file.
+constexpr std::array<std::string_view, 9> ACCEPTED_EXTENSIONS = {".epub", ".txt", ".md",     ".xtc",     ".xtch",
+                                                                 ".png",  ".bmp", ".cpcred", ".cpthemes"};
 
 /** The reserved and control characters that have no business in a FAT name. */
 bool isUnsafeCharacter(const unsigned char ch) {
@@ -182,8 +181,11 @@ OfferCheck checkOffer(const std::string_view offeredName, const uint64_t sizeByt
     check.rejection = RejectReason::UNSUPPORTED_TYPE;
     return check;
   }
-  const bool bundle = toLower(check.safeName).ends_with(".cpcred");
-  if (!fitsOnCard(sizeBytes, freeBytes) || (bundle && sizeBytes > MAX_CREDENTIAL_BUNDLE_BYTES)) {
+  const std::string lower = toLower(check.safeName);
+  const bool credBundle = lower.ends_with(".cpcred");
+  const bool presetBundle = lower.ends_with(".cpthemes");
+  if (!fitsOnCard(sizeBytes, freeBytes) || (credBundle && sizeBytes > MAX_CREDENTIAL_BUNDLE_BYTES) ||
+      (presetBundle && sizeBytes > MAX_PRESET_BUNDLE_BYTES)) {
     check.rejection = RejectReason::TOO_LARGE;
     return check;
   }

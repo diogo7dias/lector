@@ -1,5 +1,6 @@
 #include "NearbyFileTransferActivity.h"
 
+#include <ArduinoJson.h>
 #include <FsHelpers.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -15,6 +16,7 @@
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
+#include "ReaderPresetStore.h"
 #include "SdCardFontSystem.h"
 #include "WifiCredentialStore.h"
 #include "activities/ActivityManager.h"
@@ -25,6 +27,7 @@
 #include "util/BusyTick.h"
 #include "util/CredentialBundle.h"
 #include "util/PartialUploads.h"
+#include "util/PresetBundle.h"
 #include "util/ProgressFile.h"
 
 using namespace nearby_file;
@@ -211,11 +214,15 @@ void NearbyFileTransferActivity::onExit() {
   // leaves the card with this screen.
   if (mode == Mode::Send) {
     for (const auto& path : sourcePaths) {
-      if (credential_bundle::isBundleFilename(path)) Storage.remove(path.c_str());
+      if (credential_bundle::isBundleFilename(path) || preset_bundle::isBundleFilename(path)) {
+        Storage.remove(path.c_str());
+      }
     }
   }
   Storage.remove(credential_bundle::STAGING_PATH);
   Storage.remove(FsHelpers::partialPathFor(credential_bundle::STAGING_PATH).c_str());
+  Storage.remove(preset_bundle::STAGING_PATH);
+  Storage.remove(FsHelpers::partialPathFor(preset_bundle::STAGING_PATH).c_str());
   Activity::onExit();
 }
 
@@ -276,6 +283,46 @@ void NearbyFileTransferActivity::importCredentialBundle() {
   LOG_DBG(LOG_TAG, "Imported %d WiFi networks and %d OPDS servers", networks, servers);
   char buffer[96];
   std::snprintf(buffer, sizeof(buffer), tr(STR_CREDENTIALS_IMPORTED_FORMAT), networks, servers);
+  credentialsMessage = buffer;
+}
+
+void NearbyFileTransferActivity::importPresetBundle() {
+  const std::string path = destinationPath;
+  destinationPath.clear();
+
+  std::string json;
+  {
+    HalFile file;
+    if (Storage.openFileForRead(LOG_TAG, path, file) && file.fileSize() <= MAX_PRESET_BUNDLE_BYTES) {
+      json.reserve(static_cast<size_t>(file.fileSize()));
+      char buffer[256];
+      while (file.available()) {
+        const int read = file.read(reinterpret_cast<uint8_t*>(buffer), sizeof(buffer));
+        if (read <= 0) break;
+        json.append(buffer, static_cast<size_t>(read));
+      }
+      file.close();
+    }
+  }
+  Storage.remove(path.c_str());
+
+  JsonDocument doc;
+  if (json.empty() || deserializeJson(doc, json) != DeserializationError::Ok) {
+    LOG_ERR(LOG_TAG, "Reading themes bundle could not be parsed");
+    credentialsMessage = tr(STR_THEMES_REJECTED);
+    return;
+  }
+
+  const int added = READER_PRESETS.mergeFromJson(doc);
+  if (added < 0) {
+    LOG_ERR(LOG_TAG, "Reading themes bundle rejected");
+    credentialsMessage = tr(STR_THEMES_REJECTED);
+    return;
+  }
+
+  LOG_DBG(LOG_TAG, "Imported %d reading themes", added);
+  char buffer[96];
+  std::snprintf(buffer, sizeof(buffer), tr(STR_THEMES_IMPORTED_FORMAT), added);
   credentialsMessage = buffer;
 }
 
@@ -558,12 +605,13 @@ void NearbyFileTransferActivity::acceptIncomingOffer() {
   }
 
   std::string resolved;
-  const bool bundle = check.safeFolder.empty() && credential_bundle::isBundleFilename(check.safeName);
-  if (bundle) {
-    // Passwords in the clear land where the web file manager never serves them, under
-    // one fixed name boot clears. FAT rename never overwrites, so a stale copy goes first.
+  const bool credBundle = check.safeFolder.empty() && credential_bundle::isBundleFilename(check.safeName);
+  const bool themeBundle = check.safeFolder.empty() && preset_bundle::isBundleFilename(check.safeName);
+  if (credBundle || themeBundle) {
+    // Bundles land in /.crosspoint/ where the web file manager never serves them, under one
+    // fixed name boot clears. FAT rename never overwrites, so a stale copy goes first.
     if (Storage.ensureDirectoryExists("/.crosspoint")) {
-      resolved = credential_bundle::STAGING_PATH;
+      resolved = credBundle ? credential_bundle::STAGING_PATH : preset_bundle::STAGING_PATH;
       Storage.remove(resolved.c_str());
     }
   } else if (check.safeFolder.empty()) {
@@ -583,7 +631,7 @@ void NearbyFileTransferActivity::acceptIncomingOffer() {
   // A font face is never resumed. A family is wiped whole when its batch does not
   // finish, so there is no prefix left to pick up, and a face is small enough
   // that resending one costs less than reading it back to rebuild a checksum.
-  const bool allowResume = check.safeFolder.empty() && !bundle;
+  const bool allowResume = check.safeFolder.empty() && !credBundle && !themeBundle;
   uint64_t resumeOffset = 0;
   bool opened = !resolved.empty() && openIncomingFile(resolved, allowResume, resumeOffset);
   // The offset settles before the accept goes out, because the accept is what
@@ -1002,6 +1050,7 @@ bool NearbyFileTransferActivity::handleCustomInput() {
     // removed. Doing it the moment the bytes land means the passwords sit on the
     // card for as short a time as possible.
     if (mode == Mode::Receive && credential_bundle::isBundleFilename(destinationPath)) importCredentialBundle();
+    if (mode == Mode::Receive && preset_bundle::isBundleFilename(destinationPath)) importPresetBundle();
   }
   if (session.shouldDiscardPartialFile() && !partialPath.empty()) discardPartialFile();
 

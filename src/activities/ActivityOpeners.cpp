@@ -97,6 +97,9 @@ bool ActivityManager::reopenOpener() {
     case Opener::SettingsShareCredentials:
       screen = SettingsActivity::onShareCredentials(renderer, mappedInput);
       break;
+    case Opener::SettingsReadingThemes:
+      screen = SettingsActivity::onReadingThemes(renderer, mappedInput);
+      break;
     case Opener::Settings:
       screen = SettingsActivity::fromRestartRow(renderer, mappedInput, entry.row);
       break;

@@ -484,7 +484,11 @@ screen has a wallpaper to act on; on nights it has none, the menu opens on **Nav
 - **Reader Settings** — text settings for this book alone.
 - **Reset Reader Settings** — drop the per-book override, shown only when one exists.
 - **Steal Look** — copy another book's look onto this one, once.
-- **Reading Themes** — apply a saved look. A theme holds the text, margin and in-book settings, the paragraph numbers and the status bar layout (which items show and where). A theme's bar becomes your default bar, like Customise Status Bar. Up to 8 themes are kept.
+- **Reading Themes** — apply a saved look to this book alone (without overwriting your global
+  status bar), set any saved theme as your **Global Default** for future books, rename/overwrite/delete
+  themes, or **Send Themes via Nearby** to another reader (`.cpthemes`). Also available under
+  **Settings > Reader > Reading Themes**, and as JSON import/export (`/api/presets`) on the web
+  settings page. Up to 8 themes are kept.
 - **Paragraph Numbers**, **Number Size**, **Number Position**, **Paperback Look**, **Paperback Status**.
 - **Status Bar** — show or hide it. With the bar hidden, a **Progress Bar** row appears in its
   place.

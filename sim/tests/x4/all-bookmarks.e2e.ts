@@ -49,7 +49,7 @@ test('All Bookmarks opens the book at the bookmark', async ({ app, screen }) => 
   await expect(activity).toHaveText('Settings', { timeout: 30_000 });
   await press('Down'); // Reader
   await press('Confirm');
-  await press('Down', 13); // All Bookmarks, the last row
+  await press('Down', 14); // All Bookmarks, the last row
   await press('Confirm');
   await expect(activity).toHaveText('AllBookmarks', { timeout: 30_000 });
   expect(await log()).toContain('Loaded 1 bookmarks from 1 books');
