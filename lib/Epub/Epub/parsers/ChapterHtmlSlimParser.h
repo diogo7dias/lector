@@ -51,6 +51,7 @@ class ChapterHtmlSlimParser {
   int skipUntilDepth = INT_MAX;
   int boldUntilDepth = INT_MAX;
   int italicUntilDepth = INT_MAX;
+  int monoUntilDepth = INT_MAX;
   // buffer for building up words from characters, will auto break if longer than this
   // leave one char at end for null pointer
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
@@ -75,7 +76,7 @@ class ChapterHtmlSlimParser {
   uint8_t guideDotsMode;  // GuideDotsMode: off / visible dots / hidden dots (gap only)
   uint8_t paragraphIndentSpaces;
   const CssParser* cssParser;
-  bool embeddedStyle;
+  uint8_t embeddedStyle;
   uint8_t imageRendering;
   std::string contentBase;
   std::string imageBasePath;
@@ -312,6 +313,7 @@ class ChapterHtmlSlimParser {
   void makePages(bool includeLastLine = true, bool paragraphEnd = true);
   void applyBlockFontScale(BlockStyle& blockStyle, const CssStyle& cssStyle, const char* tagName) const;
   int fontIdForScale(float scale) const;
+  int fontIdForMonospace(float scale) const;
   int prepareBlockFont(ParsedText& text, float scale);
   static EpdFontFamily::Style fontStyleForTextDecoration(CssTextDecoration decoration);
   static void applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css);

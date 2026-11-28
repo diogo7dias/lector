@@ -6,7 +6,11 @@
 #include <WiFi.h>
 #include <driver/gpio.h>
 #include <esp_sleep.h>
+#include <soc/rtc.h>
 #include <soc/soc_caps.h>
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+#include <driver/usb_serial_jtag.h>
+#endif
 #if SOC_PM_SUPPORT_EXT0_WAKEUP
 #include <driver/rtc_io.h>
 #endif
@@ -38,19 +42,49 @@ static void setMemoryBusLowSpeed(const bool low) {
 }
 #endif
 
-static bool setCpuClock(const int mhz) {
+static bool isUsbSerialJtagActive() {
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+  return usb_serial_jtag_is_connected();
+#else
+  return false;
+#endif
+}
+
+// setCpuFrequencyMhz() calls rtc_clk_cpu_freq_set_config_fast(), which leaves the
+// 480 MHz BBPLL running on XTAL clocks. When disableBbpll is true, call
+// rtc_clk_cpu_freq_set_config() instead so the PLL actually powers down; restoring
+// >= 80 MHz via setCpuFrequencyMhz() falls back to rtc_clk_cpu_freq_set_config()
+// automatically when the PLL is off.
+static bool applyCpuFreqMhz(const int mhz, const bool disableBbpll) {
+  if (!disableBbpll) {
+    return setCpuFrequencyMhz(mhz);
+  }
+  rtc_cpu_freq_config_t current{};
+  rtc_clk_cpu_freq_get_config(&current);
+  if (current.freq_mhz == static_cast<uint32_t>(mhz)) {
+    return true;
+  }
+  rtc_cpu_freq_config_t target{};
+  if (!rtc_clk_cpu_freq_mhz_to_config(static_cast<uint32_t>(mhz), &target)) {
+    return false;
+  }
+  rtc_clk_cpu_freq_set_config(&target);
+  return true;
+}
+
+static bool setCpuClock(const int mhz, const bool disableBbpll) {
 #if CONFIG_IDF_TARGET_ESP32S3
   if (mhz < 80) {
     setMemoryBusLowSpeed(true);
-    if (setCpuFrequencyMhz(mhz)) return true;
+    if (applyCpuFreqMhz(mhz, disableBbpll)) return true;
     setMemoryBusLowSpeed(false);
     return false;
   }
-  if (!setCpuFrequencyMhz(mhz)) return false;
+  if (!applyCpuFreqMhz(mhz, false)) return false;
   setMemoryBusLowSpeed(false);
   return true;
 #else
-  return setCpuFrequencyMhz(mhz);
+  return applyCpuFreqMhz(mhz, disableBbpll);
 #endif
 }
 
@@ -85,11 +119,13 @@ void HalPowerManager::setPowerSaving(bool enabled) {
     return;  // invalid state
   }
 
-  auto wifiMode = WiFi.getMode();
-  if (wifiMode != WIFI_MODE_NULL) {
+  const bool wifiActive = (WiFi.getMode() != WIFI_MODE_NULL);
+  if (wifiActive) {
     // Wifi is active, force disabling power saving
     enabled = false;
   }
+  const bool usbConnected = gpio.isUsbConnectedCached() || isCharging();
+  const bool usjActive = isUsbSerialJtagActive();
 
   // Held across the check and the switch: a Lock taken in between would find full speed, do
   // nothing, and then run at LOW_POWER_FREQ until the next key press.
@@ -109,11 +145,16 @@ void HalPowerManager::setPowerSaving(bool enabled) {
       return;
     }
 #endif
+    const bool disableBbpll = power_clock::shouldDisableBbpll(LOW_POWER_FREQ, wifiActive, usbConnected, usjActive);
     // INF, not DBG: the released X4 Pro image logs at level 1, and its sim suite checks
-    // that an idle device gets here and comes back.
-    LOG_INF("PWR", "Going to low-power mode");
-    const bool lowered = setCpuClock(LOW_POWER_FREQ);
-    if (lowered) isLowPower = true;
+    // that an idle device gets here and comes back. Logged before dropping so HWCDC
+    // still has the 48 MHz USB clock if active.
+    LOG_INF("PWR", "Going to low-power mode (%d MHz, bbpll=%s)", LOW_POWER_FREQ, disableBbpll ? "off" : "on");
+    const bool lowered = setCpuClock(LOW_POWER_FREQ, disableBbpll);
+    if (lowered) {
+      isLowPower = true;
+      bbpllDisabled = disableBbpll;
+    }
 #if CONFIG_IDF_TARGET_ESP32S3
     Storage.unlock();
 #endif
@@ -123,14 +164,15 @@ void HalPowerManager::setPowerSaving(bool enabled) {
       return;
     }
 
-  } else if ((!enabled || mode != None) && isLowPower) {
-    LOG_INF("PWR", "Restoring normal CPU frequency");
-    if (!setCpuClock(normalFreq)) {
+  } else if ((!enabled || mode != None || (bbpllDisabled && (usbConnected || usjActive))) && isLowPower) {
+    if (!setCpuClock(normalFreq, false)) {
       LOG_DBG("PWR", "Failed to set CPU frequency = %d MHz", normalFreq);
       xSemaphoreGive(modeMutex);
       return;
     }
     isLowPower = false;
+    bbpllDisabled = false;
+    LOG_INF("PWR", "Restoring normal CPU frequency");
   }
 
   // Otherwise, no change needed

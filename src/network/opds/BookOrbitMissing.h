@@ -29,9 +29,9 @@ int savedCount();
 std::string savedFeedUrl();
 void save(int count, const std::string& feedUrl);
 
-// Whether the sleep check runs: always when WiFi is already up for a push,
-// otherwise once every 6 hours, and never on a clock that was never set.
-bool due(bool wifiUp);
+// Whether the sleep check runs: never when zero pages moved; otherwise always when WiFi
+// is already up for a push, or once every 6 hours on a valid clock.
+bool due(bool wifiUp, bool pagesMoved);
 
 // Fetches the Reading shelf over the WiFi already up and saves the result.
 void refresh();

@@ -24,6 +24,7 @@
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/network/NearbyFileTransferActivity.h"
 #include "components/BusyBanner.h"
+#include "components/HintBandGeometry.h"
 #include "components/UITheme.h"
 #include "components/icons/skull12.h"
 #include "fontIds.h"
@@ -176,6 +177,16 @@ void HomeActivity::loop() {
     selectorIndex = tappedItem;
     activateSelection();
     return;
+  }
+
+  // On a touch board, the band's Page Up / Page Down pair pages the recent books list.
+  if (mappedInput.hasTouch()) {
+    const bool up = mappedInput.wasPressed(MappedInputManager::Button::Left);
+    if (up || mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+      mappedInput.suppressHeldButtonRelease();
+      pageBooks(!up);
+      return;
+    }
   }
 
   const int bookCount = static_cast<int>(recentBooks.size());
@@ -360,9 +371,14 @@ void HomeActivity::render(RenderLock&&) {
   }
 
   // Same rule as every list band (ListChrome.cpp): on a touch board Select names an action
-  // on the black row only once a side key has shown one.
-  const char* select = mappedInput.showsSelection() ? tr(STR_SELECT) : "";
-  const auto labels = mappedInput.mapLabels(backLabel, select, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  // on the black row only once a side key has shown one, and Page Up / Page Down appear
+  // only while the recent books list scrolls past one screen.
+  const bool booksScroll = !recentBooks.empty() &&
+                           (firstVisibleBookIdx > 0 || lastVisibleBookIdx + 1 < static_cast<int>(recentBooks.size()));
+  const auto hints =
+      hint_band::resolveListHints(mappedInput.hasTouch(), mappedInput.showsSelection(), booksScroll, tr(STR_SELECT),
+                                  tr(STR_DIR_UP), tr(STR_DIR_DOWN), tr(STR_PAGE_UP), tr(STR_PAGE_DOWN));
+  const auto labels = mappedInput.mapLabels(backLabel, hints.confirm, hints.third, hints.fourth);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (cleanInitialRefresh) {

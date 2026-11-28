@@ -99,6 +99,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     renderer.drawRect(orientedMarginLeft, orientedMarginTop, vpW, vpH);
   }
   renderStatusBar();
+  drawBookmarkDogEar();
   const auto tBwRender = millis();
 
   if (pageHasImages) {
@@ -207,7 +208,7 @@ void EpubReaderActivity::renderStatusBar() const {
   // Read from the chapter's paragraph table, and only when the item is on: it costs
   // one section-file open, which is not worth paying on every page for a number
   // nobody asked to see.
-  const StatusBarBlock sb = statusBarOf(prefs_);
+  const StatusBarBlock sb = effectiveStatusBar(statusBarOf(prefs_), SETTINGS.calmMode != 0);
   if (sb.paraPagesPos != CrossPointSettings::SB_ANCHOR_OFF) {
     if (const auto left = section->pagesUntilNextParagraph(section->currentPage)) {
       d.paragraphPagesLeft = static_cast<int>(*left);
@@ -218,6 +219,25 @@ void EpubReaderActivity::renderStatusBar() const {
   renderer.setPaperbackLook(prefs_.paperbackLookStatus);
   GUI.drawStatusBarV2(renderer, d, sb);
   renderer.setPaperbackLook(false);
+}
+
+void EpubReaderActivity::drawBookmarkDogEar() const {
+  if (!isCurrentPageBookmarked()) return;
+  int viewTop = 0;
+  int viewRight = 0;
+  int viewBottom = 0;
+  int viewLeft = 0;
+  renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &viewLeft);
+  constexpr int DOG_EAR_W = 16;
+  constexpr int DOG_EAR_H = 22;
+  const int x0 = renderer.getScreenWidth() - viewRight - DOG_EAR_W;
+  const int y0 = viewTop;
+  renderer.fillRect(x0, y0, DOG_EAR_W, DOG_EAR_H, false);
+  const int triX[3] = {x0, x0 + DOG_EAR_W - 1, x0 + DOG_EAR_W - 1};
+  const int triY[3] = {y0, y0, y0 + DOG_EAR_H - 1};
+  renderer.fillPolygon(triX, triY, 3, true);
+  renderer.drawLine(x0, y0, x0, y0 + DOG_EAR_H - 1, true);
+  renderer.drawLine(x0, y0 + DOG_EAR_H - 1, x0 + DOG_EAR_W - 1, y0 + DOG_EAR_H - 1, true);
 }
 
 const char* EpubReaderActivity::printedPageLabel() const {
