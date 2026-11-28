@@ -57,7 +57,7 @@ static bool setCpuClock(const int mhz) {
 void HalPowerManager::holdNormalSpeedForStorage() {
 #if CONFIG_IDF_TARGET_ESP32S3
   // Unlocked read: the clock only goes down under the storage mutex, which the caller holds.
-  if (!isLowPower) return;
+  if (!powerState.isLowPower) return;
   storageWokeAtMs = millis();
   setPowerSaving(false);
 #endif
@@ -96,7 +96,7 @@ void HalPowerManager::setPowerSaving(bool enabled) {
   xSemaphoreTake(modeMutex, portMAX_DELAY);
   const LockMode mode = currentLockMode;
 
-  if (mode == None && enabled && !isLowPower) {
+  if (mode == None && enabled && !powerState.isLowPower) {
 #if CONFIG_IDF_TARGET_ESP32S3
     // Not in the middle of a card transfer, and not straight after one: work that keeps
     // reading the card would otherwise bounce the clock on every loop pass.
@@ -113,7 +113,7 @@ void HalPowerManager::setPowerSaving(bool enabled) {
     // that an idle device gets here and comes back.
     LOG_INF("PWR", "Going to low-power mode");
     const bool lowered = setCpuClock(LOW_POWER_FREQ);
-    if (lowered) isLowPower = true;
+    if (lowered) powerState.isLowPower = true;
 #if CONFIG_IDF_TARGET_ESP32S3
     Storage.unlock();
 #endif
@@ -123,17 +123,54 @@ void HalPowerManager::setPowerSaving(bool enabled) {
       return;
     }
 
-  } else if ((!enabled || mode != None) && isLowPower) {
+  } else if ((!enabled || mode != None) && powerState.isLowPower) {
     LOG_INF("PWR", "Restoring normal CPU frequency");
     if (!setCpuClock(normalFreq)) {
       LOG_DBG("PWR", "Failed to set CPU frequency = %d MHz", normalFreq);
       xSemaphoreGive(modeMutex);
       return;
     }
-    isLowPower = false;
+    powerState.onRestoredToNormal();
   }
 
   // Otherwise, no change needed
+  xSemaphoreGive(modeMutex);
+}
+
+void HalPowerManager::beginBusyWait() {
+  if (normalFreq <= 0 || modeMutex == nullptr) return;
+  const bool wifiActive = (WiFi.getMode() != WIFI_MODE_NULL);
+  xSemaphoreTake(modeMutex, portMAX_DELAY);
+  if (!powerState.shouldLowerOnBusyBegin(wifiActive)) {
+    xSemaphoreGive(modeMutex);
+    return;
+  }
+#if CONFIG_IDF_TARGET_ESP32S3
+  if (!Storage.tryLock()) {
+    xSemaphoreGive(modeMutex);
+    return;
+  }
+#endif
+  LOG_INF("PWR", "Busy-wait low-power (%d MHz)", LOW_POWER_FREQ);
+  const bool lowered = setCpuClock(LOW_POWER_FREQ);
+  if (lowered) powerState.onBusyLowered();
+#if CONFIG_IDF_TARGET_ESP32S3
+  Storage.unlock();
+#endif
+  xSemaphoreGive(modeMutex);
+}
+
+void HalPowerManager::endBusyWait() {
+  if (normalFreq <= 0 || modeMutex == nullptr) return;
+  xSemaphoreTake(modeMutex, portMAX_DELAY);
+  if (powerState.takeRestoreOnBusyEnd()) {
+    if (setCpuClock(normalFreq)) {
+      powerState.onRestoredToNormal();
+      LOG_DBG("PWR", "Restored normal CPU frequency after busy-wait");
+    } else {
+      LOG_DBG("PWR", "Failed to restore CPU frequency = %d MHz after busy-wait", normalFreq);
+    }
+  }
   xSemaphoreGive(modeMutex);
 }
 
