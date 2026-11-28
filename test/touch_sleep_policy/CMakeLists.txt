@@ -1,0 +1,3 @@
+add_executable(touch_sleep_policy_test TouchSleepPolicyTest.cpp)
+target_link_libraries(touch_sleep_policy_test PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(touch_sleep_policy_test)

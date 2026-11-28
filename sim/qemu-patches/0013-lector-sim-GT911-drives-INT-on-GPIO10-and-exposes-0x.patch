@@ -1,0 +1,121 @@
+From 39f5d73c562f596b7f30ea92e07c5b8fd54f3bea Mon Sep 17 00:00:00 2001
+From: Vault Keeper <diogo7dias@gmail.com>
+Date: Sat, 28 Nov 2026 01:10:23 +0000
+Subject: [PATCH] lector sim: GT911 drives INT on GPIO10 and exposes 0x8055 and
+ status-reads
+
+Wire the simulated GT911 interrupt output to ESP32-S3 GPIO10 so IRQ-gated touch polling works in the simulator, expose register 0x8055 (Module_Switch1, default 0x01 falling-edge), and expose a read-only QOM status-reads counter for 0x814E reads.
+---
+ hw/misc/lector_i2c.c | 31 +++++++++++++++++++++++++++++++
+ hw/xtensa/esp32s3.c  |  1 +
+ 2 files changed, 32 insertions(+)
+
+diff --git a/hw/misc/lector_i2c.c b/hw/misc/lector_i2c.c
+index a22a388..5d262a0 100644
+--- a/hw/misc/lector_i2c.c
++++ b/hw/misc/lector_i2c.c
+@@ -19,6 +19,7 @@
+ #include "qemu/cutils.h"
+ #include "qapi/error.h"
+ #include "hw/i2c/i2c.h"
++#include "hw/irq.h"
+ #include "hw/qdev-properties.h"
+ #include "qom/object.h"
+ 
+@@ -103,13 +104,17 @@ static void i2c_regs_class_init(ObjectClass *klass, void *data)
+ #define TYPE_GT911 "gt911"
+ OBJECT_DECLARE_SIMPLE_TYPE(GT911State, GT911)
+ 
++#define GT911_MODULE_SWITCH1 0x8055
+ #define GT911_STATUS 0x814E
+ #define GT911_POINTS 0x8150
+ 
+ struct GT911State {
+     I2CSlave parent_obj;
++    qemu_irq irq;
+     uint16_t ptr;
+     int nsent;
++    uint8_t module_switch1;
++    uint32_t status_reads;
+     bool fresh;
+     bool down, home;    /* the finger and the key now */
+     bool fdown, fhome;  /* what the frame at 0x814E reports */
+@@ -118,9 +123,27 @@ struct GT911State {
+     uint32_t x2, y2;
+ };
+ 
++static void gt911_update_irq(GT911State *s, bool pulse)
++{
++    const int active = (s->module_switch1 & 0x01) ? 0 : 1;
++    const int idle = !active;
++    if (!s->fresh) {
++        qemu_set_irq(s->irq, idle);
++        return;
++    }
++    if (pulse) {
++        qemu_set_irq(s->irq, idle);
++    }
++    qemu_set_irq(s->irq, active);
++}
++
+ static uint8_t gt911_reg(GT911State *s, uint16_t reg)
+ {
++    if (reg == GT911_MODULE_SWITCH1) {
++        return s->module_switch1;
++    }
+     if (reg == GT911_STATUS) {
++        s->status_reads++;
+         return s->fresh ? 0x80 | (s->fhome ? 0x10 : 0) | (s->fdown ? (s->fdown2 ? 2 : 1) : 0) : 0;
+     }
+     /* coordinates at byte 0 of each 8-byte record, as on the X4 Pro */
+@@ -169,6 +192,10 @@ static int gt911_send(I2CSlave *i2c, uint8_t data)
+             s->fdown = s->down;
+             s->fdown2 = s->down2;
+             s->fhome = s->home;
++            gt911_update_irq(s, s->fresh);
++        } else if (s->ptr == GT911_MODULE_SWITCH1) {
++            s->module_switch1 = data;
++            gt911_update_irq(s, false);
+         }
+         s->ptr++;
+     }
+@@ -184,6 +211,7 @@ static void gt911_changed(GT911State *s)
+         s->fdown2 = s->down2;
+         s->fhome = s->home;
+         s->fresh = true;
++        gt911_update_irq(s, true);
+     }
+ }
+ 
+@@ -226,6 +254,8 @@ static bool gt911_get_home(Object *obj, Error **errp)
+ static void gt911_init(Object *obj)
+ {
+     GT911State *s = GT911(obj);
++    s->module_switch1 = 0x01;  /* falling-edge INT */
++    qdev_init_gpio_out_named(DEVICE(obj), &s->irq, "irq", 1);
+     object_property_add_bool(obj, "down", gt911_get_down, gt911_set_down);
+     object_property_add_bool(obj, "home", gt911_get_home, gt911_set_home);
+     object_property_add_uint32_ptr(obj, "x", &s->x, OBJ_PROP_FLAG_READWRITE);
+@@ -233,6 +263,7 @@ static void gt911_init(Object *obj)
+     object_property_add_bool(obj, "down2", gt911_get_down2, gt911_set_down2);
+     object_property_add_uint32_ptr(obj, "x2", &s->x2, OBJ_PROP_FLAG_READWRITE);
+     object_property_add_uint32_ptr(obj, "y2", &s->y2, OBJ_PROP_FLAG_READWRITE);
++    object_property_add_uint32_ptr(obj, "status-reads", &s->status_reads, OBJ_PROP_FLAG_READ);
+ }
+ 
+ static void gt911_class_init(ObjectClass *klass, void *data)
+diff --git a/hw/xtensa/esp32s3.c b/hw/xtensa/esp32s3.c
+index c1b994e..cfa3b79 100644
+--- a/hw/xtensa/esp32s3.c
++++ b/hw/xtensa/esp32s3.c
+@@ -857,6 +857,7 @@ static void esp32s3_machine_init(MachineState *machine)
+         I2CSlave *touch = i2c_slave_new("gt911", 0x5D);
+         object_property_add_child(OBJECT(machine), "touch", OBJECT(touch));
+         i2c_slave_realize_and_unref(touch, bus, &error_fatal);
++        qdev_connect_gpio_out_named(DEVICE(touch), "irq", 0, qdev_get_gpio_in_named(DEVICE(&ss->gpio), "pin-in", 10));
+         I2CSlave *gauge = i2c_slave_new("i2c-regs", 0x63);
+         qdev_prop_set_string(DEVICE(gauge), "init", "0:0d,2:30c0,4:50");
+         i2c_slave_realize_and_unref(gauge, bus, &error_fatal);
+-- 
+2.43.0
+
