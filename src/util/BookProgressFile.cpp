@@ -52,6 +52,17 @@ bool write(const std::string& cacheDir, const Marker& marker) {
   return true;
 }
 
+bool remove(const std::string& cacheDir) {
+  if (cacheDir.empty()) return true;
+  const std::string path = cacheDir + FILE_NAME;
+  if (!Storage.exists(path.c_str())) return true;
+  if (!Storage.remove(path.c_str())) {
+    LOG_ERR("BPRG", "Could not remove progress marker: %s", path.c_str());
+    return false;
+  }
+  return true;
+}
+
 bool readForBook(const std::string& bookPath, Marker& markerOut) {
   const std::string cacheDir = bookCacheDirForPath(bookPath);
   if (cacheDir.empty()) return false;

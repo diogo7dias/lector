@@ -761,6 +761,7 @@ bool Epub::generateCoverBmp(bool cropped) const {
     LOG_ERR("EBP", "Failed to generate BMP from %s cover image", format);
     Storage.remove(partPath.c_str());
   } else if (!Storage.exists(getThumbBmpPath().c_str())) {
+    Storage.remove(getThumbFailPath().c_str());
     generateThumbBmp();
   }
   LOG_DBG("EBP", "Generated BMP from %s cover image, success: %s", format, success ? "yes" : "no");
@@ -768,11 +769,19 @@ bool Epub::generateCoverBmp(bool cropped) const {
 }
 
 std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
+std::string Epub::getThumbFailPath() const { return cachePath + "/thumb.fail"; }
 
 bool Epub::generateThumbBmp() const {
   const std::string thumbPath = getThumbBmpPath();
   if (Storage.exists(thumbPath.c_str())) return true;
+  const std::string failPath = getThumbFailPath();
+  if (Storage.exists(failPath.c_str())) return false;
   setupCacheDir();
+
+  auto recordFail = [&failPath]() {
+    HalFile marker;
+    Storage.openFileForWrite("EBP", failPath, marker);
+  };
 
   // Fast path: downsample an existing cover.bmp / cover_crop.bmp without re-opening the EPUB zip.
   for (const bool cropped : {false, true}) {
@@ -798,12 +807,18 @@ bool Epub::generateThumbBmp() const {
   // Fallback: decode cover image directly from the EPUB to 132x196 2-bit BMP.
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return false;
   const auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
-  if (coverImageHref.empty()) return false;
+  if (coverImageHref.empty()) {
+    recordFail();
+    return false;
+  }
 
   const bool jpg = FsHelpers::hasJpgExtension(coverImageHref);
   const bool gif = FsHelpers::hasGifExtension(coverImageHref);
   const bool png = !jpg && !gif;
-  if (png && !FsHelpers::hasPngExtension(coverImageHref)) return false;
+  if (png && !FsHelpers::hasPngExtension(coverImageHref)) {
+    recordFail();
+    return false;
+  }
 
   const auto coverTempPath = getCachePath() + (jpg ? "/.thumb.jpg" : gif ? "/.thumb.gif" : "/.thumb.png");
   HalFile coverImage;
@@ -818,6 +833,7 @@ bool Epub::generateThumbBmp() const {
 
   if (!Storage.openFileForRead("EBP", coverTempPath, coverImage)) {
     Storage.remove(coverTempPath.c_str());
+    recordFail();
     return false;
   }
 
@@ -835,7 +851,10 @@ bool Epub::generateThumbBmp() const {
   thumbBmp.close();
   Storage.remove(coverTempPath.c_str());
   success = success && Storage.rename(partPath.c_str(), thumbPath.c_str());
-  if (!success) Storage.remove(partPath.c_str());
+  if (!success) {
+    Storage.remove(partPath.c_str());
+    recordFail();
+  }
   return success;
 }
 

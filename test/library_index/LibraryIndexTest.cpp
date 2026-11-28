@@ -129,7 +129,10 @@ TEST(LibraryFormat, HeaderValidation) {
   bad.magic[0] = 'X';
   EXPECT_EQ(validateHeader(bad, h.selfSize), ClixValidity::BadMagic);
   bad = h;
-  bad.formatVersion = 2;  // CrossPoint's CLX1 is version 2: never accepted as ours
+  bad.formatVersion = 1;  // v1 index must be rejected and rebuilt to v2
+  EXPECT_EQ(validateHeader(bad, h.selfSize), ClixValidity::UnknownFormatVersion);
+  bad = h;
+  bad.formatVersion = 3;
   EXPECT_EQ(validateHeader(bad, h.selfSize), ClixValidity::UnknownFormatVersion);
   bad = h;
   bad.bookCount = CLIX_MAX_RECORDS + 1;

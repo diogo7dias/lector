@@ -6,6 +6,8 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <LibraryBuilder.h>
+#include <LibraryIndexFile.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <NearbyPositionReceive.h>
@@ -168,7 +170,8 @@ void EpubReaderActivity::rememberBookOnceRendered() {
   bookRemembered = true;
   APP_STATE.openEpubPath = epub->getPath();
   APP_STATE.saveToFile();
-  if (!Storage.exists(epub->getThumbBmpPath().c_str())) {
+  if (SETTINGS.libraryViewMode == CrossPointSettings::LIBRARY_VIEW_GRID &&
+      !Storage.exists(epub->getThumbBmpPath().c_str())) {
     epub->generateThumbBmp();
   }
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor());
@@ -224,6 +227,7 @@ void EpubReaderActivity::onExit() {
 
   // Update this book's home-list progress badge from the current position. One write
   // per reading session (setProgress skips if unchanged), so no page-turn cost.
+  uint8_t exitPercent = library::CLIX_PERCENT_UNREAD;
   if (epub) {
     const int pct = bookPercent();
     RECENT_BOOKS.setProgress(epub->getPath(), pct);
@@ -237,6 +241,7 @@ void EpubReaderActivity::onExit() {
       book_progress::Marker marker;
       marker.percent = pendingReadFolderMove ? 100 : static_cast<uint8_t>(pct);
       marker.readOrder = readOrder;
+      exitPercent = marker.percent;
       book_progress::write(epub->getCachePath(), marker);
     }
   }
@@ -276,6 +281,10 @@ void EpubReaderActivity::onExit() {
     finalPath = bookfiling::moveBookToFolder(srcPath, dstPath, oldCachePath);
   } else {
     epub.reset();
+  }
+
+  if (!pendingDeleteBook && !finalPath.empty() && exitPercent != library::CLIX_PERCENT_UNREAD) {
+    library::updateRecordProgress(library::libraryIndexPath(), finalPath.c_str(), exitPercent, readOrder);
   }
 
   if (pageMoved && !pendingDeleteBook && !finalPath.empty()) ko_auto_sync::markMoved(finalPath);

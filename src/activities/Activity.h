@@ -102,6 +102,26 @@ class Activity {
     (void)delta;
     return false;
   }
+  // Optional second stepper row below the first aux row (e.g. Library Filter below Sort).
+  virtual bool lightPanelAux2Text(char* out, size_t length) const {
+    (void)out;
+    (void)length;
+    return false;
+  }
+  virtual bool lightPanelStepAux2(int delta) {
+    (void)delta;
+    return false;
+  }
+  // Optional third stepper row below Aux2 (e.g. Library View: List / Grid).
+  virtual bool lightPanelAux3Text(char* out, size_t length) const {
+    (void)out;
+    (void)length;
+    return false;
+  }
+  virtual bool lightPanelStepAux3(int delta) {
+    (void)delta;
+    return false;
+  }
   // The browser order changed under this screen (the light panel's Sort row). Only the
   // file browser is laid out against it, and it has to re-read the folder rather than
   // re-sort what it drew: Last Read reads a key per book off the card.

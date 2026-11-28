@@ -12,6 +12,13 @@
 #include <string>
 #include <vector>
 
+#ifndef O_RDONLY
+#define O_RDONLY 0
+#endif
+#ifndef O_RDWR
+#define O_RDWR 2
+#endif
+
 namespace fake {
 inline std::string root;
 // Directory entries listed twice, as a damaged FAT does: dir path -> names.
@@ -129,9 +136,9 @@ class HalStorage {
     static HalStorage instance;
     return instance;
   }
-  HalFile open(const char* path) {
+  HalFile open(const char* path, const int oflag = O_RDONLY) {
     HalFile f;
-    f.open(path, "rb");
+    f.open(path, oflag == O_RDWR ? "r+b" : "rb");
     return f;
   }
   bool ensureDirectoryExists(const char* path) {

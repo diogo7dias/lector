@@ -7,10 +7,13 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "LibraryFormat.h"
 
 namespace library {
+
+using ViewProgressFn = void (*)(void* ctx);
 
 class LibraryIndexFile {
  public:
@@ -50,5 +53,16 @@ class LibraryIndexFile {
   bool readFailed = false;
   ClixValidity lastValidity = ClixValidity::BadMagic;
 };
+
+// Update percent and readOrder in place for `bookPath` inside an existing CLX v2 index.
+// Skips the write when unchanged. Returns false if the index is missing/invalid or the
+// book is not present (e.g. moved since the last build).
+bool updateRecordProgress(const char* indexPath, const char* bookPath, uint8_t percent, uint32_t readOrder);
+
+// Build an ordered list of record ordinals matching `filter` and sorted by `sort`.
+// Leaves `out` empty and returns true for the default (Title + All), which needs no
+// remapping table. Returns false on OOM or read failure.
+bool buildLibraryView(LibraryIndexFile& index, LibrarySort sort, LibraryFilter filter, std::vector<uint16_t>& out,
+                      ViewProgressFn progress = nullptr, void* progressCtx = nullptr);
 
 }  // namespace library

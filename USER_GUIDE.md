@@ -225,17 +225,23 @@ full name.
 
 ### Library
 
-**Library** lists every book on the card in one list, sorted by title, with the author under
-each title. Pick one to open it. The top right shows which book you are on and how many there
-are. Open the **Quick Panel** inside Library to switch **View** between **List** (default) and
-**Grid** (3x3 covers on X4 Pro, 2x3 on X3/X4). Each cover tile shows a thin progress bar beneath
-it and a **Read** ribbon once finished. Cover thumbnails (`132x196` `thumb.bmp`) are generated
-lazily when a book opens (or downsampled from `cover.bmp`); books without a thumbnail show an
-instant typographic card so scrolling never stalls. Titles and authors come from the books
-themselves (an EPUB's own title and author); a book without them is listed by its file name. Books
-in any folder are listed, wherever they are filed (`/recents` and `/read` included), but not the
-folders Lector keeps for
-itself (`/sleep`, `/fonts` and the like) or hidden files.
+**Library** lists every book on the card in one list, sorted by title by default, with the author
+under each title and each book's reading badge (`[NN%]` or **Read**) at the right. Pick one to open
+it. The top right shows which book you are on and how many there are. Titles and authors come from
+the books themselves (an EPUB's own title and author); a book without them is listed by its file
+name. Books in any folder are listed, wherever they are filed (`/recents` and `/read` included), but
+not the folders Lector keeps for itself (`/sleep`, `/fonts` and the like) or hidden files.
+
+Open the **Quick Panel** while in Library to change **Sort** (**Title**, **Author**, **Recently
+Added** or **Last Read**), **Filter** (**All**, **Reading**, **Unread** or **Read**), and **View**
+(**List** default, or **Grid**: 3x3 covers on X4 Pro, 2x3 on X3/X4). Each cover tile shows a thin
+progress bar beneath it and a **Read** ribbon once finished. Cover thumbnails (`132x196` `thumb.bmp`)
+are generated lazily when a book opens in Grid mode (or downsampled when `cover.bmp` is built), and
+books without a thumbnail show an instant typographic card so scrolling never stalls; a failed cover
+decode is recorded so it is not retried on every open. Hold **Confirm** on a book (on the X4 Pro,
+press and hold the row) for **Book Info** (EPUB only), **Mark Read** or **Mark Unread**, and
+**Delete**. In Grid mode, search is reachable from the **Search** icon in the header (touch) or the
+**Search** tile in the Quick Panel.
 
 The list is read from an index Lector keeps on the card (`/.crosspoint/lector-library.idx`).
 The first visit after the device starts, and the first one after any book was added, moved,
@@ -272,8 +278,9 @@ to go up one folder.
 - **Open** — **Confirm** opens the folder, book or image under the cursor.
 - **File actions** — hold **Confirm** on a file (on the X4 Pro, press and hold the row) to
   open a small menu: **Book Info** (EPUB
-  only), **Send to Nearby Reader** (files another reader can accept), **Rename**, **Move to
-  folder** and **Delete**. **Book Info** shows the title, the cover (when the book has
+  only), **Mark Read** or **Mark Unread** (EPUB and TXT), **Send to Nearby Reader** (files another
+  reader can accept), **Rename**, **Move to folder** and **Delete**. **Book Info** shows the title,
+  the cover (when the book has
   one), the author and the publisher's description, paged with the page buttons; **Back**
   returns to the list.
   A folder goes straight to the delete confirmation. Nothing is deleted without confirming.

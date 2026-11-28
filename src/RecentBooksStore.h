@@ -37,6 +37,8 @@ class RecentBooksStore : public PersistableStore<RecentBooksStore> {
   // Update a book's last-read progress percent (0-100). No-op if the book is not in
   // the list or the value is unchanged (skips the SD write). Called on reader exit.
   void setProgress(const std::string& path, int percent);
+  // Clear a book's stored progress back to -1 (unread). No-op when absent or already -1.
+  void clearProgress(const std::string& path);
 
   // Remove the entry whose path matches (used when a book is removed from recents or finished/read).
   // Returns true if an entry was found and removed (no-op + false otherwise).
