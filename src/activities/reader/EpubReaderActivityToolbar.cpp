@@ -8,10 +8,14 @@
 #include "EpubReaderActivity.h"
 #include "MappedInputManager.h"
 #include "ReaderToolbarSteps.h"
+#include "util/ReadingPercent.h"
 
-// The toolbar reader menu: a sheet over the page with a scrub row, the chapter and place,
-// and three tiles that open lector's own screens (Contents = the chapter list, Text = this
-// book's text settings, More = the tabbed list menu). See ReaderToolbarUi.
+// The toolbar reader menu: a sheet over the page with an optional Return chip, a scrub row,
+// the chapter and place, and four tiles (Contents, Bookmark, Text, More). See ReaderToolbarUi.
+
+bool EpubReaderActivity::toolbarScrubsPages() const {
+  return epub && section && reader_toolbar::scrubsPages(epub->getSpineItemsCount());
+}
 
 bool EpubReaderActivity::openToolbar() {
   // Needs a page on screen to paint over (not the End of Book screen); while one is still
@@ -34,6 +38,9 @@ bool EpubReaderActivity::openToolbar() {
     toolbarOpen = true;
     toolbarPaintOnly = true;
     toolbarJumped = false;
+    toolbarScrubPermille = -1;
+    toolbarScrubLastTarget = -1;
+    toolbarScrubLastPercent = -1;
     // Buttons show a cursor from the start; touch boards only once a button moves it.
     toolbarFocus = mappedInput.hasTouch() ? -1 : reader_toolbar::Contents;
   }
@@ -46,6 +53,9 @@ void EpubReaderActivity::closeToolbar(const bool repaint) {
     RenderLock lock(*this);
     toolbarOpen = false;
     toolbarPaintOnly = false;
+    toolbarScrubPermille = -1;
+    toolbarScrubLastTarget = -1;
+    toolbarScrubLastPercent = -1;
     toolbarUi.reset();
   }
   if (repaint) {
@@ -57,18 +67,45 @@ void EpubReaderActivity::closeToolbar(const bool repaint) {
 void EpubReaderActivity::paintToolbar() {
   // Render task, the page already in the framebuffer.
   if (!toolbarOpen || !toolbarUi || !section || !epub) return;
+  const bool byPage = toolbarScrubsPages();
+  const int totalPages = section->estimatedTotalPages();
   std::string chapterTitle = tr(STR_UNNAMED);
-  const int tocIndex = section->getTocIndexForPage(section->currentPage);
-  if (tocIndex != -1) chapterTitle = epub->getTocItem(tocIndex).title;
-  const int percent = bookPercent();
   char info[32];
-  snprintf(info, sizeof(info), "%d/%d   %d%%", section->currentPage + 1, section->estimatedTotalPages(), percent);
+  int progressPermille = 0;
+
+  if (toolbarScrubPermille >= 0) {
+    progressPermille = toolbarScrubPermille;
+    if (byPage) {
+      const int previewPage = reader_toolbar::pageForPermille(toolbarScrubPermille, totalPages);
+      const int tocIndex = section->getTocIndexForPage(previewPage);
+      if (tocIndex != -1) chapterTitle = epub->getTocItem(tocIndex).title;
+      const float spineProgress =
+          totalPages > 1 ? static_cast<float>(previewPage) / static_cast<float>(totalPages - 1) : 0.0f;
+      const int previewPercent = reading_percent::toPercent(epub->calculateProgress(currentSpineIndex, spineProgress));
+      snprintf(info, sizeof(info), "%d/%d   %d%%", previewPage + 1, totalPages, previewPercent);
+    } else {
+      const int previewSpine = reader_toolbar::spineForPermille(toolbarScrubPermille, epub->getSpineItemsCount());
+      const int tocIndex = epub->getTocIndexForSpineIndex(previewSpine);
+      if (tocIndex != -1) chapterTitle = epub->getTocItem(tocIndex).title;
+      const int previewPercent = reading_percent::toPercent(epub->calculateProgress(previewSpine, 0.0f));
+      snprintf(info, sizeof(info), "%d%%", previewPercent);
+    }
+  } else {
+    const int tocIndex = section->getTocIndexForPage(section->currentPage);
+    if (tocIndex != -1) chapterTitle = epub->getTocItem(tocIndex).title;
+    const int percent = bookPercent();
+    snprintf(info, sizeof(info), "%d/%d   %d%%", section->currentPage + 1, totalPages, percent);
+    progressPermille = byPage ? reader_toolbar::permilleForPage(section->currentPage, totalPages) : percent * 10;
+  }
 
   ReaderToolbarUi::Model model;
   model.chapterTitle = chapterTitle.c_str();
   model.pageInfo = info;
-  model.progressPermille = percent * 10;
+  model.progressPermille = progressPermille;
   model.activeTool = toolbarFocus;
+  model.bookmarked = isCurrentPageBookmarked();
+  model.canReturn = !returnHistory.empty();
+  model.returnLabel = tr(STR_RETURN);
   toolbarUi->setModel(model);
   toolbarUi->render();
   // FAST: only the sheet changes, and a full cleanup would flash the page above it.
@@ -93,6 +130,42 @@ void EpubReaderActivity::toolbarGotoSpine(const int spine) {
   requestUpdate();  // the new chapter's page, then the sheet over it
 }
 
+void EpubReaderActivity::toolbarGotoPage(const int page) {
+  if (!section) return;
+  const int total = section->estimatedTotalPages();
+  const int target = reader_toolbar::clampPage(page, total);
+  if (target == section->currentPage) return;
+  {
+    RenderLock lock(*this);
+    if (!toolbarJumped) {
+      recordJumpOrigin(true);
+      toolbarJumped = true;
+    }
+    clearDeferredReposition();
+    pendingAnchor.clear();
+    section->currentPage = target;
+  }
+  requestUpdate();
+}
+
+void EpubReaderActivity::toolbarReturn() {
+  if (returnHistory.empty()) return;
+  {
+    RenderLock lock(*this);
+    std::optional<ReaderReturnHistory::Position> here;
+    if (currentPageSpineIndex >= 0 && currentPageVisibleOffset) {
+      here = ReaderReturnHistory::Position{currentPageSpineIndex, *currentPageVisibleOffset};
+    }
+    const auto target = returnHistory.beginReturn(here);
+    if (!target) return;
+    jumpToContentOffset(target->spineIndex, target->contentOffset);
+  }
+  toolbarScrubPermille = -1;
+  toolbarScrubLastTarget = -1;
+  toolbarScrubLastPercent = -1;
+  requestUpdate();
+}
+
 void EpubReaderActivity::reopenToolbar(void* self, const int tool) {
   auto* reader = static_cast<EpubReaderActivity*>(self);
   // The sheet paints over the page, so it waits for the page to be drawn again.
@@ -105,8 +178,17 @@ void EpubReaderActivity::reopenToolbar(void* self, const int tool) {
 }
 
 void EpubReaderActivity::runToolbarTool(const int tool) {
-  // Each tile leaves for a screen of its own; that screen repaints the page when it closes,
-  // and Back from it brings the sheet back on this tile.
+  if (tool == reader_toolbar::Bookmark) {
+    if (sortesMode) {
+      closeToolbar(false);
+      blockSortesAction();
+      return;
+    }
+    addBookmark();
+    return;
+  }
+  // Each other tile leaves for a screen of its own; that screen repaints the page when it
+  // closes, and Back from it brings the sheet back on this tile.
   closeToolbar(false);
   MenuReturn::Scope backToToolbar(&EpubReaderActivity::reopenToolbar, this, tool);
   switch (tool) {
@@ -129,6 +211,7 @@ bool EpubReaderActivity::handleToolbarInput() {
   }
   if (!toolbarOpen || !toolbarUi) return false;
   using Button = MappedInputManager::Button;
+  const bool byPage = toolbarScrubsPages();
   const auto routed = toolbarUi->route(mappedInput);
   switch (routed.event) {
     case ReaderToolbarUi::Event::Dismiss:
@@ -137,17 +220,67 @@ bool EpubReaderActivity::handleToolbarInput() {
     case ReaderToolbarUi::Event::Tool:
       runToolbarTool(routed.value);
       return true;
+    case ReaderToolbarUi::Event::Return:
+      toolbarReturn();
+      return true;
     case ReaderToolbarUi::Event::PrevChapter:
-      toolbarGotoSpine(currentSpineIndex - 1);
+      if (byPage) {
+        toolbarGotoPage(section->currentPage - 1);
+      } else {
+        toolbarGotoSpine(currentSpineIndex - 1);
+      }
       return true;
     case ReaderToolbarUi::Event::NextChapter:
-      toolbarGotoSpine(currentSpineIndex + 1);
+      if (byPage) {
+        toolbarGotoPage(section->currentPage + 1);
+      } else {
+        toolbarGotoSpine(currentSpineIndex + 1);
+      }
       return true;
+    case ReaderToolbarUi::Event::ScrubPreview: {
+      int target = 0;
+      int percent = 0;
+      if (byPage) {
+        const int totalPages = section->estimatedTotalPages();
+        target = reader_toolbar::pageForPermille(routed.permille, totalPages);
+        const float sp = totalPages > 1 ? static_cast<float>(target) / static_cast<float>(totalPages - 1) : 0.0f;
+        percent = reading_percent::toPercent(epub->calculateProgress(currentSpineIndex, sp));
+      } else {
+        target = reader_toolbar::spineForPermille(routed.permille, epub->getSpineItemsCount());
+        percent = reading_percent::toPercent(epub->calculateProgress(target, 0.0f));
+      }
+      toolbarScrubPermille = routed.permille;
+      if (target != toolbarScrubLastTarget || percent != toolbarScrubLastPercent) {
+        toolbarScrubLastTarget = target;
+        toolbarScrubLastPercent = percent;
+        toolbarPaintOnly = true;
+        requestUpdate();
+      }
+      return true;
+    }
     case ReaderToolbarUi::Event::Scrub:
-      toolbarGotoSpine(reader_toolbar::spineForPermille(routed.permille, epub->getSpineItemsCount()));
+      toolbarScrubPermille = -1;
+      toolbarScrubLastTarget = -1;
+      toolbarScrubLastPercent = -1;
+      if (byPage) {
+        toolbarGotoPage(reader_toolbar::pageForPermille(routed.permille, section->estimatedTotalPages()));
+      } else {
+        toolbarGotoSpine(reader_toolbar::spineForPermille(routed.permille, epub->getSpineItemsCount()));
+      }
       return true;
     case ReaderToolbarUi::Event::None:
       break;
+  }
+  if (toolbarScrubPermille >= 0) {
+    int hx = 0;
+    int hy = 0;
+    if (!mappedInput.isScreenTouchHeld(hx, hy)) {
+      toolbarScrubPermille = -1;
+      toolbarScrubLastTarget = -1;
+      toolbarScrubLastPercent = -1;
+      toolbarPaintOnly = true;
+      requestUpdate();
+    }
   }
   if (routed.routed) return true;
 
@@ -163,9 +296,17 @@ bool EpubReaderActivity::handleToolbarInput() {
     toolbarPaintOnly = true;
     requestUpdate();
   } else if (mappedInput.wasPressed(Button::Up)) {
-    toolbarGotoSpine(currentSpineIndex - 1);
+    if (byPage) {
+      toolbarGotoPage(section->currentPage - 1);
+    } else {
+      toolbarGotoSpine(currentSpineIndex - 1);
+    }
   } else if (mappedInput.wasPressed(Button::Down)) {
-    toolbarGotoSpine(currentSpineIndex + 1);
+    if (byPage) {
+      toolbarGotoPage(section->currentPage + 1);
+    } else {
+      toolbarGotoSpine(currentSpineIndex + 1);
+    }
   }
   return true;
 }

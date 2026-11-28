@@ -515,23 +515,33 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
   } else {
     frame = {cursorX + left, cursorY - top, 1, 0, 0, 1};
   }
-  renderer.drawGlyphBitmap(bitmap, width, height, frame, is2Bit, renderMode, pixelState);
-  // Paperback Look: smear the ink +1 right and +1 down for heavier strokes, on
-  // the BW (base-frame) pass only so grayscale planes stay untouched. Every BW
-  // write uses the same state, so redrawing the glyph shifted is the same union.
-  const uint8_t weight = renderMode == GfxRenderer::BW ? renderer.getPaperbackLook() : 0;
-  if (weight > 0) {
-    frame.x++;
+  if (renderMode != GfxRenderer::BW) {
     renderer.drawGlyphBitmap(bitmap, width, height, frame, is2Bit, renderMode, pixelState);
-    if (weight > 1) {  // Bolder: a second column of ink
-      frame.x++;
-      renderer.drawGlyphBitmap(bitmap, width, height, frame, is2Bit, renderMode, pixelState);
-      frame.x--;
-    }
-    frame.x--;
-    frame.y++;
-    renderer.drawGlyphBitmap(bitmap, width, height, frame, is2Bit, renderMode, pixelState);
+    return;
   }
+  bool isTtf = false;
+#ifdef CROSSPOINT_TTF_READER
+  isTtf = TtfSdFont::ownsMissCtx(fontData->glyphMissCtx);
+#endif
+  // Map 2-bit ink weight before Paperback smear on non-TTF fonts; TTF faces bake ink
+  // weight into their 2-bit coverage during rasterization so they stay at 0x0e here.
+  const glyphBitmap::InkPlan plan =
+      glyphBitmap::inkPlanFor(renderer.getPaperbackLook(), renderer.getInkWeight(), is2Bit, isTtf);
+  for (uint8_t p = 0; p < plan.count; ++p) {
+    glyphBitmap::Frame shifted = frame;
+    shifted.x += plan.passes[p].dx;
+    shifted.y += plan.passes[p].dy;
+    renderer.drawGlyphBitmap(bitmap, width, height, shifted, is2Bit, renderMode, pixelState, plan.passes[p].bwLevels);
+  }
+}
+
+void GfxRenderer::setInkWeight(const int8_t weight, const bool updateTtf) const {
+  inkWeight_ = std::clamp<int8_t>(weight, -2, 2);
+#ifdef CROSSPOINT_TTF_READER
+  if (updateTtf) TtfSdFont::setInkWeight(inkWeight_);
+#else
+  (void)updateTtf;
+#endif
 }
 
 // Draw an unscaled glyph placed by a logical frame. Equivalent to calling
@@ -540,7 +550,7 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
 // once per pixel. Off-panel pixels are dropped silently (drawPixel logs them).
 void GfxRenderer::drawGlyphBitmap(const uint8_t* bitmap, const int width, const int height,
                                   const glyphBitmap::Frame& frame, const bool twoBit, const RenderMode mode,
-                                  const bool state) const {
+                                  const bool state, const uint8_t bwLevels) const {
   uint8_t* buffer = getWriteTarget();
   if (buffer == nullptr) return;
   // Writes go to the framebuffer, or to the strip scratch in tiled grayscale
@@ -562,7 +572,7 @@ void GfxRenderer::drawGlyphBitmap(const uint8_t* bitmap, const int width, const 
   const glyphBitmap::Plane plane = mode == BW              ? glyphBitmap::Plane::BW
                                    : mode == GRAYSCALE_MSB ? glyphBitmap::Plane::GrayMSB
                                                            : glyphBitmap::Plane::GrayLSB;
-  glyphBitmap::draw(bitmap, width, height, twoBit, plane, state, target, {0, 0, width, height});
+  glyphBitmap::draw(bitmap, width, height, twoBit, plane, state, target, {0, 0, width, height}, bwLevels);
 }
 
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and

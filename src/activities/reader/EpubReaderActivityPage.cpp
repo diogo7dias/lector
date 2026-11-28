@@ -81,13 +81,15 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     renderer.clearScreen();
   }
 
-  // Paperback Look (body): thicken the page glyphs on the BW base pass, then reset so
+  // Paperback Look and Ink Weight (body): apply on the BW base pass, then reset so
   // the paragraph numbers, the status bar (its own flag) and any grayscale/overlay
-  // passes render thin. Image pages keep the thick text: the smear pixels set here
+  // passes render clean. Image pages keep the body weight: the BW pixels set here
   // persist through the image-area re-blank/re-render below.
   renderer.setPaperbackLook(prefs_.paperbackLookBody);
+  renderer.setInkWeight(reader_defaults::resolveInkWeight(prefs_.inkWeight), /*updateTtf=*/true);
   page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
   renderer.setPaperbackLook(false);
+  renderer.setInkWeight(0);
   // Before the quote underlines, which would otherwise read as ink and cut the rule.
   ruled_lines::drawPage(renderer, *page, fontId, SETTINGS.getReaderLineCompression(prefs_), orientedMarginLeft,
                         orientedMarginTop, orientedMarginRight, orientedMarginBottom);
@@ -101,6 +103,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     renderer.drawRect(orientedMarginLeft, orientedMarginTop, vpW, vpH);
   }
   renderStatusBar();
+  drawBookmarkDogEar();
   const auto tBwRender = millis();
 
   if (pageHasImages) {
@@ -209,7 +212,7 @@ void EpubReaderActivity::renderStatusBar() const {
   // Read from the chapter's paragraph table, and only when the item is on: it costs
   // one section-file open, which is not worth paying on every page for a number
   // nobody asked to see.
-  const StatusBarBlock sb = statusBarOf(prefs_);
+  const StatusBarBlock sb = effectiveStatusBar(statusBarOf(prefs_), SETTINGS.calmMode != 0);
   if (sb.paraPagesPos != CrossPointSettings::SB_ANCHOR_OFF) {
     if (const auto left = section->pagesUntilNextParagraph(section->currentPage)) {
       d.paragraphPagesLeft = static_cast<int>(*left);
@@ -220,6 +223,25 @@ void EpubReaderActivity::renderStatusBar() const {
   renderer.setPaperbackLook(prefs_.paperbackLookStatus);
   GUI.drawStatusBarV2(renderer, d, sb);
   renderer.setPaperbackLook(false);
+}
+
+void EpubReaderActivity::drawBookmarkDogEar() const {
+  if (!isCurrentPageBookmarked()) return;
+  int viewTop = 0;
+  int viewRight = 0;
+  int viewBottom = 0;
+  int viewLeft = 0;
+  renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &viewLeft);
+  constexpr int DOG_EAR_W = 16;
+  constexpr int DOG_EAR_H = 22;
+  const int x0 = renderer.getScreenWidth() - viewRight - DOG_EAR_W;
+  const int y0 = viewTop;
+  renderer.fillRect(x0, y0, DOG_EAR_W, DOG_EAR_H, false);
+  const int triX[3] = {x0, x0 + DOG_EAR_W - 1, x0 + DOG_EAR_W - 1};
+  const int triY[3] = {y0, y0, y0 + DOG_EAR_H - 1};
+  renderer.fillPolygon(triX, triY, 3, true);
+  renderer.drawLine(x0, y0, x0, y0 + DOG_EAR_H - 1, true);
+  renderer.drawLine(x0, y0 + DOG_EAR_H - 1, x0 + DOG_EAR_W - 1, y0 + DOG_EAR_H - 1, true);
 }
 
 const char* EpubReaderActivity::printedPageLabel() const {

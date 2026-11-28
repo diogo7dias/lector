@@ -77,4 +77,20 @@ TEST(LowBatteryPolicy, ReArmsEvenWhileChargingOnAScreenItCouldNotHaveWarnedOver)
   EXPECT_EQ(low_battery::resolve(in), Action::ClearLatch);
 }
 
+TEST(LowBatteryPolicy, CalmModeSuppressesNagUntilCriticalFivePercent) {
+  Inputs in = lowAndReadable();
+  in.calmMode = true;
+  in.percent = 10;
+  EXPECT_EQ(low_battery::resolve(in), Action::None);
+
+  in.percent = low_battery::CALM_WARN_PERCENT + 1;
+  EXPECT_EQ(low_battery::resolve(in), Action::None);
+
+  in.percent = low_battery::CALM_WARN_PERCENT;
+  EXPECT_EQ(low_battery::resolve(in), Action::Warn);
+
+  in.percent = 1;
+  EXPECT_EQ(low_battery::resolve(in), Action::Warn);
+}
+
 }  // namespace

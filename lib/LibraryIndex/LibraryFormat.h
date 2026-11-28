@@ -30,7 +30,11 @@ namespace library {
 inline constexpr char CLIX_MAGIC[4] = {'C', 'L', 'X', '1'};
 // Bumping this is the whole migration: an index of another version fails
 // validation and is rebuilt.
-inline constexpr uint8_t CLIX_FORMAT_VERSION = 1;
+inline constexpr uint8_t CLIX_FORMAT_VERSION = 2;
+inline constexpr uint8_t CLIX_PERCENT_UNREAD = 255;
+
+enum class LibrarySort : uint8_t { Title = 0, Author = 1, RecentlyAdded = 2, LastRead = 3, Count = 4 };
+enum class LibraryFilter : uint8_t { All = 0, Reading = 1, Unread = 2, Read = 3, Count = 4 };
 
 inline constexpr uint32_t CLIX_ALIGN = 512;
 
@@ -78,12 +82,32 @@ struct ClixRecord {
   uint8_t titleLen;
   uint8_t authorLen;
   uint8_t pathLen;
-  uint8_t reserved[9];
+  uint8_t percent;     // 0..100, CLIX_PERCENT_UNREAD (255) = unread
+  uint32_t readOrder;  // monotonic read session counter; 0 = unknown
+  uint8_t reserved[4];
 };
 static_assert(sizeof(ClixRecord) == 32, "ClixRecord must be exactly 32 bytes");
 static_assert(CLIX_ALIGN % sizeof(ClixRecord) == 0, "records must tile a 512-byte sector");
 
 #pragma pack(pop)
+
+inline bool isRecordUnread(const ClixRecord& r) { return r.percent == CLIX_PERCENT_UNREAD; }
+inline bool isRecordRead(const ClixRecord& r) { return r.percent >= 100 && r.percent != CLIX_PERCENT_UNREAD; }
+inline bool isRecordReading(const ClixRecord& r) { return r.percent < 100; }
+
+inline bool matchesFilter(const ClixRecord& r, const LibraryFilter filter) {
+  switch (filter) {
+    case LibraryFilter::Reading:
+      return isRecordReading(r);
+    case LibraryFilter::Unread:
+      return isRecordUnread(r);
+    case LibraryFilter::Read:
+      return isRecordRead(r);
+    case LibraryFilter::All:
+    default:
+      return true;
+  }
+}
 
 inline constexpr size_t CLIX_ROW_NAME_BYTES = CLIX_MAX_TITLE + CLIX_MAX_AUTHOR + CLIX_MAX_PATH;
 

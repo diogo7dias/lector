@@ -246,8 +246,8 @@ Versions 67 and older, including the full version 53 layout every later version 
 ## Library index (`/.crosspoint/lector-library.idx`)
 
 The list behind Home > Library: one entry per book on the card, in title order. Magic
-`CLX1`, format version 1. It is not CrossPoint's `CLX1` (that is version 2, with different
-records, kept in `library.idx`), so a card moved between the two firmwares never makes them
+`CLX1`, format version 2 (version 1 had no reading progress). It is not CrossPoint's `CLX1`
+(different records, kept in `library.idx`), so a card moved between the two firmwares never makes them
 rebuild each other's file. A file of another version, size or layout fails validation and is
 rebuilt; nothing is migrated.
 
@@ -259,7 +259,7 @@ Little-endian, packed. Each section starts on a 512-byte boundary.
 | records | 512 | `bookCount` x 32 bytes, in title order |
 | names | `nameStart` | per record, in the same order: title, author, path (no terminators) |
 
-Header (64 bytes): `char magic[4]`, `u8 formatVersion` (1), `u8 flags` (bit 0: more books on the
+Header (64 bytes): `char magic[4]`, `u8 formatVersion` (2), `u8 flags` (bit 0: more books on the
 card than fit, so the list stops at the cap), `u16 bookCount`, `u32 recordStart` (512),
 `u32 nameStart` (`recordStart + 32 * bookCount`, rounded up to 512), `u32 nameLen`,
 `u32 selfSize` (`nameStart + nameLen`; must equal the real file size, so a cut file is
@@ -267,7 +267,9 @@ rejected), `u8 reserved[40]`.
 
 Record (32 bytes): `u64 pathHash` (FNV-1a 64 of the path), `u32 nameOff` (from `nameStart`),
 `u32 fileSize`, `u32 modified` (FAT date << 16 | FAT time, 0 when the card gives none),
-`u8 titleLen`, `u8 authorLen`, `u8 pathLen`, `u8 reserved[9]`. A book's title, author and
+`u8 titleLen`, `u8 authorLen`, `u8 pathLen`, `u8 percent` (reading progress 0 to 100, 255 when
+never opened), `u32 readOrder` (the reading-session counter at the last exit, 0 when unknown),
+`u8 reserved[4]`. A book's title, author and
 path are the `titleLen`, `authorLen` and `pathLen` bytes at `nameStart + nameOff`. Bounds: title
 128, author 96, path 255 bytes; a record whose text leaves the names section or exceeds
 these is refused when read.
@@ -285,3 +287,7 @@ leaves the previous index, or none between those two steps, never a half-written
 final name. `lector-library.stage` is the staging file (512 bytes per book) and is deleted
 afterwards. A book keeps the title and author of the previous index when its path, size and
 modification time are unchanged.
+
+`percent` and `readOrder` come from each book's `percent.bin` at build time. Leaving a book, and
+Mark Read or Mark Unread, rewrite that one 32-byte record in place (a record never crosses a
+512-byte sector), so the list filters and sorts on progress without a rebuild.

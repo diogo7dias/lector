@@ -202,7 +202,8 @@ The Home screen is the entry point. It lists the books you have been reading, an
 - **Library** — every book on the card by title, see [Library](#library).
 - **OPDS Browser** — shown once at least one catalog is configured, see
   [section 9](#9-getting-books-onto-the-device).
-- **File Transfer** — Wi-Fi transfers, see [section 9](#9-getting-books-onto-the-device).
+- **Nearby Sync** — receive a reading position or send and receive files with another Lector nearby, see
+  [section 10](#10-syncing-reading-position). Wi-Fi, Hotspot, Calibre and USB Drive live under **Settings > File Transfer**.
 - **Quick Panel** — the X3 and X4 only: opens the quick panel (see Settings reference), the same
   panel a double click of **Power** opens.
 - **Settings** — see [section 12](#12-settings-reference).
@@ -225,12 +226,17 @@ full name.
 
 ### Library
 
-**Library** lists every book on the card in one list, sorted by title, with the author under
-each title. Pick one to open it. The top right shows which book you are on and how many there
-are. Titles and authors come from the books themselves (an EPUB's own title and author); a
-book without them is listed by its file name. Books in any folder are listed, wherever
-they are filed (`/recents` and `/read` included), but not the folders Lector keeps for
-itself (`/sleep`, `/fonts` and the like) or hidden files.
+**Library** lists every book on the card in one list, sorted by title by default, with the author
+under each title and each book's reading badge (`[NN%]` or **Read**) at the right. Pick one to open
+it. The top right shows which book you are on and how many there are. Titles and authors come from
+the books themselves (an EPUB's own title and author); a book without them is listed by its file
+name. Books in any folder are listed, wherever they are filed (`/recents` and `/read` included), but
+not the folders Lector keeps for itself (`/sleep`, `/fonts` and the like) or hidden files.
+
+Open the **Quick Panel** while in Library to change **Sort** (**Title**, **Author**, **Recently
+Added** or **Last Read**) and **Filter** (**All**, **Reading**, **Unread** or **Read**). Hold
+**Confirm** on a book (on the X4 Pro, press and hold the row) for **Book Info** (EPUB only),
+**Mark Read** or **Mark Unread**, and **Delete**.
 
 The list is read from an index Lector keeps on the card (`/.crosspoint/lector-library.idx`).
 The first visit after the device starts, and the first one after any book was added, moved,
@@ -267,8 +273,9 @@ to go up one folder.
 - **Open** — **Confirm** opens the folder, book or image under the cursor.
 - **File actions** — hold **Confirm** on a file (on the X4 Pro, press and hold the row) to
   open a small menu: **Book Info** (EPUB
-  only), **Send to Nearby Reader** (files another reader can accept), **Rename**, **Move to
-  folder** and **Delete**. **Book Info** shows the title, the cover (when the book has
+  only), **Mark Read** or **Mark Unread** (EPUB and TXT), **Send to Nearby Reader** (files another
+  reader can accept), **Rename**, **Move to folder** and **Delete**. **Book Info** shows the title,
+  the cover (when the book has
   one), the author and the publisher's description, paged with the page buttons; **Back**
   returns to the list.
   A folder goes straight to the delete confirmation. Nothing is deleted without confirming.
@@ -308,7 +315,7 @@ books copied from a computer carry a real date, while books the device downloade
 | Type            | Opens as                                              |
 | --------------- | ----------------------------------------------------- |
 | `.epub`         | The full reader: chapters, footnotes, bookmarks, quotes |
-| `.txt`          | Plain-text reader                                     |
+| `.txt`          | Plain-text reader: per-book Text Settings, Reading Themes, justification |
 | `.xtc`          | XTC reader, the Xteink book format                    |
 | `.bmp`, `.png`, `.jpg` | Image viewer                                   |
 | `.pxc`          | Image viewer for the packed wallpaper format          |
@@ -443,26 +450,31 @@ Press **Confirm** while reading. The menu is one list of five tabs: **Look**, **
 **Book**, **Sleep Screen** and **Device**. Each tab is a heading with a plus at its right edge
 and the number of rows it holds. Moving onto a heading opens it (the plus turns to a minus)
 and closes the one that was open. **Back** closes the open tab; a second **Back** leaves the
-menu. Rows that do not apply to the open book are not shown at all.
+menu. From the tab the menu opened on, one **Back** leaves the menu. Rows that do not apply to
+the open book are not shown at all.
 
-The menu opens on **Sleep Screen**. That tab appears alongside the others while the lock
-screen has a wallpaper to act on; on nights it has none, the menu opens on **Navigate**.
+The menu opens with **Sleep Screen** expanded when the lock screen has a wallpaper to act on, or
+with **Navigate** expanded otherwise.
 
 ### Navigate
 
-- **Select Chapter** — the table of contents. Chapters the book lists but cannot actually
+- **Select Chapter** — the table of contents, with the current chapter marked (`>`) and each
+  chapter's book percentage right-aligned. Chapters the book lists but cannot actually
   open are left out, so every row here goes somewhere.
 - **Go to %** — jump by percentage. The front buttons move it by 1, the side buttons by 10.
   On a touch screen a number pad sits under the slider: type the number (4, 7 for 47%),
   the delete key takes back the last digit, and **OK** jumps.
-- **Go to Page** — jump to a page number of the printed edition: type it as the book prints
-  it (`147`, or `xii` in the front matter) and **OK**. Shown only in EPUB 3 books that carry
-  the printed page numbers (a page list); Return takes you back.
+- **Go to Page** — in an EPUB 3 book that carries printed page numbers (a page list), jump to a
+  printed page by typing it as the book prints it (`147`, or `xii` in the front matter) and **OK**.
+  In every other EPUB, jump to a page within the current chapter (`1` to the chapter's total, shown
+  as `N/M` in the prompt). Entering a page that does not exist shows **Page not found**; Return
+  takes you back.
 - **Return** — go back to where you were before selecting a chapter, jumping by percentage,
-  or opening a bookmark. Keeps the last eight jump origins during this reading session;
-  ordinary page turns do not add entries. Shown only while there is somewhere to return to.
-  Changing text size still returns to the same passage. Leaving the book (including sleep)
-  clears this history; the Back button and footnote returns keep their usual behavior.
+  or opening a bookmark. Keeps the last eight jump origins and survives sleep and reopening
+  the book; ordinary page turns do not add entries. Shown only while there is somewhere to
+  return to, and also bindable to a button in **Settings > Controls > Buttons**.
+  Changing text size still returns to the same passage; the Back button and footnote returns
+  keep their usual behavior.
 - **Forward** — after a Return, go back to the page you returned from. Shown only after a
   Return. A new jump (chapter, percentage, bookmark) clears it.
 - **Go to Paragraph** — jump by paragraph number, shown only while paragraph numbering is on.
@@ -527,16 +539,20 @@ the page, with the page above it left as it is. The same press, tap or bound act
 EPUB books.
 It holds:
 
-- A **scrub row**: drag along the track, or tap it, to jump through the book by chapter; the
-  arrow buttons at each end step one chapter. The line under it names the chapter and gives the
-  page and the percent.
-- Three tiles: **Contents** (the chapter list), **Text** (this book's text settings) and **More**
-  (the tabbed menu above).
+- A **Return** chip above the scrub row whenever there is a jump origin to return to; tap it to
+  jump straight back to where you were reading.
+- A **scrub row**: drag along the track, or tap it, to jump through the book by chapter (or by
+  page in books with one or two spine sections); the arrow buttons at each end step one chapter or
+  page. Dragging updates the chapter title and percentage live before you lift your finger. The
+  line under it names the chapter and gives the page and the percent.
+- Four tiles: **Contents** (the chapter list), **Bookmark** (toggles the bookmark on this page;
+  filled when bookmarked), **Text** (this book's text settings) and **More** (the tabbed menu
+  above).
 
 Tap a tile to open it, or tap the page above the sheet to close it. On a reader with buttons,
 **Left** and **Right** move between the tiles, **Confirm** opens the marked one, **Up** and
-**Down** step a chapter, and **Back** closes. **Menu Hold** does nothing while the toolbar is up. **Back** from the
-screen a tile opened brings the toolbar back.
+**Down** step a chapter (or page on short books), and **Back** closes. **Menu Hold** does nothing
+while the toolbar is up. **Back** from the screen a tile opened brings the toolbar back.
 
 ---
 
@@ -544,8 +560,10 @@ screen a tile opened brings the toolbar back.
 
 ### Bookmarks
 
-Bind **Long press while reading** to **Bookmark** and hold **Confirm** to drop one, or use
-**Toggle Bookmark** in the menu. Open the list from **Navigate > Bookmarks**, press
+Bookmarked pages show a folded dog-ear in the top-right corner of the page. On the X4 Pro, tapping
+the top-right corner toggles the bookmark on that page directly. You can also bind **Long press
+while reading** to **Bookmark** and hold **Confirm**, tap the **Bookmark** tile in the toolbar, or
+use **Toggle Bookmark** in the menu. Open the list from **Navigate > Bookmarks**, press
 **Confirm** on an entry to jump there. To delete one, hold **Confirm** on it, then confirm.
 **Settings > Reader > All Bookmarks** lists the bookmarks of every book; picking one opens
 that book at it, and **Return** goes back to where you had stopped. Older bookmarks show once
@@ -597,6 +615,7 @@ With BookOrbit as the KOReader sync server, quotes also travel to BookOrbit as h
 | Quick Resume   | The page you were on stays on the screen with a small moon in the bottom-left corner, and waking puts the same page back. Nothing is cleared or redrawn at lock, so it is the fastest face; a copy of the screen is kept on the card in `.crosspoint`. |
 | Transparent    | A picture with see-through parts (an overlay) drawn over the page you were on. See Overlay files below. With no overlay on the card, the white crow and "Lector" screen. |
 | Cover + Transparent | The same overlay drawn over the open book's cover. With no cover, over a blank page; with no overlay, the plain cover. |
+| Quote          | A quote of the day drawn from `/My Clippings.txt`, typeset in the reading font with the book title and author. Changes once per day when the clock is set (random otherwise). Falls back to Cover, or the Lector face, when `/My Clippings.txt` is empty. |
 | None           | An empty white screen. Drawn by the firmware, no SD file. |
 
 Custom is the default. Inactivity uses your selected sleep screen.
@@ -672,8 +691,10 @@ and edits Wi-Fi networks and OPDS servers at `http://<device-ip>/settings`. It a
 **WebDAV**, so the card can be mounted as a network drive.
 
 The home page shows battery charge, free card space, and the books you have in progress.
-The file manager can zip several selected files into one download, and **Fetch from URL**
-hands the reader a link so it downloads the file itself instead of you uploading it.
+The file manager can zip several selected files into one download, **Fetch from URL**
+hands the reader a link so it downloads the file itself instead of you uploading it, and
+**Send Article** turns pasted plain text, Markdown, or HTML into a single-chapter EPUB3 in the
+browser and uploads it to `/articles/`.
 
 An upload that is cut off part way through does not have to start again. What arrived is kept
 beside the finished books under a `.part` name, which the library ignores, and uploading the
@@ -884,7 +905,11 @@ to **KOSync** in **Settings > Controls**.
 device last slept, Lector joins a saved Wi-Fi network, fetches the position and moves to it when
 the server is ahead. When the device goes to sleep after you turned pages, it sends the new
 position of every book you read since it last slept (up to four) from behind the sleep screen. It uses saved networks only and never shows the network
-list. If no saved network answers, the book simply opens where you left it. A server whose
+list. Before sending, it scans once and joins only a saved network it can see, so a lock
+away from every saved network costs about a second of Wi-Fi. A saved hidden network is tried
+only when it was saved through **Add hidden network...** on this version or a later one:
+forget one saved earlier and add it again. After a lock that reached no network, the next attempts wait 5 minutes, then
+longer (up to an hour); a position that was not sent goes out the next time you read that book. If no saved network answers, the book simply opens where you left it. A server whose
 certificate has not been trusted yet is skipped, so run **Sync Progress** once by hand first.
 Each pull costs a few seconds of Wi-Fi and a restart back into the book.
 
@@ -918,7 +943,7 @@ its web reader and apps, so a book continues where you stopped on either side.
 4. Run **Authenticate**, then turn on **Auto Sync** if you want it.
 
 With **Auto Sync** on, Lector also watches for books you are reading in BookOrbit but have not
-put on the device. When it goes to sleep (after you read, or at most once every 6 hours), it
+put on the device. When it goes to sleep after you read, it
 reads the smart shelf named **Reading** in BookOrbit's OPDS catalogue. A book counts as on the
 device when the file an OPDS download would save exists, or a recent book has the same title.
 When some are missing, Home shows a row such as **2 on BookOrbit, not here**. Select it to see
@@ -1123,7 +1148,7 @@ belongs to, so the rows here appear in the same order as on the device.
 
 **Sleep screen**
 
-- **Sleep Screen** — Dark, Light, Custom, Cover, Cover + Custom, Quick Resume, Transparent, Cover + Transparent, None. See [section 8](#8-sleep-screen-and-wallpapers).
+- **Sleep Screen** — Dark, Light, Custom, Cover, Cover + Custom, Quick Resume, Transparent, Cover + Transparent, Quote, None. See [section 8](#8-sleep-screen-and-wallpapers).
 - **Fast Unlock** — shorter recovery-chord wait at wake, and the page painted over the sleep screen in one pass. Off if a wake lands in the recovery picker by itself or the wallpaper ghosts into the first page.
 - **Sleep Footer Text** — your own line of text on the sleep screen.
 
@@ -1156,9 +1181,13 @@ default 30; a brightness above it is brought down), **Restore on Wake** (on by d
 (at each wake inside the set hours the light comes on by itself) with its **Light On From** and
 **Light On Until** times (20:00 and 07:00 by default, in quarter-hour steps).
 
-In a book the quick panel also has **Align Left** and **Justify**, which set the book's paragraph
-alignment (for that EPUB alone; in a TXT book, for every TXT book), and **Paragraph Spacing**,
-which turns the extra space between an EPUB's paragraphs on or off for that book.
+In a book the quick panel also has **Calm Mode**, **Align Left** and **Justify**, which set the
+book's paragraph alignment for that book alone, and **Paragraph Spacing**, which turns the extra
+space between an EPUB's paragraphs on or off for that book. **Calm Mode** (off by default; also
+bindable to a button in **Settings > Controls > Buttons**) hides the status bar, the hidden-bar
+progress bar, the low-battery notice (until the critical 5% floor) and the centre-tap reader menu;
+a bottom-edge swipe up and **Confirm** still open the menu. Turning it off restores your exact
+previous setup without modifying saved status bar settings or Reading Themes.
 
 **Screen**
 
@@ -1203,6 +1232,10 @@ The other numbers in Settings, such as Time to Sleep, open their own slider scre
 - **Font** — ChareInk, plus any SD card families; opens a full-screen picker.
 - **Size** — the sizes the chosen font has: 12, 14 and 16 pt for ChareInk, whatever is installed for
   an SD card family.
+- **Ink Weight** — finer font weight in five steps, from -2 (lighter) to +2 (darker); 0 is the font
+  as designed (default). On the X4 Pro, TrueType and OpenType fonts shift their rasterizer coverage
+  threshold; built-in and `.cpfont` fonts adjust their 2-bit ink levels before Paperback Look. Changing
+  it repaints immediately without re-paginating the book.
 - **Line Spacing** — 80% to 175%. Full text pages automatically share leftover vertical space above
   and below the text, inside your margins and status bar. Short pages stay at the top;
   EPUB pages with images, rules or ruby keep their layout. This balances line boxes
@@ -1228,29 +1261,37 @@ The other numbers in Settings, such as Time to Sleep, open their own slider scre
   Justify distributes all spare horizontal space between eligible gaps; the last line
   keeps its natural spacing. Korean text wraps and stretches only at the spaces between
   words, never between syllables, unless a single word is wider than the line.
-- **Embedded Style** — honour the book's own CSS: how the words look (bold, italic, underline,
-  superscript and subscript, writing direction, passages the book marks as hidden, and lists
-  the book marks as having no bullets or numbers) and where blocks sit (alignment, the book's
-  margins and padding, image sizes, the boxes and shading around passages, and the page breaks it
-  asks for). Bold and italic written as `<b>` or `<i>` tags are always honoured, switch or not.
+- **Embedded Style** — **Off**, **Text Only** or **Full** (default).
+  - **Full** honours all supported CSS: text styling (bold, italic, underline, small caps,
+    superscript and subscript, writing direction, preserved whitespace, hidden passages) and layout
+    (alignment, margins, padding, font sizes, image sizes, borders, shading, drop caps and page
+    breaks). **Paragraph Alignment: Book's Style** needs Full.
+  - **Text Only** keeps inline text styling (weight, italic, decoration, small caps, superscript
+    and subscript, white-space, `display:none` and writing direction) while dropping the book's
+    margins, padding, font sizes and boxes so your reader layout stays uniform.
+  - **Off** ignores the book's stylesheet completely. Bold and italic written as `<b>` or `<i>` tags
+    are always honoured, and `<code>`, `<pre>`, `<tt>` and `<kbd>` render in the installed
+    **IBMPlexMono** SD font when present (falling back cleanly to the reading font if missing).
   Numbered lists always show their numbers, and a nested list counts from 1 again.
   An inline passage in another writing direction keeps the enclosing paragraph's base direction.
   Arabic and Persian text is shaped once, preserving Alef and Lam order; Latin ligatures remain supported.
-  It also honours drop caps (a large first letter spanning two to four lines), small caps,
-  text the book keeps as typed (poetry, code) and the book's relative font sizes for
-  headings, paragraphs and words. Each is drawn at the nearest size the font has: 12, 14 or 16 pt
-  for ChareInk, whatever is installed for an SD card family. **Paragraph Alignment: Book's
-  Style** reads the book's CSS, so it needs this on. The book's fonts and line height are never
-  used: the reader's own settings always win. Older builds had separate Embedded Text Style and
-  Embedded Layout Style switches: the style is on after the update only if both were on.
-  Footnote and cross-reference links are always underlined, and kerning and ligatures are
-  always on.
+  Each scaled font size is drawn at the nearest size the font has: 12, 14 or 16 pt for ChareInk,
+  whatever is installed for an SD card family. The book's fonts and line height are never used: the
+  reader's own settings always win. Footnote and cross-reference links are always underlined, and
+  kerning and ligatures are always on.
 
-Pages always end full: no line moves to the next page to keep a paragraph's first or last line
+By default pages end full: no line moves to the next page to keep a paragraph's first or last line
 or a heading from sitting alone at a page edge. Page breaks the book asks for still apply. Tables size each column to its content.
+A table too wide for the page sets its cell text one size smaller, a cell that spans columns
+stays in the grid, and a header row gets a heavier rule under it. A table keeps its grid up to
+4 columns (6 on the X4 Pro); wider ones list their cells one under another.
 Small pictures in the text (icons, symbols drawn as images, up to two lines tall) stay inside
 the line; larger ones get their own centred block, and a small picture alone in its paragraph
 is centred.
+- **Keep Headings** — off by default. When on, a heading never sits stranded at the bottom of a
+  page (it moves to the next page with the text that follows it), and paragraphs of four or more
+  lines avoid leaving a single orphan line at the bottom or a single widow line at the top of the
+  next page. Changing it re-paginates the book.
 - **Bionic Reading** — bolds the first part of each word as a fixation point.
 - **Word Spacing %** — sets the baseline gap between words, from 50% to 200% in steps of 25.
   100% keeps the original spacing. Justified lines still stretch to the right margin;

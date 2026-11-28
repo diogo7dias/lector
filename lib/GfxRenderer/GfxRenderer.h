@@ -103,6 +103,9 @@ class GfxRenderer {
   // vertical strokes gain a second pixel. Plain byte owned by the renderer (lib/ must not
   // depend on src/); callers bracket it per region.
   mutable uint8_t paperbackLook_ = 0;
+  // Finer ink weight (-2..+2, 0 = normal). On C3 2-bit fonts this shifts the painted level
+  // mask before Paperback smear; on X4 Pro TTF fonts it shifts stb_truetype coverage packing.
+  mutable int8_t inkWeight_ = 0;
   // Images: Display (B/W): image pixels dither to black and white in the B/W pass, and the
   // grayscale passes leave them alone. Set by the reader for the page it is drawing.
   bool ditherImagesInBw_ = false;
@@ -203,6 +206,9 @@ class GfxRenderer {
   int resolveFontVariant(const int fontId, const float scale) const {
     return fontVariantProvider_.resolveFont(fontId, scale);
   }
+  int resolveMonospaceFont(const int fontId, const float scale) const {
+    return fontVariantProvider_.resolveMonospaceFont(fontId, scale);
+  }
   // True when fontId is registered, loading it through the variant provider if needed.
   bool ensureFontLoaded(const int fontId) const {
     if (fontMap.count(fontId) != 0) return true;
@@ -283,6 +289,10 @@ class GfxRenderer {
   // so it can be called on the const GfxRenderer& that layout/render code holds.
   void setPaperbackLook(const uint8_t level) const { paperbackLook_ = level; }
   uint8_t getPaperbackLook() const { return paperbackLook_; }
+  // updateTtf=true updates the resident TTF rasterizer weight (used when bracketing body
+  // text); resets back to 0 for UI/status bar leave updateTtf=false so TTF caches stay warm.
+  void setInkWeight(int8_t weight, bool updateTtf = false) const;
+  int8_t getInkWeight() const { return inkWeight_; }
   void setDitherImagesInBw(const bool enabled) { ditherImagesInBw_ = enabled; }
   bool imagesDitheredInBw() const { return ditherImagesInBw_; }
   void setInvertImagesInNightMode(const bool invert) { invertImagesInNightMode_ = invert; }
@@ -295,7 +305,7 @@ class GfxRenderer {
   bool isPixelBlack(int x, int y) const;
   // Fast path for unscaled glyphs: same result as drawPixel() per ink pixel, clipped and rotated once per glyph.
   void drawGlyphBitmap(const uint8_t* bitmap, int width, int height, const glyphBitmap::Frame& frame, bool twoBit,
-                       RenderMode mode, bool state) const;
+                       RenderMode mode, bool state, uint8_t bwLevels = 0x0e) const;
   void drawLine(int x1, int y1, int x2, int y2, bool state = true) const;
   void drawLine(int x1, int y1, int x2, int y2, int lineWidth, bool state) const;
   void drawRect(int x, int y, int width, int height, bool state = true) const;

@@ -107,4 +107,16 @@ TEST(ReaderTouch, TheOldCombinedModeSplitsIntoSwitchAndGesture) {
   EXPECT_FALSE(migrateLegacyMode(255).valid);
 }
 
+TEST(ReaderTouch, TopRightCornerTapTogglesBookmarkOnlyWhenEnabled) {
+  using reader_touch::BOOKMARK_CORNER_H;
+  using reader_touch::BOOKMARK_CORNER_W;
+  using reader_touch::isBookmarkCornerTap;
+  EXPECT_TRUE(isBookmarkCornerTap(true, W, H, W - 1, 0));
+  EXPECT_TRUE(isBookmarkCornerTap(true, W, H, W - BOOKMARK_CORNER_W, BOOKMARK_CORNER_H - 1));
+  EXPECT_FALSE(isBookmarkCornerTap(true, W, H, W - BOOKMARK_CORNER_W - 1, 10));
+  EXPECT_FALSE(isBookmarkCornerTap(true, W, H, W - 10, BOOKMARK_CORNER_H));
+  EXPECT_FALSE(isBookmarkCornerTap(false, W, H, W - 10, 10));
+  EXPECT_FALSE(isBookmarkCornerTap(true, 0, H, 0, 0));
+}
+
 }  // namespace

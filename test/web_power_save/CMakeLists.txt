@@ -1,0 +1,3 @@
+add_executable(web_power_save_test WebPowerSavePolicyTest.cpp)
+target_link_libraries(web_power_save_test PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(web_power_save_test)

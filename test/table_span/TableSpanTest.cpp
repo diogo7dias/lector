@@ -34,3 +34,11 @@ TEST(TableSpan, MalformedValuesAreIgnoredRatherThanGuessed) {
   EXPECT_EQ(parseTableSpan("-2"), 1);
   EXPECT_EQ(parseTableSpan("2.5"), 1);
 }
+
+TEST(TableSpan, ExtractsColspanFromRawTagBuffer) {
+  EXPECT_EQ(parseTagAttributeSpan("td colspan=\"2\"", "colspan"), 2);
+  EXPECT_EQ(parseTagAttributeSpan("th class=\"h\" colspan='3' scope=\"col\"", "colspan"), 3);
+  EXPECT_EQ(parseTagAttributeSpan("td colspan=4", "colspan"), 4);
+  EXPECT_EQ(parseTagAttributeSpan("td mycolspan=\"2\"", "colspan"), 1);
+  EXPECT_EQ(parseTagAttributeSpan("td", "colspan"), 1);
+}
