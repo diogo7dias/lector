@@ -1157,7 +1157,7 @@ default 30; a brightness above it is brought down), **Restore on Wake** (on by d
 **Light On Until** times (20:00 and 07:00 by default, in quarter-hour steps).
 
 In a book the quick panel also has **Align Left** and **Justify**, which set the book's paragraph
-alignment (for that EPUB alone; in a TXT book, for every TXT book), and **Paragraph Spacing**,
+alignment for that book alone, and **Paragraph Spacing**,
 which turns the extra space between an EPUB's paragraphs on or off for that book.
 
 **Screen**

@@ -15,7 +15,8 @@ constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
 // Increment when cache format changes (4: form-feed page breaks, 5: UTF-16 refused,
-// 6: Windows-1252 files decoded, 7: line compression + character spacing in cache key)
+// 6: Windows-1252 files decoded, 7: character spacing joins the key; line spacing needs no
+// field of its own, it changes linesPerPage, which is already in the key)
 constexpr uint8_t CACHE_VERSION = 7;
 // How far into a file detectEncoding() looks for a non-ASCII byte before calling it UTF-8.
 constexpr size_t ENCODING_SCAN_BYTES = 64 * 1024;
