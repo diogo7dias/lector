@@ -69,7 +69,10 @@ HalStorage::HalStorage() {
 
 // begin() and ready() are only called from setup, no need to acquire mutex for them
 
-bool HalStorage::begin() { return SDCard.begin(); }
+bool HalStorage::begin() {
+  usedBytesValid = false;
+  return SDCard.begin();
+}
 
 bool HalStorage::ready() const { return SDCard.ready(); }
 
@@ -77,6 +80,7 @@ bool HalStorage::ready() const { return SDCard.ready(); }
 // built from the SDK's existing public hooks so the pinned submodule stays untouched.
 void HalStorage::prepareForDeepSleep() {
   StorageLock lock;
+  usedBytesValid = false;
 #if FREEINK_SD_SDMMC
   if (cardLentToUsbHost) return;
 #endif
@@ -112,6 +116,7 @@ bool HalStorage::beginUsbDrive() {
   // Lent before the volume is detached: a file opened earlier still points at the
   // detached volume's sectors and must fail from here on, not write through it.
   cardLentToUsbHost = true;
+  usedBytesValid = false;
   // Flush before the host takes the card; on failure keep the mount and the firmware's
   // access, as freeink-sdk 07567ed does.
   if (!syncVolume()) {
@@ -195,14 +200,30 @@ size_t HalStorage::readFileToBuffer(const char* path, char* buffer, size_t buffe
 }
 
 bool HalStorage::writeFile(const char* path, const String& content) {
-  HAL_STORAGE_WRAPPED_CALL(writeFile, path, content);
+  HalStorage::StorageLock lock;
+  if (cardLentToUsbHost) return false;
+  invalidateUsedBytes();
+  return SDCard.writeFile(path, content);
 }
 
-bool HalStorage::ensureDirectoryExists(const char* path) { HAL_STORAGE_WRAPPED_CALL(ensureDirectoryExists, path); }
+bool HalStorage::ensureDirectoryExists(const char* path) {
+  HalStorage::StorageLock lock;
+  if (cardLentToUsbHost) return false;
+  invalidateUsedBytes();
+  return SDCard.ensureDirectoryExists(path);
+}
 
 uint64_t HalStorage::sdTotalBytes() { HAL_STORAGE_WRAPPED_CALL(sdTotalBytes); }
 
-uint64_t HalStorage::sdUsedBytes() { HAL_STORAGE_WRAPPED_CALL(sdUsedBytes); }
+uint64_t HalStorage::sdUsedBytes() {
+  HalStorage::StorageLock lock;
+  if (cardLentToUsbHost) return 0;
+  if (!usedBytesValid) {
+    cachedUsedBytes = SDCard.sdUsedBytes();
+    usedBytesValid = true;
+  }
+  return cachedUsedBytes;
+}
 
 class HalFile::Impl {
  public:
@@ -245,12 +266,20 @@ HalFile HalStorage::open(const char* path, const oflag_t oflag) {
     return {};
   }
   if (cardLentToUsbHost) return {};
-  if ((oflag & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC)) != 0) noteBookPath(path);
+  if ((oflag & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC)) != 0) {
+    noteBookPath(path);
+    invalidateUsedBytes();
+  }
   impl->file = SDCard.open(path, oflag);
   return HalFile(std::move(impl));
 }
 
-bool HalStorage::mkdir(const char* path, const bool pFlag) { HAL_STORAGE_WRAPPED_CALL(mkdir, path, pFlag); }
+bool HalStorage::mkdir(const char* path, const bool pFlag) {
+  HalStorage::StorageLock lock;
+  if (cardLentToUsbHost) return false;
+  invalidateUsedBytes();
+  return SDCard.mkdir(path, pFlag);
+}
 
 bool HalStorage::exists(const char* path) { HAL_STORAGE_WRAPPED_CALL(exists, path); }
 
@@ -258,6 +287,7 @@ bool HalStorage::remove(const char* path) {
   HalStorage::StorageLock lock;
   if (cardLentToUsbHost) return false;
   noteBookPath(path);
+  invalidateUsedBytes();
   return SDCard.remove(path);
 }
 bool HalStorage::rename(const char* oldPath, const char* newPath) {
@@ -265,10 +295,16 @@ bool HalStorage::rename(const char* oldPath, const char* newPath) {
   if (cardLentToUsbHost) return false;
   noteBookPath(oldPath);
   noteBookPath(newPath);
+  invalidateUsedBytes();
   return SDCard.rename(oldPath, newPath);
 }
 
-bool HalStorage::rmdir(const char* path) { HAL_STORAGE_WRAPPED_CALL(rmdir, path); }
+bool HalStorage::rmdir(const char* path) {
+  HalStorage::StorageLock lock;
+  if (cardLentToUsbHost) return false;
+  invalidateUsedBytes();
+  return SDCard.rmdir(path);
+}
 
 bool HalStorage::openFileForRead(const char* moduleName, const char* path, HalFile& file) {
   StorageLock lock;  // ensure thread safety for the duration of this function
@@ -299,7 +335,10 @@ bool HalStorage::openFileForWrite(const char* moduleName, const char* path, HalF
     file = HalFile();
     return false;
   }
-  if (!cardLentToUsbHost) noteBookPath(path);
+  if (!cardLentToUsbHost) {
+    noteBookPath(path);
+    invalidateUsedBytes();
+  }
   const bool ok = !cardLentToUsbHost && SDCard.openFileForWrite(moduleName, path, impl->file);
   file = HalFile(std::move(impl));
   return ok;
@@ -313,7 +352,12 @@ bool HalStorage::openFileForWrite(const char* moduleName, const String& path, Ha
   return openFileForWrite(moduleName, path.c_str(), file);
 }
 
-bool HalStorage::removeDir(const char* path) { HAL_STORAGE_WRAPPED_CALL(removeDir, path); }
+bool HalStorage::removeDir(const char* path) {
+  HalStorage::StorageLock lock;
+  if (cardLentToUsbHost) return false;
+  invalidateUsedBytes();
+  return SDCard.removeDir(path);
+}
 
 // HalFile implementation
 // Allow doing file operations while ensuring thread safety via HalStorage's mutex.
@@ -350,14 +394,33 @@ int HalFile::read() {
   if (cardLentToUsbHost) return -1;
   return impl->file.read();
 }
-size_t HalFile::write(const uint8_t* buf, size_t count) { HAL_FILE_WRAPPED_CALL(write, buf, count); }
-size_t HalFile::write(const void* buf, size_t count) { HAL_FILE_WRAPPED_CALL(write, buf, count); }
-size_t HalFile::write(uint8_t b) { HAL_FILE_WRAPPED_CALL(write, b); }
+size_t HalFile::write(const uint8_t* buf, size_t count) {
+  HalStorage::StorageLock lock;
+  assert(impl != nullptr);
+  if (cardLentToUsbHost) return 0;
+  HalStorage::getInstance().invalidateUsedBytes();
+  return impl->file.write(buf, count);
+}
+size_t HalFile::write(const void* buf, size_t count) {
+  HalStorage::StorageLock lock;
+  assert(impl != nullptr);
+  if (cardLentToUsbHost) return 0;
+  HalStorage::getInstance().invalidateUsedBytes();
+  return impl->file.write(buf, count);
+}
+size_t HalFile::write(uint8_t b) {
+  HalStorage::StorageLock lock;
+  assert(impl != nullptr);
+  if (cardLentToUsbHost) return 0;
+  HalStorage::getInstance().invalidateUsedBytes();
+  return impl->file.write(b);
+}
 bool HalFile::rename(const char* newPath) {
   HalStorage::StorageLock lock;
   assert(impl != nullptr);
   if (cardLentToUsbHost) return false;
   HalStorage::getInstance().noteBookPath(newPath);
+  HalStorage::getInstance().invalidateUsedBytes();
   return impl->file.rename(newPath);
 }
 bool HalFile::isDirectory() const { HAL_FILE_FORWARD_CALL(isDirectory, ); }  // already thread-safe, no need to wrap

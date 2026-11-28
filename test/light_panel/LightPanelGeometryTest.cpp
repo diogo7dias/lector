@@ -301,3 +301,31 @@ TEST(LightPanelGeometry, NoRowsAndNoAuxStartsOnTheFirstButton) {
   EXPECT_EQ(light_panel::firstCursor(layout), (Cursor{Row::None, 0}));
   EXPECT_EQ(light_panel::moveVertical(layout, Cursor{Row::None, 0}, -1), (Cursor{Row::None, 0}));
 }
+
+TEST(LightPanelGeometry, SliderThrottleDrawsFirstUpdateThenRateLimitsAndFlushesOnRelease) {
+  light_panel::SliderThrottle throttle;
+  EXPECT_TRUE(throttle.onDragValueChanged(1000));
+  EXPECT_FALSE(throttle.onDragValueChanged(1050));
+  EXPECT_FALSE(throttle.onDragValueChanged(1174));
+  EXPECT_TRUE(throttle.pending);
+
+  // Elapsed >= 175 ms: next drag value paints immediately and clears pending.
+  EXPECT_TRUE(throttle.onDragValueChanged(1175));
+  EXPECT_FALSE(throttle.pending);
+
+  // Another change within the window stays pending and flushes on finger lift.
+  EXPECT_FALSE(throttle.onDragValueChanged(1220));
+  EXPECT_TRUE(throttle.flushOnRelease());
+  EXPECT_FALSE(throttle.flushOnRelease());
+}
+
+TEST(LightPanelGeometry, SliderThrottleFlushesOnHoldPauseAndHandlesWraparound) {
+  light_panel::SliderThrottle throttle;
+  EXPECT_TRUE(throttle.onDragValueChanged(0xFFFFFFA0u));
+  EXPECT_FALSE(throttle.onDragValueChanged(0xFFFFFFE0u));
+  EXPECT_FALSE(throttle.shouldFlush(0xFFFFFFF0u));
+  // 0xFFFFFFA0 + 175 = 0x0000004F
+  EXPECT_TRUE(throttle.shouldFlush(0x0000004Fu));
+  EXPECT_FALSE(throttle.pending);
+  EXPECT_FALSE(throttle.flushOnRelease());
+}

@@ -52,6 +52,7 @@ class LightPanel {
     warmth_ = Frontlight.warmth();
     actionPressed_ = -1;
     dragging_ = light_panel::Row::None;
+    sliderThrottle_.reset();
     rebuildContext();
     // The first row the layout will show; render() has not run yet, so it is worked out here.
     if (Frontlight.present()) {
@@ -70,6 +71,7 @@ class LightPanel {
 
   void close(const std::function<void()>& requestUpdate) {
     active_ = false;
+    sliderThrottle_.reset();
     LOG_DBG("PANEL", "Close");
     const uint8_t on = on_ ? 1 : 0;
     // A panel opened and closed unchanged costs no settings write (write throttling). With no
@@ -116,7 +118,12 @@ class LightPanel {
       // would otherwise leave the press armed, and the next unrelated release would fire
       // a button nobody was touching.
       actionPressed_ = -1;
+      const bool wasDragging = dragging_ != light_panel::Row::None;
       dragging_ = light_panel::Row::None;
+      if (wasDragging && sliderThrottle_.flushOnRelease()) {
+        requestUpdate();
+        return true;
+      }
       if (fired >= 0 && fired < context_.actionCount) {
         runAction(context_.actions[fired], requestUpdate);
         return true;
@@ -134,7 +141,12 @@ class LightPanel {
         int ly = ty;
         input.isScreenTouchHeld(lx, ly);
         const auto& bar = dragging_ == light_panel::Row::Warmth ? layout_.warmth.bar : layout_.brightness.bar;
-        if (setValue(dragging_, light_panel::valueForX(bar, lx, 0, maxFor(dragging_)))) requestUpdate();
+        const uint32_t now = millis();
+        if (setValue(dragging_, light_panel::valueForX(bar, lx, 0, maxFor(dragging_)))) {
+          if (sliderThrottle_.onDragValueChanged(now)) requestUpdate();
+        } else if (sliderThrottle_.shouldFlush(now)) {
+          requestUpdate();
+        }
         return true;
       }
 
@@ -173,8 +185,12 @@ class LightPanel {
         case light_panel::Hit::Kind::Track: {
           cursor_ = {hit.row, -1};
           dragging_ = hit.row;
+          sliderThrottle_.reset();
           const auto& bar = hit.row == light_panel::Row::Warmth ? layout_.warmth.bar : layout_.brightness.bar;
-          if (setValue(hit.row, light_panel::valueForX(bar, tx, 0, maxFor(hit.row)))) requestUpdate();
+          if (setValue(hit.row, light_panel::valueForX(bar, tx, 0, maxFor(hit.row))) &&
+              sliderThrottle_.onDragValueChanged(millis())) {
+            requestUpdate();
+          }
           break;
         }
         case light_panel::Hit::Kind::Action:
@@ -415,6 +431,7 @@ class LightPanel {
   uint64_t freeBytes_ = 0;
   light_panel::Cursor cursor_{light_panel::Row::Brightness, -1};
   light_panel::Row dragging_ = light_panel::Row::None;
+  light_panel::SliderThrottle sliderThrottle_{};
   int actionPressed_ = -1;
   light_panel::Context context_{};
   std::function<void(light_panel::Context&)> buildContext_;

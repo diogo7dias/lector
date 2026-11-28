@@ -10,6 +10,8 @@
 #include <vector>
 
 inline int cardCalls = 0;
+inline int usedBytesCalls = 0;
+inline uint64_t mockUsedBytes = 4096;
 // Volume flush: syncOk drives FsFile::sync(); detachAfterSync records that a detach only
 // ever follows a successful sync.
 inline bool syncOk = true;
@@ -80,7 +82,7 @@ class SDCardManager {
   bool writeFile(const char*, const String&) { return ++cardCalls; }
   bool ensureDirectoryExists(const char*) { return ++cardCalls; }
   uint64_t sdTotalBytes() { return ++cardCalls; }
-  uint64_t sdUsedBytes() { return ++cardCalls; }
+  uint64_t sdUsedBytes() { return ++cardCalls, ++usedBytesCalls, mockUsedBytes; }
   FsFile open(const char*, oflag_t) { return ++cardCalls, FsFile::opened(); }
   bool mkdir(const char*, bool) { return ++cardCalls; }
   bool exists(const char*) { return ++cardCalls; }
