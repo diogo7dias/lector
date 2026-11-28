@@ -107,9 +107,14 @@ poll();
 class Device:
     def __init__(self, workdir):
         flash = make_flash(os.path.join(workdir, "flash.bin"), BOARD)
-        # sim/fixtures/sd holds the SD-card TTF fonts only the X4 Pro reads (a good one, a cut-short one).
+        # sim/fixtures/sd holds .fonts/ and .crosspoint/ for the X4 Pro, plus read/ (including
+        # z_markdown_sample.md) shared across boards so Markdown e2e runs on both X4 Pro and X4.
         fixtures = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "sd")
-        sd = make_sd(os.path.join(workdir, "sd.img"), fixtures=fixtures if BOARD == "x4pro" else None)
+        sd = make_sd(
+            os.path.join(workdir, "sd.img"),
+            fixtures=fixtures if BOARD == "x4pro" else None,
+            shared_dirs=None if BOARD == "x4pro" else [os.path.join(fixtures, "read")],
+        )
         self.sim = LectorSim(BOARD, flash, sd, workdir)
         self.lock = threading.Lock()
         with self.lock:
