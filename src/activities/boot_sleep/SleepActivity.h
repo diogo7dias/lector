@@ -31,6 +31,8 @@ class SleepActivity final : public Activity {
   void renderQuickResumeScreen() const;
   // The None face: an empty white page.
   void renderBlankSleepScreen() const;
+  // The Quote face: daily (or random without clock) highlight from /My Clippings.txt.
+  void renderQuoteSleepScreen() const;
   // Where a face goes when it has nothing of its own to show.
   enum class CoverFallback : uint8_t { Default, Custom, Overlay };
   void renderCustomSleepScreen() const;

@@ -14,7 +14,7 @@ namespace wake_face {
 // either way. A card that skipped every build since keeps what its numbers meant: 7 and 8
 // are Custom, and 9, the transparent overlay, is today's 7.
 inline constexpr uint8_t sleepFaceFromFile(const uint8_t stored, const bool numbered) {
-  if (numbered) return stored <= 8 ? stored : 2;
+  if (numbered) return stored <= 9 ? stored : 2;
   if (stored == 9) return 7;
   return stored <= 6 ? stored : 2;
 }
