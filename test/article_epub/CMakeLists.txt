@@ -7,4 +7,7 @@ if(Python3_FOUND AND NODE_EXECUTABLE)
             ${NODE_EXECUTABLE}
             ${REPO_ROOT}/src/network/html/FilesPage.html
             ${REPO_ROOT}/src/network/html/js/jszip.min.js)
+else()
+  # Without node the builder is not tested at all: say so instead of passing quietly.
+  message(WARNING "ArticleEpubBuilder test skipped: needs python3 and node")
 endif()
