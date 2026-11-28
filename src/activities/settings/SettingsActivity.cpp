@@ -337,21 +337,21 @@ void SettingsActivity::rebuildSettingsList() {
                   {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
               });
 
-  applyGroups(
-      readerSettings,
-      {
-          {StrId::STR_GRP_TEXT,
-           {StrId::STR_TEXT_SETTINGS, StrId::STR_MANAGE_FONTS, StrId::STR_INSTALLED_FONTS, StrId::STR_DICTIONARY}},
-          {StrId::STR_GRP_PAGE,
-           {StrId::STR_ORIENTATION, StrId::STR_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBER_SIZE,
-            StrId::STR_PARAGRAPH_NUMBER_PLACE}},
-          // The status bar rows adjacent, and the screen that configures it straight after
-          // the toggle that hides it.
-          {StrId::STR_GRP_LOOK,
-           {StrId::STR_PAPERBACK_LOOK, StrId::STR_PAPERBACK_STATUS, StrId::STR_RULED_LINES,
-            StrId::STR_CUSTOMISE_STATUS_BAR, StrId::STR_NIGHT_MODE, StrId::STR_READER_MENU_STYLE}},
-          {StrId::STR_GRP_LIBRARY, {StrId::STR_ALL_BOOKMARKS}},
-      });
+  applyGroups(readerSettings,
+              {
+                  {StrId::STR_GRP_TEXT,
+                   {StrId::STR_TEXT_SETTINGS, StrId::STR_MANAGE_FONTS, StrId::STR_INSTALLED_FONTS,
+                    StrId::STR_DICTIONARY, StrId::STR_DICTIONARY_FALLBACK}},
+                  {StrId::STR_GRP_PAGE,
+                   {StrId::STR_ORIENTATION, StrId::STR_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBER_SIZE,
+                    StrId::STR_PARAGRAPH_NUMBER_PLACE}},
+                  // The status bar rows adjacent, and the screen that configures it straight after
+                  // the toggle that hides it.
+                  {StrId::STR_GRP_LOOK,
+                   {StrId::STR_PAPERBACK_LOOK, StrId::STR_PAPERBACK_STATUS, StrId::STR_RULED_LINES,
+                    StrId::STR_CUSTOMISE_STATUS_BAR, StrId::STR_NIGHT_MODE, StrId::STR_READER_MENU_STYLE}},
+                  {StrId::STR_GRP_LIBRARY, {StrId::STR_ALL_BOOKMARKS}},
+              });
 
   applyGroups(controlsSettings,
               {

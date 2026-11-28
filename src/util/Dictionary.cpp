@@ -152,6 +152,7 @@ DictLocation DictEntryList::location(const size_t index) const {
 
 bool Dictionary::open(const char* folderName) {
   basePath.clear();
+  preparedFolder.clear();
   readiness = Readiness::Unopened;  // an answer from an earlier open() describes another dictionary
   hasSyn = false;
   htmlDefinitions = false;
@@ -224,12 +225,14 @@ bool Dictionary::needsIndex() {
 }
 
 Dictionary::Readiness Dictionary::prepare(const char* folderName) {
-  if (readiness != Readiness::Unopened) return readiness;
-  if (!open(folderName)) {
+  const char* target = folderName ? folderName : "";
+  if (readiness != Readiness::Unopened && preparedFolder == target) return readiness;
+  if (!open(target)) {
     readiness = Readiness::Unavailable;
   } else {
     readiness = needsIndex() ? Readiness::NeedsIndex : Readiness::Ready;
   }
+  preparedFolder = target;
   return readiness;
 }
 

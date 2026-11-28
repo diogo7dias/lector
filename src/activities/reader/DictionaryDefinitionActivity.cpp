@@ -1,14 +1,18 @@
 #include "DictionaryDefinitionActivity.h"
 
 #include <Bitmap.h>
+#include <ClockZones.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <ctime>
 
 #include "CrossPointSettings.h"
 #include "ReaderUtils.h"
@@ -17,6 +21,7 @@
 #include "fontIds.h"
 #include "util/DictHtmlPages.h"
 #include "util/HtmlToPlainText.h"
+#include "util/VocabExport.h"
 
 namespace {
 
@@ -41,6 +46,10 @@ void DictionaryDefinitionActivity::onEnter() {
   // Normalize StarDict multi-type separators so the wrap loop and the
   // C-string font APIs below both see the whole definition.
   std::replace(definition.begin(), definition.end(), '\0', '\n');
+  // Capture the plain-text Anki snippet before layoutHtmlPages() clears `definition`.
+  if (vocab.enabled) {
+    vocabSnippet = vocab_export::makeSnippet(definition, htmlDefinition);
+  }
   if (!(htmlDefinition && definition.size() <= MAX_STYLED_HTML_BYTES && layoutHtmlPages())) {
     definition = htmlToPlainText(definition);
     measureCover();
@@ -231,9 +240,41 @@ void DictionaryDefinitionActivity::drawCover(const int x, const int y) const {
   renderer.drawBitmap(bitmap, x, y, coverW, coverH);
 }
 
+void DictionaryDefinitionActivity::saveVocabularyEntry() {
+  char dateBuf[16] = "";
+  uint16_t year = 0;
+  uint8_t month = 0, day = 0, hour = 0, minute = 0;
+  if (halClock.getDateTime(year, month, day, hour, minute)) {
+    const int64_t utc = clock_zones::utcSeconds(year, month, day, hour, minute);
+    const time_t local =
+        static_cast<time_t>(utc + clock_zones::offsetMinutes(SETTINGS.clockTimezone, SETTINGS.clockDst, utc) * 60);
+    tm t{};
+    gmtime_r(&local, &t);
+    snprintf(dateBuf, sizeof(dateBuf), "%04d-%02d-%02d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
+  }
+  const std::string row =
+      vocab_export::formatTsvRow(vocab.queriedWord, headword, vocabSnippet, vocab.bookTitle, dateBuf);
+  HalFile file = Storage.open(vocab_export::VOCAB_PATH, O_RDWR | O_CREAT | O_APPEND);
+  if (!file) {
+    LOG_ERR("DICT", "Cannot open %s", vocab_export::VOCAB_PATH);
+    return;
+  }
+  if (file.write(row.data(), row.size()) != row.size()) {
+    LOG_ERR("DICT", "Failed to append to %s", vocab_export::VOCAB_PATH);
+    return;
+  }
+  wordSaved = true;
+  LOG_INF("DICT", "Saved word '%s' to %s", headword.c_str(), vocab_export::VOCAB_PATH);
+  requestUpdate();
+}
+
 void DictionaryDefinitionActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     finish();
+    return;
+  }
+  if (vocab.enabled && !wordSaved && mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    saveVocabularyEntry();
     return;
   }
 
@@ -318,9 +359,6 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   ListChrome chrome;
   chrome.title = headword.c_str();
   if (counter[0] != '\0') chrome.headerRight = counter;
-  chrome.confirmHint = "";
-  chrome.thirdHint = currentPage > 0 ? "<" : "";
-  chrome.fourthHint = currentPage + 1 < totalPages ? ">" : "";
   drawListChromeTop(renderer, chrome);
 
   // Body: two-pass draw inside a prewarm scope (same pattern as the reader's
@@ -335,7 +373,13 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   drawBody(fontId, contentX + SIDE_PADDING, bodyStartY);
   if (currentPage == 0 && coverH > 0) drawCover(contentX + SIDE_PADDING + (bodyArea().width - coverW) / 2, bodyStartY);
 
-  drawListChromeBottom(renderer, mappedInput, chrome);
+  // Draw hints directly rather than via drawListChromeBottom, which hides the
+  // confirm slot on touch boards when no list row is selected; Save Word is a
+  // screen-level action that must stay tappable on touch devices.
+  const auto labels =
+      mappedInput.mapLabels(tr(STR_BACK), vocab.enabled ? (wordSaved ? tr(STR_SAVED) : tr(STR_SAVE_WORD)) : "",
+                            currentPage > 0 ? "<" : "", currentPage + 1 < totalPages ? ">" : "");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer(firstPaint ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
   firstPaint = false;
 }

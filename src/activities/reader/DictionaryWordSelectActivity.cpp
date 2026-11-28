@@ -168,14 +168,17 @@ void DictionaryWordSelectActivity::performLookup() {
     self->popupMsg = id;
     self->requestUpdateAndWait();  // paint the page + busy popup before blocking on SD
   };
-  const bool found = dict_failure::lookUp(dict, SETTINGS.dictionaryName, words[selected].text(), definition, headword,
-                                          message, showBusy, this);
+  const bool found =
+      dict_failure::lookUpWithFallbacks(dict, SETTINGS.dictionaryName, SETTINGS.dictionaryFallback != 0,
+                                        words[selected].text(), definition, headword, message, showBusy, this);
 
   if (found) {
     popup = Popup::None;
     startActivityForResult(
-        std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
-                                                       std::move(definition), dict.definitionsAreHtml()),
+        std::make_unique<DictionaryDefinitionActivity>(
+            renderer, mappedInput, std::move(headword), std::move(definition), dict.definitionsAreHtml(),
+            /*readingSurface=*/true, /*coverPath=*/std::string{},
+            DictionaryDefinitionActivity::VocabContext{words[selected].text(), bookTitle, true}),
         [this](const ActivityResult&) { requestUpdate(); });
     return;
   }

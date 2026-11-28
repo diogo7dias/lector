@@ -15,17 +15,26 @@
 // through the EPUB chapter parser into styled Pages; anything else (plain
 // text, or HTML too damaged to parse) is word-wrapped once on entry and each
 // page renders spans of the original string, so no per-line copies are held.
+struct DictionaryVocabContext {
+  std::string queriedWord;
+  std::string bookTitle;
+  bool enabled = false;
+};
+
 class DictionaryDefinitionActivity final : public Activity {
  public:
+  using VocabContext = DictionaryVocabContext;
+
   explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string headword,
                                         std::string definition, bool htmlDefinition = false, bool readingSurface = true,
-                                        std::string coverPath = {})
+                                        std::string coverPath = {}, VocabContext vocab = {})
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(std::move(headword)),
         definition(std::move(definition)),
         htmlDefinition(htmlDefinition),
         readingSurface(readingSurface),
-        coverPath(std::move(coverPath)) {}
+        coverPath(std::move(coverPath)),
+        vocab(std::move(vocab)) {}
 
   void onEnter() override;
   void onExit() override;
@@ -58,6 +67,7 @@ class DictionaryDefinitionActivity final : public Activity {
   // Book Info: fits the cover BMP into the top third of page 1 (sets coverW/coverH).
   void measureCover();
   void drawCover(int x, int y) const;
+  void saveVocabularyEntry();
 
   const std::string headword;
   // Not const: onEnter() normalizes embedded NULs (StarDict multi-type
@@ -67,6 +77,9 @@ class DictionaryDefinitionActivity final : public Activity {
   const bool readingSurface;
   // Plain-text path only: a cover drawn above page 1's text, which then holds fewer lines.
   const std::string coverPath;
+  const VocabContext vocab;
+  std::string vocabSnippet;
+  bool wordSaved = false;
   int coverW = 0;
   int coverH = 0;
   int coverLines = 0;  // text lines the cover displaces on page 1

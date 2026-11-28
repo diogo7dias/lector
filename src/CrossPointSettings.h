@@ -679,6 +679,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Sized to DictionaryRegistry::MAX_NAME_BYTES (static_assert in SettingsList.h): a UTF-8 folder name takes
   // up to 3 bytes per character, and a name stored cut short no longer names a folder.
   char dictionaryName[128] = "";
+  // Search other installed dictionaries when the selected one returns NotFound (0 = off, 1 = on).
+  uint8_t dictionaryFallback = 0;
   // Fast Unlock (0 = off by default). When off, waking from a painted sleep face runs a
   // clearing pass (matching CrossPoint) so the wallpaper does not ghost onto the first page.
   // When on, skips the clearing pass (DriveAll FAST) and shortens the X3/X4 ladder settle.

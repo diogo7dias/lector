@@ -1083,14 +1083,18 @@ choices:
 ### Dictionaries
 
 Lector reads StarDict dictionaries from `/dictionaries/<name>/` on the card. Pick one in
-**Settings > Reader > Dictionary**; the row only appears once a dictionary folder exists.
+**Settings > Reader > Dictionary**; the row only appears once a dictionary folder exists. When
+two or more dictionaries are installed, **Search Fallback Dictionaries** lets a lookup that
+misses in your primary dictionary try the remaining folders in turn automatically.
 
 Look a word up from the in-book menu's **Look Up** row, or bind a hold to **Dictionary** in
 **Settings > Controls**. On a touch screen, hold the word itself for half a second and lift:
 its definition opens straight away, and Back returns to the page. To look up a phrase, hold
 its first word, drag to its last, and tap **Look Up** (see **Quotes**). A long definition turns pages
 with the same taps and side swipes as a book page, under **Touch Reader Controls**. A word with several entries in
-the dictionary shows all of them, each under its own headword. Setup and usage
+the dictionary shows all of them, each under its own headword. Press **Save Word** (Confirm) on
+a definition to append `word`, `headword`, `snippet`, `book` and `date` as a tab-separated row
+to `/vocabulary.tsv` at the root of the card for Anki import. Setup and usage
 are covered in [docs/dictionary.md](./docs/dictionary.md).
 
 ---

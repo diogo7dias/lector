@@ -131,12 +131,14 @@ void QuoteSelectActivity::lookUpSelection(const bool fromHold) {
   };
   if (!dict) {
     LOG_ERR("QUOTE", "OOM: Dictionary");
-  } else if (dict_failure::lookUp(*dict, SETTINGS.dictionaryName, phrase.c_str(), definition, headword, message,
-                                  showBusy, this)) {
+  } else if (dict_failure::lookUpWithFallbacks(*dict, SETTINGS.dictionaryName, SETTINGS.dictionaryFallback != 0,
+                                               phrase.c_str(), definition, headword, message, showBusy, this)) {
     showPopup = false;
     startActivityForResult(
-        std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
-                                                       std::move(definition), dict->definitionsAreHtml()),
+        std::make_unique<DictionaryDefinitionActivity>(
+            renderer, mappedInput, std::move(headword), std::move(definition), dict->definitionsAreHtml(),
+            /*readingSurface=*/true, /*coverPath=*/std::string{},
+            DictionaryDefinitionActivity::VocabContext{phrase, epub.getTitle(), true}),
         [this, fromHold](const ActivityResult&) { fromHold ? finish() : requestUpdate(); });
     return;
   }
