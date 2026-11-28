@@ -1,3 +1,4 @@
+#include <LibraryFormat.h>
 #include <gtest/gtest.h>
 #include <unistd.h>
 
@@ -175,5 +176,69 @@ TEST(SortesWiring, EntryExitSleepAndMenuWritesAreGated) {
   EXPECT_NE(exit.find("APP_STATE.lastSleepFromReader = false;"), std::string::npos);
   EXPECT_NE(source.find("if (blockSortesAction()) return true;"), std::string::npos);
   EXPECT_NE(source.find("MenuAction::DELETE_CACHE ||"), std::string::npos);
+}
+
+TEST_F(SortesTest, DrawsFinishedUnreadAndByTitleFromClxV2Index) {
+  put("/finished.epub", "book");
+  put("/unread.epub", "book");
+  put("/reading.epub", "book");
+
+  struct Row {
+    const char* title;
+    const char* author;
+    const char* path;
+    uint8_t percent;
+  };
+  const Row rows[] = {
+      {"Dune", "Frank Herbert", "/finished.epub", 100},
+      {"Foundation", "Isaac Asimov", "/reading.epub", 45},
+      {"Hyperion", "Dan Simmons", "/unread.epub", library::CLIX_PERCENT_UNREAD},
+  };
+
+  std::string names;
+  std::vector<library::ClixRecord> recs;
+  for (const auto& r : rows) {
+    library::ClixRecord rec{};
+    rec.pathHash = library::clixPathHash(r.path, std::strlen(r.path));
+    rec.nameOff = static_cast<uint32_t>(names.size());
+    rec.titleLen = static_cast<uint8_t>(std::strlen(r.title));
+    rec.authorLen = static_cast<uint8_t>(std::strlen(r.author));
+    rec.pathLen = static_cast<uint8_t>(std::strlen(r.path));
+    rec.percent = r.percent;
+    names += r.title;
+    names += r.author;
+    names += r.path;
+    recs.push_back(rec);
+  }
+
+  library::ClixHeader head{};
+  std::memcpy(head.magic, library::CLIX_MAGIC, 4);
+  head.formatVersion = library::CLIX_FORMAT_VERSION;
+  head.bookCount = static_cast<uint16_t>(recs.size());
+  library::layoutSections(head, static_cast<uint32_t>(names.size()));
+
+  std::string blob(head.selfSize, '\0');
+  std::memcpy(blob.data(), &head, sizeof(head));
+  std::memcpy(blob.data() + head.recordStart, recs.data(), recs.size() * sizeof(library::ClixRecord));
+  std::memcpy(blob.data() + head.nameStart, names.data(), names.size());
+  put("/.crosspoint/lector-library.idx", blob);
+
+  // Classic draws ONLY finished from CLX v2 (even with no percent.bin files on disk).
+  std::string selected;
+  ASSERT_EQ(sortes::findBook(selected, randomWord), sortes::ScanResult::Found);
+  EXPECT_EQ(selected, "/finished.epub");
+
+  // Unread Roulette draws ONLY unread (percent == 255) and returns title/author.
+  sortes::UnreadPick pick;
+  ASSERT_EQ(sortes::findUnreadBook(pick, randomWord), sortes::ScanResult::Found);
+  EXPECT_EQ(pick.path, "/unread.epub");
+  EXPECT_EQ(pick.title, "Hyperion");
+  EXPECT_EQ(pick.author, "Dan Simmons");
+
+  // Flashback title lookup finds book case-insensitively.
+  std::string jumped;
+  ASSERT_TRUE(sortes::findBookByTitle("foundation", jumped));
+  EXPECT_EQ(jumped, "/reading.epub");
+  EXPECT_FALSE(sortes::findBookByTitle("Nonexistent", jumped));
 }
 }  // namespace

@@ -1,11 +1,16 @@
 #pragma once
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <memory>
 #include <string>
 #include <vector>
+
+#ifndef O_RDWR
+#define O_RDWR 2
+#endif
 
 // The production scanner/progress writer run against a real temporary host directory.
 class HalFile {
@@ -36,10 +41,17 @@ class HalFile {
     std::snprintf(out, size, "%s", name.c_str());
     return std::min(name.size(), size - 1);
   }
-  size_t position() const { return cursor; }
+  size_t position() const { return directory ? cursor : (file ? static_cast<size_t>(std::ftell(file.get())) : 0); }
+  uint64_t fileSize64() const {
+    std::error_code ec;
+    return !directory && std::filesystem::exists(path, ec) ? std::filesystem::file_size(path, ec) : 0;
+  }
   bool seekSet(size_t pos) {
-    cursor = pos;
-    return pos <= entries.size();
+    if (directory) {
+      cursor = pos;
+      return pos <= entries.size();
+    }
+    return file && std::fseek(file.get(), static_cast<long>(pos), SEEK_SET) == 0;
   }
   int read(void* out, size_t count) { return file ? std::fread(out, 1, count, file.get()) : -1; }
   size_t write(const void* data, size_t count) { return file ? std::fwrite(data, 1, count, file.get()) : 0; }
@@ -57,7 +69,7 @@ class HalStorage {
     return instance;
   }
   std::filesystem::path resolve(const std::string& p) const { return root / std::filesystem::path(p).relative_path(); }
-  HalFile open(const char* path) { return HalFile(resolve(path)); }
+  HalFile open(const char* path, int flags = 0) { return HalFile(resolve(path), flags == O_RDWR ? "r+b" : "rb"); }
   bool remove(const char* path) {
     ++mutations;
     return std::remove(resolve(path).c_str()) == 0;

@@ -4,6 +4,7 @@
 
 #include "./FileBrowserActivity.h"
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
 #include "util/Sortes.h"
 
@@ -25,6 +26,7 @@ class HomeActivity final : public Activity {
   char bookOrbitMissingLabel[64] = "";
   std::string sortesBook;
   sortes::ScanResult sortesResult = sortes::ScanResult::Empty;
+  OptionPopup sortesPopup;
   std::vector<RecentBook> recentBooks;
   const HomeMenuItem initialMenuItem;
   // Home is reached from the reader, a sleep face or a list: its first paint cleans
@@ -49,6 +51,7 @@ class HomeActivity final : public Activity {
   void onFileTransferOpen();
   void onOpdsBrowserOpen();
   void onBookOrbitMissingOpen();
+  void openSortesMenu();
 
   int getMenuItemCount() const;
   void loadRecentBooks(int maxBooks);
