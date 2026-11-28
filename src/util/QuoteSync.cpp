@@ -31,6 +31,7 @@ struct Highlight {
   size_t textStart = 0;
   size_t textEnd = 0;
   std::string chapter;
+  std::string note;
   std::string pos0;
   uint32_t savedAt = 0;
 };
@@ -89,6 +90,9 @@ std::vector<Highlight> resolve(Epub& epub, const std::string& buf) {
     h.savedAt = meta.savedAt;
     h.textStart = record.textStart;
     h.textEnd = record.textEnd;
+    if (record.hasNote && record.noteEnd > record.noteStart) {
+      h.note = quote_text::sanitizeNote(buf.substr(record.noteStart, record.noteEnd - record.noteStart));
+    }
     clipUtf8(h.chapter, MAX_CHAPTER_BYTES);
     out.push_back(std::move(h));
   }
@@ -188,6 +192,7 @@ bool push(const std::string& bookPath, const std::string& documentHash) {
     a["datetime"] = quote_text::koreaderDatetime(h.savedAt ? h.savedAt : quote_text::fallbackSavedAt(text));
     a["drawer"] = "lighten";
     a["text"] = text;
+    if (!h.note.empty()) a["note"] = h.note;
     if (!h.chapter.empty()) a["chapter"] = h.chapter;
     a["posFormat"] = "xpointer";
     a["pos0"] = h.pos0;

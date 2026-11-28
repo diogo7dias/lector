@@ -269,13 +269,15 @@ void QuoteSelectActivity::loop() {
   if (handleTouch()) return;
 
   if (touchSelection && phase == Phase::SelectEnd) {
-    // The hints now read Cancel / Save / Look Up; Up/Down keep moving the end.
+    // The hints now read Cancel / Save / Note / Look Up; Up/Down keep moving the end.
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       finish();
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       saveSelectedQuote();
       finish();
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+      openNoteEntry();
+    } else if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
       if (SETTINGS.dictionaryName[0] != '\0') lookUpSelection();
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
       moveVertical(-1);
@@ -289,6 +291,7 @@ void QuoteSelectActivity::loop() {
     if (phase == Phase::SelectEnd) {
       // Drop the whole selection, including any pages it had run into.
       phase = Phase::SelectStart;
+      confirmHoldConsumed = false;
       committedText.clear();
       committedMarks.clear();
       if (pageNumber != startPageNumber && showPage(startPageNumber)) pageNumber = startPageNumber;
@@ -304,16 +307,32 @@ void QuoteSelectActivity::loop() {
   // A selection that has already crossed a page can be saved even from a page with no
   // words of its own (an image page), so the picker never traps the user there.
   const bool canConfirm = !words.empty() || (phase == Phase::SelectEnd && !committedText.empty());
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) && canConfirm) {
-    if (phase == Phase::SelectStart) {
+  if (phase == Phase::SelectStart) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) && canConfirm) {
       setStartWord(cursor);
       phase = Phase::SelectEnd;
+      confirmHoldConsumed = true;  // wait for this press to release before Save/Note can fire
       requestUpdate();
-    } else {
-      saveSelectedQuote();
-      finish();
+      return;
     }
-    return;
+  } else if (canConfirm) {
+    constexpr unsigned long NOTE_HOLD_MS = 600;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      const bool shouldSave = !confirmHoldConsumed;
+      confirmHoldConsumed = false;
+      if (shouldSave) {
+        saveSelectedQuote();
+        finish();
+      }
+      return;
+    }
+    if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) confirmHoldConsumed = false;
+    if (!confirmHoldConsumed && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+        mappedInput.getHeldTime() >= NOTE_HOLD_MS) {
+      confirmHoldConsumed = true;
+      openNoteEntry();
+      return;
+    }
   }
 
   // A wordless page still passes Left/Right through, so a selection running through an
@@ -382,7 +401,7 @@ void QuoteSelectActivity::drawRangeHighlight() const {
 void QuoteSelectActivity::drawHints() const {
   if (touchSelection && phase == Phase::SelectEnd) {
     const char* lookUp = SETTINGS.dictionaryName[0] != '\0' ? tr(STR_LOOKUP) : "";
-    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SAVE), lookUp, "");
+    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SAVE), tr(STR_NOTE), lookUp);
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     return;
   }

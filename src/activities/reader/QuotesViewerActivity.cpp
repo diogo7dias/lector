@@ -95,6 +95,10 @@ void QuotesViewerActivity::loadQuotes() {
            (entry.text.back() == '\n' || entry.text.back() == '\r' || entry.text.back() == ' ')) {
       entry.text.pop_back();
     }
+    if (record.hasNote && record.noteEnd > record.noteStart) {
+      entry.note = quote_text::sanitizeNote(buf.substr(record.noteStart, record.noteEnd - record.noteStart));
+    }
+    entry.displayLabel = entry.note.empty() ? entry.text : (entry.text + "\n> " + entry.note);
     if (!entry.text.empty()) quotes.push_back(std::move(entry));
   }
 }
@@ -119,7 +123,8 @@ bool QuotesViewerActivity::saveQuotes() const {
       return false;
     }
     for (const auto& quote : quotes) {
-      const std::string entry = quote_text::formatQuoteEntry(quote.chapter, quote.anchor, quote.text, quote.meta);
+      const std::string entry =
+          quote_text::formatQuoteEntry(quote.chapter, quote.anchor, quote.text, quote.meta, quote.note);
       if (dst.write(entry.data(), entry.size()) != entry.size()) {
         LOG_ERR("QV", "Temp quotes write failed");
         dst.close();
@@ -190,24 +195,44 @@ void QuotesViewerActivity::deleteQuote(const int index) {
 
 // ── Input ───────────────────────────────────────────────────────────────────
 
-bool QuotesViewerActivity::handleButtons() {
-  if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) confirmHoldConsumed = false;
+void QuotesViewerActivity::activateIndex(const int index) {
+  if (index < 0 || index >= listCount()) return;
+  quote_text::QuoteAnchor anchor;
+  if (!quote_text::parseAnchorToken(quotes[index].anchor, anchor)) return;
 
+  ProgressChangeResult jump{};
+  jump.spineIndex = anchor.spine;
+  if (quotes[index].meta.textOffset != quote_text::QuoteMeta::NO_OFFSET) {
+    jump.hasVisibleTextOffset = true;
+    jump.visibleTextOffset = quotes[index].meta.textOffset;
+  }
+  setResult(ActivityResult{std::move(jump)});
+  finish();
+}
+
+bool QuotesViewerActivity::handleButtons() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     onBackButton();
     return true;
   }
 
-  // Hold Confirm to delete the selected quote. A Confirm still held from the
-  // screen that opened this one must not read as a fresh hold.
+  // Short Confirm release jumps to the selected quote; holding Confirm past
+  // ENTER_DELETE_MODE_MS opens delete confirmation and suppresses the trailing release.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    const bool jump = !confirmHoldConsumed && listCount() > 0;
+    confirmHoldConsumed = false;
+    if (jump) activateIndex(nav.selected);
+    return true;
+  }
+
+  if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) confirmHoldConsumed = false;
+
   if (!confirmHoldConsumed && listCount() > 0 && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
       mappedInput.getHeldTime() > ENTER_DELETE_MODE_MS) {
     confirmHoldConsumed = true;
     confirmDelete(nav.selected);
     return true;
   }
-  // No plain Confirm action: a quote is read where it sits, so the only thing
-  // the middle button does here is the hold above.
   return false;
 }
 
@@ -227,8 +252,7 @@ ListChrome QuotesViewerActivity::chrome() const {
   headerText = bookTitle + "  (" + std::to_string(quotes.size()) + ")";
   ListChrome chrome;
   chrome.title = headerText.c_str();
-  // Nothing to open: the middle button only deletes, and only on a hold.
-  chrome.confirmHint = "";
+  chrome.confirmHint = quotes.empty() ? "" : tr(STR_OPEN);
   if (!quotes.empty()) chrome.footnotes[0] = tr(STR_HOLD_TO_DELETE);
   return chrome;
 }
@@ -244,7 +268,7 @@ void QuotesViewerActivity::buildScreen(UiScreen& screen) {
   chapterTags.assign(static_cast<size_t>(count), std::string());
   rows.assign(static_cast<size_t>(count), fui::ListItem{});
   for (int i = 0; i < count; ++i) {
-    rows[i].label = quotes[i].text.c_str();
+    rows[i].label = quotes[i].displayLabel.c_str();
     if (!quotes[i].chapter.empty()) {
       chapterTags[i] =
           renderer.truncatedText(UI_10_FONT_ID, quotes[i].chapter.c_str(), chapterMaxWidth, EpdFontFamily::REGULAR);

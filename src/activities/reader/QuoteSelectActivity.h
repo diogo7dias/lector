@@ -86,14 +86,16 @@ class QuoteSelectActivity final : public Activity {
   void setStartWord(int index);
   // The selected passage, joined as the quote is saved.
   std::string selectedText() const;
-  void saveSelectedQuote();
+  void saveSelectedQuote(const std::string& note = {});
+  void openNoteEntry();
   // Touch (QuoteSelectTouch.cpp). handleTouch() owns the pass while it returns true.
   bool handleTouch();
   int nearestWord(int x, int y, int maxGap) const;
   void dragTo(int index);
   void lookUpSelection(bool fromHold = false);
-  bool saveQuoteToFile(const std::string& quote, const std::string& anchorToken, const quote_text::QuoteMeta& meta);
-  void appendClipping(const std::string& quote, uint32_t savedAt) const;
+  bool saveQuoteToFile(const std::string& quote, const std::string& anchorToken, const quote_text::QuoteMeta& meta,
+                       const std::string& note = {});
+  void appendClipping(const std::string& quote, const std::string& note, uint32_t savedAt) const;
   std::string chapterTitle() const;
   void drawRangeHighlight() const;
   void drawHints() const;
@@ -110,9 +112,10 @@ class QuoteSelectActivity final : public Activity {
   const int holdY;
 
   Drag drag = Drag::None;
-  bool touchSelection = false;  // touched once: Cancel / Save / Look Up hints, Back leaves
-  bool heldWord = false;        // opened by a hold that has not dragged: the lift looks it up
-  bool missedHold = false;      // the hold landed on no word: hand the page straight back
+  bool touchSelection = false;       // touched once: Cancel / Save / Note / Look Up hints, Back leaves
+  bool heldWord = false;             // opened by a hold that has not dragged: the lift looks it up
+  bool missedHold = false;           // the hold landed on no word: hand the page straight back
+  bool confirmHoldConsumed = false;  // suppresses trailing Confirm release after SelectStart or Note hold
   bool showPopup = false;
   StrId popupMsg = StrId::STR_DICT_LOOKING_UP;
   unsigned long popupShownAt = 0;  // 0 while the popup is a busy wait, not a timed message

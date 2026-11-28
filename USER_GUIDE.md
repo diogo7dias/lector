@@ -557,29 +557,33 @@ Bookmarks are stored as JSON under `/.crosspoint/bookmarks`.
 
 **Grab Quote** saves a passage from the current page. Quotes for a book live beside it on the
 card as a plain-text sidecar named after the book, for example `Book_QUOTES.txt`, with the
-chapter and anchor recorded next to each quote. **View Quotes** reads them back on the
-device.
+chapter, anchor and optional `> note` line recorded next to each quote. **View Quotes** reads
+them back on the device; tap a quote (or press **Confirm**) to jump straight to it in the book,
+with **Return** taking you back where you were reading.
 
 On a touch screen, select a passage with your finger:
 
 1. Hold a word for half a second, then drag without lifting. The highlight follows the
    finger. Lift without dragging and the word is looked up instead.
 2. To change the selection, touch near its first or last word and drag that end.
-3. Tap **Save** to keep the passage as a quote, or **Look Up** to look the whole phrase up in
-   the dictionary. **Cancel** returns to the page.
+3. Tap **Save** to keep the passage as a quote, **Note** to attach a note (up to 240 characters)
+   and save both, or **Look Up** to look the whole phrase up in the dictionary. **Cancel**
+   returns to the page.
 
 Up and Down still move the end of the selection, onto the next page if needed. Inside
-**Grab Quote**, touching a word starts a selection the same way, no hold needed. Look Up
+**Grab Quote**, touching a word starts a selection the same way, no hold needed; with buttons
+alone, hold **Confirm** on the selected end to attach a note instead of a plain save. Look Up
 appears only when a dictionary is set.
 
 Every saved quote is also added to `My Clippings.txt` at the root of the card, in the Kindle
 layout that Readwise, Calibre and most clipping tools import: book title and author, page,
-chapter, the time it was saved (when the device knows the time), then the passage. Deleting
-a quote in **View Quotes** removes it from the book's quotes file only; `My Clippings.txt`
-keeps everything ever saved, so trim it on a computer if you need to.
+chapter, the time it was saved (when the device knows the time), then the passage (followed by a
+matching `- Your Note` entry when a note was attached). Deleting a quote in **View Quotes**
+removes it from the book's quotes file only; `My Clippings.txt` keeps everything ever saved, so
+trim it on a computer if you need to.
 
-With BookOrbit as the KOReader sync server, quotes also travel to BookOrbit as highlights
-(see **BookOrbit** under KOReader Sync).
+With BookOrbit as the KOReader sync server, quotes and their notes also travel to BookOrbit as
+highlights (see **BookOrbit** under KOReader Sync).
 
 ---
 
