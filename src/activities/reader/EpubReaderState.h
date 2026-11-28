@@ -213,6 +213,9 @@ struct EpubReaderState {
   bool toolbarPaintOnly = false;  // the next render paints the sheet alone, not the page
   int toolbarFocus = -1;          // the marked tile; -1 until a button moves it on touch boards
   bool toolbarJumped = false;     // the first scrub of a visit files one Return entry
+  int toolbarScrubPermille = -1;  // live drag preview position (0..1000); -1 when idle
+  int toolbarScrubLastTarget = -1;
+  int toolbarScrubLastPercent = -1;
   // A menu to bring back once the page is on screen again (MenuReturn). The toolbar and the
   // Quick Menu paint over the framebuffer, which still holds the screen that just closed,
   // and a book reopened after KOReader Sync or Nearby has no page yet.
