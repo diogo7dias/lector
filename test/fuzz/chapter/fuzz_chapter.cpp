@@ -62,7 +62,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   spec.lineCompression = (flags & 0x01) ? 0.9f : 1.2f;
   spec.extraParagraphSpacing = flags & 0x02;
   spec.focusReadingEnabled = flags & 0x04;
-  spec.embeddedStyle = !(flags & 0x80);
+  spec.embeddedStyle = (flags & 0x80) ? EMBEDDED_STYLE_OFF : EMBEDDED_STYLE_FULL;
   spec.guideDotsMode = (look >> 2) % 3;
   spec.imageRendering = (look >> 4) % 4 == 3 ? 0 : (look >> 4) % 4;
   spec.paragraphAlignment = (look >> 6) % 4;

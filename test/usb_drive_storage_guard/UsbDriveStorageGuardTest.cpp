@@ -55,6 +55,77 @@ TEST(UsbDriveStorageGuard, BookGenerationMovesOnlyForBookPaths) {
   EXPECT_EQ(Storage.bookGeneration(), start + 8);
 }
 
+TEST(UsbDriveStorageGuard, SdUsedBytesCachesAcrossReadsAndInvalidatesOnWrite) {
+  usedBytesCalls = 0;
+  mockUsedBytes = 1000;
+  Storage.begin();
+
+  // First query hits the card; repeated queries and plain reads reuse the cached value.
+  EXPECT_EQ(Storage.sdUsedBytes(), 1000u);
+  EXPECT_EQ(usedBytesCalls, 1);
+  mockUsedBytes = 2000;
+  HalFile readHandle;
+  Storage.openFileForRead("TEST", "/a.epub", readHandle);
+  Storage.exists("/a.epub");
+  Storage.readFile("/a.epub");
+  EXPECT_EQ(Storage.sdUsedBytes(), 1000u);
+  EXPECT_EQ(usedBytesCalls, 1);
+
+  // Any write or mutation invalidates the cache so the next query refreshes.
+  Storage.writeFile("/notes.txt", "hi");
+  EXPECT_EQ(Storage.sdUsedBytes(), 2000u);
+  EXPECT_EQ(usedBytesCalls, 2);
+
+  mockUsedBytes = 3000;
+  HalFile writeHandle;
+  ASSERT_TRUE(Storage.openFileForWrite("TEST", "/data.bin", writeHandle));
+  EXPECT_EQ(Storage.sdUsedBytes(), 3000u);
+  EXPECT_EQ(usedBytesCalls, 3);
+
+  // Writing through an already-open handle invalidates again.
+  mockUsedBytes = 4000;
+  const uint8_t payload[2] = {1, 2};
+  EXPECT_EQ(writeHandle.write(payload, sizeof(payload)), 2u);
+  EXPECT_EQ(Storage.sdUsedBytes(), 4000u);
+  EXPECT_EQ(usedBytesCalls, 4);
+
+  mockUsedBytes = 3500;
+  Storage.remove("/notes.txt");
+  EXPECT_EQ(Storage.sdUsedBytes(), 3500u);
+  EXPECT_EQ(usedBytesCalls, 5);
+}
+
+// SDCardManager keeps its own figure for 20 s and cannot be told about a write. A figure read
+// sooner than that after a write may predate it, so HalStorage must pass it on without
+// keeping it: kept, the pre-write figure would be served until the next write.
+TEST(UsbDriveStorageGuard, SdUsedBytesIsNotKeptWhileTheCardManagerMayStillBeStale) {
+  fakeMillis = 100000;
+  usedBytesCalls = 0;
+  mockUsedBytes = 1000;  // what SDCardManager still holds from before the write
+  Storage.begin();
+  Storage.writeFile("/book.epub", "x");
+
+  fakeMillis += 5000;
+  EXPECT_EQ(Storage.sdUsedBytes(), 1000u);
+  EXPECT_EQ(usedBytesCalls, 1);
+
+  // SDCardManager rescans once its own 20 s have passed; the new figure must get through.
+  mockUsedBytes = 9000;
+  fakeMillis += 14999;
+  EXPECT_EQ(Storage.sdUsedBytes(), 9000u);
+  EXPECT_EQ(usedBytesCalls, 2);
+
+  // 20 s after the write the figure is trusted and kept until the next write.
+  fakeMillis += 1;
+  EXPECT_EQ(Storage.sdUsedBytes(), 9000u);
+  EXPECT_EQ(usedBytesCalls, 3);
+  mockUsedBytes = 1;
+  fakeMillis += 3600000;
+  EXPECT_EQ(Storage.sdUsedBytes(), 9000u);
+  EXPECT_EQ(usedBytesCalls, 3);
+  fakeMillis = 0;
+}
+
 // Once USB Drive lends the card to a computer, no firmware file call may reach it,
 // including through a handle that was opened before the handoff.
 TEST(UsbDriveStorageGuard, NoCallReachesTheCardWhileTheHostHoldsIt) {

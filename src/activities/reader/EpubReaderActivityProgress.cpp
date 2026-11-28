@@ -202,6 +202,19 @@ void EpubReaderActivity::loadCachedBookmarks() {
   BookmarkFile::load(epub->getPath(), cachedBookmarks);
 }
 
+bool EpubReaderActivity::isCurrentPageBookmarked() const {
+  if (!section || !epub || cachedBookmarks.empty()) return false;
+  const int currentPage = section->currentPage;
+  const int pageCount = section->estimatedTotalPages();
+  const ProgressRange pageRange = getPageProgressRange(*epub, currentSpineIndex, currentPage, pageCount);
+  for (const auto& b : cachedBookmarks) {
+    if (bookmarkMatchesProgress(b, currentSpineIndex, currentPage, pageCount, pageRange)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void EpubReaderActivity::addBookmark() {
   if (!section || !epub) {
     return;
@@ -227,6 +240,9 @@ void EpubReaderActivity::addBookmark() {
                         cachedBookmarks.end());
   if (cachedBookmarks.size() != bookmarkCountBeforeToggle) {
     bookmarkRemoved = true;
+    // Erasing the solid dog-ear from the top-right corner needs a cleanup pass so it
+    // does not leave a ghost triangle on the next FAST refresh.
+    scheduleGhostCleanup();
   } else {
     std::string pageText;
     if (currentPage >= 0 && currentPage < pageCount) {

@@ -8,8 +8,14 @@ test('one tap opens a row, Home comes back', async ({ app, screen }) => {
   await expect(activity).toHaveText('Home', { timeout: 120_000 });
 
   const panel = screen.getByRole('img', { name: 'Device screen' });
+  const ink = async (x: number, y: number, w: number, h: number) =>
+    (await (await fetch(`${app.baseUrl}/ink/${x}/${y}/${w}/${h}`)).json()).ink as number;
+  // On X4 Pro with no selection and nothing scrolling, slots 2..4 of the hint band (y=760..800) stay blank.
+  expect(await ink(125, 762, 350, 36), 'Home hides dead Select/Up/Down hints on X4 Pro').toBe(0);
+
   await panel.tap({ position: { x: 240, y: 517 } }); // Browse Files
   await expect(activity).toHaveText('FileBrowser', { timeout: 30_000 });
+  expect(await ink(125, 762, 350, 36), 'FileBrowser hides dead Open/Up/Down hints when nothing scrolls').toBe(0);
 
   await screen.getByRole('button', { name: 'Home' }).click();
   await expect(activity).toHaveText('Home', { timeout: 30_000 });

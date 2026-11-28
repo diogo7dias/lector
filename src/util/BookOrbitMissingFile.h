@@ -38,9 +38,11 @@ inline Saved parse(const char* text) {
 
 constexpr long long CHECK_EVERY_S = 6 * 60 * 60;
 
-// Always when WiFi is already up; otherwise every CHECK_EVERY_S, and never while
-// `now` is 0 (a clock that was never set). A clock that went back counts as due.
-inline bool due(const bool wifiUp, const long long now, const long long checkedAt) {
+// Runs only when pages moved on this session: immediately when WiFi is already up,
+// otherwise every CHECK_EVERY_S, and never while `now` is 0 (a clock that was never set).
+// A clock that went back counts as due.
+inline bool due(const bool wifiUp, const bool pagesMoved, const long long now, const long long checkedAt) {
+  if (!pagesMoved) return false;
   if (wifiUp) return true;
   if (now == 0) return false;
   return checkedAt <= 0 || now < checkedAt || now - checkedAt >= CHECK_EVERY_S;

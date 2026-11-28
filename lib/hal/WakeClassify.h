@@ -58,4 +58,24 @@ inline constexpr bool isPlugInWake(const bool enabled, const bool powerHeld, con
   return enabled && !powerHeld && charging;
 }
 
+// Early boot decision made before Storage.begin() and Frontlight.begin().
+// Rejecting AfterUSBPower and power-button bounces here avoids mounting the SD
+// card and lighting the frontlight on false wakes.
+enum class EarlyWakeAction : uint8_t {
+  Proceed,
+  SleepNow,
+  CheckAfterConfig,
+};
+
+inline constexpr EarlyWakeAction decideEarlyWake(const WakeupReason reason, const bool powerHeld,
+                                                 const bool supportsChargeWake, const bool charging,
+                                                 const bool rtcPlugInValid, const bool rtcPlugInEnabled) {
+  if (reason == WakeupReason::AfterUSBPower) return EarlyWakeAction::SleepNow;
+  if (reason != WakeupReason::PowerButton) return EarlyWakeAction::Proceed;
+  if (powerHeld) return EarlyWakeAction::Proceed;
+  if (!supportsChargeWake || !charging) return EarlyWakeAction::SleepNow;
+  if (!rtcPlugInValid) return EarlyWakeAction::CheckAfterConfig;
+  return rtcPlugInEnabled ? EarlyWakeAction::Proceed : EarlyWakeAction::SleepNow;
+}
+
 }  // namespace wake_classify

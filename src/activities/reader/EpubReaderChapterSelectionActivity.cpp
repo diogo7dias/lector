@@ -5,10 +5,12 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <cstdio>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/ReadingPercent.h"
 
 namespace fui = freeink::ui;
 
@@ -43,7 +45,18 @@ void EpubReaderChapterSelectionActivity::refreshTocWindow(const int start, const
   windowStart = start;
   windowCount = count;
   for (int i = 0; i < windowCount; i++) {
-    windowLabels[i] = tocLabelAt(start + i);
+    const int idx = start + i;
+    const auto item = epub.getTocItem(idx);
+    // level 0 exists in malformed TOCs; (level - 1) * 2 would be negative and the indent
+    // string would be asked for a nonsense length.
+    const std::string indent(item.level > 0 ? (item.level - 1) * 2 : 0, ' ');
+    windowLabels[i] = idx == currentTocIndex ? (indent + "> " + item.title) : (indent + item.title);
+    if (item.spineIndex >= 0) {
+      const int pct = reading_percent::toPercent(epub.calculateProgress(item.spineIndex, 0.0f));
+      std::snprintf(windowPercents[i], sizeof(windowPercents[i]), "%d%%", pct);
+    } else {
+      windowPercents[i][0] = '\0';
+    }
   }
 
   // One SD pass for the whole visible page. The getter form is deliberate: building a
@@ -59,14 +72,6 @@ void EpubReaderChapterSelectionActivity::refreshTocWindow(const int start, const
         return i < static_cast<uint32_t>(p->count) ? p->labels[i].c_str() : nullptr;
       },
       &ctx, static_cast<uint32_t>(windowCount));
-}
-
-std::string EpubReaderChapterSelectionActivity::tocLabelAt(const int index) const {
-  const auto item = epub.getTocItem(index);
-  // level 0 exists in malformed TOCs; (level - 1) * 2 would be negative and the indent
-  // string would be asked for a nonsense length.
-  const std::string indent(item.level > 0 ? (item.level - 1) * 2 : 0, ' ');
-  return indent + item.title;
 }
 
 void EpubReaderChapterSelectionActivity::buildScreen(UiScreen& screen) {
@@ -88,6 +93,7 @@ void EpubReaderChapterSelectionActivity::buildScreen(UiScreen& screen) {
   rows.assign(static_cast<size_t>(count), fui::ListItem{});
   for (int i = 0; i < count; ++i) {
     rows[i].label = windowLabels[i].c_str();
+    if (windowPercents[i][0] != '\0') rows[i].value = windowPercents[i];
     rows[i].actionValue = static_cast<int16_t>(start + i);
   }
   props.items = rows.data();

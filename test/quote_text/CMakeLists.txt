@@ -1,5 +1,6 @@
 add_executable(QuoteTextTest
   QuoteTextTest.cpp
+  ClippingsReaderTest.cpp
 )
 
 target_include_directories(QuoteTextTest PRIVATE

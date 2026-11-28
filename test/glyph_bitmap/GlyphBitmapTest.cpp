@@ -202,3 +202,48 @@ TEST(GlyphBitmap, EmptyAndOffPanelGlyphsDoNotWrite) {
       compare({orientation, rotated, false, BW, true, true, 11, 9, -100, -100, 0, 0, 0, 0}, 0x1b);
     }
 }
+
+TEST(GlyphBitmap, InkWeightStepsMonotonicallyOnTwoBitGlyphs) {
+  // 4x4 2-bit glyph containing a central core (3), dark shoulder (2), light fringe (1),
+  // and white corners (0), so every ink-weight step changes the painted pixel count.
+  // Row 0: 0 1 1 0 -> 0x14
+  // Row 1: 1 2 3 1 -> 0x6D
+  // Row 2: 1 3 2 1 -> 0x79
+  // Row 3: 0 1 1 0 -> 0x14
+  const uint8_t glyph[4] = {0x14, 0x6D, 0x79, 0x14};
+
+  auto paintedCount = [&](uint8_t paperback, int8_t weight, bool isTtf) {
+    std::vector<uint8_t> buf(PANEL_HEIGHT * STRIDE, 0xFF);  // white (1-bits)
+    const glyphBitmap::InkPlan plan = glyphBitmap::inkPlanFor(paperback, weight, /*twoBit=*/true, isTtf);
+    for (uint8_t p = 0; p < plan.count; ++p) {
+      glyphBitmap::Frame frame{10 + plan.passes[p].dx, 10 + plan.passes[p].dy, 1, 0, 0, 1};
+      glyphBitmap::Target target{buf.data(), PANEL_WIDTH, STRIDE, 0, PANEL_HEIGHT, frame};
+      glyphBitmap::draw(glyph, 4, 4, true, glyphBitmap::Plane::BW, true, target, {0, 0, 4, 4}, plan.passes[p].bwLevels);
+    }
+    int black = 0;
+    for (uint8_t b : buf) {
+      for (int bit = 0; bit < 8; ++bit) {
+        if (((b >> bit) & 1) == 0) ++black;
+      }
+    }
+    return black;
+  };
+
+  for (uint8_t pb : {uint8_t{0}, uint8_t{1}, uint8_t{2}}) {
+    int prev = 0;
+    for (int8_t w = -2; w <= 2; ++w) {
+      const int count = paintedCount(pb, w, /*isTtf=*/false);
+      EXPECT_GT(count, prev) << "pb=" << static_cast<int>(pb) << " weight=" << static_cast<int>(w);
+      prev = count;
+    }
+  }
+
+  // TTF glyphs already baked inkWeight into their 2-bit levels during rasterization,
+  // so inkPlanFor leaves them at the default 0x0e mask with no extra C3 passes.
+  const auto ttfNormal = glyphBitmap::inkPlanFor(0, 0, true, /*isTtf=*/true);
+  for (int8_t w = -2; w <= 2; ++w) {
+    const auto plan = glyphBitmap::inkPlanFor(0, w, true, /*isTtf=*/true);
+    EXPECT_EQ(plan.count, ttfNormal.count);
+    EXPECT_EQ(plan.passes[0].bwLevels, 0x0e);
+  }
+}

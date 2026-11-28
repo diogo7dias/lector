@@ -97,6 +97,7 @@ void WifiSession::begin(const Startup& startup, const uint32_t nowMs) {
   pending_.clear();
   autoAttemptedSsids_.clear();
   joiningSsid_.clear();
+  activeIsHidden_ = false;
 
   const bool canAutoConnect = startup_.allowAutoConnect && !startup_.savedSsids.empty();
   if (startup_.autoOnly && startup_.savedSsids.empty()) {
@@ -172,6 +173,7 @@ void WifiSession::selectNetwork(const size_t index, const uint32_t nowMs) {
     return;
   }
   clockMs_ = nowMs;
+  activeIsHidden_ = false;
   const Network& picked = networks_[index];
   joinOrAskForPassword(picked.ssid, picked.hasSavedPassword, picked.isEncrypted);
 }
@@ -181,6 +183,7 @@ void WifiSession::selectHiddenNetwork(const std::string& ssid, const uint32_t no
     return;
   }
   clockMs_ = nowMs;
+  activeIsHidden_ = true;
   // A hidden network never appears in a scan, so its encryption is unknown; ask
   // for a password unless one is already stored.
   joinOrAskForPassword(ssid, isSaved(ssid.c_str()), true);
@@ -262,6 +265,7 @@ void WifiSession::cancel(const uint32_t nowMs) {
 void WifiSession::abandonPasswordEntry(const uint32_t nowMs) {
   clockMs_ = nowMs;
   typedPasswordPending_ = false;
+  activeIsHidden_ = false;
   setState(State::NETWORK_LIST);
 }
 
@@ -287,8 +291,11 @@ void WifiSession::answerSavePrompt(const bool remember, const uint32_t nowMs) {
   clockMs_ = nowMs;
   offersToSave_ = false;
   typedPasswordPending_ = false;
+  const bool hidden = activeIsHidden_;
+  activeIsHidden_ = false;
   if (remember) {
     queue(ActionKind::SAVE_CREDENTIAL, activeSsid_);
+    pending_.back().hidden = hidden;
   }
   queue(ActionKind::FINISH);
   pending_.back().connected = true;

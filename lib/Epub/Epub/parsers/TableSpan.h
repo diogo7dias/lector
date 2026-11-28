@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 
 // Parses an HTML colspan/rowspan attribute value.
 //
@@ -21,4 +22,35 @@ inline uint16_t parseTableSpan(const char* value) {
     span = span * 10 + digit;
   }
   return span == 0 ? UINT16_MAX : static_cast<uint16_t>(span);
+}
+
+// Extracts a numeric span attribute (e.g. "colspan") from a lowercased raw opening tag buffer.
+// Returns 1 when absent or malformed.
+inline uint16_t parseTagAttributeSpan(const char* tagText, const char* attrName) {
+  if (!tagText || !attrName) return 1;
+  const size_t nameLen = std::strlen(attrName);
+  const char* p = tagText;
+  while ((p = std::strstr(p, attrName)) != nullptr) {
+    // Require whitespace before attribute name so "mycolspan" does not match.
+    if (p > tagText && p[-1] != ' ' && p[-1] != '\t' && p[-1] != '\r' && p[-1] != '\n') {
+      p += nameLen;
+      continue;
+    }
+    p += nameLen;
+    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') ++p;
+    if (*p != '=') continue;
+    ++p;
+    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') ++p;
+    char quote = 0;
+    if (*p == '"' || *p == '\'') quote = *p++;
+    char digits[16];
+    size_t n = 0;
+    while (*p && (quote ? *p != quote : (*p != ' ' && *p != '\t' && *p != '\r' && *p != '\n' && *p != '/'))) {
+      if (n + 1 < sizeof(digits)) digits[n++] = *p;
+      ++p;
+    }
+    digits[n] = '\0';
+    return parseTableSpan(digits);
+  }
+  return 1;
 }

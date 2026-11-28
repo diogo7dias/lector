@@ -8,11 +8,16 @@
 struct FontVariantProvider {
   void* ctx = nullptr;
   int (*resolve)(void* ctx, int fontId, float scale) = nullptr;
+  int (*resolveMonospace)(void* ctx, int fontId, float scale) = nullptr;
   bool (*load)(void* ctx, int fontId) = nullptr;
 
   int resolveFont(const int fontId, const float scale) const {
     // Keep small CSS size adjustments from selecting a different font size.
     if (std::fabs(scale - 1.0f) < 0.05f) return fontId;
     return resolve ? resolve(ctx, fontId, scale) : 0;
+  }
+
+  int resolveMonospaceFont(const int fontId, const float scale) const {
+    return resolveMonospace ? resolveMonospace(ctx, fontId, scale) : 0;
   }
 };

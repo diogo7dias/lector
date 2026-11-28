@@ -116,6 +116,11 @@ class HalGPIO {
 
   WakeupReason getWakeupReason() const;
 
+  // True when begin() ran the live display-bus controller probe (cold boot),
+  // which pulses EPD RST and wakes the panel controller. False when the verdict
+  // was restored from RTC memory across deep sleep.
+  bool wasDisplayProbed() const;
+
   // Button indices
   static constexpr uint8_t BTN_BACK = 0;
   static constexpr uint8_t BTN_CONFIRM = 1;
