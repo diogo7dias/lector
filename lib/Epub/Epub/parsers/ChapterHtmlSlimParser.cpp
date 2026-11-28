@@ -59,6 +59,8 @@ constexpr size_t MAX_ANCHORS_PER_CHAPTER = 1024;
 constexpr int16_t TABLE_CELL_HORIZONTAL_PADDING = 4;
 constexpr int16_t TABLE_ROW_SEPARATOR_GAP = 4;
 constexpr uint8_t TABLE_ROW_SEPARATOR_THICKNESS = 1;
+constexpr uint8_t TABLE_HEADER_SEPARATOR_THICKNESS = 2;
+constexpr float TABLE_COMPACT_FONT_SCALE = 0.88f;
 constexpr int16_t TABLE_MIN_CELL_WIDTH_LINE_HEIGHTS = 3;
 
 constexpr const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
@@ -883,6 +885,7 @@ void ChapterHtmlSlimParser::fallbackTableRowToStacked() {
     }
   }
   tableRowCells.clear();
+  tableRowSpanSum = 0;
   currentTextBlock = std::move(activeCell);
   wordsExtractedInBlock = 0;
 }
@@ -894,12 +897,15 @@ void ChapterHtmlSlimParser::closeTableCell() {
   insideTableCell = false;
   const int bottomPadding = blockStyleStack.back().paddingBottom;
   blockStyleStack.pop_back();
+  const uint8_t cellSpan = currentCellColSpan;
+  currentCellColSpan = 1;
 
   if (!currentTextBlock) {
     return;
   }
 
-  if (!tableRowStacked && tableRowCells.size() >= MAX_GRID_TABLE_COLUMNS) {
+  if (!tableRowStacked &&
+      (tableRowCells.size() >= MAX_GRID_TABLE_COLUMNS || tableRowSpanSum + cellSpan > MAX_GRID_TABLE_COLUMNS)) {
     fallbackTableRowToStacked();
   }
 
@@ -914,17 +920,19 @@ void ChapterHtmlSlimParser::closeTableCell() {
     return;
   }
 
+  tableRowColSpans[tableRowCells.size()] = cellSpan;
+  tableRowSpanSum = static_cast<uint8_t>(tableRowSpanSum + cellSpan);
   tableRowCells.push_back(std::move(currentTextBlock));
 }
 
-void ChapterHtmlSlimParser::addTableRowSeparator() {
-  if (!currentPage || currentPage->elements.empty() || viewportWidth == 0 ||
-      currentPageNextY + TABLE_ROW_SEPARATOR_GAP > viewportHeight) {
+void ChapterHtmlSlimParser::addTableRowSeparator(const uint8_t thickness) {
+  const int16_t gap = static_cast<int16_t>(std::max<int>(TABLE_ROW_SEPARATOR_GAP, thickness + 2));
+  if (!currentPage || currentPage->elements.empty() || viewportWidth == 0 || currentPageNextY + gap > viewportHeight) {
     return;
   }
 
   auto separator = std::unique_ptr<PageHorizontalRule>(
-      new (std::nothrow) PageHorizontalRule(viewportWidth, TABLE_ROW_SEPARATOR_THICKNESS, 0, currentPageNextY + 1));
+      new (std::nothrow) PageHorizontalRule(viewportWidth, thickness, 0, currentPageNextY + 1));
   if (!separator) {
     LOG_ERR("EHP", "OOM: table row separator");
     return;
@@ -933,7 +941,7 @@ void ChapterHtmlSlimParser::addTableRowSeparator() {
     currentPage->elements.reserve(currentPage->elements.size() + 1);
   }
   currentPage->elements.push_back(std::move(separator));
-  currentPageNextY += TABLE_ROW_SEPARATOR_GAP;
+  currentPageNextY += gap;
 }
 
 // Streams a table's raw markup from its opening tag and measures each column's
@@ -955,6 +963,7 @@ bool ChapterHtmlSlimParser::measureTableColumns(HalFile& file, TableColumnMeasur
   bool inEntity = false;
   char quote = 0;
   int tableNesting = 0;
+  int nextColumn = 0;
   int column = -1;
   bool inCell = false;
   bool skipCell = false;
@@ -1000,15 +1009,24 @@ bool ChapterHtmlSlimParser::measureTableColumns(HalFile& file, TableColumnMeasur
     if (tag == "tr" && !closing) {
       if (inCell) finishLine();
       inCell = false;
+      nextColumn = 0;
       column = -1;
     } else if (tag == "td" || tag == "th") {
       if (inCell) finishLine();
       inCell = !closing;
       if (!closing) {
-        // Spanning cells lay out as stacked rows, so they don't shape the grid.
-        skipCell = strstr(tagText, "colspan") != nullptr || strstr(tagText, "rowspan") != nullptr;
-        if (++column >= static_cast<int>(MAX_GRID_TABLE_COLUMNS)) return -1;
-        out.columns = static_cast<uint8_t>(std::max<int>(out.columns, column + 1));
+        const uint16_t colSpan = parseTagAttributeSpan(tagText, "colspan");
+        const uint16_t rowSpan = parseTagAttributeSpan(tagText, "rowspan");
+        if (colSpan == UINT16_MAX ||
+            nextColumn + static_cast<int>(colSpan) > static_cast<int>(MAX_GRID_TABLE_COLUMNS)) {
+          return -1;
+        }
+        column = nextColumn;
+        nextColumn += static_cast<int>(colSpan);
+        // Spanning cells still reserve their column slots so later cells in the row measure
+        // against their true columns, without skewing any single column's min/pref width.
+        skipCell = colSpan > 1 || rowSpan > 1;
+        out.columns = static_cast<uint8_t>(std::max<int>(out.columns, nextColumn));
         style = tag == "th" ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
       }
     } else if (tag == "br") {
@@ -1070,6 +1088,7 @@ bool ChapterHtmlSlimParser::measureTableColumns(HalFile& file, TableColumnMeasur
 // shares the rest in proportion to how much wrapping it would otherwise need.
 void ChapterHtmlSlimParser::planTableColumns(const TableColumnMeasure& measure) {
   tableColumnCount = 0;
+  tableCompactFont = false;
   const int columns = measure.columns;
   if (columns < 2 || columns > static_cast<int>(MAX_GRID_TABLE_COLUMNS)) return;
   constexpr int padding = TABLE_CELL_HORIZONTAL_PADDING * 2;
@@ -1084,6 +1103,8 @@ void ChapterHtmlSlimParser::planTableColumns(const TableColumnMeasure& measure) 
     minTotal += minWidth[c];
     prefTotal += prefWidth[c];
   }
+  // When natural column widths exceed the viewport, step cell text down one font size.
+  tableCompactFont = prefTotal > available;
   int assigned = 0;
   for (int c = 0; c < columns; ++c) {
     int width;
@@ -1103,41 +1124,59 @@ void ChapterHtmlSlimParser::planTableColumns(const TableColumnMeasure& measure) 
 
 void ChapterHtmlSlimParser::finishTableRow() {
   closeTableCell();
+  const bool headerRow = tableRowHasHeader;
+  tableRowHasHeader = false;
+  const uint8_t separatorThickness = headerRow ? TABLE_HEADER_SEPARATOR_THICKNESS : TABLE_ROW_SEPARATOR_THICKNESS;
 
   if (tableRowCells.empty()) {
     if (tableRowStacked) {
-      addTableRowSeparator();
+      addTableRowSeparator(separatorThickness);
     }
     tableRowStacked = false;
+    tableRowSpanSum = 0;
     return;
   }
 
   const int16_t lineHeight =
       std::max<int16_t>(1, static_cast<int16_t>(renderer.getLineHeight(fontId, lineCompression)));
-  const size_t columnCount = tableRowCells.size();
-  const bool planned = tableColumnCount == columnCount;
+  const size_t cellCount = tableRowCells.size();
+  const uint8_t totalSpanCols = tableRowSpanSum;
+  const bool planned = tableColumnCount >= 2 && totalSpanCols > 0 && totalSpanCols <= tableColumnCount;
   uint16_t columnWidths[MAX_GRID_TABLE_COLUMNS] = {};
-  bool fitsGrid = columnCount >= 2;
+  bool fitsGrid = totalSpanCols >= 2 && cellCount >= 1;
   int16_t topPadding[MAX_GRID_TABLE_COLUMNS] = {};
   int maxTopPadding = 0;
   int maxBottomPadding = 0;
-  for (size_t column = 0; column < columnCount; ++column) {
-    columnWidths[column] = planned ? tableColumnWidths[column] : static_cast<uint16_t>(viewportWidth / columnCount);
+  uint8_t gridCol = 0;
+  for (size_t cell = 0; cell < cellCount; ++cell) {
+    const uint8_t span = std::max<uint8_t>(1, tableRowColSpans[cell]);
+    if (planned) {
+      uint16_t width = 0;
+      for (uint8_t s = 0; s < span && (gridCol + s) < tableColumnCount; ++s) {
+        width = static_cast<uint16_t>(width + tableColumnWidths[gridCol + s]);
+      }
+      columnWidths[cell] = width;
+    } else {
+      columnWidths[cell] = static_cast<uint16_t>((static_cast<uint32_t>(viewportWidth) * span) / totalSpanCols);
+    }
+    gridCol = static_cast<uint8_t>(gridCol + span);
     // Equal columns keep enough width for a few glyphs so ordinary three-column tables stay
     // tabular in portrait; planned columns already fit their longest word.
-    const auto& style = tableRowCells[column]->getBlockStyle();
-    topPadding[column] = style.paddingTop;
+    const auto& style = tableRowCells[cell]->getBlockStyle();
+    topPadding[cell] = style.paddingTop;
     maxTopPadding = std::max<int>(maxTopPadding, style.paddingTop);
     maxBottomPadding = std::max<int>(maxBottomPadding, style.paddingBottom);
-    fitsGrid = fitsGrid && columnWidths[column] > style.paddingLeft + style.paddingRight &&
-               (planned || columnWidths[column] >= lineHeight * TABLE_MIN_CELL_WIDTH_LINE_HEIGHTS);
+    fitsGrid = fitsGrid && columnWidths[cell] > style.paddingLeft + style.paddingRight &&
+               (planned || columnWidths[cell] >= lineHeight * TABLE_MIN_CELL_WIDTH_LINE_HEIGHTS);
   }
   if (!fitsGrid) {
     fallbackTableRowToStacked();
-    addTableRowSeparator();
+    addTableRowSeparator(separatorThickness);
     tableRowStacked = false;
+    tableRowSpanSum = 0;
     return;
   }
+  const size_t columnCount = cellCount;
   // Row direction comes from the first cell rather than from the table's or row's own dir.
   // A <table dir="rtl"> still reaches the cells through the inherited direction, so the
   // two differ only when the first cell overrides its table.
@@ -1162,7 +1201,9 @@ void ChapterHtmlSlimParser::finishTableRow() {
     const size_t estimatedLines = tableRowCells[column]->size() * 2;
     lines.reserve(estimatedLines);
     tableLineVisibleOffsets.reserve(estimatedLines);
-    const int cellFontId = prepareBlockFont(*tableRowCells[column], tableRowCells[column]->getBlockStyle().fontScale);
+    float cellScale = tableRowCells[column]->getBlockStyle().fontScale;
+    if (tableCompactFont) cellScale = std::max(0.5f, cellScale * TABLE_COMPACT_FONT_SCALE);
+    const int cellFontId = prepareBlockFont(*tableRowCells[column], cellScale);
     tableRowCells[column]->layoutAndExtractLines(
         renderer, cellFontId,
         static_cast<uint16_t>(columnWidths[column] - tableRowCells[column]->getBlockStyle().paddingLeft -
@@ -1179,6 +1220,7 @@ void ChapterHtmlSlimParser::finishTableRow() {
     maxLineCount = std::max(maxLineCount, lines.size());
   }
   tableRowCells.clear();
+  tableRowSpanSum = 0;
   const auto clearLayoutLines = [this]() {
     for (auto& lines : tableCellLines) {
       lines.clear();
@@ -1279,8 +1321,9 @@ void ChapterHtmlSlimParser::finishTableRow() {
   if (bordered && sliceTop >= 0 && currentPage) {
     currentPageNextY = static_cast<int16_t>(std::min<int>(currentPageNextY + cellGap, viewportHeight));
     frameCells(sliceTop, currentPageNextY);
+    if (headerRow) addTableRowSeparator(TABLE_HEADER_SEPARATOR_THICKNESS);
   } else {
-    addTableRowSeparator();
+    addTableRowSeparator(separatorThickness);
   }
   tableRowStacked = false;
   clearLayoutLines();
@@ -1480,6 +1523,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->tableRowCells.reserve(MAX_GRID_TABLE_COLUMNS);
     self->tableBorder = CssBorderSide{};
     self->tableColumnCount = 0;
+    self->tableColumnCount = 0;
+    self->tableCompactFont = false;
+    self->tableRowHasHeader = false;
+    self->tableRowSpanSum = 0;
+    self->currentCellColSpan = 1;
     if (self->xmlParser_) {
       // Rows stream in one at a time, so plan shared column widths from the raw markup first.
       HalFile tableFile;
@@ -1531,12 +1579,17 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     self->currentTextBlock.reset();
 
-    // A merged cell has no single column to sit in, so the row (and every row the merge
-    // reaches into) drops out of the grid and flows stacked instead.
+    // Colspan stays in the grid by summing the spanned column widths, provided the row fits
+    // within MAX_GRID_TABLE_COLUMNS. Rowspan still crosses rows and falls back to stacked.
     const uint16_t columnSpan = parseTableSpan(getAttribute(atts, "colspan"));
     const uint16_t rowSpan = parseTableSpan(getAttribute(atts, "rowspan"));
-    if (columnSpan > 1 || rowSpan > 1) {
+    if (rowSpan > 1 || columnSpan == UINT16_MAX || self->tableRowSpanSum + columnSpan > MAX_GRID_TABLE_COLUMNS) {
       self->fallbackTableRowToStacked();
+    }
+    self->currentCellColSpan =
+        (columnSpan >= 1 && columnSpan <= MAX_GRID_TABLE_COLUMNS) ? static_cast<uint8_t>(columnSpan) : 1;
+    if (strcmp(name, "th") == 0) {
+      self->tableRowHasHeader = true;
     }
     if (rowSpan > 1) {
       const uint16_t remaining = rowSpan == UINT16_MAX ? UINT16_MAX : static_cast<uint16_t>(rowSpan - 1);
@@ -2731,6 +2784,11 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->tableDepth = 0;
     self->insideTableCell = false;
     self->tableRowStacked = false;
+    self->tableCompactFont = false;
+    self->tableRowHasHeader = false;
+    self->currentCellColSpan = 1;
+    self->tableRowSpanSum = 0;
+    self->tableColumnCount = 0;
     self->tableRowsSpannedRemaining = 0;
     self->tableRowTextBytes = 0;
     self->tableRowCells.clear();
@@ -2861,6 +2919,11 @@ bool ChapterHtmlSlimParser::beginParse() {
   tableDepth = 0;
   insideTableCell = false;
   tableRowStacked = false;
+  tableCompactFont = false;
+  tableRowHasHeader = false;
+  currentCellColSpan = 1;
+  tableRowSpanSum = 0;
+  tableColumnCount = 0;
   tableRowsSpannedRemaining = 0;
   tableRowTextBytes = 0;
   tableRowCells.clear();
