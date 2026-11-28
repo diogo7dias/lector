@@ -97,7 +97,7 @@ test('night mode images dither cleanly and switch between Normal Polarity and In
   // and remove test_jpeg_images.epub from Recents back to card root.
   await panel.tap({ position: { x: 240, y: 400 } });
   await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
-  await tapOnce(100, 198); // Book
+  await tapOnce(100, 398); // Book (below expanded Navigate's 5 rows)
   await tapOnce(100, 318); // Remove from Recents
   await expect(activity).toHaveText('Home', { timeout: 30_000 });
 
