@@ -481,6 +481,7 @@ with **Navigate** expanded otherwise.
 - **Bookmarks** — the list, shown once the book has one.
 - **Toggle Bookmark** — drop or lift a bookmark on this page.
 - **Footnotes** — shown only in books that have them.
+- **Inspect Image** — shown when the current page holds an image; opens it edge-to-edge with no margins or status bar, rotating wide images 90 degrees. On the X4 Pro, long-pressing (or double-tapping when taps are unassigned) an image opens the viewer directly, and tapping or pressing Confirm toggles 2x zoom with drag or button panning.
 
 ### This Book
 

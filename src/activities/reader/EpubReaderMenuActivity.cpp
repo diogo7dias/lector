@@ -69,6 +69,7 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::flatten(co
 
 std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(const Context& context) {
   const bool hasFootnotes = context.hasFootnotes;
+  const bool hasImages = context.hasImages;
   const bool hasBookmarks = context.hasBookmarks;
   const bool hasReaderOverride = context.hasReaderOverride;
   const uint8_t paragraphNumbering = context.paragraphNumbering;
@@ -148,6 +149,9 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
     marks.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
     if (hasFootnotes) {
       marks.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
+    }
+    if (hasImages) {
+      marks.push_back({MenuAction::INSPECT_IMAGE, StrId::STR_INSPECT_IMAGE});
     }
     group(items, std::move(marks));
   }

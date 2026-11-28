@@ -13,6 +13,8 @@ class ImageBlock final : public Block {
 
   int16_t getWidth() const { return width; }
   int16_t getHeight() const { return height; }
+  const std::string& getImagePath() const { return imagePath; }
+  const std::string& getSrcPath() const { return srcPath; }
 
   bool hasValidCache() const;
   bool needsDecode() const;

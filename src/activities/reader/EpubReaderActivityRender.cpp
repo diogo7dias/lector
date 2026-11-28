@@ -320,8 +320,19 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     pendingOffsetJump.reset();
     returnHistory.finishReturn(true);
 
-    // Collect footnotes from the loaded page
+    // Collect footnotes and image rects from the loaded page
     currentPageFootnotes = std::move(p->footnotes);
+    currentPageImages.clear();
+    for (const auto& el : p->elements) {
+      if (el->getTag() != TAG_PageImage) continue;
+      const auto& img = static_cast<const PageImage&>(*el);
+      const auto& blk = img.getImageBlock();
+      currentPageImages.push_back(
+          PageImageRef{blk.getImagePath(), blk.getSrcPath(),
+                       image_inspect::Rect{img.xPos + orientedMarginLeft, img.yPos + orientedMarginTop, blk.getWidth(),
+                                           blk.getHeight()}});
+    }
+    imageDoubleTap.reset();
 
     // Refresh at Chapter Start: the first page of a chapter just entered gets the clean pass.
     const bool enteredChapter = section->currentPage == 0 && currentSpineIndex != lastRenderedSpine;

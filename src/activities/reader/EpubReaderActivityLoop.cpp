@@ -184,9 +184,25 @@ void EpubReaderActivity::loop() {
   }
   pinchGesture.reset();
 
+  auto hitPageImage = [this](const int x, const int y) -> int {
+    for (size_t i = 0; i < currentPageImages.size(); ++i) {
+      const auto& r = currentPageImages[i].bounds;
+      if (x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height) {
+        return static_cast<int>(i);
+      }
+    }
+    return -1;
+  };
+
   int holdX = 0;
   int holdY = 0;
   if (mappedInput.wasScreenLongPress(holdX, holdY, /*keepContact=*/true)) {
+    const int imgIdx = hitPageImage(holdX, holdY);
+    if (imgIdx >= 0) {
+      gpio.suppressTouchContact();
+      openImageInspector(imgIdx);
+      return;
+    }
     openQuoteGrab(holdX, holdY);
     return;
   }
@@ -210,6 +226,17 @@ void EpubReaderActivity::loop() {
   if (ReaderUtils::isTouchMenuGesture(renderer, mappedInput, touch.menu)) {
     openReaderMenu();
     return;
+  }
+  if (!touch.prev && !touch.next && !touch.menu && !currentPageImages.empty()) {
+    int tapX = 0;
+    int tapY = 0;
+    if (mappedInput.wasScreenTapped(tapX, tapY)) {
+      const int imgIdx = hitPageImage(tapX, tapY);
+      if (imageDoubleTap.recordTap(millis(), tapX, tapY, imgIdx)) {
+        openImageInspector(imgIdx);
+        return;
+      }
+    }
   }
 
   const bool confirmHasHold = SETTINGS.longPressMenuFunction != CrossPointSettings::LP_MENU_DISABLED;
