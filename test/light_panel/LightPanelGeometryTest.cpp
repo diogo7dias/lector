@@ -296,6 +296,22 @@ TEST(LightPanelGeometry, WithALightTheCursorPassesEveryValueRowFirst) {
   EXPECT_EQ(light_panel::moveHorizontal(layout, c, 1), c);  // Left/Right off the grid step the row instead
 }
 
+TEST(LightPanelGeometry, NineButtonsFitLandscapeAndSpanLastRowInPortrait) {
+  // In a book on X4 Pro: 8 shared actions + Candle Fade = 9 tiles.
+  const auto landscape = light_panel::forScreen(800, kLineHeight, kReadoutLineHeight, /*hasWarmth=*/true,
+                                                /*hasAux=*/true, /*actionCount=*/9);
+  ASSERT_EQ(landscape.actionCount, 9);
+  EXPECT_EQ(landscape.actions[0].y, landscape.actions[2].y);  // three columns x three rows
+  EXPECT_EQ(landscape.actions[6].y, landscape.actions[8].y);
+  EXPECT_LT(landscape.height, 480);
+
+  const auto portrait = light_panel::forScreen(kScreenWidth, kLineHeight, kReadoutLineHeight, /*hasWarmth=*/true,
+                                               /*hasAux=*/true, /*actionCount=*/9);
+  ASSERT_EQ(portrait.actionCount, 9);
+  EXPECT_EQ(portrait.actions[8].x, light_panel::kSidePad);
+  EXPECT_EQ(portrait.actions[8].width, kScreenWidth - light_panel::kSidePad * 2);
+}
+
 TEST(LightPanelGeometry, NoRowsAndNoAuxStartsOnTheFirstButton) {
   const auto layout = keysOnly(/*hasAux=*/false, /*actionCount=*/6);
   EXPECT_EQ(light_panel::firstCursor(layout), (Cursor{Row::None, 0}));

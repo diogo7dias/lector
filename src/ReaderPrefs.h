@@ -62,6 +62,13 @@ inline constexpr uint8_t WORD_SPACING = 100;  // percent of the font's natural s
 // the font as designed and 0..4 covers -2..+2.
 inline constexpr uint8_t CHARACTER_SPACING = 2;
 inline constexpr uint8_t MAX_CHARACTER_SPACING = 4;
+// Ink Weight is stored unsigned like Character Spacing: 0..4 covers -2..+2, with 2 = 0 (normal).
+inline constexpr uint8_t INK_WEIGHT = 2;
+inline constexpr uint8_t MAX_INK_WEIGHT = 4;
+inline constexpr int8_t resolveInkWeight(const uint8_t stored) {
+  const uint8_t clamped = stored > MAX_INK_WEIGHT ? MAX_INK_WEIGHT : stored;
+  return static_cast<int8_t>(clamped) - static_cast<int8_t>(INK_WEIGHT);
+}
 // The side margin: 5 to 40 px in steps of 5. Top and bottom keep the wider 0 to 100 range.
 inline constexpr uint8_t MIN_SCREEN_MARGIN = 5;
 inline constexpr uint8_t MAX_SCREEN_MARGIN = 40;
@@ -114,7 +121,9 @@ struct ReaderPrefs {
   // (paragraph gap, kerning, ligatures, link underline, book margins, heading page break,
   // word expansion, fill pages, the layout half of the style switch, indent mode) stay as
   // zeroed padding, the indent byte counts spaces, character spacing counts whole pixels.
-  static constexpr uint8_t VERSION = 27;  // v27: lean typography
+  // v28: 3-way embeddedStyle (Off / Text Only / Full), same bytes as v27.
+  // v29 appends inkWeight (0..4 stored, -2..+2 shown, default 2 = 0).
+  static constexpr uint8_t VERSION = 29;  // v29: ink weight
 
   // Bring a sidecar written before the current version onto the current reading
   // defaults. Only these values are re-seeded, and only for books that predate them.
@@ -151,7 +160,7 @@ struct ReaderPrefs {
   uint8_t guideDotsHidden = 0;   // keep the widened guide-dot gap, draw no dot in it
   // Retired setting byte: preserve every later offset in v5-v14 binary sidecars.
   uint8_t reserved14 = 0;
-  uint8_t embeddedStyle = 1;  // the one Book Styling switch
+  uint8_t embeddedStyle = EMBEDDED_STYLE_FULL;  // EmbeddedStyleMode: Off / Text Only / Full
   // Retired: Text Anti-Aliasing (always off since 2026-11-22: its grey pass was 467 ms of a 1215 ms turn).
   uint8_t retiredTextAntiAliasing = 0;
   // Fed into the render spec (edited from the Reader settings category, snapshotted here).
@@ -263,6 +272,10 @@ struct ReaderPrefs {
   // paragraphNumberSize. APPENDED LAST.
   uint8_t paragraphNumberPlace = 1;  // CrossPointSettings::PARA_NUM_PLACE_TEXT
 
+  // Finer ink weight (-2..+2 stored as 0..4, offset by reader_defaults::INK_WEIGHT).
+  // Draw-only (does not affect layout or the section cache). APPENDED LAST.
+  uint8_t inkWeight = reader_defaults::INK_WEIGHT;
+
   // Copy the status bar block from `source`.
   //
   // A sidecar written before v11 stops before that block, so every field would
@@ -303,7 +316,7 @@ inline ReaderRenderSpec makeRenderSpec(const ReaderPrefs& p, const int fontId, c
   spec.paragraphAlignment = p.paragraphAlignment;
   spec.viewportWidth = viewportWidth;
   spec.viewportHeight = viewportHeight;
-  spec.embeddedStyle = p.embeddedStyle != 0;
+  spec.embeddedStyle = resolveEmbeddedStyle(p.embeddedStyle);
   // Black & White lays out exactly like Display, so switching between them keeps the
   // section cache; the reader draws the raw mode (see readerImageMode in the reader).
   spec.imageRendering = p.imageRendering == reader_defaults::IMAGES_DISPLAY_BW ? 0 : p.imageRendering;
@@ -335,6 +348,7 @@ inline constexpr size_t READER_PREFS_V22_SIZE = offsetof(ReaderPrefs, sbBookTitl
 inline constexpr size_t READER_PREFS_V23_SIZE = offsetof(ReaderPrefs, characterSpacing);
 inline constexpr size_t READER_PREFS_V24_SIZE = offsetof(ReaderPrefs, retiredFillPages);
 inline constexpr size_t READER_PREFS_V25_SIZE = offsetof(ReaderPrefs, paragraphNumberPlace);
+inline constexpr size_t READER_PREFS_V28_SIZE = offsetof(ReaderPrefs, inkWeight);
 
 // A record older than v12 carries one "Embedded Style" choice, in what is now the text
 // switch. Someone who turned it off wanted the book's own styling gone, so the layout
@@ -399,6 +413,10 @@ inline void migrateReaderPrefsFields(const uint8_t version, ReaderPrefs& p, cons
     }
     settleLegacyLookValues(p);
   }
+  // v28 turns embeddedStyle into 3-way Off (0) / Text Only (1) / Full (2); legacy 1 meant Full.
+  if (version < 28 && p.embeddedStyle != EMBEDDED_STYLE_OFF) {
+    p.embeddedStyle = EMBEDDED_STYLE_FULL;
+  }
   // The retired bytes carry nothing now; zero them so whole-blob comparison is exact.
   p.retiredParagraphSpacing = p.retiredFirstLineIndentMode = p.retiredEmbeddedLayoutStyle = 0;
   p.retiredKerning = p.retiredLigatures = p.retiredLinkUnderline = p.retiredBookMargins = 0;
@@ -445,8 +463,9 @@ inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
   if (version == 23) return READER_PREFS_V23_SIZE;
   if (version == 24) return READER_PREFS_V24_SIZE;
   if (version == 25) return READER_PREFS_V25_SIZE;
-  // v26 and v27 share one layout: v27 only changed what some bytes mean.
-  if (version == 26 || version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
+  // v26, v27 and v28 share one byte layout: v27/v28 only changed what existing bytes mean.
+  if (version == 26 || version == 27 || version == 28) return READER_PREFS_V28_SIZE;
+  if (version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
   return 0;
 }
 
@@ -475,8 +494,9 @@ static_assert(READER_PREFS_V22_SIZE == READER_PREFS_V21_SIZE + 1, "v22 adds word
 static_assert(READER_PREFS_V23_SIZE == READER_PREFS_V22_SIZE + 1, "v23 adds sbBookTitlePos");
 static_assert(READER_PREFS_V24_SIZE == READER_PREFS_V23_SIZE + 1, "v24 adds characterSpacing");
 static_assert(READER_PREFS_V25_SIZE == READER_PREFS_V24_SIZE + 1, "v25 adds fillPages");
-static_assert(sizeof(ReaderPrefs) == READER_PREFS_V25_SIZE + 1,
-              "paragraphNumberPlace must be the last byte: every new field goes last, or "
+static_assert(READER_PREFS_V28_SIZE == READER_PREFS_V25_SIZE + 1, "v26 to v28 add paragraphNumberPlace");
+static_assert(sizeof(ReaderPrefs) == READER_PREFS_V28_SIZE + 1,
+              "inkWeight must be the last byte: every new field goes last, or "
               "this firmware misreads every sidecar written by the version before it");
 
 // ── The field lists cover the struct ──────────────────────────────────────────
@@ -604,6 +624,14 @@ inline StatusBarBlock statusBarOf(const ReaderPrefs& p) {
   b.foldTitleSource();
   return b;
 }
+// Calm mode overlay: hides the status bar and off-bar without modifying stored prefs or themes.
+inline StatusBarBlock effectiveStatusBar(StatusBarBlock b, const bool calmMode) {
+  if (calmMode) {
+    b.enabled = 0;
+    b.offBar = StatusBarBlock::OFF_BAR_OFF;
+  }
+  return b;
+}
 inline void setStatusBarOf(ReaderPrefs& p, const StatusBarBlock& b) {
 #define CP_SB_TO_PREFS(prefsName, settingsName, blockName) p.prefsName = b.blockName;
   READER_STATUS_BAR_FIELDS(CP_SB_TO_PREFS)
@@ -614,7 +642,7 @@ inline void setStatusBarOf(ReaderPrefs& p, const StatusBarBlock& b) {
 // Whether the book's stylesheet has to be parsed. Decided from the book's own look:
 // a book with its Book Styling switch on needs its CSS even when the global switch is
 // off, and the loader never builds the CSS cache for a book that skipped it.
-inline bool wantsBookCss(const ReaderPrefs& p) { return p.embeddedStyle != 0; }
+inline bool wantsBookCss(const ReaderPrefs& p) { return p.embeddedStyle != EMBEDDED_STYLE_OFF; }
 
 // Brings a sidecar record read at `fromVersion` in line with this firmware.
 // - A record written before whole-book numbering was removed can still say 2; the

@@ -182,7 +182,7 @@ void TxtReaderActivity::initializeReader() {
   // progress bar never eats the margin (upstream #4444).
   // TXT has no chapters, so chapter-only items are hidden. A greedy (truncate-off)
   // book-source title wraps, needing extra band height.
-  const StatusBarBlock sb = SETTINGS.statusBar();
+  const StatusBarBlock sb = effectiveStatusBar(SETTINGS.statusBar(), SETTINGS.calmMode != 0);
   // TXT has no chapter title: the slot holds the book title (see TitleSlot).
   bool sbTitleTop = false;
   const int sbTitleLines =
@@ -308,11 +308,13 @@ void TxtReaderActivity::renderPage() {
   renderStatusBar();  // scan: a CJK title joins the batch prewarm
   scope.endScanAndPrewarm();
 
-  // BW rendering. Paperback Look (body, global) thickens the page glyphs; reset
-  // before the status bar (own flag) and the grayscale AA pass below.
+  // BW rendering. Paperback Look and Ink Weight (body, global) shape the page glyphs;
+  // reset before the status bar (own flag).
   renderer.setPaperbackLook(SETTINGS.paperbackLookBody);
+  renderer.setInkWeight(reader_defaults::resolveInkWeight(SETTINGS.inkWeight), /*updateTtf=*/true);
   renderLines();
   renderer.setPaperbackLook(false);
+  renderer.setInkWeight(0);
   if (const int step = ruled_lines::dotStep(SETTINGS.ruledLines)) {
     const auto isBlack = [this](int x, int y) { return renderer.isPixelBlack(x, y); };
     const auto plot = [this](int x, int y) { renderer.drawPixel(x, y); };
@@ -340,7 +342,7 @@ void TxtReaderActivity::renderStatusBar() const {
   d.bookPercent = reading_percent::pagePercent(currentPage, totalPages);
   d.bookTitle = txt->getTitle();
   d.sessionPages = sessionPages;
-  const StatusBarBlock sb = SETTINGS.statusBar();
+  const StatusBarBlock sb = effectiveStatusBar(SETTINGS.statusBar(), SETTINGS.calmMode != 0);
   // Costs a file read only when the item is on, as in the EPUB reader.
   if (sb.paraPagesPos != CrossPointSettings::SB_ANCHOR_OFF) d.paragraphPagesLeft = pagesUntilNextParagraph();
   // Paperback Look (status bar): thicken only status-bar glyphs, then reset.

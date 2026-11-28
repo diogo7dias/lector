@@ -226,7 +226,7 @@ void WifiSelectionActivity::runAction(const wifi_session::Action& action) {
     case wifi_session::ActionKind::SAVE_CREDENTIAL: {
       // SD card operations need the lock as we use SPI for both.
       RenderLock lock(*this);
-      WIFI_STORE.addCredential(action.ssid, enteredPassword);
+      WIFI_STORE.addCredential(action.ssid, enteredPassword, action.hidden);
       return;
     }
 

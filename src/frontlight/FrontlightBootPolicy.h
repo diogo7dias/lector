@@ -104,11 +104,13 @@ struct LightProfile {
   uint8_t warmth = 0;
 };
 
-// Selects the day or night-mode brightness/warmth pair.
-inline constexpr LightProfile activeLightProfile(const bool nightMode, const uint8_t dayBrightness,
-                                                 const uint8_t dayWarmth, const uint8_t nightBrightness,
-                                                 const uint8_t nightWarmth) {
-  return nightMode ? LightProfile{nightBrightness, nightWarmth} : LightProfile{dayBrightness, dayWarmth};
+// Selects the day or night-mode brightness/warmth pair. Until the reader edits the light
+// in Night Mode (`nightCustomized` is false), Night Mode inherits the day pair unchanged.
+inline constexpr LightProfile activeLightProfile(const bool nightMode, const bool nightCustomized,
+                                                 const uint8_t dayBrightness, const uint8_t dayWarmth,
+                                                 const uint8_t nightBrightness, const uint8_t nightWarmth) {
+  return (nightMode && nightCustomized) ? LightProfile{nightBrightness, nightWarmth}
+                                        : LightProfile{dayBrightness, dayWarmth};
 }
 
 }  // namespace frontlight

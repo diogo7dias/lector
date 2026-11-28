@@ -97,12 +97,16 @@ TEST(FrontlightBootPolicy, CandleFadeDimsAndWarmsMonotonicallyThenStops) {
   EXPECT_EQ(end.warmth, 100);
 }
 
-TEST(FrontlightBootPolicy, ActiveLightProfileSeparatesDayAndNightPairs) {
-  const auto day = frontlight::activeLightProfile(false, 25, 30, 10, 85);
+TEST(FrontlightBootPolicy, ActiveLightProfileInheritsDayUntilNightCustomized) {
+  const auto day = frontlight::activeLightProfile(false, true, 25, 30, 10, 85);
   EXPECT_EQ(day.brightness, 25);
   EXPECT_EQ(day.warmth, 30);
 
-  const auto night = frontlight::activeLightProfile(true, 25, 30, 10, 85);
-  EXPECT_EQ(night.brightness, 10);
-  EXPECT_EQ(night.warmth, 85);
+  const auto nightUnseeded = frontlight::activeLightProfile(true, false, 25, 30, 10, 85);
+  EXPECT_EQ(nightUnseeded.brightness, 25);
+  EXPECT_EQ(nightUnseeded.warmth, 30);
+
+  const auto nightCustomized = frontlight::activeLightProfile(true, true, 25, 30, 10, 85);
+  EXPECT_EQ(nightCustomized.brightness, 10);
+  EXPECT_EQ(nightCustomized.warmth, 85);
 }

@@ -306,6 +306,8 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
   emit(SettingInfo::Toggle(StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
                            "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY)
            .withWebOnly());
+  emit(SettingInfo::Toggle(StrId::STR_FRONTLIGHT, &CrossPointSettings::nightFrontlightCustomized,
+                           "nightFrontlightCustomized", StrId::STR_NONE_OPT));
   emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_BRIGHTNESS, &CrossPointSettings::nightFrontlightBrightness, {0, 100, 5},
                           "nightFrontlightBrightness", StrId::STR_NONE_OPT));
   emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_WARMTH, &CrossPointSettings::nightFrontlightWarmth, {0, 100, 5},
@@ -411,9 +413,11 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
                          "dynamicMargins", StrId::STR_CAT_READER)
            .withTextSettings());
 
-  // One switch for all publisher styling; the key predates the old text/layout split.
-  emit(SettingInfo::Toggle(StrId::STR_EMBEDDED_STYLE, &CrossPointSettings::embeddedStyle, "embeddedStyle",
-                           StrId::STR_CAT_READER)
+  // 3-way publisher styling: Off / Text Only / Full. New key "embeddedStyleMode" avoids
+  // misreading legacy 2-way "embeddedStyle" (where 1 meant Full).
+  emit(SettingInfo::Enum(StrId::STR_EMBEDDED_STYLE, &CrossPointSettings::embeddedStyle,
+                         {StrId::STR_STATE_OFF, StrId::STR_EMBEDDED_STYLE_TEXT_ONLY, StrId::STR_EMBEDDED_STYLE_FULL},
+                         "embeddedStyleMode", StrId::STR_CAT_READER)
            .withTextSettings());
 
   emit(SettingInfo::Value(StrId::STR_WORD_SPACING, &CrossPointSettings::wordSpacing,
@@ -427,6 +431,12 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
                           {0, reader_defaults::MAX_CHARACTER_SPACING, 1}, "characterSpacingPx", StrId::STR_CAT_READER)
            .withTextSettings()
            .withDisplayOffset(-static_cast<int8_t>(reader_defaults::CHARACTER_SPACING)));
+
+  // 5-step ink weight, stored 0..4 and shown -2..+2 (default 2 = 0).
+  emit(SettingInfo::Value(StrId::STR_INK_WEIGHT, &CrossPointSettings::inkWeight,
+                          {0, reader_defaults::MAX_INK_WEIGHT, 1}, "inkWeight", StrId::STR_CAT_READER)
+           .withTextSettings()
+           .withDisplayOffset(-static_cast<int8_t>(reader_defaults::INK_WEIGHT)));
 
   emit(SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
                          {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS,

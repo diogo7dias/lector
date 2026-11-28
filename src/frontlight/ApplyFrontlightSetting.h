@@ -17,10 +17,12 @@ inline void applyFrontlightSetting(uint8_t CrossPointSettings::* const valuePtr)
   } else if (valuePtr == &CrossPointSettings::frontlightBrightness ||
              valuePtr == &CrossPointSettings::frontlightMaxBrightness ||
              valuePtr == &CrossPointSettings::nightFrontlightBrightness) {
+    if (valuePtr == &CrossPointSettings::nightFrontlightBrightness) SETTINGS.nightFrontlightCustomized = 1;
     SETTINGS.clampFrontlightBrightness();
     Frontlight.setBrightness(SETTINGS.activeFrontlightBrightness());
   } else if (valuePtr == &CrossPointSettings::frontlightWarmth ||
              valuePtr == &CrossPointSettings::nightFrontlightWarmth) {
+    if (valuePtr == &CrossPointSettings::nightFrontlightWarmth) SETTINGS.nightFrontlightCustomized = 1;
     Frontlight.setWarmth(SETTINGS.activeFrontlightWarmth());
   } else if (valuePtr == &CrossPointSettings::screenInverted) {
     if (!Frontlight.present()) return;

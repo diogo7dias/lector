@@ -74,6 +74,13 @@ class XtcReaderActivity final : public Activity {
   bool runBoundAction(uint8_t function) override;
   bool appliesNightMode() const override { return true; }
   void onRevealed() override { pagesUntilFullRefresh = 0; }
+  void onCalmModeChanged() override {
+    {
+      RenderLock lock(*this);
+      pagesUntilFullRefresh = 0;
+    }
+    requestUpdate();
+  }
   bool handleForcedRefresh() override {
     {
       RenderLock lock(*this);

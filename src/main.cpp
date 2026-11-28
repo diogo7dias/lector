@@ -754,6 +754,7 @@ static void checkLowBatteryWarning() {
   inputs.alreadyWarned = APP_STATE.lowBatteryWarned;
   inputs.usbConnected = gpio.isUsbConnectedCached();
   inputs.screenAllowed = activityManager.isReaderActivity() || activityManager.isHomeActivity();
+  inputs.calmMode = SETTINGS.calmMode != 0;
 
   switch (low_battery::resolve(inputs)) {
     case low_battery::Action::ClearLatch:

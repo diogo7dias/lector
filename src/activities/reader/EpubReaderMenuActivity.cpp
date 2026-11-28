@@ -78,7 +78,6 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
   const bool wallpaperPausable = context.wallpaperPausable;
   const bool hasQuotes = context.hasQuotes;
   const bool hasReturn = context.hasReturn;
-  const bool hasPageList = context.hasPageList;
   const bool hasForward = context.hasForward;
   // Reserve every tab this menu can ever have, so no push_back below can reallocate.
   // That matters: page() hands back a reference INTO the vector, and a reallocation
@@ -130,10 +129,9 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
   {
     auto& items = page(Tab::Navigate, StrId::STR_SEC_NAVIGATE);
     std::vector<MenuItem> position{{MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER},
-                                   {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT}};
-    position.reserve(6);  // chapter, percentage, optional page, Return, Forward and paragraph
-    // Only books that carry the printed edition's page numbers can jump to one.
-    if (hasPageList) position.insert(position.begin() + 2, {MenuAction::GO_TO_PAGE, StrId::STR_GO_TO_PAGE});
+                                   {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT},
+                                   {MenuAction::GO_TO_PAGE, StrId::STR_GO_TO_PAGE}};
+    position.reserve(6);  // chapter, percentage, page, Return, Forward and paragraph
     if (hasReturn) position.push_back({MenuAction::RETURN, StrId::STR_RETURN});
     if (hasForward) position.push_back({MenuAction::FORWARD, StrId::STR_FORWARD});
     // Jump to a paragraph number — only meaningful when this book shows paragraph

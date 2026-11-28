@@ -65,7 +65,7 @@ constexpr int kActionPadY = 10;
 constexpr int kActionColumns = 2;
 constexpr int kWideActionColumns = 3;
 constexpr int kWideScreenWidth = 640;
-constexpr int kMaxActions = 8;
+constexpr int kMaxActions = 9;
 
 struct Rect {
   int x;

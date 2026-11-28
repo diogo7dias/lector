@@ -78,3 +78,13 @@ TEST(BoundActionScope, ChapterSkipRequiresOpenBookAndKeepsEnumOrder) {
   EXPECT_EQ(LP_MENU_NEXT_CHAPTER, LP_MENU_CONFIRM + 1);
   EXPECT_EQ(LP_MENU_PREV_CHAPTER, LP_MENU_CONFIRM + 2);
 }
+
+TEST(BoundActionScope, CalmModeWorksAnywhereAndKeepsEnumOrder) {
+  EXPECT_TRUE(allowedOutsideBook(LP_MENU_CALM_MODE));
+  EXPECT_EQ(LP_MENU_CALM_MODE, LP_MENU_PREV_CHAPTER + 1);
+}
+
+TEST(BoundActionScope, CandleFadeWorksAnywhereAndKeepsEnumOrder) {
+  EXPECT_TRUE(allowedOutsideBook(LP_MENU_CANDLE_FADE));
+  EXPECT_EQ(LP_MENU_CANDLE_FADE, LP_MENU_CALM_MODE + 1);
+}

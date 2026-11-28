@@ -233,6 +233,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr auto LP_MENU_CONFIRM = bound_action::LP_MENU_CONFIRM;
   static constexpr auto LP_MENU_NEXT_CHAPTER = bound_action::LP_MENU_NEXT_CHAPTER;
   static constexpr auto LP_MENU_PREV_CHAPTER = bound_action::LP_MENU_PREV_CHAPTER;
+  static constexpr auto LP_MENU_CALM_MODE = bound_action::LP_MENU_CALM_MODE;
   static constexpr auto LP_MENU_CANDLE_FADE = bound_action::LP_MENU_CANDLE_FADE;
   static constexpr auto LONG_PRESS_MENU_FUNCTION_COUNT = bound_action::LONG_PRESS_MENU_FUNCTION_COUNT;
 
@@ -339,6 +340,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // With no SettingsList entry the generic loop cannot carry it, so it is saved and loaded
   // by hand in toJson/fromJson.
   uint8_t wallpaperRotationPaused = 0;
+  // Calm mode: hides status bar, off-bar, low-battery nag (until 5%) and centre-tap menu
+  // without mutating the saved status bar or any Reading Theme. Toggled via Quick Panel or binding.
+  uint8_t calmMode = 0;
   // Status bar (per-item v2 model). Legacy fixed-slot fields were removed. XTC keeps its own overlay.
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
   // Master on/off. NEVER read this field to decide whether to draw or reserve the bar —
@@ -392,6 +396,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t wordSpacing = reader_defaults::WORD_SPACING;  // percent of natural space advance; no limit on justification
   // Whole pixels between letters, offset: 2 is the font as designed, 0..4 shows as -2..+2.
   uint8_t characterSpacing = reader_defaults::CHARACTER_SPACING;
+  // Finer ink weight, offset: 2 is normal (0), 0..4 shows as -2..+2.
+  uint8_t inkWeight = reader_defaults::INK_WEIGHT;
   // On, with both directions on Swipe Only by default: a swipe works the same wherever the
   // thumb lands, and leaves the whole page free of invisible tap targets.
   uint8_t touchReaderControls = 1;
@@ -633,11 +639,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t fadingFix = 0;
   // Power button return from footnotes (1 = enabled, 0 = disabled)
   uint8_t pwrBtnFootnoteBack = 1;
-  // The book's own CSS, one switch: text styling (weight, slant, decoration, super/sub,
-  // direction, display:none) and layout (alignment, indents, margins, padding, book-set
-  // image sizes). Written under the "embeddedStyle" key (1 = enabled, 0 = disabled).
-  // Paragraph Alignment "Book's Style" needs this on.
-  uint8_t embeddedStyle = 1;
+  // EmbeddedStyleMode: 0 = Off, 1 = Text Only (weight, italic, decoration, small caps,
+  // sup/sub, white-space, display:none, direction), 2 = Full. Written under "embeddedStyleMode".
+  // Paragraph Alignment "Book's Style" needs Full.
+  uint8_t embeddedStyle = 2;
   // Focus Reading - emphasizes the first part of words with bold
   uint8_t focusReadingEnabled = 0;
   // Guide Dots — draw a middle dot (U+00B7) between words as a reading aid. Restored
@@ -749,14 +754,41 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   }
   uint8_t frontlightWarmth = 50;  // 0 = cool .. 100 = warm; ignored without warm/cold LEDs
   // Separate brightness/warmth pair used while Night Mode (screenInverted) is active.
-  uint8_t nightFrontlightBrightness = 15;
-  uint8_t nightFrontlightWarmth = 85;
-  uint8_t& activeFrontlightBrightness() { return screenInverted ? nightFrontlightBrightness : frontlightBrightness; }
-  uint8_t& activeFrontlightWarmth() { return screenInverted ? nightFrontlightWarmth : frontlightWarmth; }
+  // Uncustomized (0) inherits the day pair until the reader adjusts the light in Night Mode,
+  // seeding both fields from day values so upgrading never surprises an existing Night Mode user.
+  uint8_t nightFrontlightCustomized = 0;
+  uint8_t nightFrontlightBrightness = 60;
+  uint8_t nightFrontlightWarmth = 50;
   uint8_t activeFrontlightBrightness() const {
-    return screenInverted ? nightFrontlightBrightness : frontlightBrightness;
+    return (screenInverted && nightFrontlightCustomized) ? nightFrontlightBrightness : frontlightBrightness;
   }
-  uint8_t activeFrontlightWarmth() const { return screenInverted ? nightFrontlightWarmth : frontlightWarmth; }
+  uint8_t activeFrontlightWarmth() const {
+    return (screenInverted && nightFrontlightCustomized) ? nightFrontlightWarmth : frontlightWarmth;
+  }
+  void setActiveFrontlightBrightness(const uint8_t value) {
+    if (screenInverted) {
+      if (!nightFrontlightCustomized) {
+        nightFrontlightBrightness = frontlightBrightness;
+        nightFrontlightWarmth = frontlightWarmth;
+        nightFrontlightCustomized = 1;
+      }
+      nightFrontlightBrightness = value;
+    } else {
+      frontlightBrightness = value;
+    }
+  }
+  void setActiveFrontlightWarmth(const uint8_t value) {
+    if (screenInverted) {
+      if (!nightFrontlightCustomized) {
+        nightFrontlightBrightness = frontlightBrightness;
+        nightFrontlightWarmth = frontlightWarmth;
+        nightFrontlightCustomized = 1;
+      }
+      nightFrontlightWarmth = value;
+    } else {
+      frontlightWarmth = value;
+    }
+  }
   uint8_t frontlightOn = 0;
   // Bring the light back by itself on wake. On by default, as in CrossPoint (Diogo,
   // 2026-11-18). Brightness and warmth are remembered either way. See FrontlightBootPolicy.h.
