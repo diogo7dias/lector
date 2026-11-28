@@ -90,7 +90,9 @@ void save(const int count, const std::string& feedUrl) {
   if (!Storage.writeFile(FILE_PATH, content)) LOG_ERR("BOMISS", "Cannot write %s", FILE_PATH);
 }
 
-bool due(const bool wifiUp) { return bookorbit_missing_file::due(wifiUp, now(), load().checkedAt); }
+bool due(const bool wifiUp, const bool pagesMoved) {
+  return bookorbit_missing_file::due(wifiUp, pagesMoved, now(), load().checkedAt);
+}
 
 void refresh() {
   GfxRenderer& renderer = activityManager.getRenderer();

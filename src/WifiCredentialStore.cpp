@@ -20,6 +20,7 @@ void WifiCredentialStore::toJson(JsonDocument& doc) const {
     // instead of silently trying a different password.
     obj["password_len"] = cred.password.size();
     obj["password_crc32"] = credential_integrity::crc32(cred.password);
+    if (cred.hidden) obj["hidden"] = true;
   }
 }
 
@@ -38,6 +39,7 @@ bool WifiCredentialStore::fromJson(JsonVariantConst doc) {
     if (credentials.size() >= MAX_NETWORKS) break;
     WifiCredential cred;
     cred.ssid = obj["ssid"] | "";
+    cred.hidden = obj["hidden"] | false;
 
     const JsonVariantConst passwordLength = obj["password_len"];
     const bool hasPasswordLength = !passwordLength.isNull();
@@ -109,7 +111,7 @@ bool WifiCredentialStore::fromJson(JsonVariantConst doc) {
   return true;
 }
 
-bool WifiCredentialStore::addCredential(const std::string& ssid, const std::string& password) {
+bool WifiCredentialStore::addCredential(const std::string& ssid, const std::string& password, const bool hidden) {
   {
     std::lock_guard<std::mutex> lock(credentialMutex);
 
@@ -118,6 +120,7 @@ bool WifiCredentialStore::addCredential(const std::string& ssid, const std::stri
                               [&ssid](const WifiCredential& cred) { return cred.ssid == ssid; });
     if (cred != credentials.end()) {
       cred->password = password;
+      if (hidden) cred->hidden = true;
       LOG_DBG("WCS", "Updated credentials for: %s", ssid.c_str());
     } else {
       if (credentials.size() >= MAX_NETWORKS) {
@@ -125,7 +128,7 @@ bool WifiCredentialStore::addCredential(const std::string& ssid, const std::stri
         return false;
       }
 
-      credentials.push_back({ssid, password});
+      credentials.push_back({ssid, password, hidden});
       LOG_DBG("WCS", "Added credentials for: %s", ssid.c_str());
     }
   }

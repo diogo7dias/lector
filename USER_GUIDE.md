@@ -918,7 +918,7 @@ its web reader and apps, so a book continues where you stopped on either side.
 4. Run **Authenticate**, then turn on **Auto Sync** if you want it.
 
 With **Auto Sync** on, Lector also watches for books you are reading in BookOrbit but have not
-put on the device. When it goes to sleep (after you read, or at most once every 6 hours), it
+put on the device. When it goes to sleep after you read, it
 reads the smart shelf named **Reading** in BookOrbit's OPDS catalogue. A book counts as on the
 device when the file an OPDS download would save exists, or a recent book has the same title.
 When some are missing, Home shows a row such as **2 on BookOrbit, not here**. Select it to see
