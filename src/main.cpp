@@ -60,6 +60,7 @@
 #include "util/DoubleClickDetector.h"
 #include "util/LowBatteryPolicy.h"
 #include "util/ScreenshotUtil.h"
+#include "util/TouchSleepPolicy.h"
 
 GfxRenderer renderer(display);
 MappedInputManager mappedInputManager(gpio, renderer);
@@ -841,10 +842,22 @@ void loop() {
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
   // Any input wakes touch (only a button can, while it sleeps); the wake itself
-  // finishes over the next few polls.
+  // finishes over the next few polls. Allow Touch Sleep during Quick Lock unless
+  // a Home key gesture in the active context is bound to Quick Lock (the capacitive
+  // Home key is read through GT911).
   const unsigned long touchSleepMs = SETTINGS.touchSleepMs();
-  // Not while locked: the timer no longer tracks input, and the Home key may be what unlocks.
-  gpio.setTouchAsleep(!quickLocked && touchSleepMs > 0 && millis() - lastActivityTime >= touchSleepMs);
+  const bool inBookForTouchSleep = activityManager.isBookContext();
+  const auto homeBinding = [&](const uint8_t gesture) {
+    const uint8_t* binding = SETTINGS.buttonBinding(inBookForTouchSleep, CrossPointSettings::BOUND_BTN_HOME, gesture);
+    return binding != nullptr ? *binding : CrossPointSettings::LP_MENU_DISABLED;
+  };
+  const bool homeUnlocksQuickLock =
+      gpio.hasHomeKey() && touch_sleep_policy::homeKeyUnlocksQuickLock(homeBinding(CrossPointSettings::BOUND_SINGLE),
+                                                                       homeBinding(CrossPointSettings::BOUND_DOUBLE),
+                                                                       homeBinding(CrossPointSettings::BOUND_HOLD),
+                                                                       CrossPointSettings::LP_MENU_QUICK_LOCK);
+  gpio.setTouchAsleep(touch_sleep_policy::shouldSleepTouch(quickLocked, homeUnlocksQuickLock, touchSleepMs,
+                                                           static_cast<uint32_t>(millis() - lastActivityTime)));
 
   // Let wake continue as soon as its hold has been verified. The release can
   // arrive after setup, so consume that one input frame rather than making it
