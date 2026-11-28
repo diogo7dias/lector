@@ -7,6 +7,7 @@
 
 #include "QuoteSelectActivity.h"
 #include "QuoteSidecar.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "util/QuoteSync.h"
 #include "util/QuoteText.h"
@@ -17,7 +18,24 @@ std::string QuoteSelectActivity::chapterTitle() const {
   return std::string(tr(STR_CHAPTER)) + " " + std::to_string(spineIndex + 1);
 }
 
-void QuoteSelectActivity::saveSelectedQuote() {
+void QuoteSelectActivity::openNoteEntry() {
+  if (startWord < 0) return;
+  startActivityForResult(
+      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, std::string(tr(STR_ADD_NOTE)), std::string(),
+                                              quote_text::MAX_NOTE_LENGTH, InputType::Text),
+      [this](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          if (const auto* kr = std::get_if<KeyboardResult>(&result.data)) {
+            saveSelectedQuote(kr->text);
+            finish();
+            return;
+          }
+        }
+        requestUpdate();
+      });
+}
+
+void QuoteSelectActivity::saveSelectedQuote(const std::string& note) {
   if (startWord < 0) return;
   const std::string quote = selectedText();
   if (quote.empty()) return;
@@ -34,21 +52,28 @@ void QuoteSelectActivity::saveSelectedQuote() {
       meta.textOffset = *offset;
     }
   }
-  if (!saveQuoteToFile(quote, quote_text::formatAnchorToken(startAnchor), meta)) {
+  const std::string cleanNote = note.empty() ? std::string() : quote_text::sanitizeNote(note);
+  if (!saveQuoteToFile(quote, quote_text::formatAnchorToken(startAnchor), meta, cleanNote)) {
     // Full sidecar or a failed write: say so before the reader repaints over it.
     GUI.drawPopup(renderer, tr(STR_QUOTE_SAVE_FAILED));
     delay(1200);
     return;
   }
-  appendClipping(quote, meta.savedAt);
+  appendClipping(quote, cleanNote, meta.savedAt);
 }
 
-// The Kindle copy of the quote. The book's own quotes file is the record: a failure
-// here is only logged, and the save still counts.
-void QuoteSelectActivity::appendClipping(const std::string& quote, const uint32_t savedAt) const {
-  const std::string entry =
-      quote_text::formatClipping(epub.getTitle(), epub.getAuthor(), chapterTitle(), startPageNumber + 1, quote,
-                                 savedAt ? quote_sync::toLocal(savedAt) : 0);
+// The Kindle copy of the quote (and optional Note entry). The book's own quotes file is
+// the record: a failure here is only logged, and the save still counts.
+void QuoteSelectActivity::appendClipping(const std::string& quote, const std::string& note,
+                                         const uint32_t savedAt) const {
+  const int64_t localSec = savedAt ? quote_sync::toLocal(savedAt) : 0;
+  const std::string chapter = chapterTitle();
+  std::string entry =
+      quote_text::formatClipping(epub.getTitle(), epub.getAuthor(), chapter, startPageNumber + 1, quote, localSec);
+  if (!note.empty()) {
+    entry +=
+        quote_text::formatNoteClipping(epub.getTitle(), epub.getAuthor(), chapter, startPageNumber + 1, note, localSec);
+  }
   HalFile file = Storage.open(quote_text::CLIPPINGS_PATH, O_RDWR | O_CREAT | O_APPEND);
   if (!file) {
     LOG_ERR("QUOTE", "Cannot open %s", quote_text::CLIPPINGS_PATH);
@@ -61,15 +86,15 @@ void QuoteSelectActivity::appendClipping(const std::string& quote, const uint32_
   LOG_INF("QUOTE", "Clipping added to %s", quote_text::CLIPPINGS_PATH);
 }
 
-// Atomic-ish read-modify-write append of one "[chapter @anchor]\nquote\n---\n\n"
+// Atomic-ish read-modify-write append of one "[chapter @anchor]\nquote\n(> note\n)---\n\n"
 // entry to the "<book>_QUOTES.txt" sidecar: stream existing bytes + the new entry
 // into a .tmp, then rotate primary -> .bak, .tmp -> primary, drop .bak (restore
 // .bak on promote failure). Refused when the file would exceed MAX_QUOTES_FILE_BYTES.
 bool QuoteSelectActivity::saveQuoteToFile(const std::string& quote, const std::string& anchorToken,
-                                          const quote_text::QuoteMeta& meta) {
+                                          const quote_text::QuoteMeta& meta, const std::string& note) {
   const std::string path = quote_text::quotesFilePathFor(epub.getPath());
   const std::string tmpPath = path + ".tmp";
-  const std::string entry = quote_text::formatQuoteEntry(chapterTitle(), anchorToken, quote, meta);
+  const std::string entry = quote_text::formatQuoteEntry(chapterTitle(), anchorToken, quote, meta, note);
 
   size_t existingSize = 0;
   if (Storage.exists(path.c_str())) {

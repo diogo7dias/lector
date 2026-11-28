@@ -12,6 +12,7 @@
 #include "EpubReaderActivity.h"
 #include "QuoteSelectActivity.h"
 #include "QuoteUnderline.h"
+#include "QuotesViewerActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "util/QuoteText.h"
 
@@ -212,4 +213,24 @@ void EpubReaderActivity::drawQuoteUnderlines(const Page& page, const int marginL
     }
   }
   drawSegments();
+}
+
+void EpubReaderActivity::openQuotesViewer() {
+  // The row only appears when the sidecar exists, so the viewer opens straight
+  // onto the file Grab Quote wrote.
+  startActivityForResult(
+      std::make_unique<QuotesViewerActivity>(renderer, mappedInput, quote_text::quotesFilePathFor(epub->getPath())),
+      [this](const ActivityResult& result) {
+        loadQuoteAnchors();  // a delete in there rewrites the sidecar
+        if (!result.isCancelled) {
+          if (const auto* jump = std::get_if<ProgressChangeResult>(&result.data)) {
+            if (jump->spineIndex >= 0 && jump->spineIndex < epub->getSpineItemsCount()) {
+              RenderLock lock(*this);
+              recordJumpOrigin(true);
+              jumpToContentOffset(jump->spineIndex, jump->hasVisibleTextOffset ? jump->visibleTextOffset : 0);
+            }
+          }
+        }
+        requestUpdate();
+      });
 }

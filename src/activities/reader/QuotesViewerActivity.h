@@ -24,6 +24,8 @@ class QuotesViewerActivity final : public UiListActivity {
     std::string anchor;
     quote_text::QuoteMeta meta;  // save time and text offset, kept on rewrite like the anchor
     std::string text;
+    std::string note;
+    std::string displayLabel;  // "text\n> note"; empty without a note, so the text is not held twice
   };
 
   QuotesViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& quotesFilePath)
@@ -36,7 +38,7 @@ class QuotesViewerActivity final : public UiListActivity {
  protected:
   int listCount() const override { return static_cast<int>(quotes.size()); }
   void buildScreen(UiScreen& screen) override;
-  void activateIndex(int index) override {}
+  void activateIndex(int index) override;
   void onRowLongPress(int index) override;
   bool handleButtons() override;
   void onBackButton() override;

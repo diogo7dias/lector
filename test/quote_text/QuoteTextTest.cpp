@@ -235,3 +235,60 @@ TEST(QuoteText, KindleClippingLayout) {
   EXPECT_EQ("Dune (Frank Herbert)\n- Your Highlight on Page 1\n\nq\n==========\n",
             formatClipping("Dune", "Frank Herbert", "", 1, "q", 0));
 }
+
+TEST(QuoteText, NoteRoundTripsInSidecarEntry) {
+  QuoteMeta meta;
+  meta.savedAt = 1763590000u;
+  meta.textOffset = 4200;
+  const std::string entry = formatQuoteEntry("Ch 1", "@q1:3,7,2", "Fear is the mind-killer.", meta, "Key litany");
+  EXPECT_EQ("\f[Ch 1 @o:4200 @t:1763590000 @q1:3,7,2]\nFear is the mind-killer.\n> Key litany\n---\n\n", entry);
+
+  size_t pos = 0;
+  QuoteRecord rec;
+  ASSERT_TRUE(nextQuoteRecord(entry, pos, rec));
+  EXPECT_TRUE(rec.hasHeader);
+  EXPECT_EQ("Fear is the mind-killer.", entry.substr(rec.textStart, rec.textEnd - rec.textStart));
+  EXPECT_TRUE(rec.hasNote);
+  EXPECT_EQ("Key litany", entry.substr(rec.noteStart, rec.noteEnd - rec.noteStart));
+  EXPECT_FALSE(nextQuoteRecord(entry, pos, rec));
+}
+
+TEST(QuoteText, NoteSanitizesNewlinesAndCapsAtMaxLength) {
+  EXPECT_EQ("line one line two", sanitizeNote("  line one\r\nline two \n "));
+  EXPECT_EQ("", sanitizeNote("   \n\r\t  "));
+  const std::string longNote(MAX_NOTE_LENGTH + 40, 'x');
+  EXPECT_EQ(MAX_NOTE_LENGTH, sanitizeNote(longNote).size());
+  // Whitespace-only note produces identical byte-for-byte sidecar entry without "> ".
+  EXPECT_EQ(formatQuoteEntry("Ch 1", "", "quote"), formatQuoteEntry("Ch 1", "", "quote", {}, "   \n"));
+}
+
+TEST(QuoteText, LegacyEntryWithoutNoteReportsNoNote) {
+  const std::string entry = formatQuoteEntry("Ch 1", "@q1:1,2,3", "Plain quote");
+  size_t pos = 0;
+  QuoteRecord rec;
+  ASSERT_TRUE(nextQuoteRecord(entry, pos, rec));
+  EXPECT_FALSE(rec.hasNote);
+  EXPECT_EQ("Plain quote", entry.substr(rec.textStart, rec.textEnd - rec.textStart));
+}
+
+TEST(QuoteText, KindleNoteClippingLayout) {
+  EXPECT_EQ(
+      "Dune (Frank Herbert)\n- Your Note on Page 12 | Book One | Added on Thursday, November 19, 2026, 10:05 PM"
+      "\n\nKey litany\n==========\n",
+      formatNoteClipping("Dune", "Frank Herbert", "Book One", 12, "Key litany", 1795125907));
+  EXPECT_EQ("Dune (Frank Herbert)\n- Your Note on Page 1\n\nn\n==========\n",
+            formatNoteClipping("Dune", "Frank Herbert", "", 1, "n", 0));
+}
+
+// A quote that itself starts with '>' is text, never a note: a misparse would empty the
+// text and the next viewer rewrite would drop the quote.
+TEST(QuoteText, QuoteStartingWithAngleBracketIsNotANote) {
+  for (const std::string& entry :
+       {formatQuoteEntry("Ch 1", "@q1:1,2,3", "> quoted line"), std::string("> quoted line\n---\n\n")}) {
+    size_t pos = 0;
+    QuoteRecord rec;
+    ASSERT_TRUE(nextQuoteRecord(entry, pos, rec));
+    EXPECT_FALSE(rec.hasNote);
+    EXPECT_EQ("> quoted line", entry.substr(rec.textStart, rec.textEnd - rec.textStart));
+  }
+}

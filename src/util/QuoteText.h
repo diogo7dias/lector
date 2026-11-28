@@ -15,9 +15,39 @@ namespace quote_text {
 // Cap for a single joined quote (bytes). Matches the DX34 heritage limit.
 inline constexpr size_t MAX_QUOTE_LENGTH = 8192;
 
+// Cap for an attached note on a quote (bytes).
+inline constexpr size_t MAX_NOTE_LENGTH = 240;
+
 // Cap for the whole "<book>_QUOTES.txt" sidecar (bytes). A save that would
 // exceed it is refused rather than growing the file unbounded on the SD card.
 inline constexpr size_t MAX_QUOTES_FILE_BYTES = 24 * 1024;
+
+// Collapse newlines into spaces, trim edges, and cap at MAX_NOTE_LENGTH without
+// splitting a UTF-8 codepoint so a note always stays one clean "> note" line.
+inline std::string sanitizeNote(const std::string& raw, const size_t maxLen = MAX_NOTE_LENGTH) {
+  std::string out;
+  out.reserve(raw.size() < maxLen ? raw.size() : maxLen);
+  bool prevSpace = true;
+  for (const char c : raw) {
+    if (c == '\r' || c == '\n' || c == '\t' || c == ' ') {
+      if (!prevSpace) {
+        out.push_back(' ');
+        prevSpace = true;
+      }
+    } else {
+      out.push_back(c);
+      prevSpace = false;
+    }
+  }
+  while (!out.empty() && out.back() == ' ') out.pop_back();
+  if (out.size() > maxLen) {
+    size_t cut = maxLen;
+    while (cut > 0 && (static_cast<uint8_t>(out[cut]) & 0xC0) == 0x80) --cut;
+    out.erase(cut);
+    while (!out.empty() && out.back() == ' ') out.pop_back();
+  }
+  return out;
+}
 
 // "<book>.epub" -> "<book>_QUOTES.txt" (strips the last extension). A path with
 // no extension gets the suffix appended. Mirrors the old fork's getQuotesFilePath.
@@ -176,13 +206,16 @@ inline bool isRecordGap(const char c) { return c == '\n' || c == '\r' || c == ' 
 
 // One record of the sidecar, located in place so no parser copies what it skips:
 // the bracketed header field (chapter title plus any anchor token), if the record has
-// one, and the quote text up to, not including, its "\n---" separator.
+// one, the quote text, and an optional trailing "> note" line before "\n---".
 struct QuoteRecord {
   bool hasHeader = false;
   size_t headerStart = 0;
   size_t headerLen = 0;
   size_t textStart = 0;
   size_t textEnd = 0;
+  bool hasNote = false;
+  size_t noteStart = 0;
+  size_t noteEnd = 0;
 };
 
 // The one reader of the record grammar below. Parses the record at `pos` and moves
@@ -207,17 +240,35 @@ inline bool nextQuoteRecord(const std::string& buf, size_t& pos, QuoteRecord& ou
   const auto sep = buf.find("\n---", pos);
   out.textEnd = (sep == std::string::npos) ? buf.size() : sep;
   pos = (sep == std::string::npos) ? buf.size() : sep + 4;
+
+  // Split an optional trailing "\n> note" line out of the quote body so underline
+  // matching, snippets, viewer display, and BookOrbit sync all see clean text + note.
+  size_t trimEnd = out.textEnd;
+  while (trimEnd > out.textStart && (buf[trimEnd - 1] == '\r' || buf[trimEnd - 1] == '\n')) --trimEnd;
+  if (trimEnd > out.textStart) {
+    const auto nl = buf.rfind('\n', trimEnd - 1);
+    if (nl != std::string::npos && nl >= out.textStart && nl + 1 < trimEnd && buf[nl + 1] == '>') {
+      size_t ns = nl + 2;
+      if (ns < trimEnd && buf[ns] == ' ') ++ns;
+      out.hasNote = true;
+      out.noteStart = ns;
+      out.noteEnd = trimEnd;
+      out.textEnd = nl;
+    }
+  }
   return true;
 }
 
-// One sidecar entry: "\f[chapter @q1:...]\nquote\n---\n\n". The anchor lives inside
-// the brackets on purpose: the record grammar (bracketed header line, body, "---")
-// is unchanged, so a reader that knows nothing about anchors still parses every
-// record. An empty token writes no anchor at all.
+// One sidecar entry: "\f[chapter @q1:...]\nquote\n(> note\n)---\n\n". The anchor lives
+// inside the brackets on purpose: the record grammar (bracketed header line, body, "---")
+// is unchanged, so a reader that knows nothing about anchors still parses every record.
+// An empty token writes no anchor at all; an empty note writes no "> " line.
 inline std::string formatQuoteEntry(const std::string& chapter, const std::string& anchorToken,
-                                    const std::string& quote, const QuoteMeta& meta = {}) {
+                                    const std::string& quote, const QuoteMeta& meta = {},
+                                    const std::string& note = {}) {
+  const std::string cleanNote = note.empty() ? std::string() : sanitizeNote(note);
   std::string entry;
-  entry.reserve(chapter.size() + anchorToken.size() + quote.size() + 40);
+  entry.reserve(chapter.size() + anchorToken.size() + quote.size() + cleanNote.size() + 44);
   entry.push_back(PAGE_BREAK);
   entry.push_back('[');
   entry.append(chapter);
@@ -235,6 +286,10 @@ inline std::string formatQuoteEntry(const std::string& chapter, const std::strin
   }
   entry.append("]\n");
   entry.append(quote);
+  if (!cleanNote.empty()) {
+    entry.append("\n> ");
+    entry.append(cleanNote);
+  }
   entry.append("\n---\n\n");
   return entry;
 }
@@ -272,13 +327,14 @@ inline constexpr char CLIPPINGS_PATH[] = "/My Clippings.txt";
 //   quote
 //   ==========
 // `localSeconds` 0 leaves "Added on" out (no clock).
-inline std::string formatClipping(const std::string& title, const std::string& author, const std::string& chapter,
-                                  const int page, const std::string& quote, const int64_t localSeconds) {
+inline std::string formatClippingOfKind(const char* kind, const std::string& title, const std::string& author,
+                                        const std::string& chapter, const int page, const std::string& body,
+                                        const int64_t localSeconds) {
   static constexpr const char* WEEKDAYS[] = {"Sunday",   "Monday", "Tuesday", "Wednesday",
                                              "Thursday", "Friday", "Saturday"};
   static constexpr const char* MONTHS[] = {"January", "February", "March",     "April",   "May",      "June",
                                            "July",    "August",   "September", "October", "November", "December"};
-  std::string entry = title + " (" + author + ")\n- Your Highlight on Page " + std::to_string(page);
+  std::string entry = title + " (" + author + ")\n- Your " + kind + " on Page " + std::to_string(page);
   if (!chapter.empty()) entry += " | " + chapter;
   if (localSeconds != 0) {
     const time_t t = static_cast<time_t>(localSeconds);
@@ -290,8 +346,18 @@ inline std::string formatClipping(const std::string& title, const std::string& a
              tm.tm_mday, tm.tm_year + 1900, hour12, tm.tm_min, tm.tm_hour >= 12 ? "PM" : "AM");
     entry += added;
   }
-  entry += "\n\n" + quote + "\n==========\n";
+  entry += "\n\n" + body + "\n==========\n";
   return entry;
+}
+
+inline std::string formatClipping(const std::string& title, const std::string& author, const std::string& chapter,
+                                  const int page, const std::string& quote, const int64_t localSeconds) {
+  return formatClippingOfKind("Highlight", title, author, chapter, page, quote, localSeconds);
+}
+
+inline std::string formatNoteClipping(const std::string& title, const std::string& author, const std::string& chapter,
+                                      const int page, const std::string& note, const int64_t localSeconds) {
+  return formatClippingOfKind("Note", title, author, chapter, page, sanitizeNote(note), localSeconds);
 }
 
 }  // namespace quote_text
