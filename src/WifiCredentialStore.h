@@ -9,6 +9,7 @@
 struct WifiCredential {
   std::string ssid;
   std::string password;  // Plaintext in memory; obfuscated with hardware key on disk
+  bool hidden = false;   // True when added as a non-broadcasting (hidden) SSID
 };
 
 struct WifiCredentialSummary {
@@ -46,7 +47,7 @@ class WifiCredentialStore : public PersistableStore<WifiCredentialStore> {
   bool fromJson(JsonVariantConst doc);
 
   // Credential management
-  bool addCredential(const std::string& ssid, const std::string& password);
+  bool addCredential(const std::string& ssid, const std::string& password, bool hidden = false);
   bool removeCredential(const std::string& ssid);
   std::optional<WifiCredential> findCredential(const std::string& ssid) const;
   std::optional<WifiCredential> getCredentialAt(size_t index) const;
