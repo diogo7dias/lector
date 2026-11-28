@@ -672,8 +672,10 @@ and edits Wi-Fi networks and OPDS servers at `http://<device-ip>/settings`. It a
 **WebDAV**, so the card can be mounted as a network drive.
 
 The home page shows battery charge, free card space, and the books you have in progress.
-The file manager can zip several selected files into one download, and **Fetch from URL**
-hands the reader a link so it downloads the file itself instead of you uploading it.
+The file manager can zip several selected files into one download, **Fetch from URL**
+hands the reader a link so it downloads the file itself instead of you uploading it, and
+**Send Article** turns pasted plain text, Markdown, or HTML into a single-chapter EPUB3 in the
+browser and uploads it to `/articles/`.
 
 An upload that is cut off part way through does not have to start again. What arrived is kept
 beside the finished books under a `.part` name, which the library ignores, and uploading the
