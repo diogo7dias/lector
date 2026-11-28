@@ -207,7 +207,10 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
 
     startWebServer();
   } else {
-    // User cancelled - go back to mode selection
+    // User cancelled - turn the radio off before returning to mode selection so
+    // STA doesn't pin CPU frequency (HalPowerManager.cpp) or idle on battery.
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
     state = WebServerActivityState::MODE_SELECTION;
 
     startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
