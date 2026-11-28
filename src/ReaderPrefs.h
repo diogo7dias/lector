@@ -604,6 +604,14 @@ inline StatusBarBlock statusBarOf(const ReaderPrefs& p) {
   b.foldTitleSource();
   return b;
 }
+// Calm mode overlay: hides the status bar and off-bar without modifying stored prefs or themes.
+inline StatusBarBlock effectiveStatusBar(StatusBarBlock b, const bool calmMode) {
+  if (calmMode) {
+    b.enabled = 0;
+    b.offBar = StatusBarBlock::OFF_BAR_OFF;
+  }
+  return b;
+}
 inline void setStatusBarOf(ReaderPrefs& p, const StatusBarBlock& b) {
 #define CP_SB_TO_PREFS(prefsName, settingsName, blockName) p.prefsName = b.blockName;
   READER_STATUS_BAR_FIELDS(CP_SB_TO_PREFS)

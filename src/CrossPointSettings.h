@@ -233,6 +233,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr auto LP_MENU_CONFIRM = bound_action::LP_MENU_CONFIRM;
   static constexpr auto LP_MENU_NEXT_CHAPTER = bound_action::LP_MENU_NEXT_CHAPTER;
   static constexpr auto LP_MENU_PREV_CHAPTER = bound_action::LP_MENU_PREV_CHAPTER;
+  static constexpr auto LP_MENU_CALM_MODE = bound_action::LP_MENU_CALM_MODE;
   static constexpr auto LONG_PRESS_MENU_FUNCTION_COUNT = bound_action::LONG_PRESS_MENU_FUNCTION_COUNT;
 
   // The three buttons the Buttons screen binds, in the order it lists them. Left and
@@ -338,6 +339,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // With no SettingsList entry the generic loop cannot carry it, so it is saved and loaded
   // by hand in toJson/fromJson.
   uint8_t wallpaperRotationPaused = 0;
+  // Calm mode: hides status bar, off-bar, low-battery nag (until 5%) and centre-tap menu
+  // without mutating the saved status bar or any Reading Theme. Toggled via Quick Panel or binding.
+  uint8_t calmMode = 0;
   // Status bar (per-item v2 model). Legacy fixed-slot fields were removed. XTC keeps its own overlay.
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
   // Master on/off. NEVER read this field to decide whether to draw or reserve the bar —

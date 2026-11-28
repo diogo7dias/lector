@@ -275,6 +275,13 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
     pageOnScreen.store(false, std::memory_order_release);
     scheduleGhostCleanup();
   }
+  void onCalmModeChanged() override {
+    {
+      RenderLock lock(*this);
+      dropSectionForRelayout();
+    }
+    requestUpdate();
+  }
   bool handleForcedRefresh() override {
     {
       RenderLock lock(*this);

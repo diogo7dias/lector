@@ -1062,3 +1062,21 @@ TEST(ReaderPrefs, ACurrentRecordIsNeverConverted) {
   EXPECT_FALSE(migrated);
   expectEqual(now, loaded);
 }
+
+TEST(ReaderPrefs, CalmModeHidesStatusBarAndOffBarWithoutMutatingSavedPrefs) {
+  ReaderPrefs saved = makeSample();
+  saved.statusBarEnabled = 1;
+  saved.sbOffBar = 2;
+  const ReaderPrefs before = saved;
+
+  const StatusBarBlock calm = effectiveStatusBar(statusBarOf(saved), /*calmMode=*/true);
+  EXPECT_FALSE(calm.textOn());
+  EXPECT_FALSE(calm.progressBarsVisible());
+  EXPECT_EQ(calm.offBar, StatusBarBlock::OFF_BAR_OFF);
+
+  const StatusBarBlock restored = effectiveStatusBar(statusBarOf(saved), /*calmMode=*/false);
+  EXPECT_TRUE(restored.textOn());
+  EXPECT_TRUE(restored.progressBarsVisible());
+  EXPECT_EQ(restored.offBar, 2);
+  expectEqual(before, saved);
+}
