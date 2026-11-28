@@ -16,7 +16,7 @@ test('Quick Lock ignores input until its own gesture fires again', async ({ app,
   await expect(activity).toHaveText('Home', { timeout: 120_000 });
   await tapOnce(240, 729); // Settings
   await tapOnce(240, 249); // Controls
-  await tapOnce(100, 323); // Buttons
+  await tapOnce(100, 353); // Buttons
   await expect(activity).toHaveText('ButtonBindings', { timeout: 30_000 });
   await tapOnce(100, 168); // Home Button
   await tapOnce(100, 288); // Outside Book, Single Click

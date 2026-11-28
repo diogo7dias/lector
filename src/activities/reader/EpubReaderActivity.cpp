@@ -173,6 +173,7 @@ void EpubReaderActivity::rememberBookOnceRendered() {
 
 void EpubReaderActivity::onExit() {
   Activity::onExit();
+  if (edgeSlider.finish()) SETTINGS.saveToFile();
   // The reading font's Character Spacing ends with the book.
   renderer.setCharacterSpacing(0, 0);
 

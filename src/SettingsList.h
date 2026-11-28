@@ -340,6 +340,11 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
   emit(SettingInfo::Enum(StrId::STR_SHOW_READER_MENU, &CrossPointSettings::showReaderMenu,
                          {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP}, "tapForReaderMenu", StrId::STR_CAT_CONTROLS));
 
+  emit(SettingInfo::Enum(StrId::STR_TAP_ZONE_LAYOUT, &CrossPointSettings::tapZoneLayout,
+                         {StrId::STR_TAP_ZONE_RIGHT_HANDED, StrId::STR_TAP_ZONE_LEFT_HANDED,
+                          StrId::STR_TAP_ZONE_TOP_BOTTOM, StrId::STR_TAP_ZONE_EQUAL_THIRDS},
+                         "tapZoneLayout", StrId::STR_CAT_CONTROLS));
+
   emit(SettingInfo::Enum(StrId::STR_HOME_BACK_ACTION, &CrossPointSettings::homeBackAction,
                          {StrId::STR_NONE_OPT, StrId::STR_RESUME, StrId::STR_NONE_OPT, StrId::STR_SORTES},
                          "homeBackAction", StrId::STR_CAT_CONTROLS)

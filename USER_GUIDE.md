@@ -60,14 +60,21 @@ and the side buttons can be swapped or disabled with **Side Button Layout (reade
 **Settings > Controls > Touch Reader Controls** switches touch page turning on or off. With it
 on, **Next Page** and **Previous Page** each take their own gesture: Tap & Swipe, Tap Only,
 Swipe Only (the default), Inverted Tap or Disabled. A swipe to the left goes on, a swipe to the
-right goes back. Taps turn from the outer thirds of the page, or from the whole page when only
-one direction accepts taps; the centre of the page opens the reader menu. Inverted Tap on either
-direction swaps the two sides. In a right-to-left EPUB (language Hebrew, Arabic or Persian) the swipes and
-the tap sides run the other way. Older settings files carry over: the old Tap, Swipe and
-Inverted Tap become the matching gesture for both directions.
+right goes back. **Tap Zone Layout** chooses how taps split the page, with no dead zones:
+Right-handed 25/75 (left 25% previous, right 75% next, the default), Left-handed 75/25 (left 75%
+next, right 25% previous), Top/Bottom (top half previous, bottom half next) or Equal Thirds (left
+third previous, middle third menu, right third next). When only one direction accepts taps, it gets
+the whole page outside the centre menu zone. Inverted Tap on either direction swaps the two sides.
+In a right-to-left EPUB (language Hebrew, Arabic or Persian) the swipes and the tap sides run the
+other way. Older settings files carry over: the old Tap, Swipe and Inverted Tap become the matching
+gesture for both directions.
 
 **Show Reader Menu** (Settings > Controls) turns the centre tap **Tap** or **Off**. Inside a
-book, a swipe up from the bottom edge always opens the reader menu.
+book, a swipe up from the bottom edge always opens the reader menu. On devices with a frontlight
+and touch screen (such as the X4 Pro), a vertical drag inside the outer 12% strips while reading
+adjusts the light live without opening the Light Panel or flashing the screen: slide up or down on
+the left edge for brightness, or on the right edge for warmth. The new level is saved once you lift
+your finger.
 
 ### Tapping, on a device with a touch screen
 
