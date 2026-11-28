@@ -145,13 +145,17 @@ void CrossPointWebServer::begin() {
   }
 
   server->addMiddleware([this](WebServer&, Middleware::Callback next) {
-    lastRequestAt = millis();
-    return next();
+    noteActivity();
+    const bool handled = next();
+    noteActivity();
+    return handled;
   });
 
-  // Disable WiFi sleep to improve responsiveness and prevent 'unreachable' errors.
-  // This is critical for reliable web server operation on ESP32.
-  WiFi.setSleep(false);
+  // Start at full radio power for initial page/mDNS responsiveness; handleClient()
+  // drops STA mode to WIFI_PS_MIN_MODEM after 15 s idle and restores WIFI_PS_NONE
+  // when traffic resumes.
+  WiFi.setSleep(WIFI_PS_NONE);
+  powerSave.reset(millis());
   // Default varies by ESP32 core version. The activity's loss-recovery loop
   // relies on driver retries during transient disconnects.
   WiFi.setAutoReconnect(true);
@@ -254,7 +258,9 @@ void CrossPointWebServer::begin() {
   // catches hard CPU lockups, matching the rest of the application lifecycle.
 
   running = true;
-  lastRequestAt = millis();
+  const unsigned long now = millis();
+  lastRequestAt = now;
+  powerSave.reset(now);
 
   LOG_DBG("WEB", "Web server started on port %d", port);
   // Show the correct IP based on network mode
@@ -334,6 +340,7 @@ void CrossPointWebServer::stop() {
 
   LOG_DBG("WEB", "STOP INITIATED - setting running=false first");
   running = false;  // Set this FIRST to prevent handleClient from using server
+  powerSave.reset(0);
 
   LOG_DBG("WEB", "[MEM] Free heap before stop: %d bytes", ESP.getFreeHeap());
 
@@ -407,6 +414,21 @@ void CrossPointWebServer::handleClient() {
   if (fetch.state == FetchStatus::State::Queued) {
     runQueuedFetch();
   }
+
+  if (powerSave.shouldEnterModemSleep(millis(), apMode, wsUploadInProgress || fetchActive())) {
+    WiFi.setSleep(WIFI_PS_MIN_MODEM);
+    LOG_INF("WEB", "Server idle %lu s; Wi-Fi power save -> WIFI_PS_MIN_MODEM",
+            static_cast<unsigned long>(web_power_save::IDLE_BEFORE_MODEM_SLEEP_MS / 1000UL));
+  }
+}
+
+void CrossPointWebServer::noteActivity() {
+  const unsigned long now = millis();
+  lastRequestAt = now;
+  if (powerSave.noteActivity(now)) {
+    WiFi.setSleep(WIFI_PS_NONE);
+    LOG_INF("WEB", "Traffic resumed; Wi-Fi power save -> WIFI_PS_NONE");
+  }
 }
 
 // Discovery uses a plain socket: NetworkUDP keeps a 1,460-byte send buffer
@@ -434,7 +456,7 @@ void CrossPointWebServer::closeDiscoverySocket() {
 }
 
 // Answers a "hello" broadcast with the device name and WebSocket port.
-void CrossPointWebServer::answerDiscovery() const {
+void CrossPointWebServer::answerDiscovery() {
   if (discoverySocket < 0) return;
   char buffer[16];
   sockaddr_in from = {};
@@ -444,6 +466,7 @@ void CrossPointWebServer::answerDiscovery() const {
   if (len <= 0) return;
   buffer[len] = '\0';
   if (strcmp(buffer, "hello") != 0) return;
+  noteActivity();
   const char* hostname = WiFi.getHostname();
   char message[96];
   const int messageLen = snprintf(message, sizeof(message), "crosspoint (on %s);%u",
@@ -2076,7 +2099,7 @@ void CrossPointWebServer::wsEventCallback(uint8_t num, WStype_t type, uint8_t* p
 //   3. Server sends TEXT "PROGRESS:<received>:<total>" after each chunk
 //   4. Server sends TEXT "DONE" or "ERROR:<message>" when complete
 void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
-  lastRequestAt = millis();
+  noteActivity();
   switch (type) {
     case WStype_DISCONNECTED:
       LOG_DBG("WS", "Client %u disconnected", num);
