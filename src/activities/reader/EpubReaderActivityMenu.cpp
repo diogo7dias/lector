@@ -169,7 +169,9 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
     case CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR:
     case CrossPointSettings::LP_MENU_ALIGN_LEFT:
     case CrossPointSettings::LP_MENU_ALIGN_JUSTIFY:
+    case CrossPointSettings::LP_MENU_TOGGLE_ALIGNMENT:
     case CrossPointSettings::LP_MENU_TOGGLE_PARAGRAPH_SPACING:
+    case CrossPointSettings::LP_MENU_READING_THEMES:
     // Bound to a key that does not already page (the Home key, or a side key whose single
     // was remapped), paging is an action like any other and the reader can always run it.
     case CrossPointSettings::LP_MENU_PAGE_PREV:
@@ -246,9 +248,14 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       requestUpdate();
       return true;
     case CrossPointSettings::LP_MENU_ALIGN_LEFT:
-    case CrossPointSettings::LP_MENU_ALIGN_JUSTIFY: {
-      const uint8_t alignment = function == CrossPointSettings::LP_MENU_ALIGN_LEFT ? CrossPointSettings::LEFT_ALIGN
-                                                                                   : CrossPointSettings::JUSTIFIED;
+    case CrossPointSettings::LP_MENU_ALIGN_JUSTIFY:
+    case CrossPointSettings::LP_MENU_TOGGLE_ALIGNMENT: {
+      const uint8_t alignment =
+          function == CrossPointSettings::LP_MENU_TOGGLE_ALIGNMENT
+              ? (prefs_.paragraphAlignment == CrossPointSettings::LEFT_ALIGN ? CrossPointSettings::JUSTIFIED
+                                                                             : CrossPointSettings::LEFT_ALIGN)
+              : (function == CrossPointSettings::LP_MENU_ALIGN_LEFT ? CrossPointSettings::LEFT_ALIGN
+                                                                    : CrossPointSettings::JUSTIFIED);
       // Already there: still consumed, so the press is not handed on as a dead one.
       if (prefs_.paragraphAlignment == alignment) return true;
       // Per-book, like Text Size in the same panel.
@@ -259,6 +266,9 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       requestUpdate();
       return true;
     }
+    case CrossPointSettings::LP_MENU_READING_THEMES:
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::READING_THEMES);
+      return true;
     case CrossPointSettings::LP_MENU_TOGGLE_PARAGRAPH_SPACING:
       // Per-book, like alignment beside it.
       prefs_.extraParagraphSpacing = prefs_.extraParagraphSpacing ? 0 : 1;

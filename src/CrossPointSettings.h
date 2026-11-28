@@ -78,8 +78,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
   enum STATUS_BAR_TITLE_SOURCE { SB_TITLE_BOOK = 0, SB_TITLE_CHAPTER = 1, STATUS_BAR_TITLE_SOURCE_COUNT };
   enum STATUS_BAR_PAGE_FORMAT {
-    SB_PAGE_FRACTION = 0,  // "3/40"
-    SB_PAGE_LEFT = 1,      // "8 left"
+    SB_PAGE_FRACTION = 0,      // "3/40"
+    SB_PAGE_LEFT = 1,          // "8 left"
+    SB_PAGE_BOOK_PERCENT = 2,  // "42%"
     STATUS_BAR_PAGE_FORMAT_COUNT
   };
   enum STATUS_BAR_EDGE { SB_EDGE_OFF = 0, SB_EDGE_TOP = 1, SB_EDGE_BOTTOM = 2, STATUS_BAR_EDGE_COUNT };
@@ -236,6 +237,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr auto LP_MENU_PREV_CHAPTER = bound_action::LP_MENU_PREV_CHAPTER;
   static constexpr auto LP_MENU_CALM_MODE = bound_action::LP_MENU_CALM_MODE;
   static constexpr auto LP_MENU_RETURN = bound_action::LP_MENU_RETURN;
+  static constexpr auto LP_MENU_NIGHT_MODE = bound_action::LP_MENU_NIGHT_MODE;
+  static constexpr auto LP_MENU_READING_THEMES = bound_action::LP_MENU_READING_THEMES;
+  static constexpr auto LP_MENU_TOGGLE_ALIGNMENT = bound_action::LP_MENU_TOGGLE_ALIGNMENT;
   static constexpr auto LONG_PRESS_MENU_FUNCTION_COUNT = bound_action::LONG_PRESS_MENU_FUNCTION_COUNT;
 
   // The three buttons the Buttons screen binds, in the order it lists them. Left and

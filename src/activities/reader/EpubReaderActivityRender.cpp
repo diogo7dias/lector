@@ -27,23 +27,12 @@
 #include "util/ScreenshotUtil.h"
 #include "util/SortesSelection.h"
 
-// Where the page sits on screen: the reading margins plus the status bar bands. render()
-// lays the page out inside these, and every overlay that hit-tests words on it (dictionary
-// pick, quote grab) must use the same, or a hold lands a line off.
-void EpubReaderActivity::pageMargins(int& top, int& right, int& bottom, int& left, const int spine) {
-  // This book's own bar, masked by Calm Mode without modifying stored prefs or themes.
+// The status bar bands for this book's own bar, masked by Calm Mode without modifying stored
+// prefs or themes. A greedy (truncate-off) title can wrap to several lines; the extra band
+// height goes to whichever edge holds the title so the reading text is pushed clear. Stacked
+// titles (book above chapter) need a line each, whatever Truncate Title says.
+void EpubReaderActivity::statusBarBandHeights(int& sbTop, int& sbBottom, const int spine) const {
   const StatusBarBlock sb = effectiveStatusBar(statusBarOf(prefs_), SETTINGS.calmMode != 0);
-
-  ReaderUtils::readerMargins(renderer, prefs_, top, right, bottom, left);
-
-  // Status bar (v2 per-item): reserve top and/or bottom bands. readerMargins
-  // already folded the reading margins into top/bottom; the band is
-  // ADDED on top of that (a real gap between the bar and the text), matching the
-  // additive left/right margins. Changing the band shifts the viewport, which
-  // re-paginates the section cache like any margin change.
-  // A greedy (truncate-off) title can wrap to several lines; reserve the extra band
-  // height in whichever edge holds the title so the reading text is pushed clear.
-  // Stacked titles (book above chapter) need a line each, whatever Truncate Title says.
   int sbTitleExtraPx = 0;
   bool sbTitleTop = false;
   if (sb.textOn() && sb.titleSlot(true).anchor != CrossPointSettings::SB_ANCHOR_OFF) {
@@ -58,8 +47,22 @@ void EpubReaderActivity::pageMargins(int& top, int& right, int& bottom, int& lef
                                                         epub->getTitle().c_str(), &sbTitleTop);
     sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
   }
-  const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(sb, true, sbTitleTop ? sbTitleExtraPx : 0);
-  const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(sb, true, sbTitleTop ? 0 : sbTitleExtraPx);
+  sbTop = UITheme::getInstance().getStatusBarV2TopHeight(sb, true, sbTitleTop ? sbTitleExtraPx : 0);
+  sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(sb, true, sbTitleTop ? 0 : sbTitleExtraPx);
+}
+
+// Where the page sits on screen: the reading margins plus the status bar bands. render()
+// lays the page out inside these, and every overlay that hit-tests words on it (dictionary
+// pick, quote grab) must use the same, or a hold lands a line off.
+void EpubReaderActivity::pageMargins(int& top, int& right, int& bottom, int& left, const int spine) {
+  ReaderUtils::readerMargins(renderer, prefs_, top, right, bottom, left);
+  // Status bar (v2 per-item): reserve top and/or bottom bands. readerMargins already folded
+  // the reading margins into top/bottom; the band is ADDED on top of that (a real gap between
+  // the bar and the text), matching the additive left/right margins. Changing the band shifts
+  // the viewport, which re-paginates the section cache like any margin change.
+  int sbTop = 0;
+  int sbBottom = 0;
+  statusBarBandHeights(sbTop, sbBottom, spine);
   top += sbTop;
   bottom += sbBottom;
 }

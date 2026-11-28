@@ -88,3 +88,12 @@ TEST(BoundActionScope, ReturnRequiresOpenBookAndKeepsEnumOrder) {
   EXPECT_FALSE(allowedOutsideBook(LP_MENU_RETURN));
   EXPECT_EQ(LP_MENU_RETURN, LP_MENU_CALM_MODE + 1);
 }
+
+TEST(BoundActionScope, NightModeWorksAnywhereWhileThemesAndAlignToggleNeedABook) {
+  EXPECT_TRUE(allowedOutsideBook(LP_MENU_NIGHT_MODE));
+  EXPECT_FALSE(allowedOutsideBook(LP_MENU_READING_THEMES));
+  EXPECT_FALSE(allowedOutsideBook(LP_MENU_TOGGLE_ALIGNMENT));
+  EXPECT_EQ(LP_MENU_NIGHT_MODE, LP_MENU_RETURN + 1);
+  EXPECT_EQ(LP_MENU_READING_THEMES, LP_MENU_RETURN + 2);
+  EXPECT_EQ(LP_MENU_TOGGLE_ALIGNMENT, LP_MENU_RETURN + 3);
+}

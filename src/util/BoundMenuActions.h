@@ -110,6 +110,12 @@ enum LONG_PRESS_MENU_FUNCTION {
   LP_MENU_CALM_MODE = 41,
   // Jumps back to the last deliberate-jump origin (same as Navigate > Return).
   LP_MENU_RETURN = 42,
+  // Flips Night mode (inverted display on reading surfaces) globally.
+  LP_MENU_NIGHT_MODE = 43,
+  // Opens Reading Themes for the open EPUB.
+  LP_MENU_READING_THEMES = 44,
+  // Flips paragraph alignment between Left and Justify (used in the Quick Panel to free a slot).
+  LP_MENU_TOGGLE_ALIGNMENT = 45,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 

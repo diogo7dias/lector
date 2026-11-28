@@ -104,6 +104,12 @@ inline StrId boundMenuActionLabel(const uint8_t function) {
       return StrId::STR_CALM_MODE;
     case CrossPointSettings::LP_MENU_RETURN:
       return StrId::STR_RETURN;
+    case CrossPointSettings::LP_MENU_NIGHT_MODE:
+      return StrId::STR_NIGHT_MODE;
+    case CrossPointSettings::LP_MENU_READING_THEMES:
+      return StrId::STR_READING_THEMES;
+    case CrossPointSettings::LP_MENU_TOGGLE_ALIGNMENT:
+      return StrId::STR_ALIGN_TOGGLE;
     case CrossPointSettings::LP_MENU_POPUP:
     default:
       return StrId::STR_MENU_POPUP;

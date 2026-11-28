@@ -161,7 +161,10 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   void toolbarReturn();
   // Reading margins plus status bar bands: where render() puts the page.
   // spine: whose chapter title sizes the status bar band (default: the open chapter).
+  void statusBarBandHeights(int& sbTop, int& sbBottom, int spine = -1) const;
   void pageMargins(int& top, int& right, int& bottom, int& left, int spine = -1);
+  // Touch boards only: tapping the status bar band cycles N/M -> N left -> Book % -> Hidden.
+  bool handleStatusBarTap();
   ChapterLabel currentChapterLabel() const;
   void openDictionaryWordSelect();
   // Opens the Grab Quote word-range picker on the current page.

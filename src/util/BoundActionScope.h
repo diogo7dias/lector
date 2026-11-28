@@ -29,6 +29,7 @@ inline bool allowedOutsideBook(const uint8_t function) {
     case LP_MENU_TOGGLE_FRONTLIGHT:
     case LP_MENU_CONFIRM:
     case LP_MENU_CALM_MODE:
+    case LP_MENU_NIGHT_MODE:
       return true;
     default:
       return false;

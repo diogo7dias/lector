@@ -881,10 +881,12 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
     }
   }
   if (slot.bookItem != 0 && !data.bookTitle.empty()) set(statusbar::BookTitle, data.bookTitle.c_str());
-  // Page in chapter ("3/40" or "8 left")
+  // Page in chapter ("3/40", "8 left", or "42%")
   if (sb.pageFormat == CrossPointSettings::SB_PAGE_LEFT) {
     const int remaining = data.chapterPages - data.chapterPage;
     snprintf(pageBuf, sizeof(pageBuf), "%d left", remaining > 0 ? remaining : 0);
+  } else if (sb.pageFormat == CrossPointSettings::SB_PAGE_BOOK_PERCENT) {
+    snprintf(pageBuf, sizeof(pageBuf), "%d%%", data.bookPercent);
   } else {
     snprintf(pageBuf, sizeof(pageBuf), "%d/%d", data.chapterPage, data.chapterPages);
   }

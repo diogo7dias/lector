@@ -717,7 +717,7 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
                          StrId::STR_CUSTOMISE_STATUS_BAR));
 
   emit(SettingInfo::Enum(StrId::STR_PAGE_FORMAT, &CrossPointSettings::sbPageFormat,
-                         {StrId::STR_PAGE_FRACTION, StrId::STR_PAGE_LEFT}, "sbPageFormat",
+                         {StrId::STR_PAGE_FRACTION, StrId::STR_PAGE_LEFT, StrId::STR_BOOK_PERCENT}, "sbPageFormat",
                          StrId::STR_CUSTOMISE_STATUS_BAR));
 
   emit(SettingInfo::Enum(StrId::STR_BOOK_PERCENT, &CrossPointSettings::sbBookPctPos, anchorPositions, "sbBookPctPos",

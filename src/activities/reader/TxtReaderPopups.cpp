@@ -236,9 +236,19 @@ bool TxtReaderActivity::runBoundAction(const uint8_t function) {
     return true;
   }
 
-  if (function == CrossPointSettings::LP_MENU_ALIGN_LEFT || function == CrossPointSettings::LP_MENU_ALIGN_JUSTIFY) {
-    const uint8_t alignment = function == CrossPointSettings::LP_MENU_ALIGN_LEFT ? CrossPointSettings::LEFT_ALIGN
-                                                                                 : CrossPointSettings::JUSTIFIED;
+  if (function == CrossPointSettings::LP_MENU_READING_THEMES) {
+    openReadingThemes();
+    return true;
+  }
+
+  if (function == CrossPointSettings::LP_MENU_ALIGN_LEFT || function == CrossPointSettings::LP_MENU_ALIGN_JUSTIFY ||
+      function == CrossPointSettings::LP_MENU_TOGGLE_ALIGNMENT) {
+    const uint8_t alignment =
+        function == CrossPointSettings::LP_MENU_TOGGLE_ALIGNMENT
+            ? (prefs_.paragraphAlignment == CrossPointSettings::LEFT_ALIGN ? CrossPointSettings::JUSTIFIED
+                                                                           : CrossPointSettings::LEFT_ALIGN)
+            : (function == CrossPointSettings::LP_MENU_ALIGN_LEFT ? CrossPointSettings::LEFT_ALIGN
+                                                                  : CrossPointSettings::JUSTIFIED);
     if (prefs_.paragraphAlignment == alignment) return true;
     prefs_.paragraphAlignment = alignment;
     prefsCustom_ = true;

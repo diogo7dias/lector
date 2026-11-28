@@ -284,6 +284,7 @@ add_subdirectory(auto_sync_join)
 add_subdirectory(web_power_save)
 add_subdirectory(idle_prewarm_timing)
 add_subdirectory(busy_wait_isr)
+add_subdirectory(status_bar_tap)
 
 if(LECTOR_FUZZ)
   add_subdirectory(fuzz)

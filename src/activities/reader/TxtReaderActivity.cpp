@@ -32,6 +32,7 @@
 #include "util/BookProgressFile.h"
 #include "util/ProgressFile.h"
 #include "util/ReadingPercent.h"
+#include "util/StatusBarTapCycle.h"
 
 void TxtReaderActivity::onEnter() {
   Activity::onEnter();
@@ -118,8 +119,43 @@ void TxtReaderActivity::loop() {
   // child screen that closed on press, instead of reading it as "leave the book".
   backLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Back));
 
-  // Touch on the open page, read once per loop, as in EpubReaderActivity: a tap or swipe
+  // Touch on the open page, read once per loop, as in EpubReaderActivity: a tap on the
+  // status bar band cycles N/M -> N left -> Book % -> Hidden; otherwise a tap or swipe
   // turns the page, and the menu gesture opens what Confirm opens here.
+  // Under the Touch Reader Controls master switch, like every touch on the open page. Calm
+  // Mode hides the bar without touching the stored prefs, so the cycle is off under it.
+  if (mappedInput.hasTouch() && SETTINGS.touchReaderControls != 0 && SETTINGS.calmMode == 0) {
+    int tx = 0;
+    int ty = 0;
+    if (mappedInput.wasScreenTapped(tx, ty)) {
+      int vt = 0, vr = 0, vb = 0, vl = 0;
+      renderer.getOrientedViewableTRBL(&vt, &vr, &vb, &vl);
+      const StatusBarBlock sb = statusBarOf(prefs_);
+      bool sbTitleTop = false;
+      const int sbTitleLines =
+          UITheme::getStatusBarV2TitleLines(sb, renderer, false, "", txt->getTitle().c_str(), &sbTitleTop);
+      const int sbTitleExtraPx = (sbTitleLines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
+      const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(sb, false, sbTitleTop ? sbTitleExtraPx : 0);
+      const int sbBottom =
+          UITheme::getInstance().getStatusBarV2BottomHeight(sb, false, sbTitleTop ? 0 : sbTitleExtraPx);
+      if (status_bar_tap::hitTestBand(renderer.getScreenHeight(), vt, vb, sbTop, sbBottom, sb.textOn(), ty)) {
+        // Per-book, like the status bar toggle (TxtReaderPopups.cpp).
+        const auto step = status_bar_tap::nextState({prefs_.statusBarEnabled, prefs_.sbPageFormat});
+        prefs_.statusBarEnabled = step.next.enabled;
+        prefs_.sbPageFormat = step.next.pageFormat;
+        prefsCustom_ = true;
+        writeReaderOverride(prefs_);
+        if (step.layoutChanged) {
+          quietIndex_ = true;
+          pagesUntilFullRefresh = 0;
+          relayoutForFontChange();
+        } else {
+          requestUpdate();
+        }
+        return;
+      }
+    }
+  }
   const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
   if (ReaderUtils::isTouchMenuGesture(renderer, mappedInput, touch.menu) ||
       mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
