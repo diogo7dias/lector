@@ -884,7 +884,11 @@ to **KOSync** in **Settings > Controls**.
 device last slept, Lector joins a saved Wi-Fi network, fetches the position and moves to it when
 the server is ahead. When the device goes to sleep after you turned pages, it sends the new
 position of every book you read since it last slept (up to four) from behind the sleep screen. It uses saved networks only and never shows the network
-list. If no saved network answers, the book simply opens where you left it. A server whose
+list. Before sending, it scans once and joins only a saved network it can see, so a lock
+away from every saved network costs about a second of Wi-Fi. A saved hidden network is tried
+only when it was saved through **Add hidden network...** on this version or a later one:
+forget one saved earlier and add it again. After a lock that reached no network, the next attempts wait 5 minutes, then
+longer (up to an hour); a position that was not sent goes out the next time you read that book. If no saved network answers, the book simply opens where you left it. A server whose
 certificate has not been trusted yet is skipped, so run **Sync Progress** once by hand first.
 Each pull costs a few seconds of Wi-Fi and a restart back into the book.
 
