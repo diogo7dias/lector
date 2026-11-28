@@ -1,4 +1,6 @@
 #pragma once
+#include <HalPowerManager.h>
+
 #include "EpubReaderMenuActivity.h"
 #include "EpubReaderState.h"
 #include "IdlePrewarmTiming.h"
@@ -46,9 +48,12 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   void renderStatusBar() const;
   // Gate for a background build tick: true when the heap can take parse allocations.
   // Updates buildHeapPaused as a side effect.
-  unsigned long lastInputMs = 0;
   bool buildTickHeapGate();
-  bool readerIdle() const { return idle_prewarm::isReady(millis(), lastInputMs, lastRenderCompleteMs); }
+  // Last loop pass that saw input: readerIdle() times the idle clock drop from it.
+  unsigned long lastInputMs = 0;
+  bool readerIdle() const {
+    return idle_prewarm::isReady(millis(), lastInputMs, lastRenderCompleteMs, HalPowerManager::IDLE_POWER_SAVING_MS);
+  }
   bool backgroundBuildWanted() const {
     return section && section->isBuilding() &&
            backgroundBuildTickWanted(section->isPartial(), static_cast<int>(section->pageCount), section->currentPage,
