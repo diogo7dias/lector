@@ -173,6 +173,7 @@ constexpr RowSpec ROW_SPECS[] = {
     {nullptr, StrId::STR_FONT, false},                                          // Font
     {nullptr, StrId::STR_SIZE, false},                                          // Size
     {&CrossPointSettings::paperbackLookBody, StrId::STR_NONE_OPT, false},       // PaperbackLook
+    {&CrossPointSettings::inkWeight, StrId::STR_NONE_OPT, false},               // InkWeight
     {&CrossPointSettings::lineSpacingPercent, StrId::STR_NONE_OPT, false},      // LineSpacing
     {&CrossPointSettings::extraParagraphSpacing, StrId::STR_NONE_OPT, false},   // ExtraSpacing
     {&CrossPointSettings::wordSpacing, StrId::STR_NONE_OPT, true},              // WordSpacing
@@ -257,6 +258,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
 
   // The two that change how the ink itself sits on the page.
   rows.push_back(Row::PaperbackLook);
+  rows.push_back(Row::InkWeight);
 
   rows.push_back(Row::LineSpacing);
   rows.push_back(Row::ExtraSpacing);

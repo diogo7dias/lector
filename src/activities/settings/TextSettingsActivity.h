@@ -52,6 +52,7 @@ class TextSettingsActivity final : public UiGridActivity {
     Font,
     Size,
     PaperbackLook,
+    InkWeight,
     LineSpacing,
     ExtraSpacing,
     WordSpacing,
