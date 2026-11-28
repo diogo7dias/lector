@@ -272,6 +272,7 @@ add_subdirectory(pinch_font_resize)
 add_subdirectory(reader_font_swap_lock)
 add_subdirectory(chapter_build_safety)
 add_subdirectory(page_jump)
+add_subdirectory(power_clock_policy)
 
 if(LECTOR_FUZZ)
   add_subdirectory(fuzz)
