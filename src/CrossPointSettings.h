@@ -320,6 +320,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // the indent just before the paragraph's first letter. Per-book, like the size.
   enum PARAGRAPH_NUMBER_PLACE { PARA_NUM_PLACE_EDGE = 0, PARA_NUM_PLACE_TEXT = 1, PARAGRAPH_NUMBER_PLACE_COUNT };
 
+  // Night mode image polarity: Normal Polarity counter-inverts images so photos look natural;
+  // Invert lets hardware inversion flip them with the page (for line diagrams).
+  enum NIGHT_MODE_IMAGES { NIGHT_IMAGES_NORMAL = 0, NIGHT_IMAGES_INVERT = 1, NIGHT_MODE_IMAGES_COUNT };
+
   // Sleep screen settings
   uint8_t sleepScreen = CUSTOM;
   // Use Quick Resume on idle-timeout sleep while keeping sleepScreen for manual locks.
@@ -327,6 +331,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Night mode: inverted output polarity on the reading surfaces only
   // (resolved per render by ActivityManager via Activity::appliesNightMode).
   uint8_t screenInverted = 0;
+  uint8_t nightModeImages = NIGHT_IMAGES_NORMAL;
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter

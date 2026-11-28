@@ -1539,8 +1539,8 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
 }
 
 void GfxRenderer::preserveImagePolarity(const int x, const int y, const int width, const int height) const {
-  if (renderMode != BW || !display.isInverted() || _stripActive || !frameBuffer || width <= 0 || height <= 0 ||
-      isFontCacheScanning()) {
+  if (renderMode != BW || !display.isInverted() || invertImagesInNightMode_ || _stripActive || !frameBuffer ||
+      width <= 0 || height <= 0 || isFontCacheScanning()) {
     return;
   }
 

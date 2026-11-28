@@ -109,6 +109,9 @@ class GfxRenderer {
   // Images: Display (B/W): image pixels dither to black and white in the B/W pass, and the
   // grayscale passes leave them alone. Set by the reader for the page it is drawing.
   bool ditherImagesInBw_ = false;
+  // Night Mode Images: false keeps natural photo polarity via preserveImagePolarity();
+  // true lets hardware inversion invert images with the page (for diagrams).
+  bool invertImagesInNightMode_ = false;
 
   // CJK UI font fallback map: primary (built-in, Latin-only) UI font id -> a
   // size-matched SD-card font id that carries CJK glyphs. When a string drawn
@@ -292,6 +295,9 @@ class GfxRenderer {
   int8_t getInkWeight() const { return inkWeight_; }
   void setDitherImagesInBw(const bool enabled) { ditherImagesInBw_ = enabled; }
   bool imagesDitheredInBw() const { return ditherImagesInBw_; }
+  void setInvertImagesInNightMode(const bool invert) { invertImagesInNightMode_ = invert; }
+  bool invertImagesInNightMode() const { return invertImagesInNightMode_; }
+  bool isDisplayInverted() const { return display.isInverted(); }
 
   // Drawing
   void drawPixel(int x, int y, bool state = true) const;

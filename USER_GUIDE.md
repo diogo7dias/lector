@@ -1331,6 +1331,7 @@ is centred.
   accents, and it does not change where the text sits, so pages keep their layout. Text
   Settings' preview and the quote and word selection screens show the page without it.
 - **Night mode** — inverts the screen.
+- **Night Mode Images** *(shown while Night mode is on)* — **Normal Polarity** (default) dithers images cleanly in black and white and keeps photos in their natural polarity while night mode is on; **Invert** lets them invert with the page, which suits white-background diagrams.
 - **Reader Menu Style** — **List** (the tabbed menu, the default) or **Toolbar**, see
   [section 6](#6-the-in-book-menu).
 - **Customise Status Bar** — see below.

@@ -1,5 +1,6 @@
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
+#include <Epub/converters/DitherUtils.h>
 #include <Epub/parsers/ArxHash.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
@@ -49,9 +50,10 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   scope.endScanAndPrewarm();
   const auto tPrewarm = millis();
 
-  // Images: Display (B/W): the page turns as plain B/W, images dither in the B/W pass and
-  // text keeps its anti-aliasing. The layout is the same as Display, so only the draw differs.
-  const bool imagesInBw = prefs_.imageRendering == CrossPointSettings::IMAGES_DISPLAY_BW;
+  // Images: Display (B/W) or Night mode (inverted display skips the hardware grayscale pass):
+  // dither images to two levels in the BW pass and skip the grayscale pass.
+  const bool imagesInBw = shouldDitherImagesInBw(prefs_.imageRendering == CrossPointSettings::IMAGES_DISPLAY_BW,
+                                                 renderer.isDisplayInverted());
   struct DitherScope {
     GfxRenderer& renderer;
     ~DitherScope() { renderer.setDitherImagesInBw(false); }

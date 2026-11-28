@@ -44,7 +44,7 @@ struct DirectPixelWriter {
     originY = renderer.getWriteOriginY();
     clipRows = renderer.getWriteRows();
     mode = renderer.getRenderMode();
-    ditherBw = renderer.imagesDitheredInBw();
+    ditherBw = shouldDitherImagesInBw(renderer.imagesDitheredInBw(), renderer.isDisplayInverted());
     displayWidthBytes = renderer.getDisplayWidthBytes();
 
     const int phyW = renderer.getDisplayWidth();

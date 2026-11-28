@@ -506,6 +506,10 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
                          {StrId::STR_MENU_STYLE_LIST, StrId::STR_MENU_STYLE_TOOLBAR}, "readerMenuStyle",
                          StrId::STR_CAT_READER));
 
+  emit(SettingInfo::Enum(StrId::STR_NIGHT_MODE_IMAGES, &CrossPointSettings::nightModeImages,
+                         {StrId::STR_NIGHT_IMAGES_NORMAL, StrId::STR_NIGHT_IMAGES_INVERT}, "nightModeImages",
+                         StrId::STR_CAT_READER));
+
   // --- Controls ---
   emit(SettingInfo::Enum(
       StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,

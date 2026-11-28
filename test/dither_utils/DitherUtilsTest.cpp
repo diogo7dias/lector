@@ -49,4 +49,44 @@ TEST(BwInkFromGray4, CellCoverageMatchesTheGrayLevel) {
   }
 }
 
+// Night mode skips the hardware grayscale pass, so BW pass must force Bayer dithering
+// whenever the display is inverted — otherwise gray levels 1 and 2 crush to solid blobs.
+TEST(NightModeImageDither, ForcesBayerDitherWhenDisplayInverted) {
+  EXPECT_FALSE(shouldDitherImagesInBw(/*imagesDisplayBw=*/false, /*displayInverted=*/false));
+  EXPECT_TRUE(shouldDitherImagesInBw(/*imagesDisplayBw=*/true, /*displayInverted=*/false));
+  EXPECT_TRUE(shouldDitherImagesInBw(/*imagesDisplayBw=*/false, /*displayInverted=*/true));
+  EXPECT_TRUE(shouldDitherImagesInBw(/*imagesDisplayBw=*/true, /*displayInverted=*/true));
+}
+
+// In night mode, Normal Polarity pre-inverts the image rectangle so the display's hardware
+// inversion cancels out and photos keep natural 4-level dithered tones (4/3/1/0 ink per 2x2).
+// Invert leaves the image un-flipped so diagrams render white-on-black (0/1/3/4 ink per 2x2).
+TEST(NightModeImageDither, NormalPolarityVsInvertProducesComplementaryTonesOnPanel) {
+  constexpr int NATURAL_INK[4] = {4, 3, 1, 0};
+  constexpr int INVERTED_INK[4] = {0, 1, 3, 4};
+  for (int level = 0; level < 4; ++level) {
+    int normalPanelInk = 0;
+    int invertPanelInk = 0;
+    for (int y = 0; y < 2; ++y) {
+      for (int x = 0; x < 2; ++x) {
+        const bool fbInk = bwInkFromGray4(static_cast<uint8_t>(level), x, y);
+        // Normal Polarity: preserveImagePolarity flips fbInk, then display inversion flips again.
+        const bool normalFbAfterPreserve = shouldPreserveImagePolarity(/*displayInverted=*/true,
+                                                                       /*invertImagesInNightMode=*/false)
+                                               ? !fbInk
+                                               : fbInk;
+        const bool invertFbAfterPreserve = shouldPreserveImagePolarity(/*displayInverted=*/true,
+                                                                       /*invertImagesInNightMode=*/true)
+                                               ? !fbInk
+                                               : fbInk;
+        // Hardware display inversion flips FB ink on the physical panel.
+        normalPanelInk += (!normalFbAfterPreserve) ? 1 : 0;
+        invertPanelInk += (!invertFbAfterPreserve) ? 1 : 0;
+      }
+    }
+    EXPECT_EQ(NATURAL_INK[level], normalPanelInk) << "Normal polarity level " << level;
+    EXPECT_EQ(INVERTED_INK[level], invertPanelInk) << "Invert polarity level " << level;
+  }
+}
+
 }  // namespace
