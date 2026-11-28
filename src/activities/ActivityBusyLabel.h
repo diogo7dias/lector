@@ -27,7 +27,7 @@ inline StrId labelFor(const std::string_view name) {
   }
   // Every reader shares one label: the user picked a book, not a format.
   if (name == activity_name::kReader || name == activity_name::kEpubReader || name == activity_name::kTxtReader ||
-      name == activity_name::kXtcReader) {
+      name == activity_name::kMarkdownReader || name == activity_name::kXtcReader) {
     return StrId::STR_BUSY_OPENING_BOOK;
   }
   // Anything that has to reach the network before it can draw. These are the waits
