@@ -77,5 +77,11 @@ class SdCardFontManager {
   // free of the (gated, incomplete here) type. Freed in unloadAll() and the destructor.
   TtfSdFont* ttf_ = nullptr;
   int ttfFontId_ = 0;
+  struct LoadedTtfVariant {
+    TtfSdFont* font;
+    int fontId;
+    uint8_t size;
+  };
+  std::vector<LoadedTtfVariant> ttfVariants_;
 #endif
 };

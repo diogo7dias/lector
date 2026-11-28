@@ -44,6 +44,32 @@ TEST(HintBand, ButtonBoardUsesTheWiderX3Positions) {
   EXPECT_EQ(hint_band::slot(band, 3).x, 384);
 }
 
+TEST(HintBand, TouchListHintsHideDeadSelectAndScrollLabels) {
+  const auto idle = hint_band::resolveListHints(/*hasTouch=*/true, /*showsSelection=*/false, /*scrolls=*/false, "Open",
+                                                "Up", "Down", "Page Up", "Page Down");
+  EXPECT_STREQ(idle.confirm, "");
+  EXPECT_STREQ(idle.third, "");
+  EXPECT_STREQ(idle.fourth, "");
+
+  const auto scrolling = hint_band::resolveListHints(/*hasTouch=*/true, /*showsSelection=*/true, /*scrolls=*/true,
+                                                     "Open", "Up", "Down", "Page Up", "Page Down");
+  EXPECT_STREQ(scrolling.confirm, "Open");
+  EXPECT_STREQ(scrolling.third, "Page Up");
+  EXPECT_STREQ(scrolling.fourth, "Page Down");
+
+  const auto custom = hint_band::resolveListHints(/*hasTouch=*/true, /*showsSelection=*/false, /*scrolls=*/false,
+                                                  "Open", "Up", "Down", "Page Up", "Page Down", "Move Here");
+  EXPECT_STREQ(custom.confirm, "");
+  EXPECT_STREQ(custom.third, "Move Here");
+  EXPECT_STREQ(custom.fourth, "");
+
+  const auto keys = hint_band::resolveListHints(/*hasTouch=*/false, /*showsSelection=*/false, /*scrolls=*/false, "Open",
+                                                "Up", "Down", "Page Up", "Page Down");
+  EXPECT_STREQ(keys.confirm, "Open");
+  EXPECT_STREQ(keys.third, "Up");
+  EXPECT_STREQ(keys.fourth, "Down");
+}
+
 TEST(HintBand, ATapInsideASlotNamesThatSlot) {
   const hint_band::Band band = touchBand();
   for (int i = 0; i < 4; ++i) {

@@ -73,6 +73,9 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
   provider.resolve = [](void* ctx, const int fontId, const float scale) {
     return static_cast<SdCardFontSystem*>(ctx)->resolveVariant(fontId, scale);
   };
+  provider.resolveMonospace = [](void* ctx, const int fontId, const float scale) {
+    return static_cast<SdCardFontSystem*>(ctx)->resolveMonospace(fontId, scale);
+  };
   provider.load = [](void* ctx, const int fontId) { return static_cast<SdCardFontSystem*>(ctx)->loadVariant(fontId); };
   renderer.setFontVariantProvider(provider);
 
@@ -134,6 +137,7 @@ void SdCardFontSystem::ensureLoadedImpl(GfxRenderer& renderer, const char* wante
     registry_.discover();
     discovered_ = true;
     partial_ = false;
+    monoProbed_ = false;
   }
 
   const std::string& currentFamily = manager_.currentFamilyName();
@@ -293,15 +297,83 @@ int SdCardFontSystem::resolveVariant(const int fontId, const float scale) {
   return loadCpfontVariant(*family, chosen, id) ? id : 0;
 }
 
+const SdCardFontFamilyInfo* SdCardFontSystem::findMonospaceFamily() const {
+  if (const auto* existing = registry_.findFamily(MONOSPACE_FAMILY_NAME)) return existing;
+  if (discovered_ && !partial_) return nullptr;
+  if (monoProbed_) return nullptr;
+  monoProbed_ = true;
+  if (registry_.discoverOne(MONOSPACE_FAMILY_NAME)) {
+    discovered_ = true;
+    partial_ = true;
+    return registry_.findFamily(MONOSPACE_FAMILY_NAME);
+  }
+  return nullptr;
+}
+
+int SdCardFontSystem::resolveMonospace(const int fontId, const float scale) {
+  const auto* family = findMonospaceFamily();
+  if (!family) return 0;
+
+  uint8_t base = builtinReaderPointSize(fontId);
+  if (base == 0) base = manager_.currentPointSize();
+  if (base == 0) base = CrossPointSettings::DEFAULT_FONT_POINT_SIZE;
+  const float target = base * scale;
+
+  uint8_t chosen = 0;
+#ifdef CROSSPOINT_TTF_READER
+  if (family->hasTtf()) {
+    chosen = family->resolvePointSize(static_cast<uint8_t>(std::clamp(std::lround(target), 1l, 255l)));
+  }
+#endif
+  if (chosen == 0) {
+    if (family->files.empty()) return 0;
+    if (scale < 1.0f) {
+      uint8_t atOrBelow = 0;
+      uint8_t smallest = family->files.front().pointSize;
+      for (const auto& file : family->files) {
+        if (file.pointSize <= target && file.pointSize > atOrBelow) atOrBelow = file.pointSize;
+        smallest = std::min(smallest, file.pointSize);
+      }
+      chosen = atOrBelow != 0 ? atOrBelow : smallest;
+    } else {
+      chosen = family->files.front().pointSize;
+      for (const auto& file : family->files) {
+        if (std::fabs(file.pointSize - target) < std::fabs(chosen - target)) chosen = file.pointSize;
+      }
+    }
+  }
+  if (chosen == 0) return 0;
+  const int id = variantFontId(MONOSPACE_VARIANT_SEED, chosen);
+  return loadCpfontVariant(*family, chosen, id) ? id : 0;
+}
+
 bool SdCardFontSystem::loadVariant(const int fontId) {
   const std::string& familyName = manager_.currentFamilyName();
-  if (familyName.empty()) return false;
-  const auto* family = registry_.findFamily(familyName);
-  if (!family) return false;
-  const int readerFontId = manager_.getFontId(familyName);
-  for (const auto& file : family->files) {
-    if (variantFontId(readerFontId, file.pointSize) == fontId) {
-      return loadCpfontVariant(*family, file.pointSize, fontId);
+  if (!familyName.empty()) {
+    const auto* family = registry_.findFamily(familyName);
+    if (family) {
+      const int readerFontId = manager_.getFontId(familyName);
+      for (const auto& file : family->files) {
+        if (variantFontId(readerFontId, file.pointSize) == fontId) {
+          return loadCpfontVariant(*family, file.pointSize, fontId);
+        }
+      }
+    }
+  }
+  if (const auto* mono = findMonospaceFamily()) {
+#ifdef CROSSPOINT_TTF_READER
+    if (mono->hasTtf()) {
+      for (uint8_t pt = 6; pt <= 48; ++pt) {
+        if (variantFontId(MONOSPACE_VARIANT_SEED, pt) == fontId) {
+          return loadCpfontVariant(*mono, pt, fontId);
+        }
+      }
+    }
+#endif
+    for (const auto& file : mono->files) {
+      if (variantFontId(MONOSPACE_VARIANT_SEED, file.pointSize) == fontId) {
+        return loadCpfontVariant(*mono, file.pointSize, fontId);
+      }
     }
   }
   return false;

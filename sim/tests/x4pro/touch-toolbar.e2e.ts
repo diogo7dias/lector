@@ -45,8 +45,23 @@ test('the toolbar menu scrubs, opens a tile and closes', async ({ app, screen })
   }
   await expect(activity).toHaveText('EpubReader', { timeout: 60_000 });
   await expect(busy).toHaveText('no', { timeout: 30_000 });
+  // A fresh open lands on the full-bleed dark cover; turn one page to the white text page.
+  if (!resume) {
+    const box = await panel.boundingBox();
+    if (!box) throw new Error('no panel on the page');
+    await screen.swipe({ from: { x: box.x + 420, y: box.y + 420 }, to: { x: box.x + 100, y: box.y + 420 } });
+    await expect(busy).toHaveText('no', { timeout: 60_000 });
+  }
 
-  // The sheet's band, y 583-800, is mostly white around a thin scrub row; the page text that
+  // Top-right corner tap toggles a visible 16x22 dog-ear bookmark on the page.
+  const dogEar = () => ink(464, 0, 16, 22);
+  const cornerBefore = await dogEar();
+  await tapOnce(460, 20);
+  await expect.poll(dogEar, { timeout: 30_000 }).toBeGreaterThan(cornerBefore + 80);
+  await tapOnce(460, 20);
+  await expect.poll(dogEar, { timeout: 30_000 }).toBeLessThan(cornerBefore + 20);
+
+  // The sheet's band, y 590-800, is mostly white around a thin scrub row; the page text that
   // fills it without the sheet is far denser.
   const band = () => ink(0, 590, 480, 210);
   const withoutSheet = await band();
@@ -54,14 +69,25 @@ test('the toolbar menu scrubs, opens a tile and closes', async ({ app, screen })
   expect(await activity.textContent(), 'a sheet, not the list menu').toBe('EpubReader');
   await expect.poll(band, { timeout: 30_000 }).toBeLessThan(withoutSheet / 2);
 
-  // Tap the track: the book jumps and the sheet is back over the new page.
-  const before = await ink(0, 0, 480, 580);
+  // The Bookmark tile (slot 1, x=184) toggles the dog-ear while keeping the sheet up.
+  await tapOnce(184, 757);
+  await expect.poll(dogEar, { timeout: 30_000 }).toBeGreaterThan(cornerBefore + 80);
+  await tapOnce(184, 757);
+  await expect.poll(dogEar, { timeout: 30_000 }).toBeLessThan(cornerBefore + 20);
+
+  // Tap the track: the book jumps and the sheet is back over the new page, now with a Return chip.
+  const before = await ink(0, 0, 480, 540);
   await tapOnce(300, 653);
-  await expect.poll(() => ink(0, 0, 480, 580), { timeout: 60_000 }).not.toBe(before);
+  await expect.poll(() => ink(0, 0, 480, 540), { timeout: 60_000 }).not.toBe(before);
+  await expect.poll(band, { timeout: 30_000 }).toBeLessThan(withoutSheet / 2);
+
+  // Tapping the Return chip (y 599..630) above the scrub row jumps back to where we started.
+  await tapOnce(64, 615);
+  await expect.poll(() => ink(0, 0, 480, 540), { timeout: 60_000 }).toBe(before);
   await expect.poll(band, { timeout: 30_000 }).toBeLessThan(withoutSheet / 2);
 
   // The Contents tile opens the chapter list on one tap.
-  await tapOnce(90, 757);
+  await tapOnce(72, 757);
   await expect(activity).toHaveText('EpubReaderChapterSelection', { timeout: 30_000 });
   await panel.tap({ position: { x: 60, y: 780 } }); // Back
   await expect(busy).toHaveText('no', { timeout: 60_000 });
@@ -74,7 +100,7 @@ test('the toolbar menu scrubs, opens a tile and closes', async ({ app, screen })
 
   // More opens the tabbed menu (an entered screen, so the label changes).
   await tapOnce(240, 400);
-  await tapOnce(390, 757);
+  await tapOnce(408, 757);
   await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
 
   // Back to the list, so later suites find the default menu.

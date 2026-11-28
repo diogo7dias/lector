@@ -49,7 +49,10 @@ inline reader_touch::Gesture nextPageGesture() { return static_cast<reader_touch
 inline reader_touch::Gesture previousPageGesture() {
   return static_cast<reader_touch::Gesture>(SETTINGS.previousPageGesture);
 }
-inline reader_touch::MenuMode readerMenuMode() { return static_cast<reader_touch::MenuMode>(SETTINGS.showReaderMenu); }
+inline reader_touch::MenuMode readerMenuMode() {
+  if (SETTINGS.calmMode != 0) return reader_touch::MenuMode::Off;
+  return static_cast<reader_touch::MenuMode>(SETTINGS.showReaderMenu);
+}
 
 // Touch on the open page: page turns and the tap into the reader menu, in one pass.
 // A swipe is read first so a slow drag never also registers as a tap. A right-to-left book

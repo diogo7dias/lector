@@ -155,7 +155,21 @@ TEST(SleepFacePaint, TheX4ProGrayscaleBaseIsHalf) {
 // removing it changes what the user sees during that wait, not only what the panel does.
 TEST(SleepFacePaint, ThePopupIsCountedSeparatelyAndStillCostsItsOwnSubmission) {
   EXPECT_EQ(sleep_face::POPUP_SUBMISSIONS, 1);
+  EXPECT_EQ(sleep_face::popupSubmissions(/*fromTimeout=*/false), 1);
   EXPECT_EQ(totalSubmissions(Face::PlainLector, false, uc8279X4()), 2);
+}
+
+TEST(SleepFacePaint, TimeoutLockSkipsThePopupSubmissionOnEveryFaceAndDevice) {
+  EXPECT_EQ(sleep_face::popupSubmissions(/*fromTimeout=*/true), 0);
+  for (const Row& row : kDevices) {
+    for (const Face face : {Face::Wallpaper, Face::CoverFallback, Face::PlainLector}) {
+      for (const bool hasTone : {false, true}) {
+        const PaintPlan plan = planFor(face, hasTone, row.dev);
+        EXPECT_EQ(totalSubmissions(face, hasTone, row.dev, /*fromTimeout=*/true), plan.submissions) << row.name;
+        EXPECT_EQ(totalSubmissions(face, hasTone, row.dev, /*fromTimeout=*/false), plan.submissions + 1) << row.name;
+      }
+    }
+  }
 }
 
 // Every sleep base uses a clean waveform (HALF/FULL), never FAST.

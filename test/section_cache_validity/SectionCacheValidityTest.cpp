@@ -29,13 +29,15 @@ TEST(SectionCacheValidity, EveryLayoutFieldInvalidatesIndependently) {
   CHECK_FIELD(paragraphAlignment, 1);
   CHECK_FIELD(viewportWidth, 440);
   CHECK_FIELD(viewportHeight, 720);
-  CHECK_FIELD(embeddedStyle, false);
+  CHECK_FIELD(embeddedStyle, EMBEDDED_STYLE_OFF);
+  CHECK_FIELD(embeddedStyle, EMBEDDED_STYLE_TEXT_ONLY);
   CHECK_FIELD(imageRendering, 1);
   CHECK_FIELD(focusReadingEnabled, true);
   CHECK_FIELD(guideDotsMode, GUIDE_DOTS_VISIBLE);
   CHECK_FIELD(guideDotsMode, GUIDE_DOTS_HIDDEN);
   CHECK_FIELD(paragraphIndentSpaces, 3);
   CHECK_FIELD(characterSpacing, -1);
+  CHECK_FIELD(keepHeadingsWithText, true);
 #undef CHECK_FIELD
 }
 

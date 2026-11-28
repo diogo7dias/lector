@@ -39,6 +39,10 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  if (mappedInput.isInputActive()) {
+    lastInputMs = millis();
+  }
+
   applyLinkLanding();
   rememberBookOnceRendered();
   // Auto Sync pulls once the first page is up, so the book never waits on the radio.
@@ -123,6 +127,12 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
 
+  if (showPageNotFoundMessage && (millis() - pageNotFoundMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showPageNotFoundMessage = false;
+    scheduleGhostCleanup();
+    requestUpdate();
+  }
+
   // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
   // input. Anything it doesn't handle (e.g. long-press Back to the file browser) falls
   // through to the regular handlers below; page turns are absorbed by the end-of-book
@@ -181,10 +191,22 @@ void EpubReaderActivity::loop() {
     openQuoteGrab(holdX, holdY);
     return;
   }
+  // Top-right corner tap toggles the page bookmark on touch boards before the general
+  // page-turn zone claims the tap.
+  if (SETTINGS.touchReaderControls != 0 && mappedInput.hasTouch() && !atEndOfBook && section &&
+      mappedInput.wasSwipe() == MappedInputManager::SwipeDir::None) {
+    int tapX = 0;
+    int tapY = 0;
+    if (mappedInput.wasScreenTapped(tapX, tapY) &&
+        reader_touch::isBookmarkCornerTap(true, renderer.getScreenWidth(), renderer.getScreenHeight(), tapX, tapY)) {
+      if (!blockSortesAction()) addBookmark();
+      return;
+    }
+  }
   // Direct footnote tap on touch boards (X4 Pro): hit-test the current page's footnote
   // word boxes before page-turn / menu tap routing.
-  if (!atEndOfBook && mappedInput.hasTouch() && !currentPageFootnoteBoxes.empty() &&
-      pageOnScreen.load(std::memory_order_acquire)) {
+  if (SETTINGS.touchReaderControls != 0 && !atEndOfBook && mappedInput.hasTouch() &&
+      !currentPageFootnoteBoxes.empty() && pageOnScreen.load(std::memory_order_acquire)) {
     int tapX = 0;
     int tapY = 0;
     if (mappedInput.wasScreenTapped(tapX, tapY)) {

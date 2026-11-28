@@ -13,6 +13,7 @@
 
 #include "CrossPointSettings.h"
 #include "EpubReaderActivity.h"
+#include "EpubReaderFootnotesActivity.h"
 #include "MappedInputManager.h"
 #include "fontIds.h"
 
@@ -95,6 +96,8 @@ void EpubReaderActivity::computeFootnoteBoxes(const Page& page, const int margin
 }
 
 bool EpubReaderActivity::openFootnotePopup(const FootnoteEntry& entry) {
+  // Kept only when the card opens: a fallback jump to the note has no menu to come back to.
+  const MenuReturn menuReturn = std::exchange(footnotePopupMenuReturn, MenuReturn{});
   if (!epub || !section || footnotePopupOpen || entry.href[0] == '\0') return false;
 
   std::string targetFile;
@@ -175,6 +178,7 @@ bool EpubReaderActivity::openFootnotePopup(const FootnoteEntry& entry) {
     footnotePopupTitle = titleBuf;
     footnotePopupHref = entry.href;
     footnotePopupLines = std::move(lines);
+    footnotePopupMenuReturn = menuReturn;
   }
   LOG_INF("ERS", "Opened footnote popup: %s (%zu lines, jump=%d)", entry.href, footnotePopupLines.size(),
           canJump ? 1 : 0);
@@ -194,6 +198,7 @@ void EpubReaderActivity::closeFootnotePopup(const bool repaint) {
     footnotePopupLines.shrink_to_fit();
     footnotePopupTitle.clear();
     footnotePopupHref.clear();
+    footnotePopupMenuReturn = MenuReturn{};
   }
   if (repaint) {
     scheduleGhostCleanup();
@@ -299,7 +304,10 @@ bool EpubReaderActivity::handleFootnotePopupInput() {
 
   using Button = MappedInputManager::Button;
   if (mappedInput.wasPressed(Button::Back) || mappedInput.wasBackGesture()) {
+    // Back returns to the screen that opened the card: the menu, when its row did.
+    const MenuReturn menuReturn = footnotePopupMenuReturn;
     closeFootnotePopup(true);
+    menuReturn.run();
   } else if (mappedInput.wasPressed(Button::Confirm)) {
     if (footnotePopupCanJump) {
       jumpToTarget();
@@ -314,4 +322,31 @@ bool EpubReaderActivity::handleFootnotePopupInput() {
     stepPage(1);
   }
   return true;
+}
+
+void EpubReaderActivity::openFootnotes() {
+  if (currentPageFootnotes.size() == 1) {
+    // One footnote: the row opens the card itself, so the card takes the menu's reopen.
+    footnotePopupMenuReturn = MenuReturn::take();
+    if (pageOnScreen.load(std::memory_order_acquire) && section) {
+      openFootnotePopup(currentPageFootnotes[0]);
+    } else {
+      pendingFootnotePopupIndex = 0;
+      requestUpdate();
+    }
+    return;
+  }
+  startActivityForResult(
+      std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, currentPageFootnotes),
+      [this](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          const auto& footnoteResult = std::get<FootnoteResult>(result.data);
+          if (footnoteResult.index >= 0 && footnoteResult.index < static_cast<int>(currentPageFootnotes.size())) {
+            pendingFootnotePopupIndex = footnoteResult.index;
+          } else {
+            navigateToHref(footnoteResult.href, true);
+          }
+        }
+        requestUpdate();
+      });
 }

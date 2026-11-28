@@ -71,7 +71,6 @@ void EpubReaderActivity::openReaderMenuList(const EpubReaderMenuActivity::MenuAc
   menuContext.bookProgressPercent = bookProgressPercent;
   menuContext.currentOrientation = SETTINGS.orientation;
   menuContext.hasFootnotes = !currentPageFootnotes.empty();
-  menuContext.hasPageList = epub->hasPageList();
   menuContext.hasBookmarks = !cachedBookmarks.empty();
   menuContext.hasReaderOverride = prefsCustom_;
   menuContext.paragraphNumbering = prefs_.paragraphNumbering;
@@ -143,6 +142,8 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
       // Same test the in-book menu uses for its own Bookmarks row: an empty list screen
       // is a dead press.
       return !cachedBookmarks.empty();
+    case CrossPointSettings::LP_MENU_RETURN:
+      return !returnHistory.empty();
     case CrossPointSettings::LP_MENU_VIEW_QUOTES:
       // Only once Grab Quote has actually written this book's sidecar.
       return Storage.exists(quote_text::quotesFilePathFor(epub->getPath()).c_str());
@@ -210,6 +211,9 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
     // binding and the matching menu row can never drift apart.
     case CrossPointSettings::LP_MENU_BOOKMARKS:
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::BOOKMARKS);
+      return true;
+    case CrossPointSettings::LP_MENU_RETURN:
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::RETURN);
       return true;
     case CrossPointSettings::LP_MENU_VIEW_QUOTES:
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::VIEW_QUOTES);

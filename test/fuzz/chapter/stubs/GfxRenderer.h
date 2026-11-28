@@ -18,12 +18,16 @@ class GfxRenderer {
   using Dir = BidiUtils::BidiBaseDir;
   using Style = EpdFontFamily::Style;
 
+  // Optional monospace font id returned for <code>/<pre>/<tt>/<kbd> in host tests; 0 = missing.
+  int monospaceFontId = 0;
+
   // Font ids 1..8 exist; the scaled variants of the body font resolve to id + 1 / id - 1.
   int resolveFontVariant(const int fontId, const float scale) const {
     if (scale > 1.2f) return fontId + 1;
-    if (scale < 0.8f && fontId > 1) return fontId - 1;
+    if (scale < 0.9f && fontId > 1) return fontId - 1;
     return fontId;
   }
+  int resolveMonospaceFont(int, float) const { return monospaceFontId; }
   bool ensureFontLoaded(const int fontId) const { return fontId >= 1 && fontId <= 8; }
   bool isSdCardFont(int) const { return false; }
   void ensureSdCardFontReady(int, const char*, uint8_t = 0x0F) const {}

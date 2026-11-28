@@ -51,6 +51,7 @@ class ChapterHtmlSlimParser {
   int skipUntilDepth = INT_MAX;
   int boldUntilDepth = INT_MAX;
   int italicUntilDepth = INT_MAX;
+  int monoUntilDepth = INT_MAX;
   // buffer for building up words from characters, will auto break if longer than this
   // leave one char at end for null pointer
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
@@ -74,8 +75,9 @@ class ChapterHtmlSlimParser {
   bool focusReadingEnabled;
   uint8_t guideDotsMode;  // GuideDotsMode: off / visible dots / hidden dots (gap only)
   uint8_t paragraphIndentSpaces;
+  bool keepHeadingsWithText;
   const CssParser* cssParser;
-  bool embeddedStyle;
+  uint8_t embeddedStyle;
   uint8_t imageRendering;
   std::string contentBase;
   std::string imageBasePath;
@@ -166,18 +168,39 @@ class ChapterHtmlSlimParser {
   };
   static constexpr size_t MAX_BOX_SCOPES = 8;
 
-  // The paragraph being laid out, for the inline images on its current line. Pages always
-  // fill: no line is carried to the next page to avoid an orphan, a widow or a lone heading.
+  // Page-break carry-over when keepHeadingsWithText is on: a heading moves with the text
+  // that follows it, and 4+ line paragraphs avoid 1-line orphans and widows.
+  static constexpr size_t MAX_CARRIED_LINES = 6;
   const ParsedText* layoutParagraph = nullptr;
-  void breakPageAt(uint32_t visibleOffset);
+  bool layoutParagraphHasDropCap = false;
+  uint8_t paragraphLinesOnPage = 0;
+  uint16_t paragraphLinesEmitted = 0;
+  uint8_t keepWithNextLines = 0;                       // trailing heading lines on this page
+  uint32_t recentLineOffsets[MAX_CARRIED_LINES] = {};  // visible offsets of this page's last lines, newest last
+  uint8_t recentLineCount = 0;
+  size_t linesToCarry(size_t& paragraphLines) const;
+  size_t keepWithNextCarry() const;
+  bool canCarry(size_t carry) const;
+  void breakPageCarryingLines(size_t carry, size_t paragraphLines, uint32_t visibleOffset);
+  void breakPageAt(uint32_t visibleOffset) { breakPageCarryingLines(0, 0, visibleOffset); }
   std::vector<BoxScope> boxScopes;
+#if defined(BOARD_HAS_PSRAM)
+  static constexpr size_t MAX_GRID_TABLE_COLUMNS = 6;
+#else
   static constexpr size_t MAX_GRID_TABLE_COLUMNS = 4;
+#endif
   // ponytail: buffer at most 160 tokens / 2 KB per row; larger rows use stacked flow.
   static constexpr size_t MAX_GRID_TABLE_ROW_WORDS = 160;
   static constexpr size_t MAX_GRID_TABLE_ROW_BYTES = 2048;
   int tableDepth = 0;
   bool insideTableCell = false;
   bool tableRowStacked = false;
+  bool tableCompactFont = false;
+  bool tableRowHasHeader = false;
+  bool tableRowHasData = false;  // a <td> in the row: its <th> cells are row headers
+  uint8_t currentCellColSpan = 1;
+  uint8_t tableRowSpanSum = 0;
+  std::array<uint8_t, MAX_GRID_TABLE_COLUMNS> tableRowColSpans{};
   // A cell that spans rows cannot be drawn in a grid, and the span keeps applying to the
   // rows below it, so the whole run of affected rows falls back to stacked. UINT16_MAX
   // means "to the end of the table" (rowspan=0 in HTML).
@@ -226,6 +249,7 @@ class ChapterHtmlSlimParser {
   // 512 anchors needs 16 KB contiguous, and a failed allocation aborts).
   int completedPageCount = 0;
   AnchorPlacement anchors;
+  static_assert(AnchorPlacement::RECENT_LINES == MAX_CARRIED_LINES, "anchors follow the lines that can be carried");
   // Deferred until after the previous text block is flushed. Optional rather than a
   // sentinel value: 0 is a legal hash, so "no anchor pending" needs its own state.
   std::optional<uint64_t> pendingAnchorId;
@@ -257,11 +281,6 @@ class ChapterHtmlSlimParser {
   bool insideHeading() const { return headingUntilDepth_ < depth; }
 
   // Footnote link tracking
-  struct PendingFootnote {
-    int startWordInBlock = 0;
-    uint8_t wordCount = 1;
-    FootnoteEntry entry = {};
-  };
   bool insideFootnoteLink = false;
   int footnoteLinkDepth = -1;
   int footnoteStartWordInBlock = 0;
@@ -317,11 +336,12 @@ class ChapterHtmlSlimParser {
   void fallbackTableRowToStacked();
   void closeTableCell();
   void finishTableRow();
-  void addTableRowSeparator();
+  void addTableRowSeparator(uint8_t thickness = 1);
   void setCurrentPageVisibleOffset(uint32_t offset);
   void makePages(bool includeLastLine = true, bool paragraphEnd = true);
   void applyBlockFontScale(BlockStyle& blockStyle, const CssStyle& cssStyle, const char* tagName) const;
   int fontIdForScale(float scale) const;
+  int fontIdForMonospace(float scale) const;
   int prepareBlockFont(ParsedText& text, float scale);
   static EpdFontFamily::Style fontStyleForTextDecoration(CssTextDecoration decoration);
   static void applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css);
@@ -360,6 +380,7 @@ class ChapterHtmlSlimParser {
         focusReadingEnabled(spec.focusReadingEnabled),
         guideDotsMode(spec.guideDotsMode),
         paragraphIndentSpaces(spec.paragraphIndentSpaces),
+        keepHeadingsWithText(spec.keepHeadingsWithText),
         completePageFn(completePageFn),
         completePageCtx(completePageCtx),
         popupFn(popupFn),

@@ -161,20 +161,21 @@ void appendParagraph(const ReaderPrefs& look, PreviewLayout& layout, const GfxRe
 void relayout(const ReaderPrefs& look, PreviewLayout& layout, const GfxRenderer& renderer, int fontId, int textWidth,
               int lineAdvance, int paragraphGap) {
   layout.lines.clear();
-  layout.secondParagraphLine = 0;
 
   const BlockStyle body = bodyStyle(look);
-  if (look.embeddedStyle) {
+  if (look.embeddedStyle == EMBEDDED_STYLE_FULL) {
     BlockStyle heading;
     heading.alignment = CssTextAlign::Center;
     heading.textAlignDefined = true;
     appendParagraph(look, layout, renderer, fontId, textWidth, I18N.get(StrId::STR_PREVIEW_HEADING), heading, true, 0);
     appendParagraph(look, layout, renderer, fontId, textWidth, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), body, false,
                     lineAdvance / 2);
+  } else if (look.embeddedStyle == EMBEDDED_STYLE_TEXT_ONLY) {
+    appendParagraph(look, layout, renderer, fontId, textWidth, I18N.get(StrId::STR_PREVIEW_HEADING), body, true, 0);
+    appendParagraph(look, layout, renderer, fontId, textWidth, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), body, false, 0);
   } else {
     appendParagraph(look, layout, renderer, fontId, textWidth, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), body, false, 0);
   }
-  layout.secondParagraphLine = static_cast<int>(layout.lines.size());
   appendParagraph(look, layout, renderer, fontId, textWidth, I18N.get(StrId::STR_PREVIEW_TEXT_2), body, false,
                   paragraphGap);
 }
@@ -226,7 +227,7 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const Rea
       if (look.guideDotsEnabled) prewarmText += GUIDE_DOT_UTF8;
       // Bit 1 is the bold mask the heading needs; bit 0 the regular body.
       uint8_t styleMask = look.focusReadingEnabled ? 0x03 : 0x01;
-      if (look.embeddedStyle) styleMask |= 0x02;
+      if (look.embeddedStyle != EMBEDDED_STYLE_OFF) styleMask |= 0x02;
       fcm->prewarmCache(fontId, prewarmText.c_str(), styleMask);
     }
     relayout(look, layout, renderer, fontId, textWidth, lineAdvance, paragraphGap);
@@ -236,30 +237,29 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const Rea
 
   const int topBarHeight = drawStatusBarEdge(renderer, sb, /*top=*/true, top, paneLeft, paneWidth);
 
-  // The smear is renderer state, so it must be cleared on every exit path below —
-  // otherwise the row grid and the button hints would render thickened too.
-  struct PaperbackScope {
+  // The smear and ink weight are renderer state, so both must be cleared on every exit
+  // path below — otherwise the row list and the button hints would inherit them.
+  struct InkScope {
     const GfxRenderer& renderer;
-    ~PaperbackScope() { renderer.setPaperbackLook(false); }
-  } paperbackScope{renderer};
+    ~InkScope() {
+      renderer.setPaperbackLook(0);
+      renderer.setInkWeight(0);
+    }
+  } inkScope{renderer};
 
-  // First paragraph with the smear, second without it. No labels at the seam: the
-  // paragraph gap is the seam, and a label would cost a line of the passage being judged.
   const int textTop = top + topBarHeight + look.screenMarginTop;
   const int textLimit = top + height;
   int y = textTop;
-  int drawn = 0;
-  // The smeared paragraph shows the chosen weight, or plain On while the setting is off.
-  renderer.setPaperbackLook(look.paperbackLookBody > 1 ? look.paperbackLookBody : 1);
+  renderer.setPaperbackLook(look.paperbackLookBody);
+  renderer.setInkWeight(reader_defaults::resolveInkWeight(look.inkWeight), /*updateTtf=*/true);
   for (const auto& entry : layout.lines) {
-    if (drawn == layout.secondParagraphLine) renderer.setPaperbackLook(false);
     y += entry.gapBefore;
     if (y + lineH > textLimit) break;
     entry.line->render(renderer, fontId, textLeft, y);
     y += lineAdvance;
-    drawn++;
   }
-  renderer.setPaperbackLook(false);
+  renderer.setPaperbackLook(0);
+  renderer.setInkWeight(0);
   if (SETTINGS.debugBorders && y > textTop) renderer.drawRect(textLeft, textTop, textWidth, y - textTop);
 }
 

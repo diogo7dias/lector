@@ -243,6 +243,7 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
   sleepScreenValues[CrossPointSettings::QUICK_RESUME] = StrId::STR_QUICK_RESUME;
   sleepScreenValues[CrossPointSettings::TRANSPARENT_CUSTOM] = StrId::STR_TRANSPARENT;
   sleepScreenValues[CrossPointSettings::COVER_TRANSPARENT] = StrId::STR_COVER_TRANSPARENT;
+  sleepScreenValues[CrossPointSettings::QUOTE] = StrId::STR_SLEEP_QUOTE;
 
   // One entry at a time, never a single braced initializer: a braced list materializes ALL
   // entries as one temporary array in this frame; at 86 entries that array alone was ~15.5 KB
@@ -410,9 +411,11 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
                          "dynamicMargins", StrId::STR_CAT_READER)
            .withTextSettings());
 
-  // One switch for all publisher styling; the key predates the old text/layout split.
-  emit(SettingInfo::Toggle(StrId::STR_EMBEDDED_STYLE, &CrossPointSettings::embeddedStyle, "embeddedStyle",
-                           StrId::STR_CAT_READER)
+  // 3-way publisher styling: Off / Text Only / Full. New key "embeddedStyleMode" avoids
+  // misreading legacy 2-way "embeddedStyle" (where 1 meant Full).
+  emit(SettingInfo::Enum(StrId::STR_EMBEDDED_STYLE, &CrossPointSettings::embeddedStyle,
+                         {StrId::STR_STATE_OFF, StrId::STR_EMBEDDED_STYLE_TEXT_ONLY, StrId::STR_EMBEDDED_STYLE_FULL},
+                         "embeddedStyleMode", StrId::STR_CAT_READER)
            .withTextSettings());
 
   emit(SettingInfo::Value(StrId::STR_WORD_SPACING, &CrossPointSettings::wordSpacing,
@@ -426,6 +429,12 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
                           {0, reader_defaults::MAX_CHARACTER_SPACING, 1}, "characterSpacingPx", StrId::STR_CAT_READER)
            .withTextSettings()
            .withDisplayOffset(-static_cast<int8_t>(reader_defaults::CHARACTER_SPACING)));
+
+  // 5-step ink weight, stored 0..4 and shown -2..+2 (default 2 = 0).
+  emit(SettingInfo::Value(StrId::STR_INK_WEIGHT, &CrossPointSettings::inkWeight,
+                          {0, reader_defaults::MAX_INK_WEIGHT, 1}, "inkWeight", StrId::STR_CAT_READER)
+           .withTextSettings()
+           .withDisplayOffset(-static_cast<int8_t>(reader_defaults::INK_WEIGHT)));
 
   emit(SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
                          {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS,
@@ -442,6 +451,10 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
            .withTextSettings());
 
   emit(SettingInfo::Toggle(StrId::STR_HIDDEN_DOTS, &CrossPointSettings::guideDotsHidden, "guideDotsHidden",
+                           StrId::STR_CAT_READER)
+           .withTextSettings());
+
+  emit(SettingInfo::Toggle(StrId::STR_KEEP_HEADINGS, &CrossPointSettings::keepHeadingsWithText, "keepHeadingsWithText",
                            StrId::STR_CAT_READER)
            .withTextSettings());
 
@@ -603,6 +616,16 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
   emit(SettingInfo::Enum(StrId::STR_OPDS_FILENAME_FORMAT, &CrossPointSettings::opdsFilenameFormat,
                          {StrId::STR_FMT_AUTHOR_TITLE, StrId::STR_FMT_TITLE_AUTHOR, StrId::STR_FMT_TITLE},
                          "opdsFilenameFormat"));
+
+  // Library sort and filter: cycled from the Quick Panel while in Library.
+  emit(SettingInfo::Enum(StrId::STR_SORT, &CrossPointSettings::librarySort,
+                         {StrId::STR_SORT_TITLE, StrId::STR_SORT_AUTHOR, StrId::STR_BOOK_ORDER_RECENTLY_ADDED,
+                          StrId::STR_BOOK_ORDER_LAST_READ},
+                         "librarySort"));
+  emit(SettingInfo::Enum(
+      StrId::STR_FILTER, &CrossPointSettings::libraryFilter,
+      {StrId::STR_FILTER_ALL, StrId::STR_FILTER_READING, StrId::STR_FILTER_UNREAD, StrId::STR_FILTER_READ},
+      "libraryFilter"));
 
   // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
   emit(SettingInfo::DynamicString(

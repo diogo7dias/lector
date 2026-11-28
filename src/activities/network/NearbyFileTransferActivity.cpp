@@ -104,6 +104,8 @@ void NearbyFileTransferActivity::onEnter() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect(false);
   if (!transport.begin(ESPNOW_CHANNEL)) {
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
     closeFiles();
     failed = true;
     errorMessage = tr(STR_NEARBY_RADIO_BUSY);

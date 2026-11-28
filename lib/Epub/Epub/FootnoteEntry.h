@@ -18,3 +18,10 @@ struct FootnoteEntry {
   uint16_t startWord = 0;
   uint8_t wordCount = 0;
 };
+
+// A footnote link the chapter parser holds until the line with its first word reaches a page.
+struct PendingFootnote {
+  int startWordInBlock = 0;
+  uint8_t wordCount = 1;
+  FootnoteEntry entry = {};
+};

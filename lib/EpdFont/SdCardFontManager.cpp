@@ -17,6 +17,7 @@ SdCardFontManager::~SdCardFontManager() {
   }
 #ifdef CROSSPOINT_TTF_READER
   delete ttf_;
+  for (auto& lv : ttfVariants_) delete lv.font;
 #endif
 }
 
@@ -126,6 +127,18 @@ int SdCardFontManager::loadFamilyExtraSize(const SdCardFontFamilyInfo& family, G
 
 bool SdCardFontManager::loadFamilyVariant(const SdCardFontFamilyInfo& family, GfxRenderer& renderer,
                                           const uint8_t pointSize, const int fontId) {
+#ifdef CROSSPOINT_TTF_READER
+  if (family.hasTtf()) {
+    if (renderer.getFontMap().count(fontId) != 0) return true;
+    auto font = makeUniqueNoThrow<TtfSdFont>();
+    if (!font || !font->load(family, pointSize)) return false;
+    EpdFontFamily fontFamily(font->pointSize(), font->getEpdFont(0), font->getEpdFont(1), font->getEpdFont(2),
+                             font->getEpdFont(3));
+    renderer.insertFont(fontId, fontFamily);
+    ttfVariants_.push_back({font.release(), fontId, pointSize});
+    return true;
+  }
+#endif
   const SdCardFontFileInfo* file = family.findFile(pointSize);
   return file && loadFile(*file, family.name.c_str(), renderer, fontId) != 0;
 }
@@ -138,6 +151,15 @@ void SdCardFontManager::unloadFont(GfxRenderer& renderer, const int fontId) {
     loaded_.erase(it);
     return;
   }
+#ifdef CROSSPOINT_TTF_READER
+  for (auto it = ttfVariants_.begin(); it != ttfVariants_.end(); ++it) {
+    if (it->fontId != fontId) continue;
+    renderer.removeFont(fontId);
+    delete it->font;
+    ttfVariants_.erase(it);
+    return;
+  }
+#endif
 }
 
 void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
@@ -154,6 +176,11 @@ void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
   delete ttf_;
   ttf_ = nullptr;
   ttfFontId_ = 0;
+  for (auto& lv : ttfVariants_) {
+    renderer.removeFont(lv.fontId);
+    delete lv.font;
+  }
+  ttfVariants_.clear();
 #endif
   loadedFamilyName_.clear();
   loadedPointSize_ = 0;
