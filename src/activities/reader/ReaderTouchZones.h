@@ -18,6 +18,9 @@ enum class Gesture : uint8_t { TapAndSwipe = 0, TapOnly = 1, SwipeOnly = 2, Inve
 // SETTINGS.showReaderMenu (centre tap). Bottom-edge swipe up always opens the reader menu inside a book.
 enum class MenuMode : uint8_t { Off = 0, Tap = 1 };
 
+// SETTINGS.tapZoneLayout. Every preset covers 100% of the reading surface with no dead zone.
+enum class TapZoneLayout : uint8_t { RightHanded = 0, LeftHanded = 1, TopBottom = 2, EqualThirds = 3 };
+
 enum class TapAction : uint8_t { None, Prev, Next, Menu };
 
 // Top-right corner tap target on touch boards to toggle a bookmark on the current page.
@@ -45,7 +48,7 @@ inline TapAction swipeAction(bool on, Gesture next, Gesture prev, bool rtl, bool
 }
 
 inline TapAction tapAction(bool on, Gesture next, Gesture prev, MenuMode menu, bool rtl, int width, int height, int x,
-                           int y) {
+                           int y, TapZoneLayout layout = TapZoneLayout::RightHanded) {
   if (!on || width <= 0 || height <= 0) return TapAction::None;
 
   const int zoneWidth = width / 3;
@@ -59,11 +62,26 @@ inline TapAction tapAction(bool on, Gesture next, Gesture prev, MenuMode menu, b
   if (!nextTaps && !prevTaps) return TapAction::None;
   // Either direction on Inverted Tap swaps the shared zones; a right-to-left book swaps them too.
   const bool inverted = (next == Gesture::InvertedTap || prev == Gesture::InvertedTap) != rtl;
-  // Only one direction accepts taps: it gets the whole page.
+  // Only one direction accepts taps: it gets the whole page outside the menu zone.
   if (nextTaps != prevTaps) return nextTaps ? TapAction::Next : TapAction::Prev;
-  if (x < zoneWidth) return inverted ? TapAction::Next : TapAction::Prev;
-  if (x >= width - zoneWidth) return inverted ? TapAction::Prev : TapAction::Next;
-  return TapAction::None;
+
+  const TapAction back = inverted ? TapAction::Next : TapAction::Prev;
+  const TapAction forward = inverted ? TapAction::Prev : TapAction::Next;
+
+  switch (layout) {
+    case TapZoneLayout::RightHanded:
+      return x < width / 4 ? back : forward;
+    case TapZoneLayout::LeftHanded:
+      return x >= width - width / 4 ? back : forward;
+    case TapZoneLayout::TopBottom:
+      return y < height / 2 ? back : forward;
+    case TapZoneLayout::EqualThirds:
+      if (x < zoneWidth) return back;
+      if (x >= width - zoneWidth) return forward;
+      if (menu == MenuMode::Tap) return TapAction::Menu;
+      return x < width / 2 ? back : forward;
+  }
+  return x < width / 4 ? back : forward;
 }
 
 // True for a BCP 47 tag of a right-to-left language the reader supports: Hebrew (he, or the

@@ -269,7 +269,8 @@ void SettingsActivity::rebuildSettingsList() {
       if ((setting.valuePtr == &CrossPointSettings::touchReaderControls ||
            setting.valuePtr == &CrossPointSettings::pageTurnGesture ||
            setting.valuePtr == &CrossPointSettings::previousPageGesture ||
-           setting.valuePtr == &CrossPointSettings::showReaderMenu) &&
+           setting.valuePtr == &CrossPointSettings::showReaderMenu ||
+           setting.valuePtr == &CrossPointSettings::tapZoneLayout) &&
           !gpio.hasTouch()) {
         continue;
       }
@@ -359,7 +360,7 @@ void SettingsActivity::rebuildSettingsList() {
                   // On a board without a digitiser both rows are absent and the heading with them.
                   {StrId::STR_GRP_TOUCH,
                    {StrId::STR_TOUCH_READER_CONTROLS, StrId::STR_NEXT_PAGE_GESTURE, StrId::STR_PREV_PAGE_GESTURE,
-                    StrId::STR_SHOW_READER_MENU}},
+                    StrId::STR_TAP_ZONE_LAYOUT, StrId::STR_SHOW_READER_MENU}},
                   {StrId::STR_GRP_BACK, {StrId::STR_BACK_SHORT_TO_FILE_BROWSER, StrId::STR_HOME_BACK_ACTION}},
                   // Buttons leads its group: it holds the eighteen per-button bindings, and left
                   // out of the map it fell to the bottom of the category under no heading.
