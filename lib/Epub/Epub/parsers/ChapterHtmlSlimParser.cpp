@@ -1112,8 +1112,10 @@ void ChapterHtmlSlimParser::planTableColumns(const TableColumnMeasure& measure) 
 
 void ChapterHtmlSlimParser::finishTableRow() {
   closeTableCell();
-  const bool headerRow = tableRowHasHeader;
+  // A header row is all <th>: a row header (<th> leading a row of <td>) is body content.
+  const bool headerRow = tableRowHasHeader && !tableRowHasData;
   tableRowHasHeader = false;
+  tableRowHasData = false;
   const uint8_t separatorThickness = headerRow ? TABLE_HEADER_SEPARATOR_THICKNESS : TABLE_ROW_SEPARATOR_THICKNESS;
 
   if (tableRowCells.empty()) {
@@ -1510,9 +1512,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->tableRowCells.reserve(MAX_GRID_TABLE_COLUMNS);
     self->tableBorder = CssBorderSide{};
     self->tableColumnCount = 0;
-    self->tableColumnCount = 0;
     self->tableCompactFont = false;
     self->tableRowHasHeader = false;
+    self->tableRowHasData = false;
     self->tableRowSpanSum = 0;
     self->currentCellColSpan = 1;
     if (self->xmlParser_) {
@@ -1577,6 +1579,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         (columnSpan >= 1 && columnSpan <= MAX_GRID_TABLE_COLUMNS) ? static_cast<uint8_t>(columnSpan) : 1;
     if (strcmp(name, "th") == 0) {
       self->tableRowHasHeader = true;
+    } else {
+      self->tableRowHasData = true;
     }
     if (rowSpan > 1) {
       const uint16_t remaining = rowSpan == UINT16_MAX ? UINT16_MAX : static_cast<uint16_t>(rowSpan - 1);
@@ -2752,6 +2756,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->tableRowStacked = false;
     self->tableCompactFont = false;
     self->tableRowHasHeader = false;
+    self->tableRowHasData = false;
     self->currentCellColSpan = 1;
     self->tableRowSpanSum = 0;
     self->tableColumnCount = 0;
@@ -2876,6 +2881,7 @@ bool ChapterHtmlSlimParser::beginParse() {
   tableRowStacked = false;
   tableCompactFont = false;
   tableRowHasHeader = false;
+  tableRowHasData = false;
   currentCellColSpan = 1;
   tableRowSpanSum = 0;
   tableColumnCount = 0;

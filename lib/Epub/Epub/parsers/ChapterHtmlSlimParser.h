@@ -184,6 +184,7 @@ class ChapterHtmlSlimParser {
   bool tableRowStacked = false;
   bool tableCompactFont = false;
   bool tableRowHasHeader = false;
+  bool tableRowHasData = false;  // a <td> in the row: its <th> cells are row headers
   uint8_t currentCellColSpan = 1;
   uint8_t tableRowSpanSum = 0;
   std::array<uint8_t, MAX_GRID_TABLE_COLUMNS> tableRowColSpans{};

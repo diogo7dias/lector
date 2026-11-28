@@ -135,6 +135,21 @@ TEST(BetterTables, HeaderRowDrawsTwoPixelRule) {
   EXPECT_EQ(out.rules[1].thickness, 1);
 }
 
+// A <th> that leads a row of <td> is a row header, not a header row: no heavy rule under it.
+TEST(BetterTables, RowHeaderCellDoesNotMakeAHeaderRow) {
+  const auto out = layOut(
+      "<table>"
+      "<tr><th>Name</th><th>Value</th></tr>"
+      "<tr><th>Alpha</th><td>One</td></tr>"
+      "<tr><th>Beta</th><td>Two</td></tr>"
+      "</table>",
+      360);
+  ASSERT_EQ(out.rules.size(), 3u);
+  EXPECT_EQ(out.rules[0].thickness, 2);
+  EXPECT_EQ(out.rules[1].thickness, 1);
+  EXPECT_EQ(out.rules[2].thickness, 1);
+}
+
 TEST(BetterTables, SixColumnGridOnlyOnPsramBoards) {
   const auto out = layOut(
       "<table><tr>"
