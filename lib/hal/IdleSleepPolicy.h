@@ -12,10 +12,6 @@ namespace idle_sleep {
 inline constexpr uint32_t SLICE_TOUCH_AWAKE_MS = 40;
 inline constexpr uint32_t SLICE_TOUCH_ASLEEP_MS = 250;
 
-// X3/X4 (C3) idle raw-input poll interval: raised from 10 ms (100 Hz) to 35 ms
-// (~28.5 Hz), leaving margin for 5 ms debounce inside an 80 ms double-click.
-inline constexpr uint32_t C3_IDLE_POLL_MS = 35;
-
 struct Conditions {
   bool wifiActive = false;
   bool usbConnected = false;

@@ -4,7 +4,6 @@
 
 namespace {
 
-using idle_sleep::C3_IDLE_POLL_MS;
 using idle_sleep::canLightSleep;
 using idle_sleep::Conditions;
 using idle_sleep::SLICE_TOUCH_ASLEEP_MS;
@@ -69,11 +68,6 @@ TEST(IdleSleepPolicy, SlicesRespectTouchStateAndDeadlines) {
   EXPECT_EQ(sliceDurationMs(/*touchAsleep=*/true, 10000), SLICE_TOUCH_ASLEEP_MS);
   EXPECT_EQ(sliceDurationMs(/*touchAsleep=*/false, 15), 15U);
   EXPECT_EQ(sliceDurationMs(/*touchAsleep=*/true, 80), 80U);
-}
-
-TEST(IdleSleepPolicy, C3IdlePollIntervalIn30To50MsRange) {
-  EXPECT_GE(C3_IDLE_POLL_MS, 30U);
-  EXPECT_LE(C3_IDLE_POLL_MS, 50U);
 }
 
 TEST(IdleSleepPolicy, TouchWakePolarityOpposesIdleLevel) {
