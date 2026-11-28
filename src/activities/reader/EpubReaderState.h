@@ -12,6 +12,7 @@
 #include "BookmarkEntry.h"
 #include "EndOfBookOptions.h"
 #include "LinkBackStack.h"
+#include "ReaderEdgeSlider.h"
 #include "ReaderPinchGesture.h"
 #include "ReaderPrefs.h"
 #include "ReaderProgressSaveDebouncer.h"
@@ -120,6 +121,7 @@ struct EpubReaderState {
   int32_t currentPageSpineIndex = -1;
   ReaderReturnHistory returnHistory;
   ReaderPinchGesture pinchGesture;  // two fingers spread or pinched step the text size
+  ReaderEdgeSlider edgeSlider;      // outer-strip vertical drag for live brightness/warmth
   // Explicit "land at this visible-codepoint offset in the target spine" request (bookmark open).
   // Resolved in render() once the section is loaded/built far enough, then cleared. Unlike a
   // settings-change reposition it always resolves by content, so it survives any re-pagination.

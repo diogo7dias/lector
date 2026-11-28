@@ -1,3 +1,4 @@
+#include <HalFrontlight.h>
 #include <HalStorage.h>
 #include <Logging.h>
 
@@ -165,6 +166,7 @@ void EpubReaderActivity::loop() {
   int pinchX2 = 0;
   int pinchY2 = 0;
   if (SETTINGS.touchReaderControls != 0 && mappedInput.getTwoFingerTouch(pinchX1, pinchY1, pinchX2, pinchY2)) {
+    if (edgeSlider.finish()) SETTINGS.saveToFile();
     if (!pinchGesture.isActive()) gpio.suppressTouchContact();
     const auto action = pinchGesture.update(pinchX1, pinchY1, pinchX2, pinchY2);
     if (action != ReaderPinchGesture::Action::None) {
@@ -173,6 +175,50 @@ void EpubReaderActivity::loop() {
     return;
   }
   pinchGesture.reset();
+
+  // Edge light sliders: vertical drag inside the outer 12% strips adjusts brightness
+  // (left) or warmth (right) live with no Light Panel or flash; persisted once on lift.
+  // Contact suppression happens on lift (not mid-drag), because InputManager::isTouchHeldAt()
+  // returns false once a contact is suppressed.
+  if (SETTINGS.touchReaderControls != 0 && mappedInput.hasTouch() && Frontlight.present()) {
+    int edgeX = 0;
+    int edgeY = 0;
+    if (mappedInput.isScreenTouchHeld(edgeX, edgeY)) {
+      const auto step = edgeSlider.update(edgeX, edgeY, renderer.getScreenWidth(), renderer.getScreenHeight(),
+                                          Frontlight.hasColorTemperature(), Frontlight.isOn(), Frontlight.brightness(),
+                                          SETTINGS.frontlightMaxBrightness, Frontlight.warmth());
+      if (step.valueChanged) {
+        if (step.axis == ReaderEdgeSlider::Axis::Brightness) {
+          SETTINGS.frontlightBrightness = step.value;
+          if (step.turnOn) {
+            SETTINGS.frontlightOn = 1;
+            Frontlight.setOn(true);
+          }
+          Frontlight.setBrightness(step.value);
+          LOG_DBG("ERS", "Edge slider brightness=%u", step.value);
+        } else if (step.axis == ReaderEdgeSlider::Axis::Warmth) {
+          SETTINGS.frontlightWarmth = step.value;
+          Frontlight.setWarmth(step.value);
+          LOG_DBG("ERS", "Edge slider warmth=%u", step.value);
+        }
+      }
+      if (step.active) return;
+    } else {
+      const bool wasDragging = edgeSlider.isDragging();
+      const bool shouldSave = edgeSlider.finish();
+      if (wasDragging) {
+        gpio.suppressTouchContact();
+        if (shouldSave) {
+          SETTINGS.saveToFile();
+          LOG_INF("ERS", "Edge slider saved: on=%u brightness=%u warmth=%u", SETTINGS.frontlightOn,
+                  SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth);
+        }
+        return;
+      }
+    }
+  } else if (edgeSlider.finish()) {
+    SETTINGS.saveToFile();
+  }
 
   int holdX = 0;
   int holdY = 0;

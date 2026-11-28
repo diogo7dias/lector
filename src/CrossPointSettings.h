@@ -399,6 +399,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Persisted under the legacy "tapForReaderMenu" key, whose old values line up:
   // 0 = Off, 1 = Tap.
   uint8_t showReaderMenu = READER_MENU_TAP;
+  enum TAP_ZONE_LAYOUT : uint8_t {
+    TAP_ZONE_RIGHT_HANDED = 0,
+    TAP_ZONE_LEFT_HANDED = 1,
+    TAP_ZONE_TOP_BOTTOM = 2,
+    TAP_ZONE_EQUAL_THIRDS = 3,
+  };
+  uint8_t tapZoneLayout = TAP_ZONE_RIGHT_HANDED;
   // Wake hold. Defaults to Normal, including for a settings file that predates this
   // setting and chose Sleep — fromJson carries those forward to Fast, so nobody's wake
   // gets slower without them asking (see the migration there).
