@@ -14,8 +14,9 @@
 namespace {
 constexpr size_t MAX_ENTRIES = OpdsParser::maxEntries();
 // Text budget for every collected entry together, claimed once before the
-// transfer. C3 keeps 48 entries + summaries in 14 KB so wolfSSL stays safe;
-// X4 Pro (PSRAM) holds 64 entries with full 400 B summaries in 32 KB.
+// transfer. C3 keeps up to 64 entries in 14 KB (trimming synopses if space
+// runs tight) so wolfSSL stays safe; X4 Pro (PSRAM) holds full 400 B summaries
+// in 32 KB.
 #if defined(BOARD_HAS_PSRAM)
 constexpr size_t ARENA_BYTES = 32 * 1024;
 #else
@@ -53,7 +54,7 @@ bool hrefEndsWithIgnoreCase(const char* href, const char* ext) {
 
 // Classifies an OPDS acquisition link into a supported book format and preference
 // rank (higher wins when an entry offers multiple formats: plain EPUB > derived
-// EPUB > CBZ/XTC > TXT). Returns 0 if unsupported.
+// EPUB > XTCH/XTC > TXT). Returns 0 if unsupported.
 uint8_t classifyAcquisition(const char* type, const char* href, OpdsBookFormat& format) {
   const bool isEpubMime = type && strcmp(type, "application/epub+zip") == 0;
   const bool isPlainEpubHref = href && (hrefEndsWithIgnoreCase(href, ".epub") || strstr(href, "/epub/") != nullptr);
@@ -61,13 +62,11 @@ uint8_t classifyAcquisition(const char* type, const char* href, OpdsBookFormat& 
     format = OpdsBookFormat::EPUB;
     return isPlainEpubHref ? 4 : 3;
   }
-  if ((type && (strcmp(type, "application/vnd.comicbook+zip") == 0 || strcmp(type, "application/x-cbz") == 0)) ||
-      hrefEndsWithIgnoreCase(href, ".cbz")) {
-    format = OpdsBookFormat::CBZ;
+  if ((type && strstr(type, "xtch") != nullptr) || hrefEndsWithIgnoreCase(href, ".xtch")) {
+    format = OpdsBookFormat::XTCH;
     return 2;
   }
-  if ((type && strstr(type, "xtc") != nullptr) || hrefEndsWithIgnoreCase(href, ".xtc") ||
-      hrefEndsWithIgnoreCase(href, ".xtch")) {
+  if ((type && strstr(type, "xtc") != nullptr) || hrefEndsWithIgnoreCase(href, ".xtc")) {
     format = OpdsBookFormat::XTC;
     return 2;
   }

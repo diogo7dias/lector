@@ -62,7 +62,7 @@ TEST(OpdsParserTest, TruncatesOversizedFeedInsteadOfGrowing) {
 
   const auto entries = parser.takeEntries();
   EXPECT_LE(entries.size(), OpdsParser::maxEntries());
-  EXPECT_EQ(OpdsParser::maxEntries(), 48u);
+  EXPECT_EQ(OpdsParser::maxEntries(), 64u);
   EXPECT_GT(entries.size(), 0u);
   for (const auto& entry : entries) {
     EXPECT_FALSE(entry.title.empty());
@@ -93,7 +93,7 @@ TEST(OpdsParserTest, CapturesSummaryCappedAt400BytesAndStripsHtml) {
   EXPECT_EQ(entries[0].summary.find('<'), std::string::npos);
 }
 
-TEST(OpdsParserTest, AcceptsTxtXtcAndCbzAcquisitionsAndPrefersEpub) {
+TEST(OpdsParserTest, AcceptsTxtXtcXtchIgnoresCbzAndPrefersEpub) {
   const std::string xml =
       "<?xml version=\"1.0\"?><feed xmlns=\"http://www.w3.org/2005/Atom\">"
       "<entry><title>Plain Text</title>"
@@ -101,7 +101,10 @@ TEST(OpdsParserTest, AcceptsTxtXtcAndCbzAcquisitionsAndPrefersEpub) {
       "<entry><title>Xtc Book</title>"
       "<link rel=\"http://opds-spec.org/acquisition\" type=\"application/octet-stream\" "
       "href=\"/books/manga.xtc\"/></entry>"
-      "<entry><title>Comic</title>"
+      "<entry><title>Xtch Book</title>"
+      "<link rel=\"http://opds-spec.org/acquisition\" type=\"application/octet-stream\" "
+      "href=\"/books/manga-hd.xtch\"/></entry>"
+      "<entry><title>Unsupported Comic</title>"
       "<link rel=\"http://opds-spec.org/acquisition\" type=\"application/vnd.comicbook+zip\" "
       "href=\"/books/issue1.cbz\"/></entry>"
       "<entry><title>Multi Format</title>"
@@ -117,10 +120,13 @@ TEST(OpdsParserTest, AcceptsTxtXtcAndCbzAcquisitionsAndPrefersEpub) {
   ASSERT_EQ(entries.size(), 4u);
   EXPECT_EQ(entries[0].type, OpdsEntryType::BOOK);
   EXPECT_EQ(entries[0].format, OpdsBookFormat::TXT);
+  EXPECT_STREQ(opdsBookExtension(entries[0].format), ".txt");
   EXPECT_EQ(entries[1].type, OpdsEntryType::BOOK);
   EXPECT_EQ(entries[1].format, OpdsBookFormat::XTC);
+  EXPECT_STREQ(opdsBookExtension(entries[1].format), ".xtc");
   EXPECT_EQ(entries[2].type, OpdsEntryType::BOOK);
-  EXPECT_EQ(entries[2].format, OpdsBookFormat::CBZ);
+  EXPECT_EQ(entries[2].format, OpdsBookFormat::XTCH);
+  EXPECT_STREQ(opdsBookExtension(entries[2].format), ".xtch");
   EXPECT_EQ(entries[3].type, OpdsEntryType::BOOK);
   EXPECT_EQ(entries[3].format, OpdsBookFormat::EPUB);
   EXPECT_EQ(entries[3].href, "/books/multi.epub");

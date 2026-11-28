@@ -20,33 +20,23 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "activities/util/TrustCertificatePrompt.h"
 #include "components/UITheme.h"
-#include "components/icons/search24.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 #include "network/TlsScratchHeap.h"
 #include "network/opds/BookOrbitMissing.h"
 #include "util/BookCacheUtils.h"
-#include "util/OpdsFilename.h"
 #include "util/StringUtils.h"
 #include "util/UrlUtils.h"
-
-namespace {
-constexpr int SEARCH_ICON_SIZE = 24;
-constexpr int SEARCH_ICON_MARGIN = 14;
-constexpr unsigned long GO_HOME_MS = 1000;  // Back held this long leaves for Home (upstream #4397)
-
-// The search glyph sits inside the header band, at its right edge.
-int searchIconX(const GfxRenderer& renderer) {
-  return renderer.getScreenWidth() - SEARCH_ICON_SIZE - SEARCH_ICON_MARGIN;
-}
-
-}  // namespace
 
 void OpdsBookBrowserActivity::onEnter() {
   UiStatusActivity::onEnter();
 
+  // WiFi, TLS and a parse run on what a book's fonts leave: release the rebuildable SD font caches
+  // first, as the web server and Calibre do. A handshake short of heap reads like a server fault.
   if (auto* fcm = renderer.getFontCacheManager()) {
+    LOG_DBG("OPDS", "Free heap before SD font cache release: %d bytes", ESP.getFreeHeap());
     fcm->releaseSdFontCaches();
+    LOG_DBG("OPDS", "Free heap after SD font cache release: %d bytes", ESP.getFreeHeap());
   }
 
   state = BrowserState::CHECK_WIFI;
@@ -76,6 +66,8 @@ void OpdsBookBrowserActivity::onExit() {
   teardownWifiAndRestart(openDownloadedBook ? silentRestartToReader : silentRestartBack);
 }
 
+// The error screen's text for a failed fetch; nullptr when the feed arrived, even empty.
+// ABORTED is handled before this is asked.
 static const char* feedErrorMessage(const opds::ClientStatus status) {
   switch (status) {
     case opds::ClientStatus::OK:
@@ -100,6 +92,7 @@ static const char* feedErrorMessage(const opds::ClientStatus status) {
   }
 }
 
+// Shared by the feed fetch and the book download: the retry screen, and Back as cancel.
 void OpdsBookBrowserActivity::showReconnect(const opds::ReconnectInfo& info) {
   state = BrowserState::RECONNECTING;
   char attemptBuf[64];
@@ -277,6 +270,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book, const bool ope
     }
     downloadProgress = downloaded;
     downloadTotal = total;
+    // No repaint: wolfSSL holds the framebuffer until the loan ends.
   };
 
   std::unique_ptr<GfxRenderer::FrameBufferLoan> loan;
@@ -318,6 +312,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book, const bool ope
   }
 
   if (result == HttpDownloader::OK && (missingOnly || openAfter)) {
+    // Open it so Auto Sync pulls its position; it is still listed, hence -1.
     if (missingOnly && navigationHistory.empty())
       bookorbit_missing::save(static_cast<int>(bookorbit_missing::countBooks(entries)) - 1, startPath);
     APP_STATE.openEpubPath = finalPath;
@@ -426,178 +421,4 @@ void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
     errorMessage = tr(STR_WIFI_CONN_FAILED);
     requestUpdate();
   }
-}
-
-bool OpdsBookBrowserActivity::isBookOnCard(const OpdsEntry& entry) const {
-  if (entry.type != OpdsEntryType::BOOK) return false;
-  const std::string path =
-      opdsTargetPath(SETTINGS.opdsDownloadFolder, entry.author, entry.title,
-                     static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat), opdsBookExtension(entry.format));
-  return Storage.exists(path.c_str());
-}
-
-void OpdsBookBrowserActivity::refreshRows() {
-  rows.resize(entries.size());
-  for (size_t i = 0; i < entries.size(); ++i) {
-    const OpdsEntry& entry = entries[i];
-    rows[i] = freeink::ui::ListItem{};
-    rows[i].label = entry.title.c_str();
-    rows[i].actionValue = static_cast<int16_t>(i);
-    if (entry.type == OpdsEntryType::NAVIGATION) {
-      rows[i].value = ">";
-    } else {
-      if (!entry.author.empty()) rows[i].subtitle = entry.author.c_str();
-      if (isBookOnCard(entry)) rows[i].value = tr(STR_OPDS_ON_CARD);
-    }
-  }
-}
-
-UiStatusActivity::StatusView OpdsBookBrowserActivity::statusView() const {
-  StatusView view;
-  view.title = server.name.empty() ? tr(STR_OPDS_BROWSER) : server.name.c_str();
-  if (pendingFullRefresh) view.refresh = HalDisplay::FULL_REFRESH;
-
-  switch (state) {
-    case BrowserState::WIFI_SELECTION:
-    case BrowserState::SEARCH_INPUT:
-      view.hidden = true;
-      break;
-    case BrowserState::CHECK_WIFI:
-    case BrowserState::LOADING:
-      view.lines = {statusMessage.c_str(), nullptr, nullptr, nullptr};
-      break;
-    case BrowserState::RECONNECTING:
-      view.lines = {reconnectAttempt.empty() ? tr(STR_CONNECTING) : reconnectAttempt.c_str(),
-                    reconnectDetail.empty() ? nullptr : reconnectDetail.c_str(), nullptr, nullptr};
-      view.backHint = tr(STR_CANCEL);
-      break;
-    case BrowserState::ERROR:
-      view.lines = {tr(STR_ERROR_MSG), errorMessage.empty() ? nullptr : errorMessage.c_str(), nullptr, nullptr};
-      view.confirmHint = tr(STR_RETRY);
-      break;
-    case BrowserState::DOWNLOADING:
-      view.lines = {tr(STR_DOWNLOADING), downloadTitle.c_str(), nullptr, nullptr};
-      view.showProgress = downloadTotal > 0;
-      view.progressValue = static_cast<int>(downloadProgress);
-      view.progressMax = downloadTotal > 0 ? static_cast<int>(downloadTotal) : 1;
-      view.backHint = tr(STR_CANCEL);
-      break;
-    case BrowserState::DETAIL: {
-      view.sections[0].heading = detailEntry.title.c_str();
-      size_t lineIdx = 0;
-      if (!detailEntry.author.empty()) view.sections[0].lines[lineIdx++] = detailEntry.author.c_str();
-      if (detailOnCard) view.sections[0].lines[lineIdx++] = tr(STR_OPDS_ON_CARD);
-      if (!detailEntry.summary.empty()) {
-        view.sections[1].paragraph = detailEntry.summary.c_str();
-        view.sections[1].paragraphMaxLines = 8;
-      }
-      view.choices = {tr(STR_DOWNLOAD), tr(STR_OPDS_DOWNLOAD_AND_READ)};
-      view.confirmHint = tr(STR_SELECT);
-      view.thirdHint = tr(STR_DIR_UP);
-      view.fourthHint = tr(STR_DIR_DOWN);
-      break;
-    }
-    case BrowserState::BROWSING:
-      if (rows.empty()) {
-        view.lines = {tr(STR_NO_ENTRIES), nullptr, nullptr, nullptr};
-        break;
-      }
-      view.listItems = rows.data();
-      view.listCount = static_cast<int>(rows.size());
-      view.listHasSubtitle = true;
-      view.confirmHint = tr(STR_OPEN);
-      view.thirdHint = !searchTemplate.empty() && listSelection() == 0 ? tr(STR_SEARCH) : tr(STR_DIR_UP);
-      view.fourthHint = tr(STR_DIR_DOWN);
-      break;
-  }
-  return view;
-}
-
-void OpdsBookBrowserActivity::drawHeaderExtras(const Rect& headerRect) {
-  if (searchTemplate.empty() || state == BrowserState::DETAIL) return;
-  renderer.drawIcon(Search24Icon.bits, searchIconX(renderer), headerRect.y + (headerRect.height - SEARCH_ICON_SIZE) / 2,
-                    Search24Icon.w);
-}
-
-void OpdsBookBrowserActivity::afterRender() { pendingFullRefresh = false; }
-
-bool OpdsBookBrowserActivity::handleCustomInput() {
-  if (state == BrowserState::WIFI_SELECTION || state == BrowserState::SEARCH_INPUT) return true;
-
-  if (consumeConfirm && mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    consumeConfirm = false;
-    return true;
-  }
-
-  if (state == BrowserState::RECONNECTING || state == BrowserState::DOWNLOADING || state == BrowserState::LOADING) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      cancelRequested = true;
-      return true;
-    }
-    return true;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) return backArmed = true;
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && std::exchange(backArmed, false)) {
-    mappedInput.getHeldTime() >= GO_HOME_MS ? onGoHome() : onBackButton();
-    return true;
-  }
-
-  if (state == BrowserState::BROWSING && mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-    if (!searchTemplate.empty() && listSelection() == 0) {
-      launchSearch();
-      return true;
-    }
-  }
-  return false;
-}
-
-void OpdsBookBrowserActivity::onListActivated(const int index) {
-  if (state != BrowserState::BROWSING || index < 0 || index >= static_cast<int>(entries.size())) return;
-  setListSelection(index);
-  const OpdsEntry entry = entries[index];
-  if (entry.type == OpdsEntryType::BOOK) {
-    detailEntry = entry;
-    detailOnCard = isBookOnCard(entry);
-    setChoiceIndex(missingOnly ? 1 : 0);
-    state = BrowserState::DETAIL;
-    requestUpdate();
-    return;
-  }
-  navigateToEntry(entry);
-}
-
-void OpdsBookBrowserActivity::onChoiceActivated(const int index) {
-  if (state != BrowserState::DETAIL) return;
-  downloadBook(detailEntry, /*openAfter=*/index == 1);
-}
-
-void OpdsBookBrowserActivity::onBackButton() {
-  if (state == BrowserState::RECONNECTING || state == BrowserState::DOWNLOADING || state == BrowserState::LOADING) {
-    cancelRequested = true;
-    return;
-  }
-  if (state == BrowserState::DETAIL) {
-    state = BrowserState::BROWSING;
-    requestUpdate();
-    return;
-  }
-  if (state == BrowserState::CHECK_WIFI) {
-    finish();
-    return;
-  }
-  navigateBack();
-}
-
-void OpdsBookBrowserActivity::onConfirmButton() {
-  if (state != BrowserState::ERROR) return;
-  // A failure retries the feed, unless the link itself is what is missing.
-  if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
-    state = BrowserState::LOADING;
-    statusMessage = tr(STR_LOADING);
-    requestUpdate();
-    fetchFeed(currentPath);
-    return;
-  }
-  launchWifiSelection();
 }

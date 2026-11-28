@@ -19,7 +19,7 @@ enum class OpdsBookFormat : uint8_t {
   EPUB = 0,
   TXT = 1,
   XTC = 2,
-  CBZ = 3,
+  XTCH = 3,
 };
 
 inline constexpr const char* opdsBookExtension(const OpdsBookFormat format) {
@@ -28,8 +28,8 @@ inline constexpr const char* opdsBookExtension(const OpdsBookFormat format) {
       return ".txt";
     case OpdsBookFormat::XTC:
       return ".xtc";
-    case OpdsBookFormat::CBZ:
-      return ".cbz";
+    case OpdsBookFormat::XTCH:
+      return ".xtch";
     case OpdsBookFormat::EPUB:
     default:
       return ".epub";
@@ -103,13 +103,7 @@ class OpdsParser final : public Print {
   /** Number of entries collected so far. */
   size_t entryCount() const { return slots.size(); }
 
-  static constexpr size_t maxEntries() {
-#if defined(BOARD_HAS_PSRAM)
-    return 64;
-#else
-    return 48;
-#endif
-  }
+  static constexpr size_t maxEntries() { return 64; }
 
   static constexpr size_t MAX_SUMMARY_CHARS = 400;
 

@@ -818,9 +818,10 @@ and how they are named (**Filename format**: Author - Title, Title - Author, or 
 from the OPDS screens and the web interface, not from the on-device Settings menu.
 
 Books already in the download folder carry an **[On card]** tag in the list. Opening a book entry
-shows its author, synopsis (when the feed provides one), and two actions: **Download** (stays in
-the catalog) and **Download & Read** (restarts into the reader once the download finishes). In
-addition to EPUB, catalogs that serve `.txt`, `.xtc`, or `.cbz` acquisition links are supported.
+shows a detail screen with its author, synopsis (when the feed provides one), and two actions:
+**Download** (stays in the catalog; replaces an existing file atomically once complete) and
+**Download & Read** (restarts into the reader once the download finishes). In addition to EPUB,
+catalogs that serve `.txt`, `.xtc`, or `.xtch` acquisition links are supported.
 
 Catalogs can also be managed from the web interface at `http://<device-ip>/settings`.
 

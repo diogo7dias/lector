@@ -51,7 +51,7 @@ TEST(OpdsFilename, UnknownFormatValueFallsBackToAuthorTitle) {
 
 TEST(OpdsFilename, PreservesNonEpubExtensionsAndComposesTargetPath) {
   EXPECT_EQ(opdsBookFilename("J. Doe", "Notes", OpdsFilenameFormat::AuthorTitle, ".txt"), "J. Doe - Notes.txt");
-  EXPECT_EQ(opdsBookFilename("J. Doe", "Issue 1", OpdsFilenameFormat::TitleOnly, ".cbz"), "Issue 1.cbz");
+  EXPECT_EQ(opdsBookFilename("J. Doe", "Issue 1", OpdsFilenameFormat::TitleOnly, ".xtch"), "Issue 1.xtch");
   EXPECT_EQ(opdsTargetPath("/Books", "J. Doe", "Manga", OpdsFilenameFormat::AuthorTitle, ".xtc"),
             "/Books/J. Doe - Manga.xtc");
   EXPECT_EQ(opdsTargetPath("", "", "Solo", OpdsFilenameFormat::TitleOnly, ".epub"), "/Solo.epub");
