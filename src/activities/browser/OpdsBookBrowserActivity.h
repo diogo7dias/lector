@@ -21,6 +21,7 @@ class OpdsBookBrowserActivity final : public UiStatusActivity {
     LOADING,
     RECONNECTING,
     BROWSING,
+    DETAIL,
     DOWNLOADING,
     ERROR,
     SEARCH_INPUT
@@ -42,6 +43,7 @@ class OpdsBookBrowserActivity final : public UiStatusActivity {
   StatusView statusView() const override;
   bool handleCustomInput() override;
   void onListActivated(int index) override;
+  void onChoiceActivated(int index) override;
   void onBackButton() override;
   void onConfirmButton() override;
   void drawHeaderExtras(const Rect& headerRect) override;
@@ -77,10 +79,13 @@ class OpdsBookBrowserActivity final : public UiStatusActivity {
   const std::string startPath;
   const bool missingOnly;
   bool openDownloadedBook = false;
+  OpdsEntry detailEntry;
+  bool detailOnCard = false;
 
   opds::OpdsClient client;
   OpdsServer server;  // Copied at construction — safe even if the store changes during browsing
 
+  bool isBookOnCard(const OpdsEntry& entry) const;
   void checkAndConnectWifi();
   void launchWifiSelection();
   void onWifiSelectionComplete(bool connected);
@@ -90,7 +95,7 @@ class OpdsBookBrowserActivity final : public UiStatusActivity {
   void releaseEntries();
   void navigateToEntry(const OpdsEntry& entry);
   void navigateBack();
-  void downloadBook(const OpdsEntry& book);
+  void downloadBook(const OpdsEntry& book, bool openAfter = false);
   void launchSearch();
   void performSearch(const std::string& query);
   // Fetches block the loop, so a state change restarts the auto-sleep clock once; an idle

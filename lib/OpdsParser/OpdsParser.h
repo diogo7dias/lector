@@ -15,14 +15,37 @@ enum class OpdsEntryType {
   BOOK         // Downloadable book
 };
 
+enum class OpdsBookFormat : uint8_t {
+  EPUB = 0,
+  TXT = 1,
+  XTC = 2,
+  CBZ = 3,
+};
+
+inline constexpr const char* opdsBookExtension(const OpdsBookFormat format) {
+  switch (format) {
+    case OpdsBookFormat::TXT:
+      return ".txt";
+    case OpdsBookFormat::XTC:
+      return ".xtc";
+    case OpdsBookFormat::CBZ:
+      return ".cbz";
+    case OpdsBookFormat::EPUB:
+    default:
+      return ".epub";
+  }
+}
+
 /**
  * Represents an entry from an OPDS feed (either a navigation link or a book).
  */
 struct OpdsEntry {
   OpdsEntryType type = OpdsEntryType::NAVIGATION;
+  OpdsBookFormat format = OpdsBookFormat::EPUB;
   std::string title;
-  std::string author;  // Only for books
-  std::string href;    // Navigation URL or epub download URL
+  std::string author;   // Only for books
+  std::string href;     // Navigation URL or book download URL
+  std::string summary;  // Book synopsis, capped at 400 bytes
 };
 
 /**
@@ -80,14 +103,24 @@ class OpdsParser final : public Print {
   /** Number of entries collected so far. */
   size_t entryCount() const { return slots.size(); }
 
+  static constexpr size_t maxEntries() {
+#if defined(BOARD_HAS_PSRAM)
+    return 64;
+#else
+    return 48;
+#endif
+  }
+
+  static constexpr size_t MAX_SUMMARY_CHARS = 400;
+
  private:
   // Expat callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void XMLCALL endElement(void* userData, const XML_Char* name);
   static void XMLCALL characterData(void* userData, const XML_Char* s, int len);
 
-  // One collected entry, as offsets into the arena. 16 bytes, against ~100 for
-  // the four std::strings it replaces during the transfer.
+  // One collected entry, as offsets into the arena. 20 bytes, against ~120 for
+  // the std::strings it replaces during the transfer.
   struct Slot {
     uint16_t titleOff = 0;
     uint16_t titleLen = 0;
@@ -95,7 +128,10 @@ class OpdsParser final : public Print {
     uint16_t authorLen = 0;
     uint16_t hrefOff = 0;
     uint16_t hrefLen = 0;
+    uint16_t summaryOff = 0;
+    uint16_t summaryLen = 0;
     OpdsEntryType type = OpdsEntryType::NAVIGATION;
+    OpdsBookFormat format = OpdsBookFormat::EPUB;
   };
 
   // Copies the staged entry into the arena. False when it no longer fits.
@@ -115,12 +151,14 @@ class OpdsParser final : public Print {
   std::vector<Slot> slots;
   OpdsEntry currentEntry;
   std::string currentText;
+  uint8_t currentLinkPriority = 0;
 
   // Parser state
   bool inEntry = false;
   bool inTitle = false;
   bool inAuthor = false;
   bool inAuthorName = false;
+  bool inSummary = false;
   bool collectCurrentEntry = false;
 
   bool errorOccured = false;

@@ -817,6 +817,11 @@ for a second and let go to leave the catalog for Home. Where downloads land (**D
 and how they are named (**Filename format**: Author - Title, Title - Author, or Title) are set
 from the OPDS screens and the web interface, not from the on-device Settings menu.
 
+Books already in the download folder carry an **[On card]** tag in the list. Opening a book entry
+shows its author, synopsis (when the feed provides one), and two actions: **Download** (stays in
+the catalog) and **Download & Read** (restarts into the reader once the download finishes). In
+addition to EPUB, catalogs that serve `.txt`, `.xtc`, or `.cbz` acquisition links are supported.
+
 Catalogs can also be managed from the web interface at `http://<device-ip>/settings`.
 
 ### HTTPS servers and their certificates
