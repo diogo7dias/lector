@@ -89,6 +89,7 @@ class HalGPIO {
   void suppressTouchContact();
   // Touch controller sleep (GT911 only; see InputManager::setTouchAsleep).
   void setTouchAsleep(bool asleep);
+  bool isTouchAsleep() const;
   bool isTouchHeldAt(float& nx, float& ny) const;
   // Exactly two contacts down (GT911 only): both positions, normalized like isTouchHeldAt.
   bool getTwoTouchContacts(float& nx1, float& ny1, float& nx2, float& ny2) const;

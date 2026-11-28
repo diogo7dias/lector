@@ -10,16 +10,28 @@
 
 #include "BatteryPercentPoll.h"
 #include "HalGPIO.h"
+#include "IdleSleepPolicy.h"
+
+// Compile-time gate for idle light sleep on ESP32-S3 (X4 Pro). Set to 0 via
+// build flags (-DLECTOR_IDLE_LIGHT_SLEEP=0) to fall back to low-clock polling.
+#ifndef LECTOR_IDLE_LIGHT_SLEEP
+#if CONFIG_IDF_TARGET_ESP32S3
+#define LECTOR_IDLE_LIGHT_SLEEP 1
+#else
+#define LECTOR_IDLE_LIGHT_SLEEP 0
+#endif
+#endif
 
 class HalPowerManager;
 extern HalPowerManager powerManager;  // Singleton
 
-// CrossPoint's power manager: drop the CPU clock after a stretch without input, no
-// automatic light sleep. Deep sleep is the only sleep the chip takes.
 class HalPowerManager {
   int normalFreq = 0;  // MHz
   bool isLowPower = false;
   unsigned long storageWokeAtMs = 0;  // last time a card access had to restore full speed
+  uint32_t lightSleepSlices = 0;
+  uint64_t lightSleepTotalUs = 0;
+  uint32_t lightSleepGpioWakes = 0;
 
   mutable BatteryPercentPoll _batteryPoll;
 
@@ -58,6 +70,12 @@ class HalPowerManager {
 
   // Control CPU frequency for power saving
   void setPowerSaving(bool enabled);
+
+  // Enter one short esp_light_sleep_start() slice on X4 Pro when every guard
+  // holds (Wi-Fi off, USB unplugged, USB Serial/JTAG idle, render idle, no
+  // power lock, no input/touch held, SD idle, GPIO wakes armed). Returns true
+  // if light sleep ran, false to fall back to timed idle polling.
+  bool idleLightSleepSlice(bool renderIdle, bool touchHeld, bool touchAsleep, uint32_t maxSliceMs);
 
   // Called with the storage mutex held, before the card is touched. The S3's SD host
   // must not run a transfer on the crystal clock (ESP-IDF's own driver holds an APB lock

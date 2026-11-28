@@ -11,7 +11,9 @@
 #include <driver/rtc_io.h>
 #endif
 #if CONFIG_IDF_TARGET_ESP32S3
+#include <driver/usb_serial_jtag.h>
 #include <esp_private/mspi_timing_tuning.h>
+#include <esp_timer.h>
 #endif
 
 #include <cassert>
@@ -124,7 +126,17 @@ void HalPowerManager::setPowerSaving(bool enabled) {
     }
 
   } else if ((!enabled || mode != None) && isLowPower) {
-    LOG_INF("PWR", "Restoring normal CPU frequency");
+    if (lightSleepSlices > 0) {
+      LOG_INF("PWR", "Restoring normal CPU frequency (light_sleep slices=%lu slept_ms=%llu gpio_wakes=%lu)",
+              static_cast<unsigned long>(lightSleepSlices),
+              static_cast<unsigned long long>(lightSleepTotalUs / 1000ULL),
+              static_cast<unsigned long>(lightSleepGpioWakes));
+      lightSleepSlices = 0;
+      lightSleepTotalUs = 0;
+      lightSleepGpioWakes = 0;
+    } else {
+      LOG_INF("PWR", "Restoring normal CPU frequency");
+    }
     if (!setCpuClock(normalFreq)) {
       LOG_DBG("PWR", "Failed to set CPU frequency = %d MHz", normalFreq);
       xSemaphoreGive(modeMutex);
@@ -135,6 +147,103 @@ void HalPowerManager::setPowerSaving(bool enabled) {
 
   // Otherwise, no change needed
   xSemaphoreGive(modeMutex);
+}
+
+bool HalPowerManager::idleLightSleepSlice(const bool renderIdle, const bool touchHeld, const bool touchAsleep,
+                                          const uint32_t maxSliceMs) {
+#if CONFIG_IDF_TARGET_ESP32S3 && LECTOR_IDLE_LIGHT_SLEEP
+  if (normalFreq <= 0 || modeMutex == nullptr) return false;
+  const uint32_t sliceMs = idle_sleep::sliceDurationMs(touchAsleep, maxSliceMs);
+  if (sliceMs < 5) return false;
+
+  idle_sleep::Conditions cond;
+  cond.wifiActive = (WiFi.getMode() != WIFI_MODE_NULL);
+  cond.usbConnected = gpio.isUsbConnectedCached() || isCharging();
+  cond.usbSerialJtagActive = usb_serial_jtag_is_connected();
+  cond.renderIdle = renderIdle;
+  cond.touchHeld = touchHeld;
+  cond.touchAsleep = touchAsleep;
+  cond.rawInputActive = gpio.rawInputActive();
+  // Quick pre-check before taking mutexes.
+  cond.gpioWakeArmed = true;
+  if (!idle_sleep::canLightSleep(cond)) return false;
+
+  if (xSemaphoreTake(modeMutex, 0) != pdTRUE) return false;
+  cond.powerLockHeld = (currentLockMode != None);
+  if (!isLowPower || cond.powerLockHeld || !Storage.tryLock()) {
+    xSemaphoreGive(modeMutex);
+    return false;
+  }
+
+  // Collect active-low digital button GPIOs (X4 Pro: GPIO0 up, GPIO7 down, GPIO3 power).
+  gpio_num_t armedPins[8] = {};
+  uint8_t armedCount = 0;
+  const auto armPin = [&](const int8_t pin, const gpio_int_type_t intrType) {
+    if (pin < 0 || armedCount >= 8) return;
+    const auto g = static_cast<gpio_num_t>(pin);
+    for (uint8_t i = 0; i < armedCount; ++i) {
+      if (armedPins[i] == g) return;
+    }
+    if (gpio_wakeup_enable(g, intrType) == ESP_OK) {
+      armedPins[armedCount++] = g;
+    }
+  };
+
+  const auto& in = BoardConfig::ACTIVE.input;
+  if (BoardConfig::ACTIVE.inputStyle == BoardConfig::InputStyle::DigitalButtons) {
+    for (const int8_t pin : {in.up, in.down, in.power, in.back, in.confirm, in.left, in.right}) {
+      armPin(pin, GPIO_INTR_LOW_LEVEL);
+    }
+  } else {
+    armPin(in.power, GPIO_INTR_LOW_LEVEL);
+  }
+  const uint8_t buttonPinsArmed = armedCount;
+
+  // Arm GT911 INT (GPIO10) only while touch is awake. When touch is asleep,
+  // InputManager drives GPIO10 LOW as an output so arming it would self-wake.
+  const auto& touch = BoardConfig::ACTIVE.touch;
+  if (!touchAsleep && touch.irq >= 0 && touch.controller == BoardConfig::TouchController::Gt911) {
+    const int idleLevel = digitalRead(touch.irq);
+    const gpio_int_type_t intrType =
+        idle_sleep::touchWakeHighLevel(idleLevel) ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL;
+    armPin(touch.irq, intrType);
+  }
+
+  cond.gpioWakeArmed = (buttonPinsArmed > 0);
+  cond.rawInputActive = gpio.rawInputActive();
+  bool slept = false;
+  if (idle_sleep::canLightSleep(cond) && esp_sleep_enable_gpio_wakeup() == ESP_OK &&
+      esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(sliceMs) * 1000ULL) == ESP_OK) {
+    const int64_t t0 = esp_timer_get_time();
+    const esp_err_t err = esp_light_sleep_start();
+    const int64_t dt = esp_timer_get_time() - t0;
+    const esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+    if (err == ESP_OK) {
+      slept = true;
+      lightSleepSlices++;
+      if (dt > 0) lightSleepTotalUs += static_cast<uint64_t>(dt);
+      if (cause == ESP_SLEEP_WAKEUP_GPIO) lightSleepGpioWakes++;
+    }
+  }
+
+  // Always tear down wake sources and clear level interrupt types before returning:
+  // leaving GPIO_INTR_{LOW,HIGH}_LEVEL armed livelocks the shared GPIO ISR service.
+  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+  for (uint8_t i = 0; i < armedCount; ++i) {
+    gpio_wakeup_disable(armedPins[i]);
+    gpio_set_intr_type(armedPins[i], GPIO_INTR_DISABLE);
+  }
+
+  Storage.unlock();
+  xSemaphoreGive(modeMutex);
+  return slept;
+#else
+  (void)renderIdle;
+  (void)touchHeld;
+  (void)touchAsleep;
+  (void)maxSliceMs;
+  return false;
+#endif
 }
 
 // X4 Pro charger STAT line: GPIO21, driven HIGH while charging. Not in BoardConfig for this board; the pin
