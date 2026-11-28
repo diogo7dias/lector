@@ -236,7 +236,7 @@ void EpubReaderActivity::releaseBookForHandoff() {
   section.reset();
   // onExit() can no longer save the back-stack once epub is gone.
   if (footnoteDepth > 0 && epub) saveLinkStack();
-  if (epub) saveReturnHistory();
+  if (epub && !sortesMode) saveReturnHistory();
   epub.reset();
 }
 

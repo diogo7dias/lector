@@ -193,6 +193,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
   uint8_t firedHoldFunction = CrossPointSettings::LP_MENU_DISABLED;
   unsigned long confirmHoldStart = 0;
   MenuAction openOn = MenuAction::SECTION_HEADER;
+  // The heading onEnter() opened by itself (Sleep Screen or Navigate); -1 when none.
+  int landingHeader = -1;
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
   const std::vector<StrId> paragraphNumLabels = {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER};

@@ -243,7 +243,8 @@ void EpubReaderActivity::onExit() {
   // book reopens on the viewed page and Back still returns to the link origin.
   applyLinkLanding();
   if (footnoteDepth > 0 && epub) saveLinkStack();
-  if (epub && !pendingDeleteBook) saveReturnHistory();
+  // Not from a Sortes visit: it never loaded the history, so it would erase the book's own.
+  if (epub && !pendingDeleteBook && !sortesMode) saveReturnHistory();
 
   // Auto Sync pushes only a book whose page moved since it opened.
   const bool pageMoved =

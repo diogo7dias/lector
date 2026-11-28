@@ -278,6 +278,7 @@ void EpubReaderMenuActivity::onEnter() {
     }
     if (first < static_cast<int>(items.size())) {
       sections.expandedHeader = first;
+      landingHeader = first;
       nav.reset(sections.visibleIndex(rows.data(), items.size(), first));
     } else {
       nav.reset(0);
@@ -345,10 +346,12 @@ bool EpubReaderMenuActivity::handleCustomInput() {
 }
 
 bool EpubReaderMenuActivity::handleButtons() {
-  // Back first collapses to the open header; a second Back leaves the menu.
+  // Back first collapses to the open header; a second Back leaves the menu. The landing tab
+  // is open without the reader asking, so Back from it leaves at once: one Back from the
+  // menu as it opened still returns to the page.
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    int header;
-    {
+    int header = -1;
+    if (sections.expandedHeader != landingHeader) {
       RenderLock lock(*this);
       header = sections.collapse(rows.data(), static_cast<int>(rows.size()));
       if (header >= 0) {

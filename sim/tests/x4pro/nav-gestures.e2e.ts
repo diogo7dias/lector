@@ -57,10 +57,8 @@ test('home flick, bottom-edge menu/Home, image viewer taps', async ({ app, scree
   await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
   await settle();
   await expect.poll(() => ink(0, 0, 480, 700), { timeout: 30_000 }).not.toBe(pageInk);
-  // Back first collapses the open landing tab (Navigate), then closes the menu back to the book;
-  // then a slow drag (>700 ms) from the bottom 14% also opens the menu (activity only updates on
-  // onEnter(), so verify via ink + log).
-  await tapOnce(60, 780);
+  // Back closes the menu back to the book, then a slow drag (>700 ms) from the bottom 14%
+  // also opens the menu (activity only updates on onEnter(), so verify via ink + log).
   await tapOnce(60, 780);
   await expect.poll(() => ink(0, 0, 480, 700), { timeout: 30_000 }).toBe(pageInk);
   const log = async () => (await fetch(`${app.baseUrl}/log`)).text();

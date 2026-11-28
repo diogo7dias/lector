@@ -443,7 +443,8 @@ Press **Confirm** while reading. The menu is one list of five tabs: **Look**, **
 **Book**, **Sleep Screen** and **Device**. Each tab is a heading with a plus at its right edge
 and the number of rows it holds. Moving onto a heading opens it (the plus turns to a minus)
 and closes the one that was open. **Back** closes the open tab; a second **Back** leaves the
-menu. Rows that do not apply to the open book are not shown at all.
+menu. From the tab the menu opened on, one **Back** leaves the menu. Rows that do not apply to
+the open book are not shown at all.
 
 The menu opens with **Sleep Screen** expanded when the lock screen has a wallpaper to act on, or
 with **Navigate** expanded otherwise.

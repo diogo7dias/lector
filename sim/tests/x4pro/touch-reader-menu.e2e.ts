@@ -75,10 +75,9 @@ test('night mode, frontlight and go home from the in-book menu', async ({ app, s
   await closeMenu();
   await expect.poll(body, { timeout: 30_000 }).toBe(day);
 
-  // Navigate opens expanded; Back collapses it so Device sits at y 263 regardless of how
-  // many Navigate rows this book has, and expanding Device places Go Home at y 543.
-  await panel.tap({ position: { x: 240, y: 400 } });
-  await expect(activity).toHaveText('EpubReaderMenu', { timeout: 30_000 });
+  // Navigate opens expanded, with as many rows as this book has. Opening Look and closing it
+  // with Back leaves every tab shut, so Device sits at y 263 and its Go Home at y 543.
+  await openLook();
   await tapOnce(60, 780);
   await tapOnce(100, 263);
   await tapOnce(100, 543);
