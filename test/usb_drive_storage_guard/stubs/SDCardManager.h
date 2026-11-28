@@ -12,6 +12,9 @@
 inline int cardCalls = 0;
 inline int usedBytesCalls = 0;
 inline uint64_t mockUsedBytes = 4096;
+// The clock HalStorage reads to tell how long ago the last write was.
+inline unsigned long fakeMillis = 0;
+inline unsigned long millis() { return fakeMillis; }
 // Volume flush: syncOk drives FsFile::sync(); detachAfterSync records that a detach only
 // ever follows a successful sync.
 inline bool syncOk = true;

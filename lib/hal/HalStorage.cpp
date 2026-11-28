@@ -71,6 +71,7 @@ HalStorage::HalStorage() {
 
 bool HalStorage::begin() {
   usedBytesValid = false;
+  usedBytesDirty = false;  // SDCardManager::begin() drops its own figure too
   return SDCard.begin();
 }
 
@@ -215,11 +216,24 @@ bool HalStorage::ensureDirectoryExists(const char* path) {
 
 uint64_t HalStorage::sdTotalBytes() { HAL_STORAGE_WRAPPED_CALL(sdTotalBytes); }
 
+void HalStorage::invalidateUsedBytes() {
+  usedBytesValid = false;
+  usedBytesDirty = true;
+  usedBytesDirtyAt = millis();
+}
+
 uint64_t HalStorage::sdUsedBytes() {
+  // SDCardManager keeps its own figure for 20 s (USED_BYTES_CACHE_TTL_MS, private there) and
+  // has no way to be told about a write. A figure read sooner than that after a write may
+  // predate the write, so it is passed on but not kept: kept, it would stay wrong until
+  // the next write. From 20 s on, SDCardManager has either rescanned or does so now.
+  static constexpr uint32_t USED_BYTES_SETTLE_MS = 20000;
   HalStorage::StorageLock lock;
   if (cardLentToUsbHost) return 0;
   if (!usedBytesValid) {
     cachedUsedBytes = SDCard.sdUsedBytes();
+    if (usedBytesDirty && millis() - usedBytesDirtyAt < USED_BYTES_SETTLE_MS) return cachedUsedBytes;
+    usedBytesDirty = false;
     usedBytesValid = true;
   }
   return cachedUsedBytes;

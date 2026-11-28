@@ -296,46 +296,4 @@ inline int valueForX(const Bar& bar, const int x, const int minValue, const int 
   return row_slider::valueForX(row_slider::Bar{bar.x, bar.y, bar.width, bar.height}, x, minValue, maxValue, 1);
 }
 
-// Minimum interval between e-ink redraws while dragging a light slider. PWM still updates
-// live on every pass; throttling only gates display refreshes and flushes on pause/release.
-inline constexpr uint32_t kSliderRedrawIntervalMs = 175;
-
-struct SliderThrottle {
-  uint32_t lastDrawMs = 0;
-  bool hasDrawn = false;
-  bool pending = false;
-
-  void reset() {
-    lastDrawMs = 0;
-    hasDrawn = false;
-    pending = false;
-  }
-
-  bool onDragValueChanged(const uint32_t nowMs, const uint32_t intervalMs = kSliderRedrawIntervalMs) {
-    if (!hasDrawn || static_cast<uint32_t>(nowMs - lastDrawMs) >= intervalMs) {
-      hasDrawn = true;
-      lastDrawMs = nowMs;
-      pending = false;
-      return true;
-    }
-    pending = true;
-    return false;
-  }
-
-  bool shouldFlush(const uint32_t nowMs, const uint32_t intervalMs = kSliderRedrawIntervalMs) {
-    if (!pending) return false;
-    if (hasDrawn && static_cast<uint32_t>(nowMs - lastDrawMs) < intervalMs) return false;
-    hasDrawn = true;
-    lastDrawMs = nowMs;
-    pending = false;
-    return true;
-  }
-
-  bool flushOnRelease() {
-    const bool wasPending = pending;
-    reset();
-    return wasPending;
-  }
-};
-
 }  // namespace light_panel
