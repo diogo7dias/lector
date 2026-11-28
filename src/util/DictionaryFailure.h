@@ -75,24 +75,9 @@ inline bool lookUp(Dictionary& dict, const char* folder, const char* word, std::
   return false;
 }
 
-// Try `primaryFolder` first; on a genuine NotFound (never masking an error on the
-// primary dictionary), try every other folder in `fallbacks` in turn, reusing the
-// single Dictionary object.
-inline bool lookUpInOrder(Dictionary& dict, const char* primaryFolder, const std::vector<DictionaryEntry>& fallbacks,
-                          const char* word, std::string& definition, std::string& headword, Message& failure,
-                          void (*showBusy)(void*, StrId), void* ctx) {
-  if (lookUp(dict, primaryFolder, word, definition, headword, failure, showBusy, ctx)) return true;
-  if (failure.isError) return false;
-  const char* primary = primaryFolder ? primaryFolder : "";
-  for (const auto& entry : fallbacks) {
-    if (entry.name == primary) continue;
-    Message subFailure;
-    if (lookUp(dict, entry.name.c_str(), word, definition, headword, subFailure, showBusy, ctx)) return true;
-  }
-  failure = {StrId::STR_DICT_NOT_FOUND, false};
-  return false;
-}
-
+// Try `primaryFolder` first; on a genuine NotFound (never masking an error on the primary
+// dictionary) and with `searchFallbacks` on, try every other installed dictionary in turn,
+// reusing the single Dictionary object.
 inline bool lookUpWithFallbacks(Dictionary& dict, const char* primaryFolder, const bool searchFallbacks,
                                 const char* word, std::string& definition, std::string& headword, Message& failure,
                                 void (*showBusy)(void*, StrId), void* ctx) {

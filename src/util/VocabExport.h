@@ -13,6 +13,7 @@ namespace vocab_export {
 
 inline constexpr char VOCAB_PATH[] = "/vocabulary.tsv";
 inline constexpr size_t MAX_SNIPPET_BYTES = 180;
+inline constexpr size_t MAX_SNIPPET_SOURCE_BYTES = 4096;  // definition bytes read to make a snippet
 inline constexpr size_t MAX_FIELD_BYTES = 256;
 
 // Flatten tabs/newlines into single spaces, trim edges, and cap on a UTF-8
@@ -44,7 +45,9 @@ inline std::string sanitizeField(const std::string_view raw, const size_t maxByt
 
 inline std::string makeSnippet(const std::string& definition, const bool isHtml,
                                const size_t maxBytes = MAX_SNIPPET_BYTES) {
-  std::string plain = definition;
+  // Only the head of the definition can reach the snippet, so only the head is copied: a
+  // whole definition runs to 64 KB, and a second copy of that is heap the C3 may not have.
+  std::string plain = definition.substr(0, MAX_SNIPPET_SOURCE_BYTES);
   for (char& c : plain) {
     if (c == '\0') c = '\n';
   }

@@ -418,3 +418,10 @@ TEST(VocabExport, FormatsSanitizedAnkiTsvRowAndStripsHtml) {
   const std::string capped = vocab_export::makeSnippet(utf8, false, 11);
   EXPECT_EQ(10u, capped.size());  // 5 complete 2-byte codepoints, never 11
 }
+
+TEST(VocabExport, SnippetReadsOnlyTheHeadOfALongDefinition) {
+  const std::string longDefinition = "<p>head words</p>" + std::string(64 * 1024, 'x');
+  const std::string snippet = vocab_export::makeSnippet(longDefinition, true);
+  EXPECT_EQ(0u, snippet.find("head words"));
+  EXPECT_LE(snippet.size(), vocab_export::MAX_SNIPPET_BYTES);
+}
