@@ -172,6 +172,7 @@ void ActivityManager::renderTaskLoop() {
         // resolving the output polarity here, per render, means menus, popups,
         // and every other activity revert to normal automatically.
         display.setInverted(SETTINGS.screenInverted != 0 && currentActivity->appliesNightMode());
+        renderer.setInvertImagesInNightMode(SETTINGS.nightModeImages == CrossPointSettings::NIGHT_IMAGES_INVERT);
         // A tap answers to what is on screen now, so the row table starts empty on every
         // paint and each list draw appends the rows it actually painted. Cleared here, the
         // one place a paint begins, rather than inside the list draws — a screen that draws

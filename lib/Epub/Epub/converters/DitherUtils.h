@@ -20,6 +20,18 @@ inline bool bwInkFromGray4(const uint8_t pixelValue, const int x, const int y) {
   return pixelValue == 0 || (pixelValue == 1 && threshold < 3) || (pixelValue == 2 && threshold < 1);
 }
 
+// Night mode skips the hardware grayscale pass, so the BW pass must use the 2x2 Bayer
+// dither whenever the display is inverted; otherwise gray levels 1 and 2 crush to solid ink.
+constexpr bool shouldDitherImagesInBw(const bool imagesDisplayBw, const bool displayInverted) {
+  return imagesDisplayBw || displayInverted;
+}
+
+// Counter-invert image pixels in the BW framebuffer during night mode so photos keep natural
+// polarity after hardware inversion; skip when the user chose Invert (for line diagrams).
+constexpr bool shouldPreserveImagePolarity(const bool displayInverted, const bool invertImagesInNightMode) {
+  return displayInverted && !invertImagesInNightMode;
+}
+
 // One pixel's 4-level value (0-3) on the display-tuned curve covers use (quantizeGray4).
 // Dithered: an ordered Bayer pick between the two panel levels around gray, in proportion
 // to where gray sits between them. Stateless, so any pixel order works.

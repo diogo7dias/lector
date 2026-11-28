@@ -255,6 +255,11 @@ void SettingsActivity::rebuildSettingsList() {
       // Settings merged into "Text Settings"
       // (they stay in the shared list for the web settings API)
       if (setting.inTextSettings) continue;
+      // Only applies while Night mode is enabled; stays in the shared list for
+      // persistence and the web settings API.
+      if (setting.valuePtr == &CrossPointSettings::nightModeImages && SETTINGS.screenInverted == 0) {
+        continue;
+      }
       readerSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_CONTROLS) {
       // The per-button bindings live in the Buttons screen; they stay in the shared
@@ -349,7 +354,8 @@ void SettingsActivity::rebuildSettingsList() {
           // the toggle that hides it.
           {StrId::STR_GRP_LOOK,
            {StrId::STR_PAPERBACK_LOOK, StrId::STR_PAPERBACK_STATUS, StrId::STR_RULED_LINES,
-            StrId::STR_CUSTOMISE_STATUS_BAR, StrId::STR_NIGHT_MODE, StrId::STR_READER_MENU_STYLE}},
+            StrId::STR_CUSTOMISE_STATUS_BAR, StrId::STR_NIGHT_MODE, StrId::STR_READER_MENU_STYLE,
+            StrId::STR_NIGHT_MODE_IMAGES}},
           {StrId::STR_GRP_LIBRARY, {StrId::STR_ALL_BOOKMARKS}},
       });
 
