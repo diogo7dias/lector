@@ -105,6 +105,8 @@ enum LONG_PRESS_MENU_FUNCTION {
   // Skips to the next or previous chapter (or +/-10 pages in chapterless TXT/XTC).
   LP_MENU_NEXT_CHAPTER = 39,
   LP_MENU_PREV_CHAPTER = 40,
+  // Quick Panel Candle Fade timer (X4 Pro with warm/cold LEDs).
+  LP_MENU_CANDLE_FADE = 41,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 

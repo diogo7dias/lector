@@ -306,16 +306,17 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
   emit(SettingInfo::Toggle(StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
                            "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY)
            .withWebOnly());
+  emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_BRIGHTNESS, &CrossPointSettings::nightFrontlightBrightness, {0, 100, 5},
+                          "nightFrontlightBrightness", StrId::STR_NONE_OPT));
+  emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_WARMTH, &CrossPointSettings::nightFrontlightWarmth, {0, 100, 5},
+                          "nightFrontlightWarmth", StrId::STR_NONE_OPT));
   emit(SettingInfo::Toggle(StrId::STR_FRONTLIGHT_SCHEDULE, &CrossPointSettings::frontlightScheduleEnabled,
-                           "frontlightScheduleEnabled", StrId::STR_CAT_DISPLAY)
-           .withWebOnly());
+                           "frontlightScheduleEnabled", StrId::STR_CAT_DISPLAY));
   emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_SCHEDULE_ON, &CrossPointSettings::frontlightScheduleOn,
                           {0, frontlight::SCHEDULE_LAST_STEP, 1}, "frontlightScheduleOn", StrId::STR_CAT_DISPLAY)
-           .withWebOnly()
            .withMinutesPerStep(frontlight::SCHEDULE_STEP_MINUTES));
   emit(SettingInfo::Value(StrId::STR_FRONTLIGHT_SCHEDULE_OFF, &CrossPointSettings::frontlightScheduleOff,
                           {0, frontlight::SCHEDULE_LAST_STEP, 1}, "frontlightScheduleOff", StrId::STR_CAT_DISPLAY)
-           .withWebOnly()
            .withMinutesPerStep(frontlight::SCHEDULE_STEP_MINUTES));
 
   emit(SettingInfo::Enum(StrId::STR_HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
@@ -801,9 +802,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                            }),
             v.end());
   } else if (!withAbsentHardware && !Frontlight.hasColorTemperature()) {
-    // Single-colour light: brightness applies, warmth does not.
+    // Single-colour light: brightness applies; warmth and sunset schedule do not.
     v.erase(std::remove_if(v.begin(), v.end(),
-                           [](const SettingInfo& s) { return s.nameId == StrId::STR_FRONTLIGHT_WARMTH; }),
+                           [](const SettingInfo& s) {
+                             return s.nameId == StrId::STR_FRONTLIGHT_WARMTH ||
+                                    s.nameId == StrId::STR_FRONTLIGHT_SCHEDULE ||
+                                    s.nameId == StrId::STR_FRONTLIGHT_SCHEDULE_ON ||
+                                    s.nameId == StrId::STR_FRONTLIGHT_SCHEDULE_OFF;
+                           }),
             v.end());
   }
   if (!withAbsentHardware && !gpio.hasTouch()) {

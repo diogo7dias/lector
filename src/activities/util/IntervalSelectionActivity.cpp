@@ -53,6 +53,13 @@ void IntervalSelectionActivity::refreshValueText() {
     valueText = I18N.get(maxBoundaryLabelId);
     return;
   }
+  if (minutesPerStep > 0) {
+    const int mins = value * minutesPerStep;
+    char text[16];
+    snprintf(text, sizeof(text), "%02d:%02d", (mins / 60) % 24, mins % 60);
+    valueText = text;
+    return;
+  }
   valueText = formatValue(valueFormatId, value);
 }
 

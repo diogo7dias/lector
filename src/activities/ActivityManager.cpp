@@ -115,6 +115,9 @@ void ActivityManager::buildLightPanelContext(light_panel::Context& context) {
       inBook ? static_cast<int>(std::size(IN_BOOK_ACTIONS)) : static_cast<int>(std::size(OUT_OF_BOOK_ACTIONS));
   context.actionCount = std::min(count, light_panel::kMaxActions);
   for (int i = 0; i < context.actionCount; ++i) context.actions[i] = actions[i];
+  if (Frontlight.hasColorTemperature() && context.actionCount < light_panel::kMaxActions) {
+    context.actions[context.actionCount++] = CrossPointSettings::LP_MENU_CANDLE_FADE;
+  }
 }
 
 bool ActivityManager::stepLightPanelAux(const int delta) {
@@ -172,6 +175,9 @@ void ActivityManager::renderTaskLoop() {
         // resolving the output polarity here, per render, means menus, popups,
         // and every other activity revert to normal automatically.
         display.setInverted(SETTINGS.screenInverted != 0 && currentActivity->appliesNightMode());
+        if (currentActivity->isReaderActivity()) {
+          frontlight::syncScheduledWarmth();
+        }
         // A tap answers to what is on screen now, so the row table starts empty on every
         // paint and each list draw appends the rows it actually painted. Cleared here, the
         // one place a paint begins, rather than inside the list draws — a screen that draws
@@ -218,6 +224,7 @@ void ActivityManager::loop() {
   }
 
   // The one gate: every screen, the light panel and the Home gesture read their input below.
+  frontlight::tickCandleFade(millis());
   if (quickLocked) {
     if (requestedUpdate.exchange(false) && renderTaskHandle) xTaskNotify(renderTaskHandle, 1, eIncrement);
     return;
@@ -689,6 +696,8 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
       SETTINGS.saveToFile();
       return true;
     }
+    case CrossPointSettings::LP_MENU_CANDLE_FADE:
+      return frontlight::toggleCandleFade(millis());
     default:
       return false;
   }

@@ -51,4 +51,64 @@ inline constexpr bool insideSchedule(const int onMinutes, const int offMinutes, 
                                 : onMinutes != offMinutes && (nowMinutes >= onMinutes || nowMinutes < offMinutes);
 }
 
+// Sunset-to-dawn warmth curve (0..100). Outside the schedule, returns baseWarmth.
+// Inside the schedule, ramps linearly from baseWarmth to peakWarmth over the first
+// min(span, 90) minutes, holds peakWarmth overnight, and (for windows >= 120 min)
+// eases back to baseWarmth over the final 30 minutes before offMinutes.
+inline constexpr uint8_t scheduledWarmth(const int onMinutes, const int offMinutes, const int nowMinutes,
+                                         const uint8_t baseWarmth, const uint8_t peakWarmth = 100) {
+  if (!insideSchedule(onMinutes, offMinutes, nowMinutes) || peakWarmth <= baseWarmth) return baseWarmth;
+  constexpr int kDay = 24 * 60;
+  const int span = (offMinutes - onMinutes + kDay) % kDay;
+  if (span <= 0) return baseWarmth;
+  const int elapsed = (nowMinutes - onMinutes + kDay) % kDay;
+  const int delta = static_cast<int>(peakWarmth) - static_cast<int>(baseWarmth);
+  const int ramp = span < 90 ? span : 90;
+  if (elapsed < ramp) {
+    return static_cast<uint8_t>(baseWarmth + (delta * elapsed + ramp / 2) / ramp);
+  }
+  constexpr int kDawnCool = 30;
+  if (span >= 120 && elapsed > span - kDawnCool) {
+    const int rem = span - elapsed;
+    return static_cast<uint8_t>(baseWarmth + (delta * rem + kDawnCool / 2) / kDawnCool);
+  }
+  return peakWarmth;
+}
+
+inline constexpr uint32_t CANDLE_FADE_DURATION_MS = 25UL * 60UL * 1000UL;
+
+struct CandleFadeStep {
+  uint8_t brightness = 0;
+  uint8_t warmth = 100;
+  bool done = true;
+};
+
+// One step of the Candle Fade timer: dims brightness linearly to 0 while warming
+// color temperature linearly to 100 over durationMs.
+inline constexpr CandleFadeStep candleFadeStep(const uint8_t startBrightness, const uint8_t startWarmth,
+                                               const uint32_t elapsedMs,
+                                               const uint32_t durationMs = CANDLE_FADE_DURATION_MS) {
+  if (durationMs == 0 || elapsedMs >= durationMs) return {0, 100, true};
+  const uint32_t permille = static_cast<uint32_t>((static_cast<uint64_t>(elapsedMs) * 1000ULL) / durationMs);
+  const uint8_t brightness =
+      static_cast<uint8_t>((static_cast<uint32_t>(startBrightness) * (1000U - permille) + 500U) / 1000U);
+  const uint8_t warmth =
+      startWarmth >= 100
+          ? 100
+          : static_cast<uint8_t>(startWarmth + ((static_cast<uint32_t>(100U - startWarmth) * permille + 500U) / 1000U));
+  return {brightness, warmth, false};
+}
+
+struct LightProfile {
+  uint8_t brightness = 0;
+  uint8_t warmth = 0;
+};
+
+// Selects the day or night-mode brightness/warmth pair.
+inline constexpr LightProfile activeLightProfile(const bool nightMode, const uint8_t dayBrightness,
+                                                 const uint8_t dayWarmth, const uint8_t nightBrightness,
+                                                 const uint8_t nightWarmth) {
+  return nightMode ? LightProfile{nightBrightness, nightWarmth} : LightProfile{dayBrightness, dayWarmth};
+}
+
 }  // namespace frontlight

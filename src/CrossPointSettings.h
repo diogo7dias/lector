@@ -233,6 +233,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr auto LP_MENU_CONFIRM = bound_action::LP_MENU_CONFIRM;
   static constexpr auto LP_MENU_NEXT_CHAPTER = bound_action::LP_MENU_NEXT_CHAPTER;
   static constexpr auto LP_MENU_PREV_CHAPTER = bound_action::LP_MENU_PREV_CHAPTER;
+  static constexpr auto LP_MENU_CANDLE_FADE = bound_action::LP_MENU_CANDLE_FADE;
   static constexpr auto LONG_PRESS_MENU_FUNCTION_COUNT = bound_action::LONG_PRESS_MENU_FUNCTION_COUNT;
 
   // The three buttons the Buttons screen binds, in the order it lists them. Left and
@@ -740,12 +741,22 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // The top of the brightness range, wherever brightness is set (the light panel's
   // track runs 0 to this). 30 by default: past it the light is too bright to read by.
   uint8_t frontlightMaxBrightness = 30;
-  // Brings a stored brightness within the maximum. Called on boot and whenever either
-  // value changes, so every place that applies the light sees a capped value.
+  // Brings stored day and night brightness within the maximum. Called on boot and whenever
+  // either value changes, so every place that applies the light sees a capped value.
   void clampFrontlightBrightness() {
     if (frontlightBrightness > frontlightMaxBrightness) frontlightBrightness = frontlightMaxBrightness;
+    if (nightFrontlightBrightness > frontlightMaxBrightness) nightFrontlightBrightness = frontlightMaxBrightness;
   }
   uint8_t frontlightWarmth = 50;  // 0 = cool .. 100 = warm; ignored without warm/cold LEDs
+  // Separate brightness/warmth pair used while Night Mode (screenInverted) is active.
+  uint8_t nightFrontlightBrightness = 15;
+  uint8_t nightFrontlightWarmth = 85;
+  uint8_t& activeFrontlightBrightness() { return screenInverted ? nightFrontlightBrightness : frontlightBrightness; }
+  uint8_t& activeFrontlightWarmth() { return screenInverted ? nightFrontlightWarmth : frontlightWarmth; }
+  uint8_t activeFrontlightBrightness() const {
+    return screenInverted ? nightFrontlightBrightness : frontlightBrightness;
+  }
+  uint8_t activeFrontlightWarmth() const { return screenInverted ? nightFrontlightWarmth : frontlightWarmth; }
   uint8_t frontlightOn = 0;
   // Bring the light back by itself on wake. On by default, as in CrossPoint (Diogo,
   // 2026-11-18). Brightness and warmth are remembered either way. See FrontlightBootPolicy.h.

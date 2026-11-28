@@ -65,3 +65,44 @@ TEST(FrontlightBootPolicy, ScheduleWithEqualEndsIsEmpty) {
   EXPECT_FALSE(frontlight::insideSchedule(600, 600, 600));
   EXPECT_FALSE(frontlight::insideSchedule(600, 600, 0));
 }
+
+TEST(FrontlightBootPolicy, ScheduledWarmthInterpolatesAcrossSunsetAndCoolsAtDawn) {
+  // Schedule 20:00 (1200) -> 07:00 (420), base warmth 20 -> peak 100.
+  EXPECT_EQ(frontlight::scheduledWarmth(1200, 420, 1199, 20), 20);
+  EXPECT_EQ(frontlight::scheduledWarmth(1200, 420, 1200, 20), 20);
+  // Halfway through the 90-minute evening ramp (20:45 = 1245) -> 60.
+  EXPECT_EQ(frontlight::scheduledWarmth(1200, 420, 1245, 20), 60);
+  // Night plateau (23:00 = 1380 and 03:00 = 180) -> peak 100.
+  EXPECT_EQ(frontlight::scheduledWarmth(1200, 420, 1380, 20), 100);
+  EXPECT_EQ(frontlight::scheduledWarmth(1200, 420, 180, 20), 100);
+  // Halfway through 30-minute dawn cooldown (06:45 = 405) -> 60.
+  EXPECT_EQ(frontlight::scheduledWarmth(1200, 420, 405, 20), 60);
+  EXPECT_EQ(frontlight::scheduledWarmth(1200, 420, 420, 20), 20);
+}
+
+TEST(FrontlightBootPolicy, CandleFadeDimsAndWarmsMonotonicallyThenStops) {
+  const auto start = frontlight::candleFadeStep(30, 40, 0);
+  EXPECT_FALSE(start.done);
+  EXPECT_EQ(start.brightness, 30);
+  EXPECT_EQ(start.warmth, 40);
+
+  const auto mid = frontlight::candleFadeStep(30, 40, frontlight::CANDLE_FADE_DURATION_MS / 2);
+  EXPECT_FALSE(mid.done);
+  EXPECT_EQ(mid.brightness, 15);
+  EXPECT_EQ(mid.warmth, 70);
+
+  const auto end = frontlight::candleFadeStep(30, 40, frontlight::CANDLE_FADE_DURATION_MS);
+  EXPECT_TRUE(end.done);
+  EXPECT_EQ(end.brightness, 0);
+  EXPECT_EQ(end.warmth, 100);
+}
+
+TEST(FrontlightBootPolicy, ActiveLightProfileSeparatesDayAndNightPairs) {
+  const auto day = frontlight::activeLightProfile(false, 25, 30, 10, 85);
+  EXPECT_EQ(day.brightness, 25);
+  EXPECT_EQ(day.warmth, 30);
+
+  const auto night = frontlight::activeLightProfile(true, 25, 30, 10, 85);
+  EXPECT_EQ(night.brightness, 10);
+  EXPECT_EQ(night.warmth, 85);
+}

@@ -20,6 +20,7 @@
 #include "MappedInputManager.h"
 #include "SliderLook.h"
 #include "fontIds.h"
+#include "frontlight/FrontlightClock.h"
 #include "icons/sun24.h"
 #include "icons/thermometer24.h"
 #include "util/BoundMenuLabels.h"
@@ -74,11 +75,14 @@ class LightPanel {
     const uint8_t on = on_ ? 1 : 0;
     // A panel opened and closed unchanged costs no settings write (write throttling). With no
     // frontlight the values were never the user's to change, so nothing is written either.
-    if (Frontlight.present() && (SETTINGS.frontlightOn != on || SETTINGS.frontlightBrightness != brightness_ ||
-                                 SETTINGS.frontlightWarmth != warmth_)) {
+    // Writes to the active day or night profile so each mode keeps its own pair.
+    uint8_t& savedBrightness = SETTINGS.activeFrontlightBrightness();
+    uint8_t& savedWarmth = SETTINGS.activeFrontlightWarmth();
+    if (Frontlight.present() &&
+        (SETTINGS.frontlightOn != on || savedBrightness != brightness_ || savedWarmth != warmth_)) {
       SETTINGS.frontlightOn = on;
-      SETTINGS.frontlightBrightness = brightness_;
-      SETTINGS.frontlightWarmth = warmth_;
+      savedBrightness = brightness_;
+      savedWarmth = warmth_;
       SETTINGS.saveToFile();
     }
     requestUpdate();
@@ -236,7 +240,14 @@ class LightPanel {
     if (layout_.hasAux) drawAuxRow(renderer, layout_.aux, context_.auxText);
 
     for (int i = 0; i < layout_.actionCount; ++i) {
-      drawBox(renderer, layout_.actions[i], I18N.get(boundMenuActionLabel(context_.actions[i])), cursor_.action == i);
+      char fadeLabel[24];
+      const char* label = I18N.get(boundMenuActionLabel(context_.actions[i]));
+      if (context_.actions[i] == CrossPointSettings::LP_MENU_CANDLE_FADE && frontlight::candleFadeActive()) {
+        snprintf(fadeLabel, sizeof(fadeLabel), "%s %um", label,
+                 static_cast<unsigned>(frontlight::candleFadeRemainingMinutes(millis())));
+        label = fadeLabel;
+      }
+      drawBox(renderer, layout_.actions[i], label, cursor_.action == i);
     }
     light_panel::drawReadout(renderer, layout_.readout, topInset_, freeBytes_);
   }
@@ -356,6 +367,7 @@ class LightPanel {
   }
 
   void applyLight() {
+    frontlight::cancelCandleFade();
     Frontlight.setOn(on_);
     if (on_) {
       Frontlight.setBrightness(brightness_);
