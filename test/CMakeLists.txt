@@ -278,6 +278,7 @@ add_subdirectory(wifi_radio_off_on_cancel)
 add_subdirectory(panel_power_off)
 add_subdirectory(auto_sync_join)
 add_subdirectory(web_power_save)
+add_subdirectory(busy_wait_isr)
 
 if(LECTOR_FUZZ)
   add_subdirectory(fuzz)
