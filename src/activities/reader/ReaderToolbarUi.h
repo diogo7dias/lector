@@ -19,13 +19,25 @@ class MappedInputManager;
 // clears the screen.
 class ReaderToolbarUi : public UiAppHost {
  public:
-  enum class Event { None = 0, Dismiss = 1, Tool = 2, PrevChapter = 3, NextChapter = 4, Scrub = 5 };
+  enum class Event {
+    None = 0,
+    Dismiss = 1,
+    Tool = 2,
+    PrevChapter = 3,
+    NextChapter = 4,
+    Scrub = 5,
+    Return = 6,
+    ScrubPreview = 7
+  };
 
   struct Model {
     const char* chapterTitle = nullptr;
     const char* pageInfo = nullptr;  // "12/40   51%"
     int progressPermille = 0;        // 0..1000 book progress (the scrub knob)
     int activeTool = -1;             // the tile the buttons' cursor is on; -1 = none shown
+    bool bookmarked = false;         // current page is in cachedBookmarks
+    bool canReturn = false;          // returnHistory has a jump origin to return to
+    const char* returnLabel = nullptr;
   };
 
   struct Routed {

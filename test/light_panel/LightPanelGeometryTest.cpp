@@ -301,3 +301,36 @@ TEST(LightPanelGeometry, NoRowsAndNoAuxStartsOnTheFirstButton) {
   EXPECT_EQ(light_panel::firstCursor(layout), (Cursor{Row::None, 0}));
   EXPECT_EQ(light_panel::moveVertical(layout, Cursor{Row::None, 0}, -1), (Cursor{Row::None, 0}));
 }
+
+TEST(LightPanelGeometry, SecondAuxRowStacksBelowAuxAndTakesSteppersAndCursor) {
+  const auto layout = light_panel::forScreen(kScreenWidth, kLineHeight, kReadoutLineHeight, /*hasWarmth=*/true,
+                                             /*hasAux=*/true, /*actionCount=*/6, /*hasLight=*/true, /*hasAux2=*/true);
+  EXPECT_TRUE(layout.hasAux2);
+  EXPECT_GT(layout.aux2.height, 0);
+  EXPECT_LE(layout.aux.y + layout.aux.height, layout.aux2.y);
+  EXPECT_LE(layout.aux2.y + layout.aux2.height, layout.actions[0].y);
+  EXPECT_EQ(layout.aux2.minus.x, layout.aux.minus.x);
+
+  const auto minus = light_panel::hitTest(layout, centerX(layout.aux2.minus), centerY(layout.aux2.minus));
+  EXPECT_EQ(minus.kind, Hit::Kind::Step);
+  EXPECT_EQ(minus.row, Row::Aux2);
+  EXPECT_EQ(minus.delta, -1);
+
+  Cursor c = light_panel::firstCursor(layout);
+  EXPECT_EQ(c.row, Row::Brightness);
+  c = light_panel::moveVertical(layout, c, 1);
+  EXPECT_EQ(c.row, Row::Warmth);
+  c = light_panel::moveVertical(layout, c, 1);
+  EXPECT_EQ(c.row, Row::Aux);
+  c = light_panel::moveVertical(layout, c, 1);
+  EXPECT_EQ(c.row, Row::Aux2);
+  c = light_panel::moveVertical(layout, c, 1);
+  EXPECT_EQ(c, (Cursor{Row::None, 0}));
+  c = light_panel::moveVertical(layout, c, -1);
+  EXPECT_EQ(c, (Cursor{Row::Aux2, -1}));
+
+  // Landscape with both aux rows still fits inside 480 px height.
+  const auto wide = light_panel::forScreen(800, kLineHeight, kReadoutLineHeight, /*hasWarmth=*/true, /*hasAux=*/true,
+                                           /*actionCount=*/6, /*hasLight=*/true, /*hasAux2=*/true);
+  EXPECT_LT(wide.height, 480);
+}

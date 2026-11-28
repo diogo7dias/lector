@@ -54,13 +54,11 @@ namespace {
 // about this book you change most; outside one it is getting back into a book, or finding
 // a different one. Alignment and paragraph spacing close the in-book set, the alignment
 // pair side by side so it reads as one choice.
-constexpr uint8_t IN_BOOK_ACTIONS[] = {CrossPointSettings::LP_MENU_FORCE_REFRESH,
-                                       CrossPointSettings::LP_MENU_ROTATE,
-                                       CrossPointSettings::LP_MENU_NIGHT_MODE,
-                                       CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR,
-                                       CrossPointSettings::LP_MENU_READER_SETTINGS,
-                                       CrossPointSettings::LP_MENU_TOGGLE_ALIGNMENT,
-                                       CrossPointSettings::LP_MENU_TOGGLE_PARAGRAPH_SPACING};
+constexpr uint8_t IN_BOOK_ACTIONS[] = {
+    CrossPointSettings::LP_MENU_FORCE_REFRESH,    CrossPointSettings::LP_MENU_ROTATE,
+    CrossPointSettings::LP_MENU_NIGHT_MODE,       CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR,
+    CrossPointSettings::LP_MENU_CALM_MODE,        CrossPointSettings::LP_MENU_READER_SETTINGS,
+    CrossPointSettings::LP_MENU_TOGGLE_ALIGNMENT, CrossPointSettings::LP_MENU_TOGGLE_PARAGRAPH_SPACING};
 
 constexpr uint8_t OUT_OF_BOOK_ACTIONS[] = {
     CrossPointSettings::LP_MENU_FORCE_REFRESH,    CrossPointSettings::LP_MENU_ROTATE,
@@ -96,7 +94,8 @@ void ActivityManager::setSleepAction(std::function<void()> onSleep) {
                        MenuReturn::Scope backToPanel(&ActivityManager::reopenLightPanel, this, 0);
                        return runBoundAction(function);
                      },
-                     [this](const int delta) { return stepLightPanelAux(delta); });
+                     [this](const int delta) { return stepLightPanelAux(delta); },
+                     [this](const int delta) { return stepLightPanelAux2(delta); });
 }
 
 void ActivityManager::buildLightPanelContext(light_panel::Context& context) {
@@ -107,6 +106,9 @@ void ActivityManager::buildLightPanelContext(light_panel::Context& context) {
   if (!taken && !isBookContext()) {
     snprintf(context.auxText, sizeof(context.auxText), "%s: %s", I18N.get(StrId::STR_SORT),
              I18N.get(bookOrderLabel(SETTINGS.bookBrowserOrder)));
+  }
+  if (currentActivity) {
+    currentActivity->lightPanelAux2Text(context.aux2Text, sizeof(context.aux2Text));
   }
 
   const bool inBook = isBookContext();
@@ -130,6 +132,10 @@ bool ActivityManager::stepLightPanelAux(const int delta) {
   // rather than re-sort what it drew: Last Read reads a key per book off the card.
   if (currentActivity) currentActivity->onBookOrderChanged();
   return true;
+}
+
+bool ActivityManager::stepLightPanelAux2(const int delta) {
+  return currentActivity && currentActivity->lightPanelStepAux2(delta);
 }
 
 void ActivityManager::begin() {
@@ -257,8 +263,10 @@ void ActivityManager::loop() {
         }
         return;
       }
-      // close() clears isActive() before this runs: the page under the band gets a clean paint.
+      // close() clears isActive() before this runs: the page under the band gets a clean paint,
+      // unless the panel action already queued a transition (matching wasHomeGesture above).
       if (lightPanel.handleInput(mappedInput, [this] {
+            if (pendingAction != PendingAction::None) return;
             if (!lightPanel.isActive()) currentActivity->onRevealed();
             requestUpdate(/*immediate=*/true);
           }))
@@ -616,6 +624,11 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
         RenderLock lock;
         renderer.displayBuffer(HalDisplay::HALF_REFRESH);
       }
+      return true;
+    case CrossPointSettings::LP_MENU_CALM_MODE:
+      SETTINGS.calmMode = SETTINGS.calmMode ? 0 : 1;
+      SETTINGS.saveToFile();
+      if (currentActivity) currentActivity->onCalmModeChanged();
       return true;
     case CrossPointSettings::LP_MENU_ROTATE: {
       const uint8_t orientation = orientation_cycle::next(SETTINGS.orientation);

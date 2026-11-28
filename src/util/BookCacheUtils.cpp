@@ -3,6 +3,8 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
+#include <LibraryBuilder.h>
+#include <LibraryIndexFile.h>
 #include <Logging.h>
 #include <Txt.h>
 #include <Xtc.h>
@@ -11,6 +13,7 @@
 #include <cstdlib>
 #include <utility>
 
+#include "BookProgressFile.h"
 #include "CrossPointState.h"
 #include "RecentBooksStore.h"
 #include "TaskWatchdog.h"
@@ -277,5 +280,32 @@ bool cleanOrphanBookCaches(int& removedCount, int& keptCount, int& failedCount) 
   root.close();
 
   LOG_INF("BookCache", "clean: %d removed, %d kept, %d failed", removedCount, keptCount, failedCount);
+  return true;
+}
+
+bool markBookRead(const std::string& bookPath) {
+  const std::string cacheDir = bookCacheDirForPath(bookPath);
+  if (cacheDir.empty()) return false;
+  Storage.ensureDirectoryExists(cacheDir.c_str());
+
+  const uint32_t readOrder = ++APP_STATE.readOrderCounter;
+  APP_STATE.saveToFile();
+  book_progress::Marker marker;
+  marker.percent = 100;
+  marker.readOrder = readOrder;
+  if (!book_progress::write(cacheDir, marker)) return false;
+
+  RECENT_BOOKS.setProgress(bookPath, 100);
+  library::updateRecordProgress(library::libraryIndexPath(), bookPath.c_str(), 100, readOrder);
+  return true;
+}
+
+bool markBookUnread(const std::string& bookPath) {
+  const std::string cacheDir = bookCacheDirForPath(bookPath);
+  if (cacheDir.empty()) return false;
+  if (!book_progress::remove(cacheDir)) return false;
+
+  RECENT_BOOKS.clearProgress(bookPath);
+  library::updateRecordProgress(library::libraryIndexPath(), bookPath.c_str(), library::CLIX_PERCENT_UNREAD, 0);
   return true;
 }

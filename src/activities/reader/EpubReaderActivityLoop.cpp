@@ -34,7 +34,9 @@ bool isInReadFolder(const std::string& path) { return bookfiling::isInFolder(pat
 }  // namespace
 
 bool EpubReaderActivity::handleStatusBarTap() {
-  if (!mappedInput.hasTouch()) return false;
+  // Under the Touch Reader Controls master switch, like every touch on the open page. Calm
+  // Mode hides the bar without touching the stored prefs, so the cycle is off under it.
+  if (!mappedInput.hasTouch() || SETTINGS.touchReaderControls == 0 || SETTINGS.calmMode != 0) return false;
   int tx = 0;
   int ty = 0;
   if (!mappedInput.wasScreenTapped(tx, ty)) return false;
@@ -69,6 +71,10 @@ void EpubReaderActivity::loop() {
     // Should never happen
     finish();
     return;
+  }
+
+  if (mappedInput.isInputActive()) {
+    lastInputMs = millis();
   }
 
   applyLinkLanding();
@@ -154,6 +160,12 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
 
+  if (showPageNotFoundMessage && (millis() - pageNotFoundMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showPageNotFoundMessage = false;
+    scheduleGhostCleanup();
+    requestUpdate();
+  }
+
   // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
   // input. Anything it doesn't handle (e.g. long-press Back to the file browser) falls
   // through to the regular handlers below; page turns are absorbed by the end-of-book
@@ -211,6 +223,18 @@ void EpubReaderActivity::loop() {
   if (mappedInput.wasScreenLongPress(holdX, holdY, /*keepContact=*/true)) {
     openQuoteGrab(holdX, holdY);
     return;
+  }
+  // Top-right corner tap toggles the page bookmark on touch boards before the general
+  // page-turn zone claims the tap.
+  if (SETTINGS.touchReaderControls != 0 && mappedInput.hasTouch() && !atEndOfBook && section &&
+      mappedInput.wasSwipe() == MappedInputManager::SwipeDir::None) {
+    int tapX = 0;
+    int tapY = 0;
+    if (mappedInput.wasScreenTapped(tapX, tapY) &&
+        reader_touch::isBookmarkCornerTap(true, renderer.getScreenWidth(), renderer.getScreenHeight(), tapX, tapY)) {
+      if (!blockSortesAction()) addBookmark();
+      return;
+    }
   }
   if (!atEndOfBook && handleStatusBarTap()) return;
   // Touch on the open page, read once per loop: a tap or swipe can turn the page or

@@ -76,8 +76,9 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
                                    sizeof(spec.viewportHeight) + sizeof(pageCount) + sizeof(spec.embeddedStyle) +
                                    sizeof(spec.imageRendering) + sizeof(spec.focusReadingEnabled) +
                                    sizeof(spec.guideDotsMode) + sizeof(spec.paragraphIndentSpaces) +
-                                   sizeof(spec.characterSpacing) + sizeof(uint32_t) + sizeof(uint32_t) +
-                                   sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
+                                   sizeof(spec.characterSpacing) + sizeof(spec.keepHeadingsWithText) +
+                                   sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +
+                                   sizeof(uint32_t),
                 "Header size mismatch");
   // Written as the incomplete sentinel; finalizeBuild() patches it to
   // SECTION_FILE_VERSION as the last step, committing the file.
@@ -95,6 +96,7 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   serialization::writePod(file, spec.guideDotsMode);
   serialization::writePod(file, spec.paragraphIndentSpaces);
   serialization::writePod(file, spec.characterSpacing);
+  serialization::writePod(file, spec.keepHeadingsWithText);
   serialization::writePod(file, pageCount);  // Placeholder for page count (will be initially 0, patched later)
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for LUT offset (patched later)
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for anchor map offset (patched later)
@@ -112,7 +114,7 @@ static bool readSpecFields(HalFile& f, ReaderRenderSpec& out) {
          serialization::readPod(f, out.viewportHeight) && serialization::readPod(f, out.embeddedStyle) &&
          serialization::readPod(f, out.imageRendering) && serialization::readPod(f, out.focusReadingEnabled) &&
          serialization::readPod(f, out.guideDotsMode) && serialization::readPod(f, out.paragraphIndentSpaces) &&
-         serialization::readPod(f, out.characterSpacing);
+         serialization::readPod(f, out.characterSpacing) && serialization::readPod(f, out.keepHeadingsWithText);
 }
 
 bool Section::loadSectionFile(const ReaderRenderSpec& spec) {

@@ -36,10 +36,6 @@ struct PreviewLine {
 struct PreviewLayout {
   std::vector<PreviewLine> lines;
   PreviewKey key;
-  // Where the second sample paragraph starts. The pane draws the first paragraph with the
-  // Paperback Look smear and the second without it, so the choice is judged on two
-  // passages side by side rather than by toggling the setting and remembering.
-  int secondParagraphLine = 0;
 };
 
 // Draws the sample page through the reader engine.

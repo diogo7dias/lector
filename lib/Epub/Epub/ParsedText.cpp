@@ -763,10 +763,13 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
       computeLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore);
   const size_t lineCount = std::min(maxLines, includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1);
 
+  const bool endIsKnown = includeLastLine && lineCount == lineBreakIndices.size();
   for (size_t i = 0; i < lineCount; ++i) {
+    linesAfterCurrent = endIsKnown ? static_cast<int>(lineCount - 1 - i) : -1;
     extractLine(i, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore, lineBreakIndices, processLine,
                 processLineCtx, renderer, fontId);
   }
+  linesAfterCurrent = -1;
   // A full pass ends the paragraph; the block may then be reused for the next one.
   paragraphContinues =
       (!includeLastLine || lineCount < lineBreakIndices.size()) && (paragraphContinues || lineCount > 0);
@@ -923,17 +926,26 @@ int ParsedText::wordFontId(const size_t wordIndex, const int blockFontId) const 
   return slot == 0 || sizeSlotFontIds[slot] == 0 ? blockFontId : sizeSlotFontIds[slot];
 }
 
-uint8_t ParsedText::sizeSlotFor(const float scale) {
-  uint8_t nearest = 1;
+uint8_t ParsedText::sizeSlotFor(const float scale, const bool monospace) {
+  uint8_t nearest = 0;
   for (uint8_t slot = 1; slot < sizeSlotCount; ++slot) {
+    if (sizeSlotMonospace[slot] != monospace) continue;
     if (std::fabs(sizeSlotScales[slot] - scale) < 0.01f) return slot;
-    if (std::fabs(sizeSlotScales[slot] - scale) < std::fabs(sizeSlotScales[nearest] - scale)) nearest = slot;
+    if (nearest == 0 || std::fabs(sizeSlotScales[slot] - scale) < std::fabs(sizeSlotScales[nearest] - scale)) {
+      nearest = slot;
+    }
   }
   if (sizeSlotCount < MAX_SIZE_SLOTS) {
     sizeSlotScales[sizeSlotCount] = scale;
+    sizeSlotMonospace[sizeSlotCount] = monospace;
     return sizeSlotCount++;
   }
-  return nearest;
+  if (nearest != 0) return nearest;
+  uint8_t fallback = 1;
+  for (uint8_t slot = 2; slot < sizeSlotCount; ++slot) {
+    if (std::fabs(sizeSlotScales[slot] - scale) < std::fabs(sizeSlotScales[fallback] - scale)) fallback = slot;
+  }
+  return fallback;
 }
 
 std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& renderer, const int fontId) {

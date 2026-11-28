@@ -318,6 +318,36 @@ TEST(TtfPack2Bit, QuantisesLikeFontconvert) {
   EXPECT_EQ(out[1], 0xC0);  // 11 then zero padding
 }
 
+TEST(TtfPack2Bit, InkWeightShiftsCoverageThresholdMonotonically) {
+  // Weight 0 is byte-identical to the default coverage >> 6 quantization.
+  uint8_t defOut[64] = {};
+  uint8_t zeroOut[64] = {};
+  uint8_t allCov[256];
+  for (int i = 0; i < 256; ++i) allCov[i] = static_cast<uint8_t>(i);
+  pack2Bit(allCov, 256, 1, defOut);
+  pack2Bit(allCov, 256, 1, zeroOut, 0);
+  EXPECT_EQ(memcmp(defOut, zeroOut, sizeof(defOut)), 0);
+
+  // Pure background (coverage 0) stays white at every weight, including +2.
+  for (int8_t w = -3; w <= 3; ++w) {
+    EXPECT_EQ(quantizeCoverage2Bit(0, w), 0u) << "weight=" << static_cast<int>(w);
+  }
+
+  // First coverage value that crosses into ink (level > 0) drops strictly from -2 to +2:
+  // -2: 128, -1: 96, 0: 64, +1: 32, +2: 1.
+  const uint8_t expectedCutoff[5] = {128, 96, 64, 32, 1};
+  for (int idx = 0; idx < 5; ++idx) {
+    const int8_t w = static_cast<int8_t>(idx - 2);
+    const uint8_t cut = expectedCutoff[idx];
+    EXPECT_EQ(quantizeCoverage2Bit(static_cast<uint8_t>(cut - 1), w), 0u) << "weight=" << static_cast<int>(w);
+    EXPECT_GT(quantizeCoverage2Bit(cut, w), 0u) << "weight=" << static_cast<int>(w);
+  }
+
+  // Out-of-range weights clamp to [-2, +2].
+  EXPECT_EQ(quantizeCoverage2Bit(100, -5), quantizeCoverage2Bit(100, -2));
+  EXPECT_EQ(quantizeCoverage2Bit(10, 5), quantizeCoverage2Bit(10, 2));
+}
+
 TEST(TtfPack2Bit, RowsPackBackToBackWithoutPadding) {
   const uint8_t cov[] = {255, 255, 255, 255, 0, 0, 0, 0, 255, 0, 255};  // 11 px
   ASSERT_EQ(packed2BitBytes(11, 1), 3u);

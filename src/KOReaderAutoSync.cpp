@@ -8,6 +8,7 @@
 #include <WiFi.h>
 #include <esp_attr.h>
 
+#include <ctime>
 #include <vector>
 
 #include "KOReaderCredentialStore.h"
@@ -17,6 +18,7 @@
 #include "ProgressMapper.h"
 #include "WifiCredentialStore.h"
 #include "network/opds/BookOrbitMissing.h"
+#include "util/AutoSyncJoinPolicy.h"
 #include "util/ProgressFile.h"
 #include "util/QuoteSync.h"
 
@@ -24,12 +26,19 @@ namespace {
 
 constexpr uint32_t PULL_MAGIC = 0x4B4F5055;  // "KOPU"
 constexpr unsigned long JOIN_TIMEOUT_MS = 7000;
-constexpr size_t MAX_JOINS = 3;
+constexpr uint32_t FAST_SCAN_MS_PER_CHAN = 100;
+constexpr int64_t CLOCK_VALID_FROM = 1577836800;  // 2020-01-01, as HalClock judges it
 
 // RTC_NOINIT survives ESP.restart() and deep sleep, not power loss; the magic tells
 // a kept claim from power-on noise.
 RTC_NOINIT_ATTR uint32_t pullMagic;
 RTC_NOINIT_ATTR uint32_t pulledPathHash;
+RTC_NOINIT_ATTR auto_sync_join::BackoffState joinBackoff;
+
+int64_t currentEpoch() {
+  const time_t t = time(nullptr);
+  return t >= CLOCK_VALID_FROM ? static_cast<int64_t>(t) : 0;
+}
 
 // Every book read on another page since the last sleep, oldest first. Each push loads
 // the book and talks TLS behind the sleep face, so the list keeps the newest few.
@@ -94,25 +103,65 @@ bool joinOne(const WifiCredential& cred) {
   return false;
 }
 
-// Last connected network first, then the others, a few at most: the reader is
-// waiting on nothing (the sleep face is up) but the battery is.
+// Fast scan first, then join only saved networks actually seen (plus explicitly
+// configured hidden SSIDs). Away from home this spends ~1.3 s scanning once instead
+// of 21 s of blind 7 s joins, and backs off across subsequent locks on failure.
 bool joinSavedNetwork() {
-  WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
-  const std::string last = WIFI_STORE.getLastConnectedSsid();
-  size_t joins = 0;
-  if (!last.empty()) {
-    if (const auto cred = WIFI_STORE.findCredential(last)) {
-      if (joinOne(*cred)) return true;
-      ++joins;
+  const int64_t nowEpoch = currentEpoch();
+  if (auto_sync_join::shouldSkip(joinBackoff, nowEpoch)) {
+    auto_sync_join::consumeSkippedLock(joinBackoff, nowEpoch);
+    LOG_INF("KOAUTO", "Auto-sync skipped (backoff active, failures=%u)",
+            static_cast<unsigned>(joinBackoff.consecutiveFailures));
+    return false;
+  }
+
+  const size_t savedCount = WIFI_STORE.getCredentialCount();
+  std::vector<auto_sync_join::SavedNetwork> saved;
+  saved.reserve(savedCount);
+  for (size_t i = 0; i < savedCount; ++i) {
+    if (const auto cred = WIFI_STORE.getCredentialAt(i)) {
+      saved.push_back({cred->ssid, cred->hidden});
     }
   }
-  for (size_t i = 0; i < WIFI_STORE.getCredentialCount() && joins < MAX_JOINS; ++i) {
-    const auto cred = WIFI_STORE.getCredentialAt(i);
-    if (!cred || cred->ssid == last) continue;
-    if (joinOne(*cred)) return true;
-    ++joins;
+  if (saved.empty()) return false;
+
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.disconnect(false);
+
+  const int16_t found =
+      WiFi.scanNetworks(/*async=*/false, /*show_hidden=*/false, /*passive=*/false, FAST_SCAN_MS_PER_CHAN);
+  std::vector<auto_sync_join::ScannedNetwork> scanned;
+  if (found > 0) {
+    scanned.reserve(static_cast<size_t>(found));
+    for (int i = 0; i < found; ++i) {
+      const String ssid = WiFi.SSID(i);
+      if (ssid.isEmpty()) continue;
+      scanned.push_back({ssid.c_str(), WiFi.RSSI(i)});
+    }
   }
+  WiFi.scanDelete();
+
+  const std::vector<std::string> candidates =
+      auto_sync_join::selectCandidates(saved, scanned, WIFI_STORE.getLastConnectedSsid(), auto_sync_join::MAX_JOINS);
+  if (candidates.empty()) {
+    LOG_INF("KOAUTO", "No saved network in scan (%d APs); skipping join", static_cast<int>(found));
+    auto_sync_join::recordFailure(joinBackoff, nowEpoch);
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    return false;
+  }
+
+  for (const std::string& ssid : candidates) {
+    const auto cred = WIFI_STORE.findCredential(ssid);
+    if (cred && joinOne(*cred)) {
+      auto_sync_join::recordSuccess(joinBackoff);
+      return true;
+    }
+  }
+  auto_sync_join::recordFailure(joinBackoff, nowEpoch);
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
   return false;
 }
 
@@ -171,15 +220,17 @@ void markMoved(const std::string& path) {
 
 void onSleep() {
   pullMagic = 0;
+  pushJoinFailed = false;
   std::vector<std::string> paths;
   paths.swap(movedPaths);
   if (!enabled()) return;
+  const bool pagesMoved = !paths.empty();
   bool wifiUp = false;
   for (const auto& path : paths) {
     if (pushJoinFailed) break;
     wifiUp = push(path) || wifiUp;
   }
-  if (!bookorbit_missing::findServer() || !bookorbit_missing::due(wifiUp)) return;
+  if (!bookorbit_missing::findServer() || !bookorbit_missing::due(wifiUp, pagesMoved)) return;
   if (!wifiUp && (pushJoinFailed || !(haveSavedNetwork() && joinSavedNetwork()))) return;
   bookorbit_missing::refresh();
 }

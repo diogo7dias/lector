@@ -147,19 +147,23 @@ void SleepActivity::renderSleepScreen() const {
   // and taken back out of the framebuffer, and there is no pre-clear. The overlay's own
   // waveform is the only pass that cleans, as CrossPoint does.
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM) {
-    showPopupKeepingPage();
-    SleepTiming::mark("popup");
+    if (!fromTimeout) {
+      showPopupKeepingPage();
+      SleepTiming::mark("popup");
+    }
     return renderTransparentCustomSleepScreen();
   }
 
-  if (APP_STATE.lastSleepFromReader) {
-    ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
-    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
-    renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-  } else {
-    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+  if (!fromTimeout) {
+    if (APP_STATE.lastSleepFromReader) {
+      ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+      GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+    } else {
+      GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+    }
+    SleepTiming::mark("popup");
   }
-  SleepTiming::mark("popup");
 
   // Match CrossPoint: every mode below replaces the whole screen, so clean to white once
   // with HALF_REFRESH first (BLANK skips this and runs that single white HALF_REFRESH itself).
@@ -187,6 +191,8 @@ void SleepActivity::renderSleepScreen() const {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM):
       // The cover while reading, a wallpaper otherwise (and when the book has no cover).
       return APP_STATE.lastSleepFromReader ? renderCoverSleepScreen(CoverFallback::Custom) : renderCustomSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::QUOTE):
+      return renderQuoteSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM):
     default:
       return renderCustomSleepScreen();

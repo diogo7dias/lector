@@ -29,6 +29,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     QUICK_RESUME = 6,
     TRANSPARENT_CUSTOM = 7,
     COVER_TRANSPARENT = 8,
+    QUOTE = 9,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
@@ -234,6 +235,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr auto LP_MENU_CONFIRM = bound_action::LP_MENU_CONFIRM;
   static constexpr auto LP_MENU_NEXT_CHAPTER = bound_action::LP_MENU_NEXT_CHAPTER;
   static constexpr auto LP_MENU_PREV_CHAPTER = bound_action::LP_MENU_PREV_CHAPTER;
+  static constexpr auto LP_MENU_CALM_MODE = bound_action::LP_MENU_CALM_MODE;
+  static constexpr auto LP_MENU_RETURN = bound_action::LP_MENU_RETURN;
   static constexpr auto LP_MENU_NIGHT_MODE = bound_action::LP_MENU_NIGHT_MODE;
   static constexpr auto LP_MENU_READING_THEMES = bound_action::LP_MENU_READING_THEMES;
   static constexpr auto LP_MENU_TOGGLE_ALIGNMENT = bound_action::LP_MENU_TOGGLE_ALIGNMENT;
@@ -342,6 +345,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // With no SettingsList entry the generic loop cannot carry it, so it is saved and loaded
   // by hand in toJson/fromJson.
   uint8_t wallpaperRotationPaused = 0;
+  // Calm mode: hides status bar, off-bar, low-battery nag (until 5%) and centre-tap menu
+  // without mutating the saved status bar or any Reading Theme. Toggled via Quick Panel or binding.
+  uint8_t calmMode = 0;
   // Status bar (per-item v2 model). Legacy fixed-slot fields were removed. XTC keeps its own overlay.
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
   // Master on/off. NEVER read this field to decide whether to draw or reserve the bar —
@@ -395,6 +401,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t wordSpacing = reader_defaults::WORD_SPACING;  // percent of natural space advance; no limit on justification
   // Whole pixels between letters, offset: 2 is the font as designed, 0..4 shows as -2..+2.
   uint8_t characterSpacing = reader_defaults::CHARACTER_SPACING;
+  // Finer ink weight, offset: 2 is normal (0), 0..4 shows as -2..+2.
+  uint8_t inkWeight = reader_defaults::INK_WEIGHT;
   // On, with both directions on Swipe Only by default: a swipe works the same wherever the
   // thumb lands, and leaves the whole page free of invisible tap targets.
   uint8_t touchReaderControls = 1;
@@ -517,6 +525,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t opdsFilenameFormat = 0;
   // Read EPUB title/author metadata when building the Library index; off lists filenames only.
   uint8_t libraryUseMetadata = 1;
+  // Library sort order (0=Title, 1=Author, 2=Recently Added, 3=Last Read) and filter
+  // (0=All, 1=Reading, 2=Unread, 3=Read), matching library::LibrarySort / LibraryFilter.
+  uint8_t librarySort = 0;
+  uint8_t libraryFilter = 0;
   // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
@@ -636,11 +648,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t fadingFix = 0;
   // Power button return from footnotes (1 = enabled, 0 = disabled)
   uint8_t pwrBtnFootnoteBack = 1;
-  // The book's own CSS, one switch: text styling (weight, slant, decoration, super/sub,
-  // direction, display:none) and layout (alignment, indents, margins, padding, book-set
-  // image sizes). Written under the "embeddedStyle" key (1 = enabled, 0 = disabled).
-  // Paragraph Alignment "Book's Style" needs this on.
-  uint8_t embeddedStyle = 1;
+  // EmbeddedStyleMode: 0 = Off, 1 = Text Only (weight, italic, decoration, small caps,
+  // sup/sub, white-space, display:none, direction), 2 = Full. Written under "embeddedStyleMode".
+  // Paragraph Alignment "Book's Style" needs Full.
+  uint8_t embeddedStyle = 2;
   // Focus Reading - emphasizes the first part of words with bold
   uint8_t focusReadingEnabled = 0;
   // Guide Dots — draw a middle dot (U+00B7) between words as a reading aid. Restored
@@ -650,6 +661,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // create, but draw no dot in it. Only meaningful while guideDotsEnabled is on, and
   // it feeds the render spec too, so toggling it rebuilds the cache.
   uint8_t guideDotsHidden = 0;
+  // Keep Headings with Text (0 = off by default): never strand a heading at the page
+  // bottom, and avoid 1-line orphans and widows on 4+ line paragraphs.
+  uint8_t keepHeadingsWithText = 0;
   // Diagnostic: outline the reader text viewport (0 = off, 1 = on). Drawn as an
   // overlay after the page renders, so it never affects layout or the cache.
   uint8_t debugBorders = 0;

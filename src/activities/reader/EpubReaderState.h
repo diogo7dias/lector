@@ -139,6 +139,9 @@ struct EpubReaderState {
   // "No dictionary set" popup, shown when a lookup is triggered without a configured dictionary.
   bool showDictionaryMessage = false;
   unsigned long dictionaryMessageTime = 0UL;
+  // "Page not found" popup, shown when Go to Page fails to match a printed or chapter page.
+  bool showPageNotFoundMessage = false;
+  unsigned long pageNotFoundMessageTime = 0UL;
   bool ignoreNextConfirmRelease = false;
   // Idle-time glyph prewarm: after a page settles, scan the neighbour the
   // reader is moving toward (scan mode draws nothing) and load its missing
@@ -213,6 +216,9 @@ struct EpubReaderState {
   bool toolbarPaintOnly = false;  // the next render paints the sheet alone, not the page
   int toolbarFocus = -1;          // the marked tile; -1 until a button moves it on touch boards
   bool toolbarJumped = false;     // the first scrub of a visit files one Return entry
+  int toolbarScrubPermille = -1;  // live drag preview position (0..1000); -1 when idle
+  int toolbarScrubLastTarget = -1;
+  int toolbarScrubLastPercent = -1;
   // A menu to bring back once the page is on screen again (MenuReturn). The toolbar and the
   // Quick Menu paint over the framebuffer, which still holds the screen that just closed,
   // and a book reopened after KOReader Sync or Nearby has no page yet.
@@ -296,12 +302,9 @@ struct EpubReaderState {
   // is ~1s on e-ink and a page builds in ~30ms, so the reader can't out-click the builder -- a
   // tiny buffer is enough. Building unbounded right after every turn locked up input by
   // monopolizing the RenderLock, so the window holds until the reader has been idle for
-  // IDLE_DEBOUNCE_MS; then the build runs on to the chapter's end (backgroundBuildTickWanted).
+  // idle_prewarm::RENDER_DEBOUNCE_MS; then the build runs on to the chapter's end (backgroundBuildTickWanted).
   // Leaving before it ends keeps the pages laid out so far as a partial (Section::suspendBuild()).
   static constexpr int BUILD_WINDOW_AHEAD = 5;
-  // How long after the last render the reader counts as idle: past rapid page-flipping, the
-  // background work (prewarm, progress save, chapter builds, next-chapter prefetch) may run.
-  static constexpr unsigned long IDLE_DEBOUNCE_MS = 400;
   // Prefetch the next chapter once the reader is this many pages from this one's end. Only
   // spines up to BUILD_POPUP_BYTE_THRESHOLD: inflating a bigger one holds the loop for seconds.
   // Inflating needs tinfl's 32 KB window in one block.
