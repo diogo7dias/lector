@@ -27,8 +27,9 @@ struct StagedEntry {
   char title[CLIX_MAX_TITLE];
   char author[CLIX_MAX_AUTHOR];
   char path[CLIX_MAX_PATH + 1];
+  char series[CLIX_MAX_SERIES];
 };
-static_assert(sizeof(StagedEntry) == 512, "a staged entry is one sector");
+static_assert(sizeof(StagedEntry) == 608, "staged entry size must stay compact");
 constexpr size_t STAGE_STRIDE = sizeof(StagedEntry);
 
 // Key to find a book of the previous index again. mtime is checked on the record.
@@ -125,7 +126,7 @@ uint32_t packModified(HalFile& file) {
 
 bool loadPrior(Build& b) {
   if (!b.previous.open(b.indexPath) || b.previous.bookCount() == 0) return true;
-  if (b.previous.metadataEnabled() != b.useMetadata) {
+  if (b.previous.metadataEnabled() != b.useMetadata || (b.useMetadata && !b.previous.hasSeriesMetadata())) {
     b.previous.close();
     return true;
   }
@@ -155,9 +156,10 @@ bool loadPrior(Build& b) {
   return true;
 }
 
-// Title, author and progress the previous index held for this exact file (same path, size, modified), if any.
+// Title, author, series and progress the previous index held for this exact file (same path, size, modified), if any.
 bool reuseFromPrevious(Build& b, const uint64_t hash, const uint32_t size, const uint32_t modified, std::string& title,
-                       std::string& author, uint8_t& percent, uint32_t& readOrder) {
+                       std::string& author, std::string& series, uint16_t& seriesIndexX10, uint8_t& percent,
+                       uint32_t& readOrder) {
   if (b.priorCount == 0) return false;
   const PriorEntry* const begin = b.prior.get();
   const PriorEntry* const end = begin + b.priorCount;
@@ -168,7 +170,11 @@ bool reuseFromPrevious(Build& b, const uint64_t hash, const uint32_t size, const
     ClixRecord record;
     if (!b.previous.readRecord(hit->ordinal, record)) return false;
     if (record.modified != modified) continue;
-    if (!b.previous.readTitle(record, title) || !b.previous.readAuthor(record, author)) return false;
+    if (!b.previous.readTitle(record, title) || !b.previous.readAuthor(record, author) ||
+        !b.previous.readSeries(record, series)) {
+      return false;
+    }
+    seriesIndexX10 = record.seriesIndexX10;
     percent = record.percent;
     readOrder = record.readOrder;
     return true;
@@ -203,23 +209,31 @@ bool stageBook(Build& b, const char* path, const std::string_view name, const ui
 
   std::string title;
   std::string author;
+  std::string series;
+  uint16_t seriesIndexX10 = 0;
   uint8_t percent = CLIX_PERCENT_UNREAD;
   uint32_t readOrder = 0;
-  if (reuseFromPrevious(b, hash, size, modified, title, author, percent, readOrder)) {
+  if (reuseFromPrevious(b, hash, size, modified, title, author, series, seriesIndexX10, percent, readOrder)) {
     stats.reused++;
   } else {
     title.clear();
     author.clear();
+    series.clear();
+    seriesIndexX10 = 0;
     if (b.useMetadata && FsHelpers::hasEpubExtension(name)) {
       stats.parsed++;
       Epub epub(path, CACHE_DIR);
-      if (!epub.loadMetadata(title, author)) {
+      if (!epub.loadMetadata(title, author, series, seriesIndexX10)) {
         title.clear();
         author.clear();
+        series.clear();
+        seriesIndexX10 = 0;
       }
     }
     title = cleanText(title, CLIX_MAX_TITLE);
     author = cleanText(author, CLIX_MAX_AUTHOR);
+    series = cleanText(series, CLIX_MAX_SERIES);
+    if (series.empty()) seriesIndexX10 = 0;
     if (title.empty()) title = cleanText(stemOf(path), CLIX_MAX_TITLE);
     if (isUnknownAuthor(author)) author.clear();
   }
@@ -242,8 +256,10 @@ bool stageBook(Build& b, const char* path, const std::string_view name, const ui
   e.record.modified = modified;
   e.record.percent = percent;
   e.record.readOrder = readOrder;
+  e.record.seriesIndexX10 = seriesIndexX10;
   copyField(e.title, sizeof(e.title), title, e.record.titleLen);
   copyField(e.author, sizeof(e.author), author, e.record.authorLen);
+  copyField(e.series, sizeof(e.series), series, e.record.seriesLen);
   std::memcpy(e.path, path, pathLen);
   e.record.pathLen = static_cast<uint8_t>(pathLen);
   if (e.record.titleLen == 0) {  // an extension with no stem (".epub" is hidden anyway): list the path
@@ -254,7 +270,7 @@ bool stageBook(Build& b, const char* path, const std::string_view name, const ui
     b.failed = true;
     return false;
   }
-  b.nameBytes += static_cast<uint32_t>(e.record.titleLen) + e.record.authorLen + e.record.pathLen;
+  b.nameBytes += static_cast<uint32_t>(e.record.titleLen) + e.record.authorLen + e.record.pathLen + e.record.seriesLen;
   stats.books++;
   return true;
 }
@@ -404,7 +420,8 @@ bool emitIndex(Build& b, const SortKey* keys, const uint16_t count, const std::s
   ClixHeader head{};
   std::memcpy(head.magic, CLIX_MAGIC, sizeof(head.magic));
   head.formatVersion = CLIX_FORMAT_VERSION;
-  head.flags = (b.stats->truncated ? CLIX_FLAG_TRUNCATED : 0) | (b.useMetadata ? 0 : CLIX_FLAG_NO_METADATA);
+  head.flags = (b.stats->truncated ? CLIX_FLAG_TRUNCATED : 0) | (b.useMetadata ? 0 : CLIX_FLAG_NO_METADATA) |
+               CLIX_FLAG_HAS_SERIES;
   head.bookCount = count;
   layoutSections(head, b.nameBytes);
 
@@ -417,15 +434,16 @@ bool emitIndex(Build& b, const SortKey* keys, const uint16_t count, const std::s
     ok = readStaged(b, keys[i].ordinal, e);
     if (!ok) break;
     e.record.nameOff = nameOff;
-    nameOff += static_cast<uint32_t>(e.record.titleLen) + e.record.authorLen + e.record.pathLen;
+    nameOff += static_cast<uint32_t>(e.record.titleLen) + e.record.authorLen + e.record.pathLen + e.record.seriesLen;
     ok = writeAll(out, &e.record, sizeof(ClixRecord));
   }
   ok = ok && writeZeros(out, head.nameStart - (head.recordStart + static_cast<uint32_t>(count) * sizeof(ClixRecord)));
 
-  // Text, in the same order.
+  // Text, in the same order: title, author, path, series.
   for (uint16_t i = 0; ok && i < count; i++) {
     ok = readStaged(b, keys[i].ordinal, e) && writeAll(out, e.title, e.record.titleLen) &&
-         writeAll(out, e.author, e.record.authorLen) && writeAll(out, e.path, e.record.pathLen);
+         writeAll(out, e.author, e.record.authorLen) && writeAll(out, e.path, e.record.pathLen) &&
+         writeAll(out, e.series, e.record.seriesLen);
   }
   out.flush();
   const bool whole = ok && out.position() == head.selfSize;

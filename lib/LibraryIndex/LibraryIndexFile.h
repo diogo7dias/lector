@@ -30,6 +30,7 @@ class LibraryIndexFile {
   const ClixHeader& header() const { return head; }
   uint16_t bookCount() const { return opened ? head.bookCount : 0; }
   bool metadataEnabled() const { return opened && (head.flags & CLIX_FLAG_NO_METADATA) == 0; }
+  bool hasSeriesMetadata() const { return opened && (head.flags & CLIX_FLAG_HAS_SERIES) != 0; }
 
   // Up to `count` records from `first` in one read. Returns how many were read,
   // each already checked with recordInBounds (a bad one stops the batch).
@@ -42,6 +43,7 @@ class LibraryIndexFile {
   bool readAuthor(const ClixRecord& record, std::string& out);
   // Absolute path of the book.
   bool readPath(const ClixRecord& record, std::string& out);
+  bool readSeries(const ClixRecord& record, std::string& out);
 
  private:
   bool readAt(uint32_t offset, void* dst, size_t len);

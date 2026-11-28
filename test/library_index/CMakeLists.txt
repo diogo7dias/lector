@@ -1,8 +1,10 @@
 add_executable(LibraryIndexTest
   LibraryIndexTest.cpp
   LibraryProgressViewTest.cpp
+  LibrarySeriesTest.cpp
   ${REPO_ROOT}/lib/LibraryIndex/LibraryBuilder.cpp
   ${REPO_ROOT}/lib/LibraryIndex/LibraryIndexFile.cpp
+  ${REPO_ROOT}/lib/LibraryIndex/LibraryGroups.cpp
   ${REPO_ROOT}/lib/LibraryIndex/LibraryFormat.cpp
   ${REPO_ROOT}/lib/FsHelpers/FsHelpers.cpp
   ${REPO_ROOT}/lib/Utf8/Utf8.cpp

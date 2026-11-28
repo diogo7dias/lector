@@ -84,6 +84,15 @@ bool LibraryIndexFile::readPath(const ClixRecord& record, std::string& out) {
          !out.empty() && out[0] == '/';
 }
 
+bool LibraryIndexFile::readSeries(const ClixRecord& record, std::string& out) {
+  if (!readText(record, static_cast<size_t>(record.titleLen) + record.authorLen + record.pathLen, record.seriesLen,
+                out)) {
+    return false;
+  }
+  out = cleanText(out, CLIX_MAX_SERIES);
+  return true;
+}
+
 bool updateRecordProgress(const char* indexPath, const char* bookPath, const uint8_t percent,
                           const uint32_t readOrder) {
   if (!indexPath || !bookPath || bookPath[0] != '/') return false;

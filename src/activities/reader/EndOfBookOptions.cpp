@@ -6,6 +6,8 @@
 #include <HalClock.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <LibraryBuilder.h>
+#include <LibraryGroups.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -24,10 +26,33 @@
 #include "util/QuoteText.h"
 
 namespace {
-// Display name without the file extension, mirroring the file browser rows
+// Display name without folder prefix or file extension, mirroring the file browser rows
 std::string displayName(const std::string& filename) {
-  const auto pos = filename.rfind('.');
-  return filename.substr(0, pos);
+  const auto slash = filename.rfind('/');
+  const size_t start = slash == std::string::npos ? 0 : slash + 1;
+  const auto dot = filename.rfind('.');
+  if (dot != std::string::npos && dot > start) return filename.substr(start, dot - start);
+  return filename.substr(start);
+}
+
+void prependSeriesNext(const std::string& currentBookPath, const std::string& folder, std::vector<std::string>& names,
+                       const size_t maxSuggestions) {
+  library::LibraryIndexFile index;
+  std::string nextPath;
+  if (!index.open(library::libraryIndexPath()) || !library::findNextInSeries(index, currentBookPath, nextPath) ||
+      !Storage.exists(nextPath.c_str())) {
+    return;
+  }
+  // Remove duplicate if NextBookFinder already listed the same book as a sibling filename.
+  names.erase(std::remove_if(names.begin(), names.end(),
+                             [&](const std::string& item) {
+                               if (!item.empty() && item[0] == '/') return item == nextPath;
+                               const std::string p = folder == "/" ? "/" + item : folder + "/" + item;
+                               return p == nextPath;
+                             }),
+              names.end());
+  names.insert(names.begin(), std::move(nextPath));
+  if (names.size() > maxSuggestions) names.resize(maxSuggestions);
 }
 
 // The last quote saved from this book, from the tail of its sidecar only: a record longer
@@ -83,6 +108,7 @@ void EndOfBookOptions::loadOnce(const std::string& currentBookPath, const std::s
   }
   folder = FsHelpers::extractFolderPath(currentBookPath);
   names = NextBookFinder::findNextBooks(currentBookPath, MAX_SUGGESTIONS);
+  prependSeriesNext(currentBookPath, folder, names, MAX_SUGGESTIONS);
   selector = 0;
 
   bookTitle = title;
@@ -104,6 +130,7 @@ std::string EndOfBookOptions::fullPath(const size_t index) const {
   if (index >= names.size()) {
     return {};
   }
+  if (!names[index].empty() && names[index][0] == '/') return names[index];
   return folder == "/" ? "/" + names[index] : folder + "/" + names[index];
 }
 

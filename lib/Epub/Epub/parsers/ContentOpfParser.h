@@ -19,6 +19,8 @@ class ContentOpfParser final : public Print {
     IN_BOOK_AUTHOR,
     IN_BOOK_LANGUAGE,
     IN_BOOK_DESCRIPTION,
+    IN_META_COLLECTION,
+    IN_META_GROUP_POSITION,
     IN_MANIFEST,
     IN_SPINE,
     IN_GUIDE,
@@ -32,6 +34,9 @@ class ContentOpfParser final : public Print {
   BookMetadataCache* cache;
   HalFile tempItemStore;
   std::string coverItemId;
+  std::string collectionId;
+  std::string collectionText;
+  std::string groupPositionText;
   bool hasExplicitStartReference = false;
   bool metadataDone = false;
 
@@ -55,6 +60,12 @@ class ContentOpfParser final : public Print {
   std::string title;
   std::string author;
   std::string language;
+  std::string series;
+  uint16_t seriesIndexX10 = 0;
+
+  // Parses a numeric series position ("1", "2.5", "03") into tenths (10, 25, 30).
+  // Returns 0 for empty, negative, zero, or non-numeric input.
+  static uint16_t parseSeriesIndexX10(const char* text);
   // Publisher synopsis. Capped while parsing (see kMaxDescriptionBytes in the .cpp)
   // because some EPUBs carry several kilobytes of marketing copy and this has to
   // fit alongside everything else the parse already holds.

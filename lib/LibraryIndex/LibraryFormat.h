@@ -43,6 +43,7 @@ inline constexpr uint32_t CLIX_ALIGN = 512;
 inline constexpr size_t CLIX_MAX_TITLE = 128;
 inline constexpr size_t CLIX_MAX_AUTHOR = 96;
 inline constexpr size_t CLIX_MAX_PATH = 255;
+inline constexpr size_t CLIX_MAX_SERIES = 96;
 
 // Books listed. Past it the walk stops and the header says so. The C3 holds the
 // sort keys of the build in RAM (see LibraryBuilder.h), so it lists fewer.
@@ -55,6 +56,7 @@ inline constexpr uint16_t CLIX_MAX_RECORDS = 2048;
 enum ClixFlags : uint8_t {
   CLIX_FLAG_TRUNCATED = 1 << 0,    // more books on the card than CLIX_MAX_RECORDS
   CLIX_FLAG_NO_METADATA = 1 << 1,  // built from filenames only (libraryUseMetadata = 0)
+  CLIX_FLAG_HAS_SERIES = 1 << 2,   // records include series name & index in CLX v2
 };
 
 #pragma pack(push, 1)
@@ -82,9 +84,11 @@ struct ClixRecord {
   uint8_t titleLen;
   uint8_t authorLen;
   uint8_t pathLen;
-  uint8_t percent;     // 0..100, CLIX_PERCENT_UNREAD (255) = unread
-  uint32_t readOrder;  // monotonic read session counter; 0 = unknown
-  uint8_t reserved[4];
+  uint8_t percent;          // 0..100, CLIX_PERCENT_UNREAD (255) = unread
+  uint32_t readOrder;       // monotonic read session counter; 0 = unknown
+  uint16_t seriesIndexX10;  // 0 = unset; e.g. 10 = #1, 15 = #1.5, 20 = #2
+  uint8_t seriesLen;        // length of series string after path in name section
+  uint8_t reserved;
 };
 static_assert(sizeof(ClixRecord) == 32, "ClixRecord must be exactly 32 bytes");
 static_assert(CLIX_ALIGN % sizeof(ClixRecord) == 0, "records must tile a 512-byte sector");
@@ -109,7 +113,7 @@ inline bool matchesFilter(const ClixRecord& r, const LibraryFilter filter) {
   }
 }
 
-inline constexpr size_t CLIX_ROW_NAME_BYTES = CLIX_MAX_TITLE + CLIX_MAX_AUTHOR + CLIX_MAX_PATH;
+inline constexpr size_t CLIX_ROW_NAME_BYTES = CLIX_MAX_TITLE + CLIX_MAX_AUTHOR + CLIX_MAX_PATH + CLIX_MAX_SERIES;
 
 inline uint64_t clixPathHash(const char* data, const size_t len) {
   uint64_t hash = 14695981039346656037ULL;  // FNV-1a 64
@@ -166,9 +170,9 @@ inline ClixValidity validateHeader(const ClixHeader& h, const uint64_t actualFil
 
 // A record's text must lie inside the name section and within the bounds above.
 inline bool recordInBounds(const ClixHeader& h, const ClixRecord& r) {
-  const uint64_t end = static_cast<uint64_t>(r.nameOff) + r.titleLen + r.authorLen + r.pathLen;
+  const uint64_t end = static_cast<uint64_t>(r.nameOff) + r.titleLen + r.authorLen + r.pathLen + r.seriesLen;
   return end <= h.nameLen && r.titleLen <= CLIX_MAX_TITLE && r.authorLen <= CLIX_MAX_AUTHOR &&
-         r.pathLen <= CLIX_MAX_PATH && r.pathLen > 0;
+         r.pathLen <= CLIX_MAX_PATH && r.pathLen > 0 && r.seriesLen <= CLIX_MAX_SERIES;
 }
 
 // --- text a book gave us -----------------------------------------------------
