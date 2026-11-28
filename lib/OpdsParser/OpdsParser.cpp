@@ -3,6 +3,7 @@
 #include <Logging.h>
 #include <XmlParserUtils.h>
 
+#include <cctype>
 #include <cstring>
 #include <new>
 
@@ -11,14 +12,20 @@
 #endif
 
 namespace {
-constexpr size_t MAX_ENTRIES = 64;
+constexpr size_t MAX_ENTRIES = OpdsParser::maxEntries();
 // Text budget for every collected entry together, claimed once before the
-// transfer. 64 entries of a Calibre-Web page cost about 7 KB of title, author
-// and href; the rest is headroom for long hrefs.
-constexpr size_t ARENA_BYTES = 10 * 1024;
+// transfer. C3 keeps up to 64 entries in 14 KB (trimming synopses if space
+// runs tight) so wolfSSL stays safe; X4 Pro (PSRAM) holds full 400 B summaries
+// in 32 KB.
+#if defined(BOARD_HAS_PSRAM)
+constexpr size_t ARENA_BYTES = 32 * 1024;
+#else
+constexpr size_t ARENA_BYTES = 14 * 1024;
+#endif
 constexpr size_t MAX_TITLE_CHARS = 160;
 constexpr size_t MAX_AUTHOR_CHARS = 120;
 constexpr size_t MAX_HREF_CHARS = 768;
+constexpr size_t MAX_SUMMARY_CHARS = OpdsParser::MAX_SUMMARY_CHARS;
 constexpr size_t MAX_SEARCH_TEMPLATE_CHARS = 768;
 constexpr size_t MAX_PAGE_URL_CHARS = 768;
 // Reserved up front for the feed-level links, so assigning them mid-transfer
@@ -29,6 +36,92 @@ constexpr size_t FEED_URL_RESERVE = 256;
 // 20 KB with an unreadable MEMORY_E (-125), so stop above that and report it.
 constexpr size_t MIN_FREE_HEAP_BYTES = 15 * 1024;
 #endif
+
+bool hrefEndsWithIgnoreCase(const char* href, const char* ext) {
+  if (!href || !ext) return false;
+  size_t pathLen = 0;
+  while (href[pathLen] && href[pathLen] != '?' && href[pathLen] != '#') ++pathLen;
+  const size_t extLen = strlen(ext);
+  if (pathLen < extLen) return false;
+  const char* tail = href + pathLen - extLen;
+  for (size_t i = 0; i < extLen; ++i) {
+    if (std::tolower(static_cast<unsigned char>(tail[i])) != std::tolower(static_cast<unsigned char>(ext[i]))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Classifies an OPDS acquisition link into a supported book format and preference
+// rank (higher wins when an entry offers multiple formats: plain EPUB > derived
+// EPUB > XTCH/XTC > TXT). Returns 0 if unsupported.
+uint8_t classifyAcquisition(const char* type, const char* href, OpdsBookFormat& format) {
+  const bool isEpubMime = type && strcmp(type, "application/epub+zip") == 0;
+  const bool isPlainEpubHref = href && (hrefEndsWithIgnoreCase(href, ".epub") || strstr(href, "/epub/") != nullptr);
+  if (isEpubMime || (!type && isPlainEpubHref)) {
+    format = OpdsBookFormat::EPUB;
+    return isPlainEpubHref ? 4 : 3;
+  }
+  if ((type && strstr(type, "xtch") != nullptr) || hrefEndsWithIgnoreCase(href, ".xtch")) {
+    format = OpdsBookFormat::XTCH;
+    return 2;
+  }
+  if ((type && strstr(type, "xtc") != nullptr) || hrefEndsWithIgnoreCase(href, ".xtc")) {
+    format = OpdsBookFormat::XTC;
+    return 2;
+  }
+  if ((type && strncmp(type, "text/plain", 10) == 0) || hrefEndsWithIgnoreCase(href, ".txt")) {
+    format = OpdsBookFormat::TXT;
+    return 1;
+  }
+  return 0;
+}
+
+// Strips HTML tags and collapses whitespace in place, leaving a clean single
+// paragraph bounded by MAX_SUMMARY_CHARS without allocating.
+void cleanSummaryInPlace(std::string& s) {
+  size_t out = 0;
+  bool inTag = false;
+  bool lastSpace = true;
+  for (size_t i = 0; i < s.size(); ++i) {
+    const unsigned char c = static_cast<unsigned char>(s[i]);
+    if (c == '<') {
+      inTag = true;
+      continue;
+    }
+    if (inTag) {
+      if (c == '>') inTag = false;
+      continue;
+    }
+    if (c <= ' ') {
+      if (!lastSpace && out < MAX_SUMMARY_CHARS) {
+        s[out++] = ' ';
+        lastSpace = true;
+      }
+    } else if (out < MAX_SUMMARY_CHARS) {
+      s[out++] = static_cast<char>(c);
+      lastSpace = false;
+    }
+  }
+  while (out > 0 && s[out - 1] == ' ') --out;
+  // Avoid cutting inside a multi-byte UTF-8 sequence.
+  if (out > 0 && (static_cast<unsigned char>(s[out - 1]) & 0x80) != 0) {
+    size_t back = out;
+    while (back > 0 && (static_cast<unsigned char>(s[back - 1]) & 0xC0) == 0x80) --back;
+    if (back > 0) {
+      const unsigned char lead = static_cast<unsigned char>(s[back - 1]);
+      size_t expected = 1;
+      if ((lead & 0xE0) == 0xC0)
+        expected = 2;
+      else if ((lead & 0xF0) == 0xE0)
+        expected = 3;
+      else if ((lead & 0xF8) == 0xF0)
+        expected = 4;
+      if (out - (back - 1) < expected) out = back - 1;
+    }
+  }
+  s.resize(out);
+}
 }  // namespace
 
 OpdsParser::OpdsParser() {
@@ -50,6 +143,7 @@ OpdsParser::OpdsParser() {
   currentEntry.title.reserve(MAX_TITLE_CHARS);
   currentEntry.author.reserve(MAX_AUTHOR_CHARS);
   currentEntry.href.reserve(MAX_HREF_CHARS);
+  currentEntry.summary.reserve(MAX_SUMMARY_CHARS);
   currentText.reserve(MAX_TITLE_CHARS);
   searchTemplate.reserve(FEED_URL_RESERVE);
   nextPageUrl.reserve(FEED_URL_RESERVE);
@@ -120,20 +214,36 @@ bool OpdsParser::error() const { return errorOccured; }
 
 bool OpdsParser::storeCurrentEntry() {
   if (slots.size() >= MAX_ENTRIES || !arena) return false;
-  const size_t need = currentEntry.title.size() + currentEntry.author.size() + currentEntry.href.size();
-  if (arenaUsed + need > ARENA_BYTES) return false;
+  const size_t baseNeed = currentEntry.title.size() + currentEntry.author.size() + currentEntry.href.size();
+  if (arenaUsed + baseNeed > ARENA_BYTES) return false;
+
+  // Trim summary only if the remaining arena cannot hold all of it, so a feed
+  // full of long synopses does not drop book entries early.
+  size_t summaryKeep = currentEntry.summary.size();
+  const size_t availForSummary = ARENA_BYTES - arenaUsed - baseNeed;
+  if (summaryKeep > availForSummary) {
+    summaryKeep = availForSummary;
+    while (summaryKeep > 0 && (static_cast<unsigned char>(currentEntry.summary[summaryKeep - 1]) & 0xC0) == 0x80) {
+      --summaryKeep;
+    }
+    if (summaryKeep > 0 && (static_cast<unsigned char>(currentEntry.summary[summaryKeep - 1]) & 0x80) != 0) {
+      --summaryKeep;
+    }
+  }
 
   Slot slot;
   slot.type = currentEntry.type;
-  const auto put = [this](const std::string& text, uint16_t& off, uint16_t& len) {
+  slot.format = currentEntry.format;
+  const auto put = [this](const char* data, const size_t size, uint16_t& off, uint16_t& len) {
     off = static_cast<uint16_t>(arenaUsed);
-    len = static_cast<uint16_t>(text.size());
-    memcpy(arena.get() + arenaUsed, text.data(), text.size());
-    arenaUsed += text.size();
+    len = static_cast<uint16_t>(size);
+    if (size > 0) memcpy(arena.get() + arenaUsed, data, size);
+    arenaUsed += size;
   };
-  put(currentEntry.title, slot.titleOff, slot.titleLen);
-  put(currentEntry.author, slot.authorOff, slot.authorLen);
-  put(currentEntry.href, slot.hrefOff, slot.hrefLen);
+  put(currentEntry.title.data(), currentEntry.title.size(), slot.titleOff, slot.titleLen);
+  put(currentEntry.author.data(), currentEntry.author.size(), slot.authorOff, slot.authorLen);
+  put(currentEntry.href.data(), currentEntry.href.size(), slot.hrefOff, slot.hrefLen);
+  put(currentEntry.summary.data(), summaryKeep, slot.summaryOff, slot.summaryLen);
   slots.push_back(slot);
   return true;
 }
@@ -144,9 +254,11 @@ std::vector<OpdsEntry> OpdsParser::takeEntries() {
   for (const Slot& slot : slots) {
     OpdsEntry entry;
     entry.type = slot.type;
+    entry.format = slot.format;
     entry.title.assign(arena.get() + slot.titleOff, slot.titleLen);
     entry.author.assign(arena.get() + slot.authorOff, slot.authorLen);
     entry.href.assign(arena.get() + slot.hrefOff, slot.hrefLen);
+    entry.summary.assign(arena.get() + slot.summaryOff, slot.summaryLen);
     out.push_back(std::move(entry));
   }
   slots.clear();
@@ -185,11 +297,14 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
     // Cleared field by field rather than reassigned: the strings keep the
     // capacity reserved in the constructor, so no entry allocates mid-transfer.
     self->currentEntry.type = OpdsEntryType::NAVIGATION;
+    self->currentEntry.format = OpdsBookFormat::EPUB;
     self->currentEntry.title.clear();
     self->currentEntry.author.clear();
     self->currentEntry.href.clear();
+    self->currentEntry.summary.clear();
     self->currentText.clear();
-    self->inTitle = self->inAuthor = self->inAuthorName = false;
+    self->currentLinkPriority = 0;
+    self->inTitle = self->inAuthor = self->inAuthorName = self->inSummary = false;
     return;
   }
 
@@ -210,16 +325,13 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
       }
 
       if (self->inEntry && self->collectCurrentEntry) {
-        if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
-            strcmp(type, "application/epub+zip") == 0) {
-          // Prefer plain EPUB links over derived formats when multiple
-          // acquisition links are present for one entry.
-          const bool isPlainEpub = strstr(href, ".epub") != nullptr || strstr(href, "/epub/") != nullptr;
-          const bool alreadyHasPlainEpub = self->currentEntry.type == OpdsEntryType::BOOK &&
-                                           (self->currentEntry.href.find(".epub") != std::string::npos ||
-                                            self->currentEntry.href.find("/epub/") != std::string::npos);
-          if (self->currentEntry.type != OpdsEntryType::BOOK || (isPlainEpub && !alreadyHasPlainEpub)) {
+        if (rel && strstr(rel, "opds-spec.org/acquisition") != nullptr) {
+          OpdsBookFormat fmt = OpdsBookFormat::EPUB;
+          const uint8_t priority = classifyAcquisition(type, href, fmt);
+          if (priority > self->currentLinkPriority) {
+            self->currentLinkPriority = priority;
             self->currentEntry.type = OpdsEntryType::BOOK;
+            self->currentEntry.format = fmt;
             assignBounded(self->currentEntry.href, href, MAX_HREF_CHARS);
           }
         } else if (type && strstr(type, "application/atom+xml") != nullptr) {
@@ -242,6 +354,9 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
   } else if (self->inAuthor && (strcmp(name, "name") == 0 || strstr(name, ":name") != nullptr)) {
     self->inAuthorName = true;
     self->currentText.clear();
+  } else if (strcmp(name, "summary") == 0 || strstr(name, ":summary") != nullptr) {
+    self->inSummary = true;
+    self->currentEntry.summary.clear();
   }
 }
 
@@ -254,6 +369,7 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
     }
     self->inEntry = false;
     self->collectCurrentEntry = false;
+    self->inSummary = false;
   } else if (self->inEntry) {
     if (strcmp(name, "title") == 0 || strstr(name, ":title") != nullptr) {
       if (self->inTitle) self->currentEntry.title = self->currentText;
@@ -263,6 +379,9 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
     } else if (self->inAuthorName && (strcmp(name, "name") == 0 || strstr(name, ":name") != nullptr)) {
       self->currentEntry.author = self->currentText;
       self->inAuthorName = false;
+    } else if (strcmp(name, "summary") == 0 || strstr(name, ":summary") != nullptr) {
+      if (self->inSummary) cleanSummaryInPlace(self->currentEntry.summary);
+      self->inSummary = false;
     }
   }
 }
@@ -274,5 +393,7 @@ void XMLCALL OpdsParser::characterData(void* userData, const XML_Char* s, const 
     appendBounded(self->currentText, s, len, MAX_TITLE_CHARS);
   } else if (self->inAuthorName) {
     appendBounded(self->currentText, s, len, MAX_AUTHOR_CHARS);
+  } else if (self->inSummary) {
+    appendBounded(self->currentEntry.summary, s, len, MAX_SUMMARY_CHARS);
   }
 }

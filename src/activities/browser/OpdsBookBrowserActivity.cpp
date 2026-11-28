@@ -20,27 +20,13 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "activities/util/TrustCertificatePrompt.h"
 #include "components/UITheme.h"
-#include "components/icons/search24.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 #include "network/TlsScratchHeap.h"
 #include "network/opds/BookOrbitMissing.h"
 #include "util/BookCacheUtils.h"
-#include "util/OpdsFilename.h"
 #include "util/StringUtils.h"
 #include "util/UrlUtils.h"
-
-namespace {
-constexpr int SEARCH_ICON_SIZE = 24;
-constexpr int SEARCH_ICON_MARGIN = 14;
-constexpr unsigned long GO_HOME_MS = 1000;  // Back held this long leaves for Home (upstream #4397)
-
-// The search glyph sits inside the header band, at its right edge.
-int searchIconX(const GfxRenderer& renderer) {
-  return renderer.getScreenWidth() - SEARCH_ICON_SIZE - SEARCH_ICON_MARGIN;
-}
-
-}  // namespace
 
 void OpdsBookBrowserActivity::onEnter() {
   UiStatusActivity::onEnter();
@@ -213,10 +199,11 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
 
   entries.reserve(entries.size() + (prevUrl.empty() ? 0 : 1) + (nextUrl.empty() ? 0 : 1));
   if (!prevUrl.empty()) {
-    entries.insert(entries.begin(), OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_PREV_PAGE), "", prevUrl});
+    entries.insert(entries.begin(),
+                   OpdsEntry{OpdsEntryType::NAVIGATION, OpdsBookFormat::EPUB, tr(STR_PREV_PAGE), "", prevUrl, ""});
   }
   if (!nextUrl.empty()) {
-    entries.push_back(OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_NEXT_PAGE), "", nextUrl});
+    entries.push_back(OpdsEntry{OpdsEntryType::NAVIGATION, OpdsBookFormat::EPUB, tr(STR_NEXT_PAGE), "", nextUrl, ""});
   }
   if (feedTruncated) {
     LOG_INF("OPDS", "Feed truncated to fit memory");
@@ -267,7 +254,7 @@ void OpdsBookBrowserActivity::navigateBack() {
   }
 }
 
-void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
+void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book, const bool openAfter) {
   state = BrowserState::DOWNLOADING;
   statusMessage = book.title;
   downloadTitle = renderer.truncatedText(UI_10_FONT_ID, book.title.c_str(), renderer.getScreenWidth() - 40);
@@ -312,9 +299,9 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
                                           afterAttempt, pollCancel);
 
   if (result == HttpDownloader::CERT_UNTRUSTED &&
-      askToTrustRejectedCertificate(*this, renderer, mappedInput, [this, retry = book](const bool trusted) {
+      askToTrustRejectedCertificate(*this, renderer, mappedInput, [this, retry = book, openAfter](const bool trusted) {
         if (trusted) {
-          downloadBook(retry);
+          downloadBook(retry, openAfter);
           return;
         }
         state = BrowserState::ERROR;
@@ -324,9 +311,9 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     return;
   }
 
-  if (result == HttpDownloader::OK && missingOnly) {
+  if (result == HttpDownloader::OK && (missingOnly || openAfter)) {
     // Open it so Auto Sync pulls its position; it is still listed, hence -1.
-    if (navigationHistory.empty())
+    if (missingOnly && navigationHistory.empty())
       bookorbit_missing::save(static_cast<int>(bookorbit_missing::countBooks(entries)) - 1, startPath);
     APP_STATE.openEpubPath = finalPath;
     openDownloadedBook = true;
@@ -334,6 +321,10 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     return;
   }
   if (result == HttpDownloader::OK) {
+    {
+      RenderLock lock(*this);
+      refreshRows();
+    }
     state = BrowserState::BROWSING;
   } else if (result == HttpDownloader::ABORTED) {
     state = BrowserState::BROWSING;
@@ -430,157 +421,4 @@ void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
     errorMessage = tr(STR_WIFI_CONN_FAILED);
     requestUpdate();
   }
-}
-
-// --- Rows and screen ---
-
-void OpdsBookBrowserActivity::refreshRows() {
-  // The rows borrow the feed's strings: a second copy of every title and author is heap
-  // this device lacks with WiFi and TLS up.
-  rows.resize(entries.size());
-  for (size_t i = 0; i < entries.size(); ++i) {
-    const OpdsEntry& entry = entries[i];
-    rows[i] = freeink::ui::ListItem{};
-    rows[i].label = entry.title.c_str();
-    rows[i].actionValue = static_cast<int16_t>(i);
-    // An arrow marks a place to go; a book carries its author under the title.
-    if (entry.type == OpdsEntryType::NAVIGATION) {
-      rows[i].value = ">";
-    } else if (!entry.author.empty()) {
-      rows[i].subtitle = entry.author.c_str();
-    }
-  }
-}
-
-UiStatusActivity::StatusView OpdsBookBrowserActivity::statusView() const {
-  StatusView view;
-  view.title = server.name.empty() ? tr(STR_OPDS_BROWSER) : server.name.c_str();
-  // A TLS loan returns the framebuffer white and downloads repaint FAST: owe a full pass.
-  if (pendingFullRefresh) view.refresh = HalDisplay::FULL_REFRESH;
-
-  switch (state) {
-    case BrowserState::WIFI_SELECTION:
-    case BrowserState::SEARCH_INPUT:
-      // The picker and the keyboard own the screen.
-      view.hidden = true;
-      break;
-    case BrowserState::CHECK_WIFI:
-    case BrowserState::LOADING:
-      view.lines = {statusMessage.c_str(), nullptr, nullptr, nullptr};
-      break;
-    case BrowserState::RECONNECTING:
-      view.lines = {reconnectAttempt.empty() ? tr(STR_CONNECTING) : reconnectAttempt.c_str(),
-                    reconnectDetail.empty() ? nullptr : reconnectDetail.c_str(), nullptr, nullptr};
-      view.backHint = tr(STR_CANCEL);
-      break;
-    case BrowserState::ERROR:
-      view.lines = {tr(STR_ERROR_MSG), errorMessage.empty() ? nullptr : errorMessage.c_str(), nullptr, nullptr};
-      view.confirmHint = tr(STR_RETRY);
-      break;
-    case BrowserState::DOWNLOADING:
-      view.lines = {tr(STR_DOWNLOADING), downloadTitle.c_str(), nullptr, nullptr};
-      view.showProgress = downloadTotal > 0;
-      view.progressValue = static_cast<int>(downloadProgress);
-      view.progressMax = downloadTotal > 0 ? static_cast<int>(downloadTotal) : 1;
-      view.backHint = tr(STR_CANCEL);
-      break;
-    case BrowserState::BROWSING:
-      if (rows.empty()) {
-        view.lines = {tr(STR_NO_ENTRIES), nullptr, nullptr, nullptr};
-        break;
-      }
-      view.listItems = rows.data();
-      view.listCount = static_cast<int>(rows.size());
-      view.listHasSubtitle = true;
-      // The selection is clamped after this runs: on a shorter feed's first paint it can name a gone row.
-      {
-        const size_t selected = static_cast<size_t>(listSelection());
-        const bool isBook = selected < entries.size() && entries[selected].type == OpdsEntryType::BOOK;
-        view.confirmHint = isBook ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
-      }
-      // Search shares the page-up button, on the first row only, where a feed opens.
-      view.thirdHint = !searchTemplate.empty() && listSelection() == 0 ? tr(STR_SEARCH) : tr(STR_DIR_UP);
-      view.fourthHint = tr(STR_DIR_DOWN);
-      break;
-  }
-  return view;
-}
-
-void OpdsBookBrowserActivity::drawHeaderExtras(const Rect& headerRect) {
-  if (searchTemplate.empty()) return;
-  renderer.drawIcon(Search24Icon.bits, searchIconX(renderer), headerRect.y + (headerRect.height - SEARCH_ICON_SIZE) / 2,
-                    Search24Icon.w);
-}
-
-void OpdsBookBrowserActivity::afterRender() { pendingFullRefresh = false; }
-
-// --- Input handling ---
-
-bool OpdsBookBrowserActivity::handleCustomInput() {
-  if (state == BrowserState::WIFI_SELECTION || state == BrowserState::SEARCH_INPUT) return true;
-
-  // A press that opened this screen must not also act on it.
-  if (consumeConfirm && mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    consumeConfirm = false;
-    return true;
-  }
-
-  // Allow Back button to cancel during in-flight operations
-  if (state == BrowserState::RECONNECTING || state == BrowserState::DOWNLOADING || state == BrowserState::LOADING) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      cancelRequested = true;
-      return true;
-    }
-    return true;
-  }
-
-  // Back acts on release, so a hold skips refetching every level. Only a press seen here
-  // arms it, not the one that closed the search keyboard.
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) return backArmed = true;
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && std::exchange(backArmed, false)) {
-    mappedInput.getHeldTime() >= GO_HOME_MS ? onGoHome() : onBackButton();
-    return true;
-  }
-
-  if (state == BrowserState::BROWSING && mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-    if (!searchTemplate.empty() && listSelection() == 0) {
-      launchSearch();
-      return true;
-    }
-  }
-  return false;
-}
-
-void OpdsBookBrowserActivity::onListActivated(const int index) {
-  if (state != BrowserState::BROWSING || index < 0 || index >= static_cast<int>(entries.size())) return;
-  setListSelection(index);
-  // Copied before the call: navigating and downloading both release the list
-  // this entry lives in.
-  const OpdsEntry entry = entries[index];
-  entry.type == OpdsEntryType::BOOK ? downloadBook(entry) : navigateToEntry(entry);
-}
-
-void OpdsBookBrowserActivity::onBackButton() {
-  if (state == BrowserState::RECONNECTING || state == BrowserState::DOWNLOADING || state == BrowserState::LOADING) {
-    cancelRequested = true;
-    return;
-  }
-  if (state == BrowserState::CHECK_WIFI) {
-    finish();
-    return;
-  }
-  navigateBack();
-}
-
-void OpdsBookBrowserActivity::onConfirmButton() {
-  if (state != BrowserState::ERROR) return;
-  // A failure retries the feed, unless the link itself is what is missing.
-  if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
-    state = BrowserState::LOADING;
-    statusMessage = tr(STR_LOADING);
-    requestUpdate();
-    fetchFeed(currentPath);
-    return;
-  }
-  launchWifiSelection();
 }

@@ -53,11 +53,9 @@ const OpdsServer* findServer() {
 }
 
 bool onDevice(const OpdsEntry& book) {
-  std::string path;
-  path.reserve(96);
-  path += SETTINGS.opdsDownloadFolder;
-  path += '/';
-  path += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
+  const std::string path =
+      opdsTargetPath(SETTINGS.opdsDownloadFolder, book.author, book.title,
+                     static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat), opdsBookExtension(book.format));
   if (Storage.exists(path.c_str())) return true;
   for (const RecentBook& recent : RECENT_BOOKS.getBooks()) {
     if (sameTitle(recent.title, book.title) && !RecentBooksStore::isMissing(recent)) return true;

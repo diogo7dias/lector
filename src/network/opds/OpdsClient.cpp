@@ -258,11 +258,9 @@ HttpDownloader::DownloadError OpdsClient::downloadBook(
     haveFolder = false;
   }
 
-  std::string filename;
-  filename.reserve(96);
-  if (haveFolder) filename += folder;
-  filename += '/';
-  filename += opdsBookFilename(entry.author, entry.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
+  std::string filename =
+      opdsTargetPath(haveFolder ? folder : "", entry.author, entry.title,
+                     static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat), opdsBookExtension(entry.format));
   LOG_DBG("OPDSCLI", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
   auto isCancelled = [&cancelFlag, &pollCancel]() {
