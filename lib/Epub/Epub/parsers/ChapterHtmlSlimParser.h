@@ -184,13 +184,23 @@ class ChapterHtmlSlimParser {
   void breakPageCarryingLines(size_t carry, size_t paragraphLines, uint32_t visibleOffset);
   void breakPageAt(uint32_t visibleOffset) { breakPageCarryingLines(0, 0, visibleOffset); }
   std::vector<BoxScope> boxScopes;
+#if defined(BOARD_HAS_PSRAM)
+  static constexpr size_t MAX_GRID_TABLE_COLUMNS = 6;
+#else
   static constexpr size_t MAX_GRID_TABLE_COLUMNS = 4;
+#endif
   // ponytail: buffer at most 160 tokens / 2 KB per row; larger rows use stacked flow.
   static constexpr size_t MAX_GRID_TABLE_ROW_WORDS = 160;
   static constexpr size_t MAX_GRID_TABLE_ROW_BYTES = 2048;
   int tableDepth = 0;
   bool insideTableCell = false;
   bool tableRowStacked = false;
+  bool tableCompactFont = false;
+  bool tableRowHasHeader = false;
+  bool tableRowHasData = false;  // a <td> in the row: its <th> cells are row headers
+  uint8_t currentCellColSpan = 1;
+  uint8_t tableRowSpanSum = 0;
+  std::array<uint8_t, MAX_GRID_TABLE_COLUMNS> tableRowColSpans{};
   // A cell that spans rows cannot be drawn in a grid, and the span keeps applying to the
   // rows below it, so the whole run of affected rows falls back to stacked. UINT16_MAX
   // means "to the end of the table" (rowspan=0 in HTML).
@@ -321,7 +331,7 @@ class ChapterHtmlSlimParser {
   void fallbackTableRowToStacked();
   void closeTableCell();
   void finishTableRow();
-  void addTableRowSeparator();
+  void addTableRowSeparator(uint8_t thickness = 1);
   void setCurrentPageVisibleOffset(uint32_t offset);
   void makePages(bool includeLastLine = true, bool paragraphEnd = true);
   void applyBlockFontScale(BlockStyle& blockStyle, const CssStyle& cssStyle, const char* tagName) const;

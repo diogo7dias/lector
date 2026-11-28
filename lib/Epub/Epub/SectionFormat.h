@@ -176,7 +176,10 @@ namespace {
 //      use the installed monospace SD font (IBMPlexMono) via TextBlock per-word font slots.
 // v95: Keep Headings with Text enters the header; when on, headings stay with the text
 //      that follows and 4+ line paragraphs avoid 1-line orphans and widows.
-constexpr uint8_t SECTION_FILE_VERSION = 95;
+// v96: Tables step cell text down one size when natural widths exceed the viewport, sum
+//      spanned column widths for colspan, draw a 2px rule under <th> rows, and allow 6
+//      grid columns on PSRAM boards (4 on C3).
+constexpr uint8_t SECTION_FILE_VERSION = 96;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
