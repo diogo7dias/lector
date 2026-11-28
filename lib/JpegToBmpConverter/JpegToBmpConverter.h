@@ -11,4 +11,6 @@ class JpegToBmpConverter {
 
  public:
   static bool jpegFileToBmpStream(HalFile& jpegFile, Print& bmpOut, bool crop = true);
+  static bool jpegFileToBmpStreamSized(HalFile& jpegFile, Print& bmpOut, int targetWidth, int targetHeight,
+                                       bool crop = true);
 };

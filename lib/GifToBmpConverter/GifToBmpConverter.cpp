@@ -249,3 +249,8 @@ bool GifToBmpConverter::gifFileToBmpStream(HalFile& gifFile, Print& bmpOut, bool
   // Runtime display dimensions (swapped for portrait cover sizing), as the PNG path.
   return gifFileToBmpStreamInternal(gifFile, bmpOut, display.getDisplayHeight(), display.getDisplayWidth(), crop);
 }
+
+bool GifToBmpConverter::gifFileToBmpStreamSized(HalFile& gifFile, Print& bmpOut, const int targetWidth,
+                                                const int targetHeight, const bool crop) {
+  return gifFileToBmpStreamInternal(gifFile, bmpOut, targetWidth, targetHeight, crop);
+}

@@ -227,9 +227,14 @@ full name.
 
 **Library** lists every book on the card in one list, sorted by title, with the author under
 each title. Pick one to open it. The top right shows which book you are on and how many there
-are. Titles and authors come from the books themselves (an EPUB's own title and author); a
-book without them is listed by its file name. Books in any folder are listed, wherever
-they are filed (`/recents` and `/read` included), but not the folders Lector keeps for
+are. Open the **Quick Panel** inside Library to switch **View** between **List** (default) and
+**Grid** (3x3 covers on X4 Pro, 2x3 on X3/X4). Each cover tile shows a thin progress bar beneath
+it and a **Read** ribbon once finished. Cover thumbnails (`132x196` `thumb.bmp`) are generated
+lazily when a book opens (or downsampled from `cover.bmp`); books without a thumbnail show an
+instant typographic card so scrolling never stalls. Titles and authors come from the books
+themselves (an EPUB's own title and author); a book without them is listed by its file name. Books
+in any folder are listed, wherever they are filed (`/recents` and `/read` included), but not the
+folders Lector keeps for
 itself (`/sleep`, `/fonts` and the like) or hidden files.
 
 The list is read from an index Lector keeps on the card (`/.crosspoint/lector-library.idx`).

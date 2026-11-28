@@ -613,3 +613,8 @@ bool PngToBmpConverter::pngFileToBmpStream(HalFile& pngFile, Print& bmpOut, bool
   const int targetHeight = display.getDisplayWidth();
   return pngFileToBmpStreamInternal(pngFile, bmpOut, targetWidth, targetHeight, crop);
 }
+
+bool PngToBmpConverter::pngFileToBmpStreamSized(HalFile& pngFile, Print& bmpOut, const int targetWidth,
+                                                const int targetHeight, const bool crop) {
+  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetWidth, targetHeight, crop);
+}

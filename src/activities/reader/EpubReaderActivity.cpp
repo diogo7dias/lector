@@ -168,6 +168,9 @@ void EpubReaderActivity::rememberBookOnceRendered() {
   bookRemembered = true;
   APP_STATE.openEpubPath = epub->getPath();
   APP_STATE.saveToFile();
+  if (!Storage.exists(epub->getThumbBmpPath().c_str())) {
+    epub->generateThumbBmp();
+  }
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor());
 }
 

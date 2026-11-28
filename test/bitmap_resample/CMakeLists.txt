@@ -1,5 +1,6 @@
 add_executable(BitmapResampleTest
   BitmapResampleTest.cpp
+  ThumbResamplerTest.cpp
   ${REPO_ROOT}/lib/GfxRenderer/Bitmap.cpp
 )
 
@@ -7,6 +8,7 @@ target_include_directories(BitmapResampleTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/stubs
   ${REPO_ROOT}/lib/GfxRenderer
   ${REPO_ROOT}/lib/Memory
+  ${REPO_ROOT}/src
 )
 
 target_link_libraries(BitmapResampleTest PRIVATE
