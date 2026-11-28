@@ -274,6 +274,7 @@ add_subdirectory(chapter_build_safety)
 add_subdirectory(page_jump)
 add_subdirectory(power_clock_policy)
 add_subdirectory(wifi_radio_off_on_cancel)
+add_subdirectory(panel_power_off)
 
 if(LECTOR_FUZZ)
   add_subdirectory(fuzz)
