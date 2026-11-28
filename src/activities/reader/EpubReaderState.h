@@ -299,9 +299,6 @@ struct EpubReaderState {
   // IDLE_DEBOUNCE_MS; then the build runs on to the chapter's end (backgroundBuildTickWanted).
   // Leaving before it ends keeps the pages laid out so far as a partial (Section::suspendBuild()).
   static constexpr int BUILD_WINDOW_AHEAD = 5;
-  // How long after the last render the reader counts as idle: past rapid page-flipping, the
-  // background work (prewarm, progress save, chapter builds, next-chapter prefetch) may run.
-  static constexpr unsigned long IDLE_DEBOUNCE_MS = 400;
   // Prefetch the next chapter once the reader is this many pages from this one's end. Only
   // spines up to BUILD_POPUP_BYTE_THRESHOLD: inflating a bigger one holds the loop for seconds.
   // Inflating needs tinfl's 32 KB window in one block.

@@ -14,7 +14,11 @@
 #include "EpubReaderActivity.h"
 #include "EpubReaderUtils.h"
 #include "IdlePrewarmNeighbour.h"
+#include "IdlePrewarmTiming.h"
 #include "MappedInputManager.h"
+
+static_assert(idle_prewarm::DELAY_AFTER_INPUT_MS < HalPowerManager::IDLE_POWER_SAVING_MS,
+              "idle prewarm must run before the idle clock drop");
 #include "QuoteSelectActivity.h"
 #include "WatermarkBuildBail.h"
 #include "activities/util/KeyboardEntryActivity.h"

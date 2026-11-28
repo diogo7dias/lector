@@ -61,6 +61,7 @@ using bookfiling::ROOT_FOLDER;
 
 void EpubReaderActivity::onEnter() {
   Activity::onEnter();
+  lastInputMs = millis();
   // Back from KOReader Sync or Nearby, launched from a reader menu: that menu comes back once
   // the page is up. Only this reader's own reopens, which take the new reader as their ctx.
   if (const MenuReturn menu = activityManager.takeReaderMenu(); menu.reopen == &EpubReaderActivity::reopenReaderMenu ||
