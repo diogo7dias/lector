@@ -3,6 +3,7 @@ set(TABLE_TEST_SOURCES
   BetterTablesTest.cpp
   ${FUZZ_CHAPTER}/links.cpp
   ${REPO_ROOT}/lib/Epub/Epub/converters/ImageToFramebufferDecoder.cpp
+  ${REPO_ROOT}/lib/Epub/Epub/FootnoteExtractor.cpp
   ${REPO_ROOT}/lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
   ${REPO_ROOT}/lib/Epub/Epub/parsers/VoidTagFixer.cpp
   ${REPO_ROOT}/lib/Epub/Epub/Page.cpp
