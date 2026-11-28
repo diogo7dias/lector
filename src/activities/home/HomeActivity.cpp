@@ -21,6 +21,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "SortesActivity.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/network/NearbyFileTransferActivity.h"
 #include "components/BusyBanner.h"
@@ -112,10 +113,6 @@ void HomeActivity::onEnter() {
   bookOrbitMissing = bookorbit_missing::findServer() ? bookorbit_missing::savedCount() : 0;
   snprintf(bookOrbitMissingLabel, sizeof(bookOrbitMissingLabel), tr(STR_BOOKORBIT_MISSING), bookOrbitMissing);
   buildMenuRows();
-  if (SETTINGS.homeBackAction == CrossPointSettings::HOME_BACK_SORTES) {
-    BusyBanner banner(renderer, tr(STR_SORTES));
-    sortesResult = sortes::findBook(sortesBook, esp_random);
-  }
 
   // Load every recent (in-progress) book, up to the store cap; drawList pages them
   // (with up/down arrows) when there are more than fit the list area at once.
@@ -133,6 +130,7 @@ void HomeActivity::onEnter() {
 void HomeActivity::onExit() { Activity::onExit(); }
 
 void HomeActivity::loop() {
+  if (sortesPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
   const int menuCount = getMenuItemCount();
 
   auto activateSelection = [this] {
@@ -218,13 +216,8 @@ void HomeActivity::loop() {
         }
         break;
       case CrossPointSettings::HOME_BACK_SORTES:
-        // onEnter already drew a random finished book, and nothing on Home changes the
-        // card, so a second walk of the whole library would only draw again.
-        if (sortesResult == sortes::ScanResult::Found) {
-          activityManager.goToReader(sortesBook, false, false, true);
-          return;
-        }
-        break;
+        openSortesMenu();
+        return;
       case CrossPointSettings::HOME_BACK_NONE:
       default:
         break;
@@ -350,9 +343,7 @@ void HomeActivity::render(RenderLock&&) {
       backLabel = recentBooks.empty() ? "" : tr(STR_RESUME);
       break;
     case CrossPointSettings::HOME_BACK_SORTES:
-      backLabel = sortesResult == sortes::ScanResult::Found   ? tr(STR_SORTES)
-                  : sortesResult == sortes::ScanResult::Empty ? tr(STR_SORTES_EMPTY)
-                                                              : tr(STR_SORTES_UNAVAILABLE);
+      backLabel = tr(STR_SORTES);
       break;
     case CrossPointSettings::HOME_BACK_NONE:
     default:
@@ -364,6 +355,8 @@ void HomeActivity::render(RenderLock&&) {
   const char* select = mappedInput.showsSelection() ? tr(STR_SELECT) : "";
   const auto labels = mappedInput.mapLabels(backLabel, select, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  if (sortesPopup.processRender(renderer, mappedInput)) return;
 
   if (cleanInitialRefresh) {
     // The panel still shows the previous screen (a page, a sleep image, a list), and a
@@ -382,6 +375,36 @@ void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 // A child of Home, so Back lands on the Library row again.
 void HomeActivity::onLibraryOpen() {
   startActivityForResult(std::make_unique<LibraryActivity>(renderer, mappedInput), [](const ActivityResult&) {});
+}
+
+void HomeActivity::openSortesMenu() {
+  static constexpr StrId kModes[3] = {StrId::STR_SORTES_CLASSIC, StrId::STR_SORTES_ROULETTE,
+                                      StrId::STR_SORTES_FLASHBACK};
+  sortesPopup.show(StrId::STR_SORTES, kModes, 3, 0, [this](const int choice) {
+    if (choice == 0) {
+      {
+        BusyBanner banner(renderer, tr(STR_SORTES));
+        sortesResult = sortes::findBook(sortesBook, esp_random);
+      }
+      if (sortesResult == sortes::ScanResult::Found) {
+        activityManager.goToReader(sortesBook, false, false, true);
+        return;
+      }
+      GUI.drawPopup(renderer,
+                    sortesResult == sortes::ScanResult::Empty ? tr(STR_SORTES_EMPTY) : tr(STR_SORTES_UNAVAILABLE));
+      delay(1200);
+      cleanInitialRefresh = true;
+      requestUpdate();
+      return;
+    }
+    const auto mode = choice == 1 ? SortesActivity::Mode::UnreadRoulette : SortesActivity::Mode::Flashback;
+    startActivityForResult(std::make_unique<SortesActivity>(renderer, mappedInput, mode),
+                           [this](const ActivityResult&) {
+                             cleanInitialRefresh = true;
+                             requestUpdate();
+                           });
+  });
+  requestUpdate();
 }
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }

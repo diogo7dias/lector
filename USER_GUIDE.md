@@ -209,9 +209,15 @@ The Home screen is the entry point. It lists the books you have been reading, an
 
 **Settings > Controls > Home Back Button** decides what **Back** does here: nothing, resume
 the current book, or open **Sortes**.
-Resume remains the default. Sortes opens a randomly chosen finished EPUB at a random page:
-a book counts as finished when its saved library badge is 100% (Read), wherever it is filed.
-The footer says **No read books** and does nothing when none qualify.
+Resume remains the default. Pressing **Back** with Sortes enabled opens a three-mode picker,
+drawing books in a single sequential read from the CLX v2 library index when present:
+
+- **Classic** — opens a randomly chosen finished EPUB (100% / Read) at a random page, leaving
+  saved reading position, Read status, filing and recents untouched.
+- **Unread Roulette** — draws a random unread book and shows its title, author, and synopsis with
+  **Start** and **Roll Again** actions.
+- **Flashback** — draws a random saved quote from `/My Clippings.txt` with **Jump to Book** (when
+  the book is on the card) and **Roll Again**.
 
 Back or sleep ends the visit. Sortes leaves the saved reading position, Read status, filing
 and recents untouched. Quotes and bookmarks can still be saved deliberately, and the reader
