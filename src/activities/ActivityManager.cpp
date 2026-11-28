@@ -263,8 +263,10 @@ void ActivityManager::loop() {
         }
         return;
       }
-      // close() clears isActive() before this runs: the page under the band gets a clean paint.
+      // close() clears isActive() before this runs: the page under the band gets a clean paint,
+      // unless the panel action already queued a transition (matching wasHomeGesture above).
       if (lightPanel.handleInput(mappedInput, [this] {
+            if (pendingAction != PendingAction::None) return;
             if (!lightPanel.isActive()) currentActivity->onRevealed();
             requestUpdate(/*immediate=*/true);
           }))
