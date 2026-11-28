@@ -530,16 +530,20 @@ the page, with the page above it left as it is. The same press, tap or bound act
 EPUB books.
 It holds:
 
-- A **scrub row**: drag along the track, or tap it, to jump through the book by chapter; the
-  arrow buttons at each end step one chapter. The line under it names the chapter and gives the
-  page and the percent.
-- Three tiles: **Contents** (the chapter list), **Text** (this book's text settings) and **More**
-  (the tabbed menu above).
+- A **Return** chip above the scrub row whenever there is a jump origin to return to; tap it to
+  jump straight back to where you were reading.
+- A **scrub row**: drag along the track, or tap it, to jump through the book by chapter (or by
+  page in books with one or two spine sections); the arrow buttons at each end step one chapter or
+  page. Dragging updates the chapter title and percentage live before you lift your finger. The
+  line under it names the chapter and gives the page and the percent.
+- Four tiles: **Contents** (the chapter list), **Bookmark** (toggles the bookmark on this page;
+  filled when bookmarked), **Text** (this book's text settings) and **More** (the tabbed menu
+  above).
 
 Tap a tile to open it, or tap the page above the sheet to close it. On a reader with buttons,
 **Left** and **Right** move between the tiles, **Confirm** opens the marked one, **Up** and
-**Down** step a chapter, and **Back** closes. **Menu Hold** does nothing while the toolbar is up. **Back** from the
-screen a tile opened brings the toolbar back.
+**Down** step a chapter (or page on short books), and **Back** closes. **Menu Hold** does nothing
+while the toolbar is up. **Back** from the screen a tile opened brings the toolbar back.
 
 ---
 
@@ -547,8 +551,10 @@ screen a tile opened brings the toolbar back.
 
 ### Bookmarks
 
-Bind **Long press while reading** to **Bookmark** and hold **Confirm** to drop one, or use
-**Toggle Bookmark** in the menu. Open the list from **Navigate > Bookmarks**, press
+Bookmarked pages show a folded dog-ear in the top-right corner of the page. On the X4 Pro, tapping
+the top-right corner toggles the bookmark on that page directly. You can also bind **Long press
+while reading** to **Bookmark** and hold **Confirm**, tap the **Bookmark** tile in the toolbar, or
+use **Toggle Bookmark** in the menu. Open the list from **Navigate > Bookmarks**, press
 **Confirm** on an entry to jump there. To delete one, hold **Confirm** on it, then confirm.
 **Settings > Reader > All Bookmarks** lists the bookmarks of every book; picking one opens
 that book at it, and **Return** goes back to where you had stopped. Older bookmarks show once

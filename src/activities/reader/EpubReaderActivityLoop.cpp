@@ -186,6 +186,18 @@ void EpubReaderActivity::loop() {
     openQuoteGrab(holdX, holdY);
     return;
   }
+  // Top-right corner tap toggles the page bookmark on touch boards before the general
+  // page-turn zone claims the tap.
+  if (SETTINGS.touchReaderControls != 0 && mappedInput.hasTouch() && !atEndOfBook && section &&
+      mappedInput.wasSwipe() == MappedInputManager::SwipeDir::None) {
+    int tapX = 0;
+    int tapY = 0;
+    if (mappedInput.wasScreenTapped(tapX, tapY) &&
+        reader_touch::isBookmarkCornerTap(true, renderer.getScreenWidth(), renderer.getScreenHeight(), tapX, tapY)) {
+      if (!blockSortesAction()) addBookmark();
+      return;
+    }
+  }
   // Touch on the open page, read once per loop: a tap or swipe can turn the page or
   // open the menu. Read before the Confirm handling below so the menu opens from
   // either input on the same pass.
