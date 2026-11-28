@@ -54,25 +54,25 @@ bool fallbackMissingSdFont(const char* const logTag, ReaderPrefs& prefs) {
 }
 
 bool commitEdit(const char* const logTag, const std::string& cachePath, const ReaderPrefs& edited, ReaderPrefs& prefs,
-                bool& custom) {
+                bool& custom, const bool persist) {
   ReaderPrefs next = edited;
   restoreBookOnlyFields(next, prefs);
   if (std::memcmp(&next, &prefs, sizeof(ReaderPrefs)) == 0) return false;
   prefs = next;
   custom = true;
-  writeOverride(logTag, cachePath, prefs);
+  if (persist) writeOverride(logTag, cachePath, prefs);
   return true;
 }
 
 bool applyIncoming(const char* const logTag, const std::string& cachePath, const ReaderPrefs& incoming,
-                   ReaderPrefs& prefs, bool& custom, ReaderPrefs* const adoptedOut) {
+                   ReaderPrefs& prefs, bool& custom, ReaderPrefs* const adoptedOut, const bool persist) {
   ReaderPrefs next = incoming;
   fallbackMissingSdFont(logTag, next);
   if (adoptedOut) *adoptedOut = next;
   if (std::memcmp(&next, &prefs, sizeof(ReaderPrefs)) == 0) return false;
   prefs = next;
   custom = true;
-  writeOverride(logTag, cachePath, prefs);
+  if (persist) writeOverride(logTag, cachePath, prefs);
   return true;
 }
 

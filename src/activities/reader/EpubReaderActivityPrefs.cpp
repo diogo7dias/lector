@@ -97,7 +97,7 @@ void EpubReaderActivity::persistReaderSettingsEdit(const ReaderPrefs& live) cons
 }
 
 void EpubReaderActivity::applyReaderSettingsEdit() {
-  if (!book_reader_prefs::commitEdit("ERS", epub->getCachePath(), readerEdit_, prefs_, prefsCustom_)) {
+  if (!book_reader_prefs::commitEdit("ERS", epub->getCachePath(), readerEdit_, prefs_, prefsCustom_, !sortesMode)) {
     // Opened the settings screen but changed nothing — leave the book as it was.
     requestUpdate();
     return;
@@ -238,19 +238,8 @@ void EpubReaderActivity::applyStolenLook(const std::string& sourceCachePath) {
 // a stored preset, so a dead font name is repaired rather than re-applied forever.
 ReaderPrefs EpubReaderActivity::applyReaderPrefsFrom(const ReaderPrefs& incoming) {
   ReaderPrefs adopted;
-  bool changed = false;
-  if (sortesMode) {
-    adopted = incoming;
-    book_reader_prefs::fallbackMissingSdFont("ERS", adopted);
-    changed = std::memcmp(&adopted, &prefs_, sizeof(ReaderPrefs)) != 0;
-    if (changed) {
-      prefs_ = adopted;
-      prefsCustom_ = true;
-    }
-  } else {
-    changed = book_reader_prefs::applyIncoming("ERS", epub->getCachePath(), incoming, prefs_, prefsCustom_, &adopted);
-  }
-  if (!changed) {
+  if (!book_reader_prefs::applyIncoming("ERS", epub->getCachePath(), incoming, prefs_, prefsCustom_, &adopted,
+                                        !sortesMode)) {
     requestUpdate();  // already identical — nothing to copy, and no re-layout to pay for
     return adopted;
   }
