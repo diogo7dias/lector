@@ -200,6 +200,9 @@ class GfxRenderer {
   int resolveFontVariant(const int fontId, const float scale) const {
     return fontVariantProvider_.resolveFont(fontId, scale);
   }
+  int resolveMonospaceFont(const int fontId, const float scale) const {
+    return fontVariantProvider_.resolveMonospaceFont(fontId, scale);
+  }
   // True when fontId is registered, loading it through the variant provider if needed.
   bool ensureFontLoaded(const int fontId) const {
     if (fontMap.count(fontId) != 0) return true;

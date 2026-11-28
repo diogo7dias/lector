@@ -19,14 +19,20 @@ TEST(BookOrbitMissingFile, TornOrForeignFileMeansNothingMissing) {
   }
 }
 
-TEST(BookOrbitMissingFile, DueEverySixHoursOrWhenWifiIsUp) {
+TEST(BookOrbitMissingFile, DueEverySixHoursOrWhenWifiIsUpOnlyAfterPagesMoved) {
   constexpr long long t = 1790000000;
-  EXPECT_TRUE(due(true, 0, t));    // a push already joined
-  EXPECT_FALSE(due(false, 0, 0));  // clock never set
-  EXPECT_TRUE(due(false, t, 0));   // never checked
-  EXPECT_FALSE(due(false, t + CHECK_EVERY_S - 1, t));
-  EXPECT_TRUE(due(false, t + CHECK_EVERY_S, t));
-  EXPECT_TRUE(due(false, t - 10, t));  // clock went back
+  // Zero pages moved: never triggers Wi-Fi on lock, even past 6 hours or never checked.
+  EXPECT_FALSE(due(false, false, t, 0));
+  EXPECT_FALSE(due(false, false, t + CHECK_EVERY_S, t));
+  EXPECT_FALSE(due(true, false, t, t));
+
+  // Pages moved: piggybacks when Wi-Fi is up, otherwise honours the 6-hour interval.
+  EXPECT_TRUE(due(true, true, 0, t));    // a push already joined
+  EXPECT_FALSE(due(false, true, 0, 0));  // clock never set
+  EXPECT_TRUE(due(false, true, t, 0));   // never checked
+  EXPECT_FALSE(due(false, true, t + CHECK_EVERY_S - 1, t));
+  EXPECT_TRUE(due(false, true, t + CHECK_EVERY_S, t));
+  EXPECT_TRUE(due(false, true, t - 10, t));  // clock went back
 }
 
 // What the old sscanf("%d %lld\n%n") accepted, pinned so the parser can change: any run of

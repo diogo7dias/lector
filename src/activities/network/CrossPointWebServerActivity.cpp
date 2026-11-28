@@ -101,13 +101,17 @@ void CrossPointWebServerActivity::onExit() {
   MDNS.end();
 
   // Skip reboot if WiFi was never activated (e.g. user backed out of mode selection).
-  if (WiFi.getMode() != WIFI_MODE_NULL) {
-    if (isApMode) {
-      WiFi.softAPdisconnect(true);
-    } else {
-      WiFi.disconnect(false);
+  // A cancelled Join Network has the radio off again, but it was up: still reboot.
+  const bool radioOn = WiFi.getMode() != WIFI_MODE_NULL;
+  if (wifiRestartNeeded(radioOn, wifiUsed)) {
+    if (radioOn) {
+      if (isApMode) {
+        WiFi.softAPdisconnect(true);
+      } else {
+        WiFi.disconnect(false);
+      }
+      delay(30);
     }
-    delay(30);
     // The reboot lands where Back would have: the Settings card or Home row that opened it.
     silentRestartBack();
   }
@@ -139,6 +143,7 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
     // A cancelled Join Network leaves the radio on: onExit() would then reboot
     // instead, and Nearby refuses a radio that is not off.
     WiFi.mode(WIFI_OFF);
+    wifiUsed = false;  // Nearby takes over without a reboot
     activityManager.replaceFromOpener(
         makeUniqueNoThrow<NearbyFileTransferActivity>(renderer, mappedInput, NearbyFileTransferActivity::Mode::Receive),
         ActivityManager::Opener::FileTransfer, {}, static_cast<int>(mode));
@@ -150,6 +155,7 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
     // A cancelled Join Network leaves the radio on, and onExit() would then reboot
     // instead of opening USB Drive. USB Drive ends in a reboot, which comes back here.
     WiFi.mode(WIFI_OFF);
+    wifiUsed = false;
     activityManager.replaceFromOpener(makeUniqueNoThrow<UsbDriveActivity>(renderer, mappedInput),
                                       ActivityManager::Opener::FileTransfer, {}, static_cast<int>(mode));
     return;
@@ -177,6 +183,7 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
     // STA mode - launch WiFi selection
     LOG_DBG("WEBACT", "Turning on WiFi (STA mode)...");
     WiFi.mode(WIFI_STA);
+    wifiUsed = true;
 
     state = WebServerActivityState::WIFI_SELECTION;
     LOG_DBG("WEBACT", "Launching WifiSelectionActivity...");
@@ -192,6 +199,7 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
   } else {
     // AP mode - start access point
     state = WebServerActivityState::AP_STARTING;
+    onRevealed();
     requestUpdate();
     startAccessPoint();
   }
@@ -207,7 +215,10 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
 
     startWebServer();
   } else {
-    // User cancelled - go back to mode selection
+    // User cancelled - turn the radio off before returning to mode selection so
+    // STA doesn't pin CPU frequency (HalPowerManager.cpp) or idle on battery.
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
     state = WebServerActivityState::MODE_SELECTION;
 
     startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
@@ -304,8 +315,9 @@ void CrossPointWebServerActivity::startWebServer() {
       ipFallbackLine = std::string(tr(STR_OR_HTTP_PREFIX)) + AP_HOSTNAME + ".local/";
     }
 
-    // Force an immediate render since we're transitioning from a subactivity
-    // that had its own rendering task. We need to make sure our display is shown.
+    // Force a clean HALF_REFRESH for the initial QR paint; subsequent signal-bar
+    // updates only change a small corner icon and run on FAST_REFRESH.
+    onRevealed();
     requestUpdate();
   } else {
     LOG_ERR("WEBACT", "ERROR: Failed to start web server!");
@@ -400,9 +412,10 @@ UiStatusActivity::StatusView CrossPointWebServerActivity::statusView() const {
   }
 
   view.title = isApMode ? tr(STR_HOTSPOT_MODE) : tr(STR_FILE_TRANSFER);
-  // Nearly all QR: a differential waveform leaves the old pattern as speckle
-  // under a dense block of black, which is what made this screen unreadable.
-  view.refresh = HalDisplay::HALF_REFRESH;
+  // UiStatusActivity promotes FAST_REFRESH to HALF_REFRESH on entry, reveal,
+  // and overlay clear, so the QR code still paints cleanly while 2 s RSSI
+  // bar-only redraws stay on FAST_REFRESH.
+  view.refresh = HalDisplay::FAST_REFRESH;
 
   if (state == WebServerActivityState::AP_STARTING) {
     view.lines = {tr(STR_STARTING_HOTSPOT), nullptr, nullptr, nullptr};

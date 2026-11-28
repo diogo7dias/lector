@@ -296,7 +296,7 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
     // first-line indent are reading-surface furniture and only add noise here.
     spec.guideDotsMode = GUIDE_DOTS_OFF;
     spec.paragraphIndentSpaces = 0;
-    spec.embeddedStyle = false;
+    spec.embeddedStyle = EMBEDDED_STYLE_OFF;
     spec.imageRendering = CrossPointSettings::IMAGES_SUPPRESS;
     auto parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(nullptr, tmpPath, renderer, spec, &collectPage, &collect,
                                                            /*contentBase=*/"", /*imageBasePath=*/"");

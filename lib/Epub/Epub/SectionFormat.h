@@ -172,7 +172,9 @@ namespace {
 //      first or last line or a heading from sitting alone, so pages end full.
 // v93: An unstyled blockquote is inset 1 em from each side (shrunk when nested), so
 //      chapters with quotes wrap differently.
-constexpr uint8_t SECTION_FILE_VERSION = 93;
+// v94: Embedded Style becomes 3-way (Off / Text Only / Full), and <code>/<pre>/<tt>/<kbd>
+//      use the installed monospace SD font (IBMPlexMono) via TextBlock per-word font slots.
+constexpr uint8_t SECTION_FILE_VERSION = 94;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -193,7 +195,7 @@ constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE - (SECTION_FILE_VERSION - 
 constexpr uint32_t HEADER_SIZE =
     sizeof(uint8_t) /*version*/ + sizeof(int) /*fontId*/ + sizeof(float) /*lineCompression*/ +
     sizeof(bool) /*extraParagraphSpacing*/ + sizeof(uint8_t) /*wordSpacing*/ + sizeof(uint8_t) /*alignment*/ +
-    sizeof(uint16_t) * 2 /*viewport*/ + sizeof(bool) /*embeddedStyle*/ + sizeof(uint8_t) /*imageRendering*/ +
+    sizeof(uint16_t) * 2 /*viewport*/ + sizeof(uint8_t) /*embeddedStyle*/ + sizeof(uint8_t) /*imageRendering*/ +
     sizeof(bool) /*focusReading*/ + sizeof(uint8_t) /*guideDotsMode*/ + sizeof(uint8_t) /*paragraphIndentSpaces*/ +
     sizeof(int8_t) /*characterSpacing*/ + sizeof(uint16_t) /*pageCount*/ + sizeof(uint32_t) * 5 /*LUT offsets*/;
 // The header ends with the patched-later fields, in this order. Named once so a seek

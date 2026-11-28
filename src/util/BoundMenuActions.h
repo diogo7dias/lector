@@ -105,6 +105,9 @@ enum LONG_PRESS_MENU_FUNCTION {
   // Skips to the next or previous chapter (or +/-10 pages in chapterless TXT/XTC).
   LP_MENU_NEXT_CHAPTER = 39,
   LP_MENU_PREV_CHAPTER = 40,
+  // Distraction-free reading overlay: hides status bar, off-bar, low-battery nag (until 5%)
+  // and centre-tap menu without overwriting Reading Themes or the saved status bar.
+  LP_MENU_CALM_MODE = 41,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 

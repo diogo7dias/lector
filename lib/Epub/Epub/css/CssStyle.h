@@ -378,21 +378,20 @@ struct CssStyle {
     return borderTop.visible() || borderRight.visible() || borderBottom.visible() || borderLeft.visible();
   }
 
-  // The reader's one Book Styling switch. With it off, every property the book sets is
-  // dropped here, right after resolution, so no consumer downstream has to know about the
-  // switch: an undefined property already means "the book said nothing, use the reader's
-  // own setting".
-  //
-  // Text   — how the glyphs look: weight, slant, decoration, super/sub, writing
-  //          direction, list markers, font size, small caps, drop caps, preserved
-  //          whitespace and display:none (the book declaring a run is not content).
-  // Layout — where the block sits: alignment, indent, margins, padding, borders, shading,
-  //          page breaks and book-set image dimensions.
-  void keepBuckets(const bool bookStyling) {
-    if (bookStyling) return;
-    defined.fontStyle = defined.fontWeight = defined.textDecoration = 0;
-    defined.verticalAlign = defined.direction = defined.display = defined.listStyleType = 0;
-    defined.fontSize = defined.smallCaps = defined.floatLeft = defined.initialLetter = defined.whiteSpace = 0;
+  // Filters resolved CSS properties according to EmbeddedStyleMode:
+  //   Full (2)      — keep everything.
+  //   Text Only (1) — keep weight, italic, decoration, small caps, sup/sub, white-space,
+  //                   display:none and direction; drop margins, padding, font sizes,
+  //                   alignment, indents, lists, drop caps, page breaks, image sizes and boxes.
+  //   Off (0)       — drop every CSS property.
+  void keepBuckets(const uint8_t mode) {
+    if (mode >= 2) return;
+    if (mode == 0) {
+      defined.fontStyle = defined.fontWeight = defined.textDecoration = 0;
+      defined.verticalAlign = defined.direction = defined.display = 0;
+      defined.smallCaps = defined.whiteSpace = 0;
+    }
+    defined.fontSize = defined.listStyleType = defined.floatLeft = defined.initialLetter = 0;
     defined.textAlign = defined.textIndent = 0;
     defined.imageWidth = defined.imageHeight = 0;
     defined.pageBreakBefore = defined.pageBreakAfter = defined.shaded = 0;

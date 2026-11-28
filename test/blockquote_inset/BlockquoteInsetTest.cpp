@@ -43,7 +43,7 @@ std::vector<Line> layOut(const std::string& body, const std::string& stylesheet 
   }
   ReaderRenderSpec spec;
   spec.fontId = 1;
-  spec.embeddedStyle = bookStyle;
+  spec.embeddedStyle = bookStyle ? EMBEDDED_STYLE_FULL : EMBEDDED_STYLE_OFF;
   spec.viewportWidth = 456;
   spec.viewportHeight = 760;
   std::vector<Line> lines;

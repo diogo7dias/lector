@@ -76,9 +76,10 @@ class TtfSdFont {
   uint32_t contentHash_ = 0;
   uint8_t pointSize_ = 0;
 
-  // One TTF family is resident at a time (SdCardFontManager), so the bitmap
-  // lookup can identify a miss context by comparing against this instance.
-  static TtfSdFont* active_;
+  // Intrusive list of resident TTF families (body + optional monospace code variant),
+  // so ownsMissCtx() recognises miss contexts from every resident TtfSdFont.
+  TtfSdFont* next_ = nullptr;
+  static TtfSdFont* head_;
 };
 
 #endif  // CROSSPOINT_TTF_READER
