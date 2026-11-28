@@ -97,10 +97,14 @@ class SdCardFontSystem {
   // reader font id and point size, so ids cached in section files can be reloaded after
   // eviction or a reboot. Least recently used variants are evicted at the cap below.
   int resolveVariant(int fontId, float scale);
+  int resolveMonospace(int fontId, float scale);
   bool loadVariant(int fontId);
   bool loadCpfontVariant(const SdCardFontFamilyInfo& family, uint8_t pointSize, int fontId);
+  const SdCardFontFamilyInfo* findMonospaceFamily() const;
   void unloadCpfonts(GfxRenderer& renderer);
   static int variantFontId(int readerFontId, uint8_t pointSize);
+  static constexpr const char* MONOSPACE_FAMILY_NAME = "IBMPlexMono";
+  static constexpr int MONOSPACE_VARIANT_SEED = 0x4D4F4E4F;  // "MONO"
 
   struct CpfontVariant {
     int fontId;
@@ -116,6 +120,7 @@ class SdCardFontSystem {
   // discoverOne() filled the registry with a single family, so the family LIST is
   // incomplete even though discovered_ logic has been satisfied for that one name.
   mutable bool partial_ = false;
+  mutable bool monoProbed_ = false;
   SdCardFontManager manager_;
   std::atomic<bool> registryDirty_{false};
 };

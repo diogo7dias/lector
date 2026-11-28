@@ -68,6 +68,8 @@ struct Action {
   bool useSavedPassword = false;
   /** FINISH only: whether the screen leaves with a connection. */
   bool connected = false;
+  /** SAVE_CREDENTIAL only: whether the network was added via hidden-SSID entry. */
+  bool hidden = false;
 };
 
 /** What the activity knows before the screen opens. */
@@ -173,6 +175,7 @@ class WifiSession {
   bool lastJoinUsedSaved_ = false;
   bool lastJoinTyped_ = false;
   bool typedPasswordPending_ = false;
+  bool activeIsHidden_ = false;
   bool offersToSave_ = false;
   State state_ = State::SCANNING;
   uint32_t clockMs_ = 0;

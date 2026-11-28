@@ -410,9 +410,11 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
                          "dynamicMargins", StrId::STR_CAT_READER)
            .withTextSettings());
 
-  // One switch for all publisher styling; the key predates the old text/layout split.
-  emit(SettingInfo::Toggle(StrId::STR_EMBEDDED_STYLE, &CrossPointSettings::embeddedStyle, "embeddedStyle",
-                           StrId::STR_CAT_READER)
+  // 3-way publisher styling: Off / Text Only / Full. New key "embeddedStyleMode" avoids
+  // misreading legacy 2-way "embeddedStyle" (where 1 meant Full).
+  emit(SettingInfo::Enum(StrId::STR_EMBEDDED_STYLE, &CrossPointSettings::embeddedStyle,
+                         {StrId::STR_STATE_OFF, StrId::STR_EMBEDDED_STYLE_TEXT_ONLY, StrId::STR_EMBEDDED_STYLE_FULL},
+                         "embeddedStyleMode", StrId::STR_CAT_READER)
            .withTextSettings());
 
   emit(SettingInfo::Value(StrId::STR_WORD_SPACING, &CrossPointSettings::wordSpacing,

@@ -74,21 +74,31 @@ struct TtfSdFont::Face {
   }
 };
 
-TtfSdFont* TtfSdFont::active_ = nullptr;
+TtfSdFont* TtfSdFont::head_ = nullptr;
 
 TtfSdFont::TtfSdFont() {
   for (uint8_t i = 0; i < MAX_STYLES; ++i) ctx_[i] = {this, i};
-  if (active_ == nullptr) active_ = this;
+  next_ = head_;
+  head_ = this;
 }
 
 TtfSdFont::~TtfSdFont() {
-  if (active_ == this) active_ = nullptr;
+  TtfSdFont** link = &head_;
+  while (*link != nullptr) {
+    if (*link == this) {
+      *link = next_;
+      break;
+    }
+    link = &(*link)->next_;
+  }
 }
 
 bool TtfSdFont::ownsMissCtx(const void* ctx) {
-  if (active_ == nullptr || ctx == nullptr) return false;
-  for (const MissCtx& c : active_->ctx_) {
-    if (ctx == &c) return true;
+  if (ctx == nullptr) return false;
+  for (const TtfSdFont* font = head_; font != nullptr; font = font->next_) {
+    for (const MissCtx& c : font->ctx_) {
+      if (ctx == &c) return true;
+    }
   }
   return false;
 }
@@ -98,10 +108,6 @@ EpdFont* TtfSdFont::getEpdFont(const uint8_t style) {
 }
 
 bool TtfSdFont::load(const SdCardFontFamilyInfo& family, const uint8_t pointSize) {
-  if (active_ != this) {
-    LOG_ERR(TAG, "Another TTF family is still resident");
-    return false;
-  }
   pointSize_ = ttfscan::clampTtfPointSize(pointSize);
   contentHash_ = fnv1a::OFFSET_BASIS_32;
   const size_t psramBefore = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);

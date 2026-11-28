@@ -54,13 +54,11 @@ namespace {
 // about this book you change most; outside one it is getting back into a book, or finding
 // a different one. Alignment and paragraph spacing close the in-book set, the alignment
 // pair side by side so it reads as one choice.
-constexpr uint8_t IN_BOOK_ACTIONS[] = {CrossPointSettings::LP_MENU_FORCE_REFRESH,
-                                       CrossPointSettings::LP_MENU_ROTATE,
-                                       CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR,
-                                       CrossPointSettings::LP_MENU_READER_SETTINGS,
-                                       CrossPointSettings::LP_MENU_ALIGN_LEFT,
-                                       CrossPointSettings::LP_MENU_ALIGN_JUSTIFY,
-                                       CrossPointSettings::LP_MENU_TOGGLE_PARAGRAPH_SPACING};
+constexpr uint8_t IN_BOOK_ACTIONS[] = {
+    CrossPointSettings::LP_MENU_FORCE_REFRESH,     CrossPointSettings::LP_MENU_ROTATE,
+    CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR, CrossPointSettings::LP_MENU_CALM_MODE,
+    CrossPointSettings::LP_MENU_READER_SETTINGS,   CrossPointSettings::LP_MENU_ALIGN_LEFT,
+    CrossPointSettings::LP_MENU_ALIGN_JUSTIFY,     CrossPointSettings::LP_MENU_TOGGLE_PARAGRAPH_SPACING};
 
 constexpr uint8_t OUT_OF_BOOK_ACTIONS[] = {
     CrossPointSettings::LP_MENU_FORCE_REFRESH,    CrossPointSettings::LP_MENU_ROTATE,
@@ -624,6 +622,11 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
         RenderLock lock;
         renderer.displayBuffer(HalDisplay::HALF_REFRESH);
       }
+      return true;
+    case CrossPointSettings::LP_MENU_CALM_MODE:
+      SETTINGS.calmMode = SETTINGS.calmMode ? 0 : 1;
+      SETTINGS.saveToFile();
+      if (currentActivity) currentActivity->onCalmModeChanged();
       return true;
     case CrossPointSettings::LP_MENU_ROTATE: {
       const uint8_t orientation = orientation_cycle::next(SETTINGS.orientation);

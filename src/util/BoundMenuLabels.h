@@ -100,6 +100,8 @@ inline StrId boundMenuActionLabel(const uint8_t function) {
       return StrId::STR_NEXT_CHAPTER;
     case CrossPointSettings::LP_MENU_PREV_CHAPTER:
       return StrId::STR_PREV_CHAPTER;
+    case CrossPointSettings::LP_MENU_CALM_MODE:
+      return StrId::STR_CALM_MODE;
     case CrossPointSettings::LP_MENU_POPUP:
     default:
       return StrId::STR_MENU_POPUP;

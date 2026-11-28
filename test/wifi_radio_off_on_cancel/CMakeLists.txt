@@ -1,0 +1,6 @@
+add_executable(WifiRadioOffOnCancelTest WifiRadioOffOnCancelTest.cpp)
+target_link_libraries(WifiRadioOffOnCancelTest PRIVATE crosspoint_test_common GTest::gtest_main)
+target_compile_definitions(WifiRadioOffOnCancelTest PRIVATE
+  NETWORK_ACTIVITY_DIR="${REPO_ROOT}/src/activities/network"
+)
+gtest_discover_tests(WifiRadioOffOnCancelTest)

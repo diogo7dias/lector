@@ -66,6 +66,7 @@ constexpr const char* BOLD_TAGS[] = {"b", "strong"};
 constexpr const char* ITALIC_TAGS[] = {"i", "em"};
 constexpr const char* UNDERLINE_TAGS[] = {"u", "ins"};
 constexpr const char* LINETHROUGH_TAGS[] = {"del", "s", "strike"};
+constexpr const char* MONO_INLINE_TAGS[] = {"code", "tt", "kbd"};
 constexpr const char* IMAGE_TAGS[] = {"img", "image"};
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
 
@@ -696,17 +697,21 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
     fallbackTableRowToStacked();
   }
 
-  // Inline font-size spans size their words apart from the block.
+  // Inline font-size spans and monospace tags (<code>/<pre>/<tt>/<kbd>) pick per-word font slots.
   float inlineScale = 0.0f;
   for (const auto& entry : inlineStyleStack) {
     if (!entry.hasFontScale) continue;
     const float base = inlineScale > 0.0f ? inlineScale : currentTextBlock->getBlockStyle().fontScale;
     inlineScale = entry.fontScaleRem ? entry.fontScale : base * entry.fontScale;
   }
-  const uint8_t sizeSlot =
-      inlineScale > 0.0f && (inlineSize.valid || inlineScale != currentTextBlock->getBlockStyle().fontScale)
-          ? currentTextBlock->sizeSlotFor(std::clamp(inlineScale, 0.5f, 3.0f))
-          : 0;
+  const bool isMono = monoUntilDepth < depth;
+  uint8_t sizeSlot = 0;
+  if (isMono) {
+    const float monoScale = inlineScale > 0.0f ? inlineScale : currentTextBlock->getBlockStyle().fontScale;
+    sizeSlot = currentTextBlock->sizeSlotFor(std::clamp(monoScale, 0.5f, 3.0f), true);
+  } else if (inlineScale > 0.0f && (inlineSize.valid || inlineScale != currentTextBlock->getBlockStyle().fontScale)) {
+    sizeSlot = currentTextBlock->sizeSlotFor(std::clamp(inlineScale, 0.5f, 3.0f), false);
+  }
   currentTextBlock->addWord(partWordBuffer, fontStyle, nextWordContinues, partWordVisibleOffset, sizeSlot,
                             effectivePreserveWhitespace);
   if (insideTableCell && !tableRowStacked) {
@@ -2090,6 +2095,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         if (!cssStyle.hasMarginLeft()) blockStyle.marginLeft = quoteMargin;
         if (!cssStyle.hasMarginRight()) blockStyle.marginRight = quoteMargin;
       }
+      if (strcmp(name, "pre") == 0) {
+        self->monoUntilDepth = std::min(self->monoUntilDepth, self->depth);
+      }
       self->applyBlockFontScale(blockStyle, cssStyle, name);
       self->openBoxScope(blockStyle, cssStyle);
       const auto accumulated =
@@ -2220,6 +2228,14 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     // <tbody>, <thead>, <tfoot>, <colgroup> and <caption> land here rather than in the table
     // branches above, and stylesheets routinely set text-align on them, so inside a table an
     // alignment alone is worth a style entry.
+    const bool isMonoTag = matches(name, MONO_INLINE_TAGS, std::size(MONO_INLINE_TAGS));
+    if (isMonoTag) {
+      if (self->partWordBufferIndex > 0) {
+        self->flushPartWordBuffer();
+        self->nextWordContinues = true;
+      }
+      self->monoUntilDepth = std::min(self->monoUntilDepth, self->depth);
+    }
     const bool inheritedTableTextAlign = self->tableDepth >= 1 && cssStyle.hasTextAlign();
     // <small>/<big> default to the browser's relative sizes.
     const float tagScale = strcmp(name, "small") == 0 ? 0.83f : (strcmp(name, "big") == 0 ? 1.2f : 0.0f);
@@ -2605,8 +2621,9 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       !self->inlineStyleStack.empty() && self->inlineStyleStack.back().depth == self->depth - 1;
   const bool willClearBold = self->boldUntilDepth == self->depth - 1;
   const bool willClearItalic = self->italicUntilDepth == self->depth - 1;
+  const bool willClearMono = self->monoUntilDepth == self->depth - 1;
 
-  const bool styleWillChange = willPopStyleStack || willClearBold || willClearItalic;
+  const bool styleWillChange = willPopStyleStack || willClearBold || willClearItalic || willClearMono;
   const bool headerOrBlockTag = isHeaderOrBlock(name);
   const bool tableStructuralTag = isTableStructuralTag(name);
   const bool insideSkippedSubtree = self->depth - 1 >= self->skipUntilDepth;
@@ -2727,6 +2744,11 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->italicUntilDepth = INT_MAX;
   }
 
+  // Leaving monospace tag (<code>/<pre>/<tt>/<kbd>)
+  if (self->monoUntilDepth == self->depth) {
+    self->monoUntilDepth = INT_MAX;
+  }
+
   // Pop from inline style stack if we pushed an entry at this depth
   // This handles all inline elements: b, i, u, span, etc.
   if (!self->inlineStyleStack.empty() && self->inlineStyleStack.back().depth == self->depth) {
@@ -2811,6 +2833,7 @@ bool ChapterHtmlSlimParser::beginParse() {
   // A parse that failed mid-table leaves table/tr/td entries on the stack; they would bias the
   // next chapter's effective style, so the stack is emptied with the rest of the table state.
   inlineStyleStack.clear();
+  monoUntilDepth = INT_MAX;
   updateEffectiveInlineStyle();
   listStack.clear();
   tableDepth = 0;
@@ -2983,11 +3006,18 @@ int ChapterHtmlSlimParser::fontIdForScale(const float scale) const {
   return variant != 0 ? variant : fontId;
 }
 
+int ChapterHtmlSlimParser::fontIdForMonospace(const float scale) const {
+  return renderer.resolveMonospaceFont(fontId, scale);
+}
+
 int ChapterHtmlSlimParser::prepareBlockFont(ParsedText& text, const float scale) {
   BlockStyle& blockStyle = text.getBlockStyle();
   const int layoutFontId = fontIdForScale(scale);
   for (uint8_t slot = 1; slot < text.sizeSlotsInUse(); ++slot) {
-    text.setSizeSlotFontId(slot, fontIdForScale(text.sizeSlotScale(slot)));
+    const float slotScale = text.sizeSlotScale(slot);
+    // No monospace font installed: the span still keeps its own size, in the body font.
+    const int mono = text.sizeSlotIsMonospace(slot) ? fontIdForMonospace(slotScale) : 0;
+    text.setSizeSlotFontId(slot, mono != 0 ? mono : fontIdForScale(slotScale));
   }
   blockStyle.fontId = layoutFontId == fontId ? 0 : layoutFontId;
   return layoutFontId;

@@ -116,6 +116,8 @@ class Activity {
   // file browser is laid out against it, and it has to re-read the folder rather than
   // re-sort what it drew: Last Read reads a key per book off the card.
   virtual void onBookOrderChanged() {}
+  // Calm mode toggled while this screen is active: readers relayout/repaint without mutating prefs.
+  virtual void onCalmModeChanged() {}
   virtual bool isHomeActivity() const { return false; }
   virtual ScreenshotInfo getScreenshotInfo() const { return {}; }
 

@@ -21,6 +21,7 @@
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/BusyBanner.h"
+#include "components/HintBandGeometry.h"
 #include "components/RowHitTest.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -816,18 +817,6 @@ void FileBrowserActivity::loop() {
     scrollOffset = std::clamp(scrollOffset, 0, std::max(0, listSize - 1));
   };
 
-  buttonNavigator.onNextStep([this, listSize, followSelection] {
-    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
-    followSelection();
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousStep([this, listSize, followSelection] {
-    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
-    followSelection();
-    requestUpdate();
-  });
-
   // Rows per repeat with the shared ramp, clamped at the ends — the library is
   // the longest list on the device and a page-per-repeat hold was unaimable. A
   // swipe arrives through the same callback and moves the window a whole screen.
@@ -839,6 +828,29 @@ void FileBrowserActivity::loop() {
     selectorIndex = window.selected;
     requestUpdate();
   };
+
+  // On a touch board, the band's Page Up / Page Down pair scrolls a whole screen.
+  // PickFolder keeps Left for "Move Here" (handled above), so only Right pages there.
+  if (mappedInput.hasTouch()) {
+    const bool up = mode != Mode::PickFolder && mappedInput.wasPressed(MappedInputManager::Button::Left);
+    if (up || mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+      mappedInput.suppressHeldButtonRelease();
+      pageBy(up ? -1 : 1);
+      return;
+    }
+  }
+
+  buttonNavigator.onNextStep([this, listSize, followSelection] {
+    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
+    followSelection();
+    requestUpdate();
+  });
+
+  buttonNavigator.onPreviousStep([this, listSize, followSelection] {
+    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
+    followSelection();
+    requestUpdate();
+  });
 
   buttonNavigator.onNextContinuous([this, listSize, followSelection, pageBy] {
     if (ButtonNavigator::swipeDrivenPass()) return pageBy(1);
@@ -966,15 +978,18 @@ void FileBrowserActivity::render(RenderLock&&) {
                                      !files[static_cast<size_t>(selectedFile)].empty() &&
                                      files[static_cast<size_t>(selectedFile)].back() != '/';
   const bool listEmpty = totalRowCount() == 0;
+  const bool listScrolls = !listEmpty && (firstVisibleIdx > 0 || lastVisibleIdx + 1 < totalRowCount());
   const char* confirmLabel =
       listEmpty ? ""
-                : (rowKindAt(selectedRow) != RowKind::Entry ? tr(STR_SELECT)
-                                                            : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN)));
-  const auto labels = mode == Mode::PickFolder
-                          ? mappedInput.mapLabels(backLabel, listEmpty ? "" : tr(STR_OPEN), tr(STR_MOVE_HERE),
-                                                  listEmpty ? "" : tr(STR_DIR_DOWN))
-                          : mappedInput.mapLabels(backLabel, confirmLabel, listEmpty ? "" : tr(STR_DIR_UP),
-                                                  listEmpty ? "" : tr(STR_DIR_DOWN));
+                : (mode == Mode::PickFolder ? tr(STR_OPEN)
+                                            : (rowKindAt(selectedRow) != RowKind::Entry
+                                                   ? tr(STR_SELECT)
+                                                   : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN))));
+  const auto hints =
+      hint_band::resolveListHints(mappedInput.hasTouch(), mappedInput.showsSelection(), listScrolls, confirmLabel,
+                                  listEmpty ? "" : tr(STR_DIR_UP), listEmpty ? "" : tr(STR_DIR_DOWN), tr(STR_PAGE_UP),
+                                  tr(STR_PAGE_DOWN), mode == Mode::PickFolder ? tr(STR_MOVE_HERE) : nullptr);
+  const auto labels = mappedInput.mapLabels(backLabel, hints.confirm, hints.third, hints.fourth);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // The browser is commonly reached straight from screens that paint only in FAST

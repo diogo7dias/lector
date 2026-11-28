@@ -240,7 +240,11 @@ class LightPanel {
     if (layout_.hasAux2) drawAuxRow(renderer, layout_.aux2, context_.aux2Text);
 
     for (int i = 0; i < layout_.actionCount; ++i) {
-      drawBox(renderer, layout_.actions[i], I18N.get(boundMenuActionLabel(context_.actions[i])), cursor_.action == i);
+      const uint8_t action = context_.actions[i];
+      const char* label = (action == CrossPointSettings::LP_MENU_CALM_MODE && SETTINGS.calmMode)
+                              ? I18N.get(StrId::STR_CALM_MODE_ON)
+                              : I18N.get(boundMenuActionLabel(action));
+      drawBox(renderer, layout_.actions[i], label, cursor_.action == i);
     }
     light_panel::drawReadout(renderer, layout_.readout, topInset_, freeBytes_);
   }

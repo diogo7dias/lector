@@ -91,7 +91,7 @@ TEST(ReaderPresetMigration, ANewPresetIsLeftAlone) {
   p.screenMarginBottom = 18;
   p.marginLinkMode = margin_link::toStored(Mode::Separate);
   p.dynamicMargins = 2;
-  p.embeddedStyle = 1;
+  p.embeddedStyle = EMBEDDED_STYLE_TEXT_ONLY;
   p.paragraphIndentSpaces = 4;
   p.characterSpacing = 3;
   p.imageRendering = 2;
@@ -100,6 +100,7 @@ TEST(ReaderPresetMigration, ANewPresetIsLeftAlone) {
   keys.hasMarginLinkMode = true;
   keys.hasParagraphIndentSpaces = true;
   keys.hasCharacterSpacingPx = true;
+  keys.hasEmbeddedStyleMode = true;
   reader_preset_migration::apply(keys, p);
 
   EXPECT_EQ(12, p.screenMarginTop);
@@ -107,14 +108,13 @@ TEST(ReaderPresetMigration, ANewPresetIsLeftAlone) {
   EXPECT_EQ(35, p.screenMargin);
   EXPECT_EQ(margin_link::toStored(Mode::Separate), p.marginLinkMode);
   EXPECT_EQ(2, p.dynamicMargins);
-  EXPECT_EQ(1, p.embeddedStyle);
+  EXPECT_EQ(EMBEDDED_STYLE_TEXT_ONLY, p.embeddedStyle);
   EXPECT_EQ(4, p.paragraphIndentSpaces);
   EXPECT_EQ(3, p.characterSpacing);
   EXPECT_EQ(2, p.imageRendering);
 }
 
-// Two Embedded Style switches became one: it stays on only if both were on, because a
-// preset saved with either off wanted the book's own styling gone.
+// Two Embedded Style switches became one 3-way mode: legacy on stays Full, either off becomes Off.
 TEST(ReaderPresetMigration, TheTwoStyleSwitchesBecomeOneAndOffWins) {
   for (const uint8_t text : {uint8_t{0}, uint8_t{1}}) {
     for (const uint8_t layout : {uint8_t{0}, uint8_t{1}}) {
@@ -124,15 +124,17 @@ TEST(ReaderPresetMigration, TheTwoStyleSwitchesBecomeOneAndOffWins) {
       keys.hasEmbeddedLayoutStyle = true;
       keys.embeddedLayoutStyle = layout;
       reader_preset_migration::apply(keys, p);
-      EXPECT_EQ(text && layout ? 1 : 0, p.embeddedStyle) << int(text) << int(layout);
+      EXPECT_EQ(text && layout ? EMBEDDED_STYLE_FULL : EMBEDDED_STYLE_OFF, p.embeddedStyle) << int(text) << int(layout);
     }
   }
-  // No layout key: this preset predates the split, so its one switch already says it all.
+  // No layout key: legacy 2-way "embeddedStyle" maps 0 -> Off, 1 -> Full.
   for (const uint8_t choice : {uint8_t{0}, uint8_t{1}}) {
     ReaderPrefs p;
-    p.embeddedStyle = choice;
-    reader_preset_migration::apply(LegacyKeys{}, p);
-    EXPECT_EQ(choice, p.embeddedStyle);
+    LegacyKeys keys;
+    keys.hasLegacyEmbeddedStyle = true;
+    keys.legacyEmbeddedStyle = choice;
+    reader_preset_migration::apply(keys, p);
+    EXPECT_EQ(choice ? EMBEDDED_STYLE_FULL : EMBEDDED_STYLE_OFF, p.embeddedStyle);
   }
 }
 
