@@ -80,24 +80,76 @@ __attribute__((always_inline)) inline void paint(uint8_t* buffer, int destinatio
     buffer[destination >> 3] |= mask;
 }
 
+// BW 2-bit pixel level mask (bit n = paint 2-bit value n):
+//   weight <= -2 : 0x08 (level 3 only)
+//   weight == -1 : 0x0c (levels 2, 3)
+//   weight >=  0 : 0x0e (levels 1, 2, 3 — default)
+inline constexpr uint8_t bwLevelsForInkWeight(const int8_t inkWeight) {
+  if (inkWeight <= -2) return 0x08;
+  if (inkWeight == -1) return 0x0c;
+  return 0x0e;
+}
+
+// One BW blit pass: a logical offset (dx, dy) plus the 2-bit level mask to paint.
+struct InkPass {
+  int8_t dx;
+  int8_t dy;
+  uint8_t bwLevels;
+};
+
+struct InkPlan {
+  InkPass passes[6];
+  uint8_t count;
+};
+
+// Maps Paperback Look (0..2) and Ink Weight (-2..+2) into the BW blit sequence.
+// Negative weights drop lower 2-bit fringes before any Paperback smear; positive
+// weights add controlled horizontal then vertical/diagonal passes using the base
+// mask so strokes darken monotonically even across anti-aliased fringes.
+// TTF glyphs already baked inkWeight into their 2-bit coverage during packing, so
+// they keep the default 0x0e mask and never double-filter here.
+inline constexpr InkPlan inkPlanFor(const uint8_t paperbackLook, const int8_t inkWeight, const bool twoBit,
+                                    const bool isTtf) {
+  const int8_t w = (twoBit && !isTtf) ? (inkWeight < -2 ? -2 : (inkWeight > 2 ? 2 : inkWeight)) : 0;
+  const uint8_t base = bwLevelsForInkWeight(w);
+  InkPlan plan{{}, 0};
+  plan.passes[plan.count++] = {0, 0, base};
+  if (paperbackLook == 0) {
+    if (w >= 1) plan.passes[plan.count++] = {1, 0, base};
+    if (w >= 2) plan.passes[plan.count++] = {0, 1, base};
+  } else if (paperbackLook == 1) {
+    plan.passes[plan.count++] = {1, 0, base};
+    plan.passes[plan.count++] = {0, 1, base};
+    if (w >= 1) plan.passes[plan.count++] = {2, 0, base};
+    if (w >= 2) plan.passes[plan.count++] = {1, 1, base};
+  } else {
+    plan.passes[plan.count++] = {1, 0, base};
+    plan.passes[plan.count++] = {2, 0, base};
+    plan.passes[plan.count++] = {0, 1, base};
+    if (w >= 1) plan.passes[plan.count++] = {1, 1, base};
+    if (w >= 2) plan.passes[plan.count++] = {2, 1, base};
+  }
+  return plan;
+}
+
 // Paint a packed glyph into target.
 //
 // bitmap: rows are contiguous, MSB first, 1 or 2 bits per pixel; widths need
 //   not be byte-aligned. 2bpp values are 0=white, 1=light gray, 2=dark gray,
 //   3=black. 1bpp value 1 is ink.
-// plane: which 2bpp values are painted. BW paints every non-white value and
-//   honours state (true clears the bit, i.e. black). The gray planes only ever
-//   set bits, because there 0 means leave alone and 1 means update: MSB paints
-//   both grays, LSB paints dark gray only. 1bpp glyphs paint ink with state on
-//   every plane.
+// plane: which 2bpp values are painted. BW paints the bits selected by bwLevels
+//   (default 0x0e, every non-white value) and honours state (true clears the bit,
+//   i.e. black). The gray planes only ever set bits, because there 0 means leave
+//   alone and 1 means update: MSB paints both grays, LSB paints dark gray only.
+//   1bpp glyphs paint ink with state on every plane.
 // Clipping happens before pixel decoding, so fully hidden glyphs cost nothing.
 inline void draw(const uint8_t* bitmap, int width, int height, bool twoBit, Plane plane, bool state,
-                 const Target& target, Clip clip) {
+                 const Target& target, Clip clip, uint8_t bwLevels = 0x0e) {
   // Bit n of levels set means source value n is painted.
   uint8_t levels = 0x02;
   bool clearBits = state;
   if (twoBit) {
-    levels = plane == Plane::BW ? 0x0e : plane == Plane::GrayMSB ? 0x06 : 0x04;
+    levels = plane == Plane::BW ? bwLevels : plane == Plane::GrayMSB ? 0x06 : 0x04;
     if (plane != Plane::BW) clearBits = false;
   }
 

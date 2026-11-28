@@ -308,11 +308,13 @@ void TxtReaderActivity::renderPage() {
   renderStatusBar();  // scan: a CJK title joins the batch prewarm
   scope.endScanAndPrewarm();
 
-  // BW rendering. Paperback Look (body, global) thickens the page glyphs; reset
-  // before the status bar (own flag) and the grayscale AA pass below.
+  // BW rendering. Paperback Look and Ink Weight (body, global) shape the page glyphs;
+  // reset before the status bar (own flag).
   renderer.setPaperbackLook(SETTINGS.paperbackLookBody);
+  renderer.setInkWeight(reader_defaults::resolveInkWeight(SETTINGS.inkWeight), /*updateTtf=*/true);
   renderLines();
   renderer.setPaperbackLook(false);
+  renderer.setInkWeight(0);
   if (const int step = ruled_lines::dotStep(SETTINGS.ruledLines)) {
     const auto isBlack = [this](int x, int y) { return renderer.isPixelBlack(x, y); };
     const auto plot = [this](int x, int y) { renderer.drawPixel(x, y); };
