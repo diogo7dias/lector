@@ -11,9 +11,13 @@
 
 #include "DictZip.h"
 #include "Dictionary.h"
+#include "DictionaryFailure.h"
 #include "DictionaryRegistry.h"
+#include "VocabExport.h"
 
 namespace DictionaryRegistry {
+static std::vector<DictionaryEntry> g_stubDictionaries;
+void discover(std::vector<DictionaryEntry>& out) { out = g_stubDictionaries; }
 bool resolveBasePath(const char* folderName, std::string& basePathOut) {
   basePathOut = std::string("/dictionaries/") + folderName + "/" + folderName;
   return true;
@@ -56,9 +60,10 @@ class DictionaryTest : public testing::Test {
   void TearDown() override { std::filesystem::remove_all(root); }
 
   // Entries must already be in StarDict order. An empty ifoType leaves sametypesequence out.
-  void writeDictionary(const std::vector<Entry>& entries, const std::string& ifoType,
-                       const std::vector<Synonym>& synonyms = {}) {
-    const std::string base = root + "/dictionaries/test/test";
+  void writeDictionaryIn(const std::string& folder, const std::vector<Entry>& entries, const std::string& ifoType,
+                         const std::vector<Synonym>& synonyms = {}) {
+    std::filesystem::create_directories(root + "/dictionaries/" + folder);
+    const std::string base = root + "/dictionaries/" + folder + "/" + folder;
     std::string idx, dict;
     for (const auto& entry : entries) {
       idx += entry.word;
@@ -70,7 +75,7 @@ class DictionaryTest : public testing::Test {
     std::ofstream(base + ".idx", std::ios::binary) << idx;
     std::ofstream(base + ".dict", std::ios::binary) << dict;
     std::ofstream ifo(base + ".ifo");
-    ifo << "StarDict's dict ifo file\nversion=2.4.2\nbookname=test\nidxoffsetbits=32\n";
+    ifo << "StarDict's dict ifo file\nversion=2.4.2\nbookname=" << folder << "\nidxoffsetbits=32\n";
     if (!ifoType.empty()) ifo << "sametypesequence=" << ifoType << "\n";
     ifo.close();
     if (synonyms.empty()) return;
@@ -81,6 +86,11 @@ class DictionaryTest : public testing::Test {
       appendBe32(syn, synonym.ordinal);
     }
     std::ofstream(base + ".syn", std::ios::binary) << syn;
+  }
+
+  void writeDictionary(const std::vector<Entry>& entries, const std::string& ifoType,
+                       const std::vector<Synonym>& synonyms = {}) {
+    writeDictionaryIn("test", entries, ifoType, synonyms);
   }
 
   void openAndIndex() {
@@ -330,4 +340,88 @@ TEST_F(DictionaryTest, ElisionTriesTheLongestRemainderFirstAndSkipsLongPrefixes)
   openAndIndex();
   EXPECT_FALSE(dictionary.lookup("abcdefgh'word", definition, headword, &result));  // prefix over 7 bytes
   EXPECT_EQ(result, Dictionary::LookupResult::NotFound);
+}
+
+TEST_F(DictionaryTest, PrepareSwitchesFoldersOnSameDictionaryObject) {
+  writeDictionaryIn("primary", {{"alpha", "first"}}, "m");
+  writeDictionaryIn("secondary", {{"beta", "second"}}, "m");
+
+  ASSERT_EQ(dictionary.prepare("primary"), Dictionary::Readiness::NeedsIndex);
+  ASSERT_TRUE(dictionary.buildIndex());
+  ASSERT_TRUE(dictionary.lookup("alpha", definition, headword, &result));
+  EXPECT_EQ(definition, "first");
+
+  // Reusing the same Dictionary object for another folder must reopen and re-check its index.
+  ASSERT_EQ(dictionary.prepare("secondary"), Dictionary::Readiness::NeedsIndex);
+  ASSERT_TRUE(dictionary.buildIndex());
+  ASSERT_TRUE(dictionary.lookup("beta", definition, headword, &result));
+  EXPECT_EQ(definition, "second");
+}
+
+TEST_F(DictionaryTest, FallbackLookupSearchesOtherDictionariesOnNotFound) {
+  writeDictionaryIn("primary", {{"alpha", "first"}}, "m");
+  writeDictionaryIn("secondary", {{"beta", "second"}}, "m");
+  writeDictionaryIn("tertiary", {{"gamma", "third"}}, "m");
+  DictionaryRegistry::g_stubDictionaries = {
+      {"primary", "primary"}, {"secondary", "secondary"}, {"tertiary", "tertiary"}};
+
+  auto noopBusy = [](void*, StrId) {};
+  dict_failure::Message msg;
+
+  // Toggle off: misses on primary without searching fallbacks.
+  EXPECT_FALSE(dict_failure::lookUpWithFallbacks(dictionary, "primary", false, "gamma", definition, headword, msg,
+                                                 noopBusy, nullptr));
+  EXPECT_EQ(msg.id, StrId::STR_DICT_NOT_FOUND);
+  EXPECT_FALSE(msg.isError);
+
+  // Toggle on: falls through primary -> secondary -> tertiary reusing the same Dictionary object.
+  ASSERT_TRUE(dict_failure::lookUpWithFallbacks(dictionary, "primary", true, "gamma", definition, headword, msg,
+                                                noopBusy, nullptr));
+  EXPECT_EQ(headword, "gamma");
+  EXPECT_EQ(definition, "third");
+
+  // Subsequent lookup still checks primary first and finds primary entries cleanly.
+  ASSERT_TRUE(dict_failure::lookUpWithFallbacks(dictionary, "primary", true, "alpha", definition, headword, msg,
+                                                noopBusy, nullptr));
+  EXPECT_EQ(headword, "alpha");
+  EXPECT_EQ(definition, "first");
+
+  // Genuine miss across all dictionaries reports NotFound.
+  EXPECT_FALSE(dict_failure::lookUpWithFallbacks(dictionary, "primary", true, "missing", definition, headword, msg,
+                                                 noopBusy, nullptr));
+  EXPECT_EQ(msg.id, StrId::STR_DICT_NOT_FOUND);
+  EXPECT_FALSE(msg.isError);
+}
+
+TEST_F(DictionaryTest, FallbackLookupDoesNotHidePrimaryUnavailableError) {
+  writeDictionaryIn("secondary", {{"beta", "second"}}, "m");
+  DictionaryRegistry::g_stubDictionaries = {{"secondary", "secondary"}};
+
+  auto noopBusy = [](void*, StrId) {};
+  dict_failure::Message msg;
+  EXPECT_FALSE(dict_failure::lookUpWithFallbacks(dictionary, "missing_primary", true, "beta", definition, headword, msg,
+                                                 noopBusy, nullptr));
+  EXPECT_TRUE(msg.isError);
+  EXPECT_EQ(msg.id, StrId::STR_DICT_ERROR);
+}
+
+TEST(VocabExport, FormatsSanitizedAnkiTsvRowAndStripsHtml) {
+  const std::string snippet = vocab_export::makeSnippet("<p><b>quick</b>\tbrown\nfox</p>", true);
+  EXPECT_EQ("quick brown fox", snippet);
+
+  const std::string row = vocab_export::formatTsvRow("ran\tfast", "run\n", snippet, "Dune\t1", "2026-11-28");
+  EXPECT_EQ("ran fast\trun\tquick brown fox\tDune 1\t2026-11-28\n", row);
+
+  // Snippet caps cleanly on UTF-8 boundary without splitting multi-byte codepoints.
+  std::string utf8;
+  for (int i = 0; i < 80; ++i) utf8 += "\xC3\xA9";  // 160 bytes of 'é'
+  const std::string capped = vocab_export::makeSnippet(utf8, false, 11);
+  EXPECT_EQ(10u, capped.size());  // 5 complete 2-byte codepoints, never 11
+}
+
+TEST(VocabExport, SnippetReadsOnlyTheHeadOfALongDefinition) {
+  const std::string longDefinition = "<p>head words</p>" + std::string(64 * 1024, 'x');
+  const std::string snippet = vocab_export::makeSnippet(longDefinition, true);
+  EXPECT_EQ(0u, snippet.find("head words"));
+  EXPECT_LE(snippet.size(), vocab_export::MAX_SNIPPET_BYTES);
 }

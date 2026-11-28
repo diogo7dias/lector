@@ -17,12 +17,14 @@
 class DictionaryWordSelectActivity final : public Activity {
  public:
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        std::unique_ptr<Page> page, int marginLeft, int marginTop, int fontId)
+                                        std::unique_ptr<Page> page, int marginLeft, int marginTop, int fontId,
+                                        std::string bookTitle = {})
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         marginLeft(marginLeft),
         marginTop(marginTop),
-        fontId(fontId) {}
+        fontId(fontId),
+        bookTitle(std::move(bookTitle)) {}
 
   void onEnter() override;
   void loop() override;
@@ -59,6 +61,7 @@ class DictionaryWordSelectActivity final : public Activity {
   const int marginLeft;
   const int marginTop;
   const int fontId;
+  const std::string bookTitle;
 
   std::vector<WordBox> words;
   int selected = 0;

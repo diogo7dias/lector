@@ -53,10 +53,10 @@ void EpubReaderActivity::openDictionaryWordSelect() {
   pageMargins(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
 
   // The page was laid out in this book's font (per-book prefs), so the word boxes must be too.
-  startActivityForResult(
-      std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page), orientedMarginLeft,
-                                                     orientedMarginTop, SETTINGS.getReaderFontId(prefs_)),
-      [this](const ActivityResult&) { requestUpdate(); });
+  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
+                             renderer, mappedInput, std::move(page), orientedMarginLeft, orientedMarginTop,
+                             SETTINGS.getReaderFontId(prefs_), epub ? epub->getTitle() : std::string{}),
+                         [this](const ActivityResult&) { requestUpdate(); });
 }
 
 void EpubReaderActivity::openQuoteGrab(const int holdX, const int holdY) {

@@ -349,6 +349,9 @@ static_assert(clock_zones::UTC_INDEX == 17, "CrossPointSettings::clockTimezone d
   // --- Reader ---
   // Built-in font-family entry. Replaced per-call with a registry-aware
   // version when SD fonts are installed.
+  emit(SettingInfo::Toggle(StrId::STR_DICTIONARY_FALLBACK, &CrossPointSettings::dictionaryFallback,
+                           "dictionaryFallback", StrId::STR_CAT_READER));
+
   emit(SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily, {StrId::STR_CHAREINK}, "fontFamily",
                          StrId::STR_CAT_READER)
            .withTextSettings());
@@ -872,6 +875,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     if (it != v.end()) {
       *it = buildFontSizeSetting(registry);
     }
+  }
+  if (!withAbsentHardware && (!dictionaries || dictionaries->size() < 2)) {
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) { return s.nameId == StrId::STR_DICTIONARY_FALLBACK; }),
+            v.end());
   }
   if (dictionaries && !dictionaries->empty()) {
     // Insert at the end of the Reader category (just before the first Controls entry).
