@@ -122,6 +122,12 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
 
+  if (showPageNotFoundMessage && (millis() - pageNotFoundMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showPageNotFoundMessage = false;
+    scheduleGhostCleanup();
+    requestUpdate();
+  }
+
   // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
   // input. Anything it doesn't handle (e.g. long-press Back to the file browser) falls
   // through to the regular handlers below; page turns are absorbed by the end-of-book
@@ -179,6 +185,18 @@ void EpubReaderActivity::loop() {
   if (mappedInput.wasScreenLongPress(holdX, holdY, /*keepContact=*/true)) {
     openQuoteGrab(holdX, holdY);
     return;
+  }
+  // Top-right corner tap toggles the page bookmark on touch boards before the general
+  // page-turn zone claims the tap.
+  if (SETTINGS.touchReaderControls != 0 && mappedInput.hasTouch() && !atEndOfBook && section &&
+      mappedInput.wasSwipe() == MappedInputManager::SwipeDir::None) {
+    int tapX = 0;
+    int tapY = 0;
+    if (mappedInput.wasScreenTapped(tapX, tapY) &&
+        reader_touch::isBookmarkCornerTap(true, renderer.getScreenWidth(), renderer.getScreenHeight(), tapX, tapY)) {
+      if (!blockSortesAction()) addBookmark();
+      return;
+    }
   }
   // Touch on the open page, read once per loop: a tap or swipe can turn the page or
   // open the menu. Read before the Confirm handling below so the menu opens from

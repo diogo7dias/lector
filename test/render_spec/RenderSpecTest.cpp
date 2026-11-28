@@ -21,6 +21,7 @@ const std::set<std::string> NOT_IN_SPEC = {
 ReaderPrefs baseLook() {
   ReaderPrefs p;
   p.guideDotsEnabled = 1;
+  p.embeddedStyle = EMBEDDED_STYLE_TEXT_ONLY;  // 1 ^ 1 = 0, both in-range
   return p;
 }
 
@@ -49,8 +50,12 @@ TEST(RenderSpec, NormalisesSwitches) {
   p.focusReadingEnabled = 7;
   const ReaderRenderSpec spec = makeRenderSpec(p, 1, 480, 800);
   EXPECT_TRUE(spec.extraParagraphSpacing);
-  EXPECT_TRUE(spec.embeddedStyle);
+  EXPECT_EQ(EMBEDDED_STYLE_FULL, spec.embeddedStyle);
   EXPECT_TRUE(spec.focusReadingEnabled);
+  p.embeddedStyle = EMBEDDED_STYLE_TEXT_ONLY;
+  EXPECT_EQ(EMBEDDED_STYLE_TEXT_ONLY, makeRenderSpec(p, 1, 480, 800).embeddedStyle);
+  p.embeddedStyle = EMBEDDED_STYLE_OFF;
+  EXPECT_EQ(EMBEDDED_STYLE_OFF, makeRenderSpec(p, 1, 480, 800).embeddedStyle);
 }
 
 TEST(RenderSpec, LineSpacingRangeIs80To175) {

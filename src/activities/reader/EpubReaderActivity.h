@@ -45,6 +45,7 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
+  void drawBookmarkDogEar() const;
   // Gate for a background build tick: true when the heap can take parse allocations.
   // Updates buildHeapPaused as a side effect.
   bool buildTickHeapGate();
@@ -147,7 +148,10 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   bool handleToolbarInput();
   void paintToolbar();
   void runToolbarTool(int tool);
+  bool toolbarScrubsPages() const;
   void toolbarGotoSpine(int spine);
+  void toolbarGotoPage(int page);
+  void toolbarReturn();
   // Reading margins plus status bar bands: where render() puts the page.
   // spine: whose chapter title sizes the status bar band (default: the open chapter).
   void pageMargins(int& top, int& right, int& bottom, int& left, int spine = -1);
@@ -229,6 +233,7 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   // Leave the End-of-Book screen for the book's last page.
   void returnToLastPage();
   void loadCachedBookmarks();
+  bool isCurrentPageBookmarked() const;
   void addBookmark();
 
   // Footnote navigation
@@ -276,6 +281,13 @@ class EpubReaderActivity final : public Activity, private EpubReaderState {
   void onRevealed() override {
     pageOnScreen.store(false, std::memory_order_release);
     scheduleGhostCleanup();
+  }
+  void onCalmModeChanged() override {
+    {
+      RenderLock lock(*this);
+      dropSectionForRelayout();
+    }
+    requestUpdate();
   }
   bool handleForcedRefresh() override {
     {

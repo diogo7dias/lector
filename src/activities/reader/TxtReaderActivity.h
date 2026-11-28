@@ -98,6 +98,10 @@ class TxtReaderActivity final : public Activity {
   // binding this reader cannot honour does not cost every power click the ~280 ms
   // hold-back the detector needs.
   bool isBookContext() const override { return true; }
+  void onCalmModeChanged() override {
+    quietIndex_ = true;
+    relayoutForFontChange();
+  }
   bool runBoundAction(uint8_t function) override;
   bool appliesNightMode() const override { return true; }
   void onRevealed() override { pagesUntilFullRefresh = 0; }

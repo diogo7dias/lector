@@ -71,7 +71,6 @@ void EpubReaderActivity::openReaderMenuList(const EpubReaderMenuActivity::MenuAc
   menuContext.bookProgressPercent = bookProgressPercent;
   menuContext.currentOrientation = SETTINGS.orientation;
   menuContext.hasFootnotes = !currentPageFootnotes.empty();
-  menuContext.hasPageList = epub->hasPageList();
   menuContext.hasBookmarks = !cachedBookmarks.empty();
   menuContext.hasReaderOverride = prefsCustom_;
   menuContext.paragraphNumbering = prefs_.paragraphNumbering;
