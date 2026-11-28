@@ -30,6 +30,7 @@ void SleepActivity::showPopupKeepingPage() const {
 
 // The overlay over the page. Nothing usable on the card means the Lector face.
 void SleepActivity::renderTransparentCustomSleepScreen() const {
+  renderer.waitRefreshComplete();
   SleepOverlay overlay;
   if (!overlay.prepare(renderer)) return renderDefaultSleepScreen();
   // BW pass into the page already in the framebuffer.

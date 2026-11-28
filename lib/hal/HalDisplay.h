@@ -130,6 +130,9 @@ class HalDisplay {
 
   // An async refresh has been started and waitRefreshComplete() has not yet seen it end.
   bool pendingAsync = false;
+  // On SSD1677 single-buffer async FAST, the driver skips its post-waveform RED RAM sync;
+  // waitRefreshComplete() resyncs RED from the untouched framebuffer before the next diff.
+  bool pendingAsyncBaselineSync = false;
   // True once any refresh has finished since boot.
   bool refreshCompleted = false;
 };

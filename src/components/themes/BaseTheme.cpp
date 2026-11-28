@@ -644,6 +644,7 @@ Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message
   // Painted over the screen rather than as part of it: whatever is underneath
   // has to clean the band once this is gone (UITheme::consumeOverlayPainted).
   // Both the popup and the busy banner come through here.
+  renderer.waitRefreshComplete();
   UITheme::noteOverlayPainted();
   const int w = renderer.getScreenWidth();
   const int lineHeight = renderer.getLineHeight(banner::FONT_ID);
@@ -687,6 +688,7 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) cons
 }
 
 void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const {
+  renderer.waitRefreshComplete();
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int barHeight = metrics.popupProgressBarHeight;
   const int barWidth =

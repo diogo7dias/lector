@@ -1100,7 +1100,10 @@ void loop() {
     // This costs nothing visible: no flash, no waveform, and the next paint brings the
     // rails back up by itself. Repeat calls are free, so no "already off" flag is kept
     // here — the driver holds that state and returns immediately when it is already down.
-    if (idleMs >= HalPowerManager::IDLE_PANEL_POWER_OFF_MS) display.powerOffPanel();
+    if (idleMs >= HalPowerManager::IDLE_PANEL_POWER_OFF_MS) {
+      RenderLock lock(RenderLock::TryOnly{});
+      if (lock.owns()) display.powerOffPanel();
+    }
 
     if (idleMs >= HalPowerManager::IDLE_POWER_SAVING_MS) {
       // If we've been inactive for a while, increase the delay to save power

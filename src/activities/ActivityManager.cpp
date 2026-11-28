@@ -573,6 +573,7 @@ void ActivityManager::toggleQuickLock() {
 // Over the page already in the framebuffer, like the light panel: nothing on screen is
 // changing, so the screen does not render again until the lock ends.
 void ActivityManager::paintQuickLockBadge() {
+  renderer.waitRefreshComplete();
   constexpr int padding = 6;
   const char* text = tr(STR_LOCKED);
   int top, right, bottom, left;

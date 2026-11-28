@@ -41,6 +41,7 @@ void drawMoon(const GfxRenderer& renderer) {
 // differs from what the panel holds, so a differential FAST pass adds it without the clean
 // pass that would flash the page away. main.cpp saves the frame once this returns.
 void SleepActivity::renderQuickResumeScreen() const {
+  renderer.waitRefreshComplete();
   if (APP_STATE.lastSleepFromReader) ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
   drawMoon(renderer);
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
