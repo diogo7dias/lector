@@ -12,12 +12,15 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "MappedInputManager.h"
 #include "activities/ActivityManager.h"
 #include "activities/RenderLock.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/BusyBanner.h"
+#include "components/UITheme.h"
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
+#include "util/BookProgressFile.h"
 #include "util/BusyTick.h"
 #include "util/TaskWatchdog.h"
 
@@ -43,9 +46,12 @@ void LibraryActivity::onEnter() {
   refreshIndex(false);
 }
 
+bool LibraryActivity::isGridMode() const { return SETTINGS.libraryViewMode != 0; }
+
 void LibraryActivity::onExit() {
   UiListActivity::onExit();
   rows.clear();
+  gridRenderer.invalidateCache();
 }
 
 // Rebuild when the index is missing, was built before something changed on the card, or
@@ -81,7 +87,12 @@ void LibraryActivity::refreshIndex(const bool force) {
   if (startRow > 0 && startRow < rowCount) {
     nav.selected = startRow;
     nav.followOnBuild = true;
+    gridSelected = std::max(0, static_cast<int>(startRow) - headerRows());
+  } else {
+    gridSelected = 0;
   }
+  gridCleanPaint = true;
+  gridRenderer.invalidateCache();
   startRow = 0;
   requestUpdate();
 }
@@ -246,6 +257,35 @@ void LibraryActivity::buildScreen(UiScreen& screen) {
   screen.list(props);
 }
 
+void LibraryActivity::openEntry(const int entryIndex) {
+  const int entries = entryCount();
+  if (entryIndex < 0 || entryIndex >= entries) return;
+  std::string path;
+  {
+    // The render task reads the index too; keep it off the card while this handle seeks.
+    RenderLock lock(*this);
+    library::LibraryIndexFile file;
+    library::ClixRecord record;
+    if (file.open(library::libraryIndexPath()) &&
+        file.readRecord(static_cast<uint16_t>(ordinalAt(entryIndex)), record)) {
+      file.readPath(record, path);
+    }
+    file.close();
+    // A row can only name a missing file if something changed the card behind the
+    // generation count (the card edited on a computer). Rebuild rather than open nothing.
+    if (path.empty() || !Storage.exists(path.c_str())) {
+      LOG_INF("LIB", "entry %d names a missing book, rebuilding", entryIndex);
+      refreshIndex(/*force=*/true);
+      return;
+    }
+  }
+  LOG_INF("LIB", "open %s", path.c_str());
+  // The unfiltered row (one header row), so Back from the book lands on it with no search.
+  APP_STATE.libraryRow = static_cast<uint16_t>(ordinalAt(entryIndex) + 1);
+  app.clearTapFlash();
+  activityManager.goToReader(path);
+}
+
 void LibraryActivity::activateIndex(const int index) {
   if (index < 0 || index >= rowCount) return;
   if (index < headerRows()) {
@@ -256,30 +296,145 @@ void LibraryActivity::activateIndex(const int index) {
     }
     return;
   }
-  std::string path;
-  {
-    // The render task reads the index too; keep it off the card while this handle seeks.
-    RenderLock lock(*this);
-    library::LibraryIndexFile file;
-    library::ClixRecord record;
-    if (file.open(library::libraryIndexPath()) &&
-        file.readRecord(static_cast<uint16_t>(ordinalAt(index - headerRows())), record)) {
-      file.readPath(record, path);
+  openEntry(index - headerRows());
+}
+
+void LibraryActivity::renderGrid() {
+  const ListChrome ch = chrome();
+  const list_chrome::Bands bands = listChromeBands(renderer, ch);
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int screenW = renderer.getScreenWidth();
+
+  renderer.clearScreen();
+  const Rect headerRect{0, metrics.topPadding, screenW,
+                        BaseTheme::headerHeightFor(renderer, screenW, ch.title, ch.headerRight)};
+  GUI.drawHeader(renderer, headerRect, ch.title, nullptr, ch.headerRight);
+
+#if defined(BOARD_HAS_PSRAM)
+  constexpr bool kHighRam = true;
+#else
+  constexpr bool kHighRam = false;
+#endif
+  const library_grid::Box body{metrics.contentSidePadding, bands.contentTop + 4,
+                               screenW - 2 * metrics.contentSidePadding,
+                               std::max(80, bands.contentBottom - bands.contentTop - 8)};
+  gridLayout = library_grid::computeLayout(body, kHighRam);
+
+  const int total = entryCount();
+  if (gridSelected >= total) gridSelected = std::max(0, total - 1);
+  const int pageStart = library_grid::pageStartFor(gridSelected, gridLayout.perPage);
+  const int wanted = std::min(gridLayout.perPage, total - pageStart);
+
+  library_grid::GridBook pageBooks[library_grid::kMaxPageTiles];
+  int got = 0;
+  library::LibraryIndexFile index;
+  if (wanted > 0 && index.open(library::libraryIndexPath())) {
+    if (searchActive()) {
+      while (got < wanted && index.readRecord(static_cast<uint16_t>(ordinalAt(pageStart + got)), records[got])) got++;
+    } else {
+      got = static_cast<int>(index.readRecords(static_cast<uint16_t>(pageStart), static_cast<size_t>(wanted), records));
     }
-    file.close();
-    // A row can only name a missing file if something changed the card behind the
-    // generation count (the card edited on a computer). Rebuild rather than open nothing.
-    if (path.empty() || !Storage.exists(path.c_str())) {
-      LOG_INF("LIB", "row %d names a missing book, rebuilding", index);
-      refreshIndex(/*force=*/true);
-      return;
+    for (int i = 0; i < got; ++i) {
+      if (!index.readTitle(records[i], pageBooks[i].title) || !index.readAuthor(records[i], pageBooks[i].author) ||
+          !index.readPath(records[i], pageBooks[i].path)) {
+        got = i;
+        break;
+      }
+      book_progress::Marker marker;
+      pageBooks[i].percent = book_progress::readForBook(pageBooks[i].path, marker) ? marker.percent : 255;
     }
   }
-  LOG_INF("LIB", "open %s", path.c_str());
-  // The unfiltered row (one header row), so Back from the book lands on it with no search.
-  APP_STATE.libraryRow = static_cast<uint16_t>(ordinalAt(index - headerRows()) + 1);
-  app.clearTapFlash();
-  activityManager.goToReader(path);
+  gridVisibleCount = got;
+  gridRenderer.drawPage(renderer, gridLayout, pageBooks, got, gridSelected - pageStart, pageStart,
+                        Storage.bookGeneration());
+
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  renderer.displayBuffer(gridCleanPaint ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+  gridCleanPaint = false;
+}
+
+void LibraryActivity::render(RenderLock&& lock) {
+  if (!isGridMode() || bookCount == 0) {
+    UiListActivity::render(std::move(lock));
+    return;
+  }
+  renderGrid();
+}
+
+bool LibraryActivity::handleCustomInput() {
+  if (!isGridMode() || bookCount == 0) return false;
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    onBackButton();
+    return true;
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    openEntry(gridSelected);
+    return true;
+  }
+
+  const int total = entryCount();
+  if (total <= 0) return true;
+
+  const auto scroll = mappedInput.wasListScrollSwipe();
+  if (scroll != list_swipe::Scroll::None) {
+    const int next = library_grid::movePage(gridSelected, total, gridLayout.perPage,
+                                            scroll == list_swipe::Scroll::PageDown ? 1 : -1);
+    if (next != gridSelected) {
+      gridSelected = next;
+      gridCleanPaint = true;
+      requestUpdate();
+    }
+    return true;
+  }
+
+  int tx = 0;
+  int ty = 0;
+  if (mappedInput.wasScreenTapped(tx, ty)) {
+    const int hit = library_grid::tileAt(gridLayout, gridVisibleCount, tx, ty);
+    if (hit >= 0) {
+      const int pageStart = library_grid::pageStartFor(gridSelected, gridLayout.perPage);
+      gridSelected = pageStart + hit;
+      openEntry(gridSelected);
+    }
+    return true;
+  }
+
+  auto move = [this, total](const int delta) {
+    const int oldPage = library_grid::pageStartFor(gridSelected, gridLayout.perPage);
+    const int next = library_grid::moveCursor(gridSelected, total, delta);
+    if (next == gridSelected) return;
+    gridSelected = next;
+    if (library_grid::pageStartFor(gridSelected, gridLayout.perPage) != oldPage) gridCleanPaint = true;
+    requestUpdate();
+  };
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [&] { move(-gridLayout.cols); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [&] { move(gridLayout.cols); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [&] { move(-1); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [&] { move(1); });
+  return true;
+}
+
+bool LibraryActivity::lightPanelAuxText(char* buf, const size_t size) const {
+  snprintf(buf, size, "%s: %s", tr(STR_VIEW), isGridMode() ? tr(STR_VIEW_GRID) : tr(STR_VIEW_LIST));
+  return true;
+}
+
+bool LibraryActivity::lightPanelStepAux(const int delta) {
+  if (delta == 0) return false;
+  SETTINGS.libraryViewMode = isGridMode() ? 0 : 1;
+  SETTINGS.saveToFile();
+  if (isGridMode()) {
+    gridSelected = std::max(0, nav.selected - headerRows());
+    gridCleanPaint = true;
+  } else {
+    nav.selected = std::min(rowCount - 1, gridSelected + headerRows());
+    nav.followOnBuild = true;
+    gridRenderer.invalidateCache();
+  }
+  requestUpdate();
+  return true;
 }
 
 // Back leaves a search before it leaves the Library.
@@ -299,7 +454,7 @@ ListChrome LibraryActivity::chrome() const {
     return chrome;
   }
   // Which book is selected; on the search rows, how many there are.
-  const int entry = nav.selected - headerRows();
+  const int entry = isGridMode() ? gridSelected : (nav.selected - headerRows());
   const int entries = entryCount();
   if (entry >= 0 && entry < entries) {
     snprintf(counter, sizeof(counter), tr(STR_LIBRARY_POSITION), entry + 1, entries);

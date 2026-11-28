@@ -8,6 +8,7 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <PngToBmpConverter.h>
+#include <ThumbResampler.h>
 #include <Utf8.h>
 #include <ZipFile.h>
 
@@ -759,8 +760,82 @@ bool Epub::generateCoverBmp(bool cropped) const {
   if (!success) {
     LOG_ERR("EBP", "Failed to generate BMP from %s cover image", format);
     Storage.remove(partPath.c_str());
+  } else if (!Storage.exists(getThumbBmpPath().c_str())) {
+    generateThumbBmp();
   }
   LOG_DBG("EBP", "Generated BMP from %s cover image, success: %s", format, success ? "yes" : "no");
+  return success;
+}
+
+std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
+
+bool Epub::generateThumbBmp() const {
+  const std::string thumbPath = getThumbBmpPath();
+  if (Storage.exists(thumbPath.c_str())) return true;
+  setupCacheDir();
+
+  // Fast path: downsample an existing cover.bmp / cover_crop.bmp without re-opening the EPUB zip.
+  for (const bool cropped : {false, true}) {
+    const std::string coverPath = getCoverBmpPath(cropped);
+    if (!Storage.exists(coverPath.c_str())) continue;
+    HalFile src;
+    if (!Storage.openFileForRead("EBP", coverPath, src)) continue;
+    const std::string partPath = FsHelpers::partialPathFor(thumbPath);
+    HalFile dst;
+    bool ok = Storage.openFileForWrite("EBP", partPath, dst);
+    if (ok) {
+      ok = thumb_resampler::downsample2BitBmp(src, dst, thumb_resampler::THUMB_WIDTH, thumb_resampler::THUMB_HEIGHT);
+    }
+    src.close();
+    dst.close();
+    if (ok && Storage.rename(partPath.c_str(), thumbPath.c_str())) {
+      LOG_DBG("EBP", "Downsampled %s to thumb.bmp", coverPath.c_str());
+      return true;
+    }
+    Storage.remove(partPath.c_str());
+  }
+
+  // Fallback: decode cover image directly from the EPUB to 132x196 2-bit BMP.
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return false;
+  const auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
+  if (coverImageHref.empty()) return false;
+
+  const bool jpg = FsHelpers::hasJpgExtension(coverImageHref);
+  const bool gif = FsHelpers::hasGifExtension(coverImageHref);
+  const bool png = !jpg && !gif;
+  if (png && !FsHelpers::hasPngExtension(coverImageHref)) return false;
+
+  const auto coverTempPath = getCachePath() + (jpg ? "/.thumb.jpg" : gif ? "/.thumb.gif" : "/.thumb.png");
+  HalFile coverImage;
+  if (!Storage.openFileForWrite("EBP", coverTempPath, coverImage)) return false;
+  if (gif) {
+    GifLimitedWriter limited(coverImage, GifCommon::MAX_FILE_BYTES);
+    readItemContentsToStream(coverImageHref, limited, 1024);
+  } else {
+    readItemContentsToStream(coverImageHref, coverImage, 1024);
+  }
+  coverImage.close();
+
+  if (!Storage.openFileForRead("EBP", coverTempPath, coverImage)) {
+    Storage.remove(coverTempPath.c_str());
+    return false;
+  }
+
+  const std::string partPath = FsHelpers::partialPathFor(thumbPath);
+  HalFile thumbBmp;
+  bool success = Storage.openFileForWrite("EBP", partPath, thumbBmp);
+  if (success) {
+    constexpr int kW = thumb_resampler::THUMB_WIDTH;
+    constexpr int kH = thumb_resampler::THUMB_HEIGHT;
+    success = jpg   ? JpegToBmpConverter::jpegFileToBmpStreamSized(coverImage, thumbBmp, kW, kH, /*crop=*/false)
+              : gif ? GifToBmpConverter::gifFileToBmpStreamSized(coverImage, thumbBmp, kW, kH, /*crop=*/false)
+                    : PngToBmpConverter::pngFileToBmpStreamSized(coverImage, thumbBmp, kW, kH, /*crop=*/false);
+  }
+  coverImage.close();
+  thumbBmp.close();
+  Storage.remove(coverTempPath.c_str());
+  success = success && Storage.rename(partPath.c_str(), thumbPath.c_str());
+  if (!success) Storage.remove(partPath.c_str());
   return success;
 }
 

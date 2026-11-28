@@ -12,4 +12,6 @@ class GifToBmpConverter {
 
  public:
   static bool gifFileToBmpStream(HalFile& gifFile, Print& bmpOut, bool crop = true);
+  static bool gifFileToBmpStreamSized(HalFile& gifFile, Print& bmpOut, int targetWidth, int targetHeight,
+                                      bool crop = true);
 };

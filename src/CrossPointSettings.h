@@ -513,6 +513,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t opdsFilenameFormat = 0;
   // Read EPUB title/author metadata when building the Library index; off lists filenames only.
   uint8_t libraryUseMetadata = 1;
+  // Library view layout: 0 = List (default), 1 = Cover Grid.
+  uint8_t libraryViewMode = 0;
   // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;

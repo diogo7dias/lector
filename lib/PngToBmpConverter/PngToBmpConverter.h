@@ -10,4 +10,6 @@ class PngToBmpConverter {
 
  public:
   static bool pngFileToBmpStream(HalFile& pngFile, Print& bmpOut, bool crop = true);
+  static bool pngFileToBmpStreamSized(HalFile& pngFile, Print& bmpOut, int targetWidth, int targetHeight,
+                                      bool crop = true);
 };

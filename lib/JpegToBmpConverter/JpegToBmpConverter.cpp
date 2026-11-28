@@ -457,3 +457,8 @@ bool JpegToBmpConverter::jpegFileToBmpStream(HalFile& jpegFile, Print& bmpOut, b
   const int targetHeight = display.getDisplayWidth();
   return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetWidth, targetHeight, crop);
 }
+
+bool JpegToBmpConverter::jpegFileToBmpStreamSized(HalFile& jpegFile, Print& bmpOut, const int targetWidth,
+                                                  const int targetHeight, const bool crop) {
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetWidth, targetHeight, crop);
+}

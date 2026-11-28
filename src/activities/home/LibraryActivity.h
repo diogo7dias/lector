@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "activities/UiListActivity.h"
+#include "activities/home/LibraryCoverGrid.h"
 #include "activities/home/LibrarySearch.h"
 
 // Home > Library: every book on the card, by title with its author under it. Picking
@@ -47,6 +48,14 @@ class LibraryActivity final : public UiListActivity {
   std::vector<freeink::ui::ListItem> rows;
   mutable char counter[24] = "";
 
+  // Cover Grid mode state (active when SETTINGS.libraryViewMode != 0).
+  int gridSelected = 0;
+  int gridVisibleCount = 0;
+  bool gridCleanPaint = true;
+  library_grid::PageLayout gridLayout{};
+  library_grid::CoverGridRenderer gridRenderer;
+
+  bool isGridMode() const;
   bool searchActive() const { return !searchQuery.empty(); }
   // Search row, then Clear search while a query is set.
   int headerRows() const { return bookCount == 0 ? 0 : (searchActive() ? 2 : 1); }
@@ -58,18 +67,28 @@ class LibraryActivity final : public UiListActivity {
   void refreshIndex(bool force);
   // Reads `wanted` entries from entry row `first` into titles/authors.
   int loadEntries(int first, int wanted);
+  void openEntry(int entryIndex);
   void openSearch();
   void applySearch(const std::string& query);
+  void renderGrid();
 
  public:
   explicit LibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, uint16_t firstRow = 0)
       : UiListActivity(activity_name::kLibrary, renderer, mappedInput), startRow(firstRow) {}
   void onEnter() override;
   void onExit() override;
+  void render(RenderLock&& lock) override;
+  void onRevealed() override {
+    UiListActivity::onRevealed();
+    gridCleanPaint = true;
+  }
+  bool lightPanelAuxText(char* buf, size_t size) const override;
+  bool lightPanelStepAux(int delta) override;
 
  protected:
   int listCount() const override { return rowCount; }
   void buildScreen(UiScreen& screen) override;
+  bool handleCustomInput() override;
   void activateIndex(int index) override;
   void onBackButton() override;
   ListChrome chrome() const override;
