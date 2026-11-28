@@ -273,6 +273,7 @@ add_subdirectory(reader_font_swap_lock)
 add_subdirectory(chapter_build_safety)
 add_subdirectory(page_jump)
 add_subdirectory(power_clock_policy)
+add_subdirectory(wifi_radio_off_on_cancel)
 
 if(LECTOR_FUZZ)
   add_subdirectory(fuzz)
