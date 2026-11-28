@@ -193,7 +193,11 @@ void TxtReaderActivity::relayoutForFontChange() {
   if (!txt) return;
   // Page numbers mean nothing across a font change, but byte offsets do: remember the
   // byte the reader is showing, then land on whichever new page contains it.
-  const size_t anchorOffset = pageOffsets.empty() ? 0 : pageOffsets[currentPage];
+  // On the End of Book screen currentPage is one past the last page: anchor on the last
+  // page there, and go back to the end screen once the new index is built.
+  const bool atEnd = !pageOffsets.empty() && currentPage >= static_cast<int>(pageOffsets.size());
+  const size_t anchorOffset =
+      pageOffsets.empty() ? 0 : pageOffsets[std::min<size_t>(currentPage, pageOffsets.size() - 1)];
 
   initialized = false;
   pageOffsets.clear();
@@ -207,7 +211,7 @@ void TxtReaderActivity::relayoutForFontChange() {
     if (pageOffsets[i] > anchorOffset) break;
     landing = static_cast<int>(i);
   }
-  currentPage = landing;
+  currentPage = atEnd ? totalPages : landing;
   requestUpdate();
 }
 

@@ -6,6 +6,8 @@
 #include <HalClock.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <LibraryBuilder.h>
+#include <LibraryIndexFile.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -19,6 +21,8 @@
 #include "activities/Activity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/BookProgressFile.h"
+#include "util/BusyTick.h"
 #include "util/ButtonNavigator.h"
 #include "util/NextBookFinder.h"
 #include "util/QuoteText.h"
@@ -28,6 +32,67 @@ namespace {
 std::string displayName(const std::string& filename) {
   const auto pos = filename.rfind('.');
   return filename.substr(0, pos);
+}
+
+// Queries LibraryIndexFile for up to MAX_SUGGESTIONS unread books matching the same author
+// (preferred) or filename series prefix. Streams records in small stack batches so RAM use
+// stays tiny regardless of library size.
+void findFromLibraryIndex(const std::string& currentBookPath, const std::string& bookAuthor,
+                          std::vector<EndOfBookOptions::Suggestion>& out) {
+  library::LibraryIndexFile index;
+  if (!index.open(library::libraryIndexPath())) return;
+  const uint16_t total = index.bookCount();
+  if (total == 0) return;
+
+  const bool hasAuthor = !end_of_book::trimAscii(bookAuthor).empty();
+  const bool hasPrefix = end_of_book::extractSeriesPrefix(currentBookPath).size() >= end_of_book::MIN_PREFIX_LEN;
+  if (!hasAuthor && !hasPrefix) return;
+
+  std::vector<end_of_book::LibraryCandidate> picks;
+  picks.reserve(EndOfBookOptions::MAX_SUGGESTIONS + 1);
+
+  // 4 x 32 B = 128 B on stack (well below the 256 B stack limit).
+  constexpr size_t BATCH_SIZE = 4;
+  library::ClixRecord batch[BATCH_SIZE];
+  std::string candPath;
+  std::string candAuthor;
+  std::string candTitle;
+
+  for (uint16_t ordinal = 0; ordinal < total;) {
+    const size_t n = index.readRecords(ordinal, BATCH_SIZE, batch);
+    if (n == 0) break;
+    for (size_t i = 0; i < n; ++i, ++ordinal) {
+      if ((ordinal & 0x0F) == 0) busy::tick();
+      const auto& rec = batch[i];
+      if (!index.readPath(rec, candPath)) continue;
+      if (end_of_book::shouldSkipLibraryEntry(currentBookPath, candPath)) continue;
+
+      bool sameAuthor = false;
+      if (hasAuthor && rec.authorLen > 0 && index.readAuthor(rec, candAuthor)) {
+        sameAuthor = end_of_book::isSameAuthor(bookAuthor, candAuthor);
+      }
+      const bool samePrefix = !sameAuthor && hasPrefix && end_of_book::matchesFilenamePrefix(currentBookPath, candPath);
+      if (!sameAuthor && !samePrefix) continue;
+
+      book_progress::Marker marker;
+      if (book_progress::readForBook(candPath, marker) && marker.percent >= 100) continue;
+      if (!Storage.exists(candPath.c_str())) continue;
+
+      std::string label;
+      if (rec.titleLen > 0 && index.readTitle(rec, candTitle) && !end_of_book::trimAscii(candTitle).empty()) {
+        label = std::move(candTitle);
+      } else {
+        label = displayName(std::string(bookfiling::fileNameOf(candPath)));
+      }
+      end_of_book::insertCandidate(picks, {std::move(label), candPath, sameAuthor ? uint8_t{0} : uint8_t{1}},
+                                   EndOfBookOptions::MAX_SUGGESTIONS);
+    }
+  }
+
+  out.reserve(picks.size());
+  for (auto& pick : picks) {
+    out.push_back({std::move(pick.displayName), std::move(pick.fullPath)});
+  }
 }
 
 // The last quote saved from this book, from the tail of its sidecar only: a record longer
@@ -77,17 +142,32 @@ bool formatToday(char* out, const size_t size) {
 }  // namespace
 
 void EndOfBookOptions::loadOnce(const std::string& currentBookPath, const std::string& title,
-                                const std::string& bookAuthor) {
+                                const std::string& bookAuthor, const bool canSync, const bool allowQuotes) {
   if (isLoaded.load(std::memory_order_acquire)) {
     return;
   }
-  folder = FsHelpers::extractFolderPath(currentBookPath);
-  names = NextBookFinder::findNextBooks(currentBookPath, MAX_SUGGESTIONS);
+
+  suggestions.clear();
+  const bool inRecents = bookfiling::isInFolder(currentBookPath, bookfiling::RECENTS_FOLDER);
+  if (!inRecents) {
+    const std::string folder = FsHelpers::extractFolderPath(currentBookPath);
+    const auto siblingNames = NextBookFinder::findNextBooks(currentBookPath, MAX_SUGGESTIONS);
+    suggestions.reserve(siblingNames.size());
+    for (const auto& name : siblingNames) {
+      suggestions.push_back({displayName(name), folder == "/" ? "/" + name : folder + "/" + name});
+    }
+  }
+  if (end_of_book::shouldUseLibraryFallback(currentBookPath, suggestions.size())) {
+    findFromLibraryIndex(currentBookPath, bookAuthor, suggestions);
+  }
+
+  const bool hasQuotes = allowQuotes && Storage.exists(quote_text::quotesFilePathFor(currentBookPath).c_str());
+  rows = end_of_book::buildActionRows(static_cast<int>(suggestions.size()), canSync, hasQuotes);
   selector = 0;
 
   bookTitle = title;
   author = bookAuthor;
-  quote = lastQuote(currentBookPath);
+  quote = allowQuotes ? lastQuote(currentBookPath) : std::string();
   datesLine[0] = '\0';
   char finished[12];
   if (formatToday(finished, sizeof(finished)))
@@ -98,36 +178,38 @@ void EndOfBookOptions::loadOnce(const std::string& currentBookPath, const std::s
   isLoaded.store(true, std::memory_order_release);
 }
 
-bool EndOfBookOptions::menuActive() const { return isLoaded.load(std::memory_order_acquire) && !names.empty(); }
+bool EndOfBookOptions::menuActive() const { return isLoaded.load(std::memory_order_acquire) && !rows.empty(); }
 
-std::string EndOfBookOptions::fullPath(const size_t index) const {
-  if (index >= names.size()) {
-    return {};
+EndOfBookOptions::Action EndOfBookOptions::activateRow(const int rowIndex, std::string* openPath) const {
+  if (rowIndex < 0 || rowIndex >= rows.count) return Action::None;
+  const auto& row = rows[rowIndex];
+  switch (row.kind) {
+    case end_of_book::RowKind::Book:
+      if (row.bookIndex >= 0 && row.bookIndex < static_cast<int>(suggestions.size())) {
+        if (openPath) *openPath = suggestions[static_cast<size_t>(row.bookIndex)].fullPath;
+        return Action::OpenBook;
+      }
+      return Action::None;
+    case end_of_book::RowKind::SyncProgress:
+      return Action::SyncProgress;
+    case end_of_book::RowKind::ViewQuotes:
+      return Action::ViewQuotes;
+    case end_of_book::RowKind::Home:
+      return Action::GoHome;
   }
-  return folder == "/" ? "/" + names[index] : folder + "/" + names[index];
+  return Action::None;
 }
 
 EndOfBookOptions::Action EndOfBookOptions::handleMenuInput(const MappedInputManager& input, std::string* openPath) {
-  // A tap on a row answers, the way Confirm does. The row list is the suggestions followed
-  // by the Home entry, so the tapped index maps straight onto the selector.
+  // A tap on a row answers, the way Confirm does.
   int tappedRow = 0;
-  if (input.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow <= static_cast<int>(names.size())) {
+  if (input.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < rows.count) {
     selector = tappedRow;
-    if (selector < static_cast<int>(names.size())) {
-      if (openPath) *openPath = fullPath(selector);
-      return Action::OpenBook;
-    }
-    return Action::GoHome;
+    return activateRow(selector, openPath);
   }
 
   if (input.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (selector < static_cast<int>(names.size())) {
-      if (openPath) {
-        *openPath = fullPath(selector);
-      }
-      return Action::OpenBook;
-    }
-    return Action::GoHome;  // "Home" entry selected
+    return activateRow(selector, openPath);
   }
 
   // Short-press Back returns to the last page; a long press falls through to the
@@ -142,13 +224,12 @@ EndOfBookOptions::Action EndOfBookOptions::handleMenuInput(const MappedInputMana
   // double-fire here, because this screen arrives through a transition that arms the
   // input gate.
   const auto triggered = [&](const MappedInputManager::Button button) { return input.wasPressed(button); };
-  const int itemCount = static_cast<int>(names.size()) + 1;  // + "Home" entry
   if (triggered(MappedInputManager::Button::NavPrevious)) {
-    selector = ButtonNavigator::previousIndex(selector, itemCount);  // wraps to the bottom
+    selector = ButtonNavigator::previousIndex(selector, rows.count);  // wraps to the bottom
     return Action::Redraw;
   }
   if (triggered(MappedInputManager::Button::NavNext)) {
-    selector = ButtonNavigator::nextIndex(selector, itemCount);  // wraps to the top
+    selector = ButtonNavigator::nextIndex(selector, rows.count);  // wraps to the top
     return Action::Redraw;
   }
   return Action::None;
@@ -186,35 +267,38 @@ void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& i
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
 
-  if (!menuActive()) {
-    // No suggestions: the title at 3/8 of the screen height, as it always stood, and the
-    // book's lines under it.
-    const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, false, false);
-    const int titleY = renderer.getScreenHeight() * 3 / 8;
-    UITheme::drawCenteredText(renderer, safe, UI_10_FONT_ID, titleY, tr(STR_END_OF_BOOK), true, EpdFontFamily::REGULAR);
-    drawFinished(renderer, safe, titleY + lineH);
-    return;
-  }
-
-  // Suggestion menu: title, the book's lines, list (+ Home entry) and button hints. The
-  // hints are drawn at the physical front buttons, which is a logical side/top edge in the
-  // rotated orientations — lay out inside the safe area so nothing hides behind them.
-  // Vertical positions derive from the safe-area height and font line heights so other
-  // panel resolutions scale (review request on #2532).
+  // Always draw inside the hint-safe area with action rows (Sync Progress when
+  // configured, View Quotes when present, Home) and button hints, even when no
+  // next-book suggestions were found.
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const int titleY = safe.y + safe.height / 8;
   UITheme::drawCenteredText(renderer, safe, UI_10_FONT_ID, titleY, tr(STR_END_OF_BOOK), true, EpdFontFamily::REGULAR);
-  const int subtitleY = drawFinished(renderer, safe, titleY + lineH) + metrics.verticalSpacing * 2;
-  const int listTop = subtitleY + lineH + metrics.verticalSpacing * 2;
-  UITheme::drawCenteredText(renderer, safe, UI_10_FONT_ID, subtitleY, tr(STR_EOB_CONTINUE_WITH));
+  const int finishedBottom = drawFinished(renderer, safe, titleY + lineH);
+  int listTop = finishedBottom + metrics.verticalSpacing * 2;
+  if (!suggestions.empty()) {
+    UITheme::drawCenteredText(renderer, safe, UI_10_FONT_ID, listTop, tr(STR_EOB_CONTINUE_WITH));
+    listTop += lineH + metrics.verticalSpacing * 2;
+  }
   const int listHeight = safe.y + safe.height - listTop - metrics.verticalSpacing;
   // Titles wrap over the lines they need rather than being cut; the visible range
   // comes back from the draw and feeds the scroll offset, as in the file browser.
-  const ListVisibility vis = GUI.drawWrappedList(
-      renderer, Rect{safe.x, listTop, safe.width, listHeight}, static_cast<int>(names.size()) + 1, selector,
-      scrollOffset, [this](const int index) {
-        return index < static_cast<int>(names.size()) ? displayName(names[index]) : std::string(tr(STR_EOB_HOME));
-      });
+  const ListVisibility vis =
+      GUI.drawWrappedList(renderer, Rect{safe.x, listTop, safe.width, listHeight}, rows.count, selector, scrollOffset,
+                          [this](const int index) -> std::string {
+                            if (index < 0 || index >= rows.count) return {};
+                            const auto& row = rows[index];
+                            switch (row.kind) {
+                              case end_of_book::RowKind::Book:
+                                return suggestions[static_cast<size_t>(row.bookIndex)].displayName;
+                              case end_of_book::RowKind::SyncProgress:
+                                return tr(STR_SYNC_PROGRESS);
+                              case end_of_book::RowKind::ViewQuotes:
+                                return tr(STR_VIEW_QUOTES);
+                              case end_of_book::RowKind::Home:
+                                return tr(STR_EOB_HOME);
+                            }
+                            return {};
+                          });
   scrollOffset = vis.firstVisible;
 
   const auto labels = input.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

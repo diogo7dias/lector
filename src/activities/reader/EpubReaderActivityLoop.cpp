@@ -144,6 +144,12 @@ void EpubReaderActivity::loop() {
       case EndOfBookOptions::Action::OpenBook:
         activityManager.goToReader(openPath);
         return;
+      case EndOfBookOptions::Action::SyncProgress:
+        launchKOReaderSync();
+        return;
+      case EndOfBookOptions::Action::ViewQuotes:
+        openQuotesViewer();
+        return;
       case EndOfBookOptions::Action::GoHome:
         onGoHome();
         return;
@@ -184,9 +190,11 @@ void EpubReaderActivity::loop() {
   }
   pinchGesture.reset();
 
+  const bool eobOwnsMenu = atEndOfBook && endOfBookOptions.menuActive();
+
   int holdX = 0;
   int holdY = 0;
-  if (mappedInput.wasScreenLongPress(holdX, holdY, /*keepContact=*/true)) {
+  if (!eobOwnsMenu && mappedInput.wasScreenLongPress(holdX, holdY, /*keepContact=*/true)) {
     openQuoteGrab(holdX, holdY);
     return;
   }
@@ -207,15 +215,16 @@ void EpubReaderActivity::loop() {
   // either input on the same pass.
   const auto touch =
       ReaderUtils::detectTouchPageTurn(renderer, mappedInput, reader_touch::isRtlLanguage(epub->getLanguage().c_str()));
-  if (ReaderUtils::isTouchMenuGesture(renderer, mappedInput, touch.menu)) {
+  if (!eobOwnsMenu && ReaderUtils::isTouchMenuGesture(renderer, mappedInput, touch.menu)) {
     openReaderMenu();
     return;
   }
 
   const bool confirmHasHold = SETTINGS.longPressMenuFunction != CrossPointSettings::LP_MENU_DISABLED;
-  const bool confirmEdge = confirmHasHold
-                               ? confirmLatch_.release(mappedInput.wasReleased(MappedInputManager::Button::Confirm))
-                               : mappedInput.wasPressed(MappedInputManager::Button::Confirm);
+  const bool confirmEdge =
+      !eobOwnsMenu &&
+      (confirmHasHold ? confirmLatch_.release(mappedInput.wasReleased(MappedInputManager::Button::Confirm))
+                      : mappedInput.wasPressed(MappedInputManager::Button::Confirm));
   if (confirmEdge) {
     if (ignoreNextConfirmRelease) {
       ignoreNextConfirmRelease = false;
