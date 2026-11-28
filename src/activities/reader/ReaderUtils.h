@@ -53,6 +53,9 @@ inline reader_touch::MenuMode readerMenuMode() {
   if (SETTINGS.calmMode != 0) return reader_touch::MenuMode::Off;
   return static_cast<reader_touch::MenuMode>(SETTINGS.showReaderMenu);
 }
+inline reader_touch::TapZoneLayout tapZoneLayout() {
+  return static_cast<reader_touch::TapZoneLayout>(SETTINGS.tapZoneLayout);
+}
 
 // Touch on the open page: page turns and the tap into the reader menu, in one pass.
 // A swipe is read first so a slow drag never also registers as a tap. A right-to-left book
@@ -77,7 +80,7 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
   if (!input.wasScreenTapped(x, y)) return result;
 
   switch (reader_touch::tapAction(on, nextPageGesture(), previousPageGesture(), readerMenuMode(), rtlBook,
-                                  renderer.getScreenWidth(), renderer.getScreenHeight(), x, y)) {
+                                  renderer.getScreenWidth(), renderer.getScreenHeight(), x, y, tapZoneLayout())) {
     case reader_touch::TapAction::Prev:
       result.prev = true;
       break;
